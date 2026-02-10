@@ -33,10 +33,28 @@ In fact, CCBot itself was built this way — iterating on itself through Claude 
 - **Hook-based session tracking** — Auto-associates tmux windows with Claude sessions via `SessionStart` hook
 - **Persistent state** — Thread bindings and read offsets survive restarts
 
+## Prerequisites
+
+- **tmux** — must be installed and available in PATH
+- **Claude Code** — the CLI tool (`claude`) must be installed
+
 ## Installation
 
+### Option 1: Install from GitHub (Recommended)
+
 ```bash
-cd ccbot
+# Using uv (recommended)
+uv tool install git+https://github.com/six-ddc/ccmux.git
+
+# Or using pipx
+pipx install git+https://github.com/six-ddc/ccmux.git
+```
+
+### Option 2: Install from source
+
+```bash
+git clone https://github.com/six-ddc/ccmux.git
+cd ccmux
 uv sync
 ```
 
@@ -51,8 +69,14 @@ uv sync
 
 **2. Configure environment variables:**
 
+Create `~/.ccbot/.env` (or `$CCBOT_DIR/.env` if customized):
+
 ```bash
-cp .env.example .env
+mkdir -p ~/.ccbot
+cat > ~/.ccbot/.env << 'EOF'
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+ALLOWED_USERS=your_telegram_user_id
+EOF
 ```
 
 **Required:**
@@ -104,6 +128,10 @@ This writes window-session mappings to `$CCBOT_DIR/session_map.json` (`~/.ccbot/
 ## Usage
 
 ```bash
+# If installed via uv tool / pipx
+ccbot
+
+# If installed from source
 uv run ccbot
 ```
 

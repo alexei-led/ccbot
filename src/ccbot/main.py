@@ -22,11 +22,27 @@ def main() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.WARNING,
     )
+
+    # Import config before enabling DEBUG — avoid leaking debug logs on config errors
+    try:
+        from .config import config
+    except ValueError as e:
+        from .utils import ccbot_dir
+
+        config_dir = ccbot_dir()
+        env_path = config_dir / ".env"
+        print(f"Error: {e}\n")
+        print(f"Create {env_path} with the following content:\n")
+        print(f"  TELEGRAM_BOT_TOKEN=your_bot_token_here")
+        print(f"  ALLOWED_USERS=your_telegram_user_id")
+        print()
+        print("Get your bot token from @BotFather on Telegram.")
+        print("Get your user ID from @userinfobot on Telegram.")
+        sys.exit(1)
+
     logging.getLogger("ccbot").setLevel(logging.DEBUG)
     logger = logging.getLogger(__name__)
 
-    # Import after logging is configured — Config() validates env vars
-    from .config import config
     from .tmux_manager import tmux_manager
 
     logger.info("Allowed users: %s", config.allowed_users)

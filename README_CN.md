@@ -31,10 +31,28 @@ CCBot 让你**通过 Telegram 无缝接管同一个会话**。核心设计思路
 - **Hook 会话追踪** — 通过 `SessionStart` hook 自动关联 tmux 窗口与 Claude 会话
 - **持久化状态** — 话题绑定和读取偏移量在重启后保持
 
+## 前置要求
+
+- **tmux** — 需要安装并在 PATH 中可用
+- **Claude Code** — CLI 工具（`claude`）需要已安装
+
 ## 安装
 
+### 方式一：从 GitHub 安装（推荐）
+
 ```bash
-cd ccbot
+# 使用 uv（推荐）
+uv tool install git+https://github.com/six-ddc/ccmux.git
+
+# 或使用 pipx
+pipx install git+https://github.com/six-ddc/ccmux.git
+```
+
+### 方式二：从源码安装
+
+```bash
+git clone https://github.com/six-ddc/ccmux.git
+cd ccmux
 uv sync
 ```
 
@@ -49,8 +67,14 @@ uv sync
 
 **2. 配置环境变量：**
 
+创建 `~/.ccbot/.env`（如果自定义了 `CCBOT_DIR`，则在对应目录下）：
+
 ```bash
-cp .env.example .env
+mkdir -p ~/.ccbot
+cat > ~/.ccbot/.env << 'EOF'
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+ALLOWED_USERS=your_telegram_user_id
+EOF
 ```
 
 **必填项：**
@@ -64,6 +88,7 @@ cp .env.example .env
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
+| `CCBOT_DIR` | `~/.ccbot` | 配置/状态目录（`.env` 从此目录加载） |
 | `TMUX_SESSION_NAME` | `ccbot` | tmux 会话名称 |
 | `CLAUDE_COMMAND` | `claude` | 新窗口中运行的命令 |
 | `MONITOR_POLL_INTERVAL` | `2.0` | 轮询间隔（秒） |
@@ -95,11 +120,15 @@ ccbot hook --install
 }
 ```
 
-Hook 会将窗口-会话映射写入 `~/.ccbot/session_map.json`，这样 Bot 就能自动追踪每个 tmux 窗口中运行的 Claude 会话 — 即使在 `/clear` 或会话重启后也能保持关联。
+Hook 会将窗口-会话映射写入 `$CCBOT_DIR/session_map.json`（默认 `~/.ccbot/`），这样 Bot 就能自动追踪每个 tmux 窗口中运行的 Claude 会话 — 即使在 `/clear` 或会话重启后也能保持关联。
 
 ## 使用方法
 
 ```bash
+# 通过 uv tool / pipx 安装的
+ccbot
+
+# 从源码安装的
 uv run ccbot
 ```
 
@@ -215,9 +244,9 @@ claude
 
 | 路径 | 说明 |
 |---|---|
-| `~/.ccbot/state.json` | 话题绑定、窗口状态、每用户读取偏移量 |
-| `~/.ccbot/session_map.json` | Hook 生成的 `{tmux_session:window_name: {session_id, cwd}}` 映射 |
-| `~/.ccbot/monitor_state.json` | 每会话的监控字节偏移量（防止重复通知） |
+| `$CCBOT_DIR/state.json` | 话题绑定、窗口状态、每用户读取偏移量 |
+| `$CCBOT_DIR/session_map.json` | Hook 生成的 `{tmux_session:window_name: {session_id, cwd}}` 映射 |
+| `$CCBOT_DIR/monitor_state.json` | 每会话的监控字节偏移量（防止重复通知） |
 | `~/.claude/projects/` | Claude Code 会话数据（只读） |
 
 ## 文件结构
