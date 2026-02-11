@@ -1,5 +1,5 @@
 # Session state - auto-managed by specctl
-task: TASK-015-doc-cleanup
+task: TASK-009-dead-window-detection
 step: planning
-started: 2026-02-11T14:54:01Z
-base_commit: 01e7824
+started: 2026-02-11T15:02:59Z
+base_commit: 39d03dc

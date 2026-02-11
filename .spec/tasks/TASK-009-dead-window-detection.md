@@ -1,7 +1,7 @@
 ---
 id: TASK-009
 title: Dead window detection and recovery UI
-status: todo
+status: done
 req: REQ-003
 epic: EPIC-003
 ---

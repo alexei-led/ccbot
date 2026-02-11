@@ -1,4 +1,3 @@
-12:57 START TASK-002-group-filter
 13:10 DONE TASK-002
 13:14 DONE TASK-003
 13:17 START TASK-004-discover-cc-commands
@@ -8,3 +7,5 @@
 14:13 START TASK-007-demote-commands-to-buttons
 16:42 DONE TASK-007
 16:54 START TASK-015-doc-cleanup
+17:02 START TASK-009-dead-window-detection
+DONE TASK-009

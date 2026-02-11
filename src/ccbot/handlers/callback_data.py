@@ -11,6 +11,7 @@ Constants:
   - CB_ASK_*: Interactive UI navigation (arrows, enter, esc)
   - CB_SESSIONS_*: Sessions dashboard (refresh, new, kill)
   - CB_STATUS_*: Status message action buttons (esc, screenshot)
+  - CB_RECOVERY_*: Dead window recovery UI (fresh, continue, resume)
   - CB_KEYS_PREFIX: Screenshot control keys (kb:<key_id>:<window>)
 """
 
@@ -53,6 +54,12 @@ CB_SESSIONS_KILL_CONFIRM = "sess:killok:"  # sess:killok:<window_id>
 # Status message action buttons
 CB_STATUS_ESC = "st:esc:"  # st:esc:<window_id>
 CB_STATUS_SCREENSHOT = "st:ss:"  # st:ss:<window_id>
+
+# Recovery UI (dead window)
+CB_RECOVERY_FRESH = "rec:f:"  # rec:f:<window_id>
+CB_RECOVERY_CONTINUE = "rec:c:"  # rec:c:<window_id> (TASK-010)
+CB_RECOVERY_RESUME = "rec:r:"  # rec:r:<window_id> (TASK-010)
+CB_RECOVERY_CANCEL = "rec:x"  # cancel recovery
 
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>

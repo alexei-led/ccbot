@@ -149,17 +149,9 @@ async def status_poll_loop(bot: Bot) -> None:
 
             for user_id, thread_id, wid in list(session_manager.iter_thread_bindings()):
                 try:
-                    # Clean up stale bindings (window no longer exists)
+                    # Skip dead windows — recovery UI handles them on next user message
                     w = await tmux_manager.find_window_by_id(wid)
                     if not w:
-                        session_manager.unbind_thread(user_id, thread_id)
-                        await clear_topic_state(user_id, thread_id, bot)
-                        logger.info(
-                            "Cleaned up stale binding: user=%d thread=%d window_id=%s",
-                            user_id,
-                            thread_id,
-                            wid,
-                        )
                         continue
 
                     queue = get_message_queue(user_id)

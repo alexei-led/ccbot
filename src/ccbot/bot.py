@@ -61,6 +61,10 @@ from .handlers.callback_data import (
     CB_HISTORY_NEXT,
     CB_HISTORY_PREV,
     CB_KEYS_PREFIX,
+    CB_RECOVERY_CANCEL,
+    CB_RECOVERY_CONTINUE,
+    CB_RECOVERY_FRESH,
+    CB_RECOVERY_RESUME,
     CB_SCREENSHOT_REFRESH,
     CB_SESSIONS_KILL,
     CB_SESSIONS_KILL_CONFIRM,
@@ -486,6 +490,31 @@ async def _capture_bash_output(
         _bash_capture_tasks.pop((user_id, thread_id), None)
 
 
+def _build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
+    """Build inline keyboard for dead window recovery options."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🆕 Fresh",
+                    callback_data=f"{CB_RECOVERY_FRESH}{window_id}"[:64],
+                ),
+                InlineKeyboardButton(
+                    "▶ Continue",
+                    callback_data=f"{CB_RECOVERY_CONTINUE}{window_id}"[:64],
+                ),
+                InlineKeyboardButton(
+                    "📂 Resume",
+                    callback_data=f"{CB_RECOVERY_RESUME}{window_id}"[:64],
+                ),
+            ],
+            [
+                InlineKeyboardButton("✖ Cancel", callback_data=CB_RECOVERY_CANCEL),
+            ],
+        ]
+    )
+
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user or not is_user_allowed(user.id):
@@ -599,17 +628,50 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     w = await tmux_manager.find_window_by_id(wid)
     if not w:
         display = session_manager.get_display_name(wid)
+        ws = session_manager.get_window_state(wid)
+        cwd = ws.cwd if ws.cwd else ""
+
+        if not cwd or not Path(cwd).is_dir():
+            # No valid cwd — unbind and fall back to directory browser
+            logger.info(
+                "Dead window %s (no valid cwd), falling back to directory browser"
+                " (user=%d, thread=%d)",
+                wid,
+                user.id,
+                thread_id,
+            )
+            session_manager.unbind_thread(user.id, thread_id)
+            start_path = str(Path.cwd())
+            msg_text, keyboard, subdirs = build_directory_browser(start_path)
+            if context.user_data is not None:
+                context.user_data[STATE_KEY] = STATE_BROWSING_DIRECTORY
+                context.user_data[BROWSE_PATH_KEY] = start_path
+                context.user_data[BROWSE_PAGE_KEY] = 0
+                context.user_data[BROWSE_DIRS_KEY] = subdirs
+                context.user_data["_pending_thread_id"] = thread_id
+                context.user_data["_pending_thread_text"] = text
+            await safe_reply(update.message, msg_text, reply_markup=keyboard)
+            return
+
+        # Show recovery UI
         logger.info(
-            "Stale binding: window %s gone, unbinding (user=%d, thread=%d)",
+            "Dead window %s (%s), showing recovery UI (user=%d, thread=%d)",
+            wid,
             display,
             user.id,
             thread_id,
         )
-        session_manager.unbind_thread(user.id, thread_id)
+        if context.user_data is not None:
+            context.user_data["_pending_thread_id"] = thread_id
+            context.user_data["_pending_thread_text"] = text
+            context.user_data["_recovery_window_id"] = wid
+        keyboard = _build_recovery_keyboard(wid)
         await safe_reply(
             update.message,
-            f"❌ Window '{display}' no longer exists. Binding removed.\n"
-            "Send a message to start a new session.",
+            f"⚠ Window `{display}` is no longer running.\n"
+            f"📂 `{cwd}`\n\n"
+            "How would you like to recover?",
+            reply_markup=keyboard,
         )
         return
 
@@ -1134,6 +1196,114 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             message_thread_id=thread_id,
         )
         await query.answer("📸")
+
+    # Recovery UI: dead window recovery options
+    elif data.startswith(CB_RECOVERY_FRESH):
+        old_wid = data[len(CB_RECOVERY_FRESH) :]
+        thread_id = _get_thread_id(update)
+        if thread_id is None:
+            await query.answer("Use in a topic", show_alert=True)
+            return
+        # Validate pending state and window_id
+        pending_tid = (
+            context.user_data.get("_pending_thread_id") if context.user_data else None
+        )
+        stored_wid = (
+            context.user_data.get("_recovery_window_id") if context.user_data else None
+        )
+        if pending_tid is None or thread_id != pending_tid or stored_wid != old_wid:
+            await query.answer("Stale recovery (topic mismatch)", show_alert=True)
+            return
+
+        ws = session_manager.get_window_state(old_wid)
+        cwd = ws.cwd if ws.cwd else ""
+        if not cwd or not Path(cwd).is_dir():
+            await safe_edit(query, "❌ Directory no longer exists.")
+            if context.user_data is not None:
+                context.user_data.pop("_pending_thread_id", None)
+                context.user_data.pop("_pending_thread_text", None)
+                context.user_data.pop("_recovery_window_id", None)
+            await query.answer("Failed")
+            return
+
+        # Unbind old dead window
+        session_manager.unbind_thread(user.id, thread_id)
+
+        # Create new window in same cwd
+        success, message, created_wname, created_wid = await tmux_manager.create_window(
+            cwd
+        )
+        if not success:
+            await safe_edit(query, f"❌ {message}")
+            if context.user_data is not None:
+                context.user_data.pop("_pending_thread_id", None)
+                context.user_data.pop("_pending_thread_text", None)
+                context.user_data.pop("_recovery_window_id", None)
+            await query.answer("Failed")
+            return
+
+        await session_manager.wait_for_session_map_entry(created_wid)
+        session_manager.bind_thread(
+            user.id, thread_id, created_wid, window_name=created_wname
+        )
+
+        # Rename topic to match window name
+        try:
+            await context.bot.edit_forum_topic(
+                chat_id=session_manager.resolve_chat_id(user.id, thread_id),
+                message_thread_id=thread_id,
+                name=created_wname,
+            )
+        except Exception as e:
+            logger.debug("Failed to rename topic: %s", e)
+
+        await safe_edit(query, f"✅ {message}\n\nFresh session started.")
+
+        # Forward pending text
+        pending_text = (
+            context.user_data.get("_pending_thread_text") if context.user_data else None
+        )
+        if context.user_data is not None:
+            context.user_data.pop("_pending_thread_text", None)
+            context.user_data.pop("_pending_thread_id", None)
+            context.user_data.pop("_recovery_window_id", None)
+        if pending_text:
+            send_ok, send_msg = await session_manager.send_to_window(
+                created_wid, pending_text
+            )
+            if not send_ok:
+                logger.warning("Failed to forward pending text: %s", send_msg)
+                await safe_send(
+                    context.bot,
+                    session_manager.resolve_chat_id(user.id, thread_id),
+                    f"❌ Failed to send pending message: {send_msg}",
+                    message_thread_id=thread_id,
+                )
+        await query.answer("Created")
+
+    elif data.startswith(CB_RECOVERY_CONTINUE):
+        await query.answer(
+            "Continue will be available in a future update", show_alert=True
+        )
+
+    elif data.startswith(CB_RECOVERY_RESUME):
+        await query.answer(
+            "Resume will be available in a future update", show_alert=True
+        )
+
+    elif data == CB_RECOVERY_CANCEL:
+        pending_tid = (
+            context.user_data.get("_pending_thread_id") if context.user_data else None
+        )
+        if pending_tid is None or _get_thread_id(update) != pending_tid:
+            await query.answer("Stale recovery (topic mismatch)", show_alert=True)
+            return
+        if context.user_data is not None:
+            context.user_data.pop("_pending_thread_id", None)
+            context.user_data.pop("_pending_thread_text", None)
+            context.user_data.pop("_recovery_window_id", None)
+        await safe_edit(query, "Cancelled. Send a message to try again.")
+        await query.answer("Cancelled")
 
     # Sessions dashboard
     elif data == CB_SESSIONS_REFRESH:
