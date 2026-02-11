@@ -121,30 +121,6 @@ async def send_history(
         _start = TranscriptParser.EXPANDABLE_QUOTE_START
         _end = TranscriptParser.EXPANDABLE_QUOTE_END
 
-        total = len(messages)
-        if total == 0:
-            if is_unread:
-                text = f"📬 [{display_name}] No unread messages."
-            else:
-                text = f"📋 [{display_name}] No messages yet."
-            keyboard = None
-            if edit:
-                await safe_edit(target, text, reply_markup=keyboard)
-            elif bot is not None and user_id is not None:
-                await safe_send(
-                    bot,
-                    session_manager.resolve_chat_id(user_id, message_thread_id),
-                    text,
-                    message_thread_id=message_thread_id,
-                    reply_markup=keyboard,
-                )
-            else:
-                await safe_reply(target, text, reply_markup=keyboard)
-            # Update offset even if no assistant messages
-            if user_id is not None and end_byte > 0:
-                session_manager.update_user_window_offset(user_id, window_id, end_byte)
-            return
-
         if is_unread:
             header = f"📬 [{display_name}] {total} unread messages"
         else:
