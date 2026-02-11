@@ -2,14 +2,19 @@
 
 Control Claude Code sessions remotely via Telegram — monitor, interact, and manage AI coding sessions running in tmux.
 
-https://github.com/user-attachments/assets/15ffb38e-5eb9-4720-93b9-412e4961dc93
-
 ## Contents
 
-- [Why CCBot?](#why-ccbot)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Documentation](#documentation)
+- [CCBot](#ccbot)
+  - [Contents](#contents)
+  - [Why CCBot?](#why-ccbot)
+  - [Features](#features)
+  - [Quick Start](#quick-start)
+    - [1. Prerequisites](#1-prerequisites)
+    - [2. Install](#2-install)
+    - [3. Configure](#3-configure)
+    - [4. Install the session hook](#4-install-the-session-hook)
+    - [5. Run](#5-run)
+  - [Documentation](#documentation)
 
 ## Why CCBot?
 
@@ -81,8 +86,6 @@ Open your Telegram group, create a new topic, send a message — a directory bro
 
 ## Documentation
 
-| Guide                                          | Description                                                         |
-| ---------------------------------------------- | ------------------------------------------------------------------- |
-| **[Getting Started](docs/getting-started.md)** | Detailed installation, configuration, and first session walkthrough |
-| **[Guides](docs/guides.md)**                   | Multi-instance setup, manual tmux usage, data storage               |
-| **[Contributing](docs/contributing.md)**       | Development setup, testing, code conventions                        |
+| Guide                        | Description                                           |
+| ---------------------------- | ----------------------------------------------------- |
+| **[Guides](docs/guides.md)** | Multi-instance setup, manual tmux usage, data storage |
