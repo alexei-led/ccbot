@@ -5,9 +5,8 @@
 │                         Telegram Bot (bot.py)                       │
 │  - Topic-based routing: 1 topic = 1 window = 1 session             │
 │  - /history: Paginated message history (default: latest page)      │
-│  - /screenshot: Capture tmux pane as PNG                           │
-│  - /esc: Send Escape to interrupt Claude                           │
-│  - /kill: Kill tmux window and unbind all users                    │
+│  - /sessions: Dashboard with per-session Kill buttons              │
+│  - Status messages: inline [Esc] and [Screenshot] buttons          │
 │  - Send text → Claude Code via tmux keystrokes                     │
 │  - Forward /commands to Claude Code                                │
 │  - Create sessions via directory browser in unbound topics         │

@@ -1,77 +1,66 @@
-"""Tests for /kill command."""
+"""Tests for session kill via sessions dashboard (two-step confirmation)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccbot.bot import kill_command
-
-
-def _make_update(user_id: int, thread_id: int | None) -> MagicMock:
-    update = MagicMock()
-    update.effective_user = MagicMock(id=user_id)
-    update.message = AsyncMock()
-    msg = update.message
-    msg.message_thread_id = thread_id
-    if thread_id and thread_id != 1:
-        msg.message_thread_id = thread_id
-    else:
-        msg.message_thread_id = None
-    return update
-
-
-def _make_context(bot: AsyncMock | None = None) -> MagicMock:
-    ctx = MagicMock()
-    ctx.bot = bot or AsyncMock()
-    return ctx
+from ccbot.handlers.sessions_dashboard import (
+    handle_sessions_kill,
+    handle_sessions_kill_confirm,
+)
 
 
 @pytest.fixture(autouse=True)
-def _allow_user():
-    with patch("ccbot.bot.is_user_allowed", return_value=True):
-        yield
+def _patch_deps():
+    with (
+        patch("ccbot.handlers.sessions_dashboard.session_manager") as mock_sm,
+        patch("ccbot.handlers.sessions_dashboard.tmux_manager") as mock_tm,
+        patch(
+            "ccbot.handlers.sessions_dashboard.clear_topic_state",
+            new_callable=AsyncMock,
+        ) as mock_clear,
+    ):
+        mock_sm.get_display_name.side_effect = lambda wid: wid
+        mock_sm.get_all_thread_windows.return_value = {}
+        mock_tm.list_windows = AsyncMock(return_value=[])
+        yield mock_sm, mock_tm, mock_clear
 
 
-class TestKillCommand:
-    @pytest.mark.parametrize(
-        "thread_id",
-        [
-            pytest.param(None, id="no-thread"),
-            pytest.param(42, id="unbound-thread"),
-        ],
-    )
-    async def test_kill_unbound_topic(self, thread_id: int | None) -> None:
-        update = _make_update(100, thread_id)
-        ctx = _make_context()
+class TestHandleSessionsKill:
+    async def test_shows_confirmation(self, _patch_deps) -> None:
+        mock_sm, _, _ = _patch_deps
+        mock_sm.get_display_name.side_effect = lambda wid: "myproj"
 
-        with patch("ccbot.bot.session_manager") as mock_sm:
-            mock_sm.resolve_window_for_thread.return_value = None
-            await kill_command(update, ctx)
-
-        update.message.reply_text.assert_called()
-
-    async def test_kill_bound_topic(self) -> None:
-        update = _make_update(100, 42)
-        ctx = _make_context()
-
-        with (
-            patch("ccbot.bot.session_manager") as mock_sm,
-            patch("ccbot.bot.tmux_manager") as mock_tm,
-            patch("ccbot.bot.clear_topic_state", new_callable=AsyncMock) as mock_clear,
-        ):
-            mock_sm.resolve_window_for_thread.return_value = "@5"
-            mock_sm.get_display_name.return_value = "myproj"
-            mock_sm.iter_thread_bindings.return_value = [
-                (100, 42, "@5"),
-                (200, 99, "@5"),
-                (300, 10, "@9"),
+        query = AsyncMock()
+        with patch("ccbot.handlers.sessions_dashboard.safe_edit") as mock_edit:
+            await handle_sessions_kill(query, 100, "@5")
+            mock_edit.assert_called_once()
+            text = mock_edit.call_args[0][1]
+            assert "Kill session" in text
+            assert "myproj" in text
+            keyboard = mock_edit.call_args.kwargs["reply_markup"]
+            data = [
+                btn.callback_data for row in keyboard.inline_keyboard for btn in row
             ]
-            mock_tm.find_window_by_id = AsyncMock(
-                return_value=MagicMock(window_id="@5")
-            )
-            mock_tm.kill_window = AsyncMock(return_value=True)
+            assert any("sess:killok:" in d for d in data)
 
-            await kill_command(update, ctx)
+
+class TestHandleSessionsKillConfirm:
+    async def test_kills_and_unbinds(self, _patch_deps) -> None:
+        mock_sm, mock_tm, mock_clear = _patch_deps
+        mock_sm.get_display_name.side_effect = lambda wid: "myproj"
+        mock_sm.iter_thread_bindings.return_value = [
+            (100, 42, "@5"),
+            (200, 99, "@5"),
+            (300, 10, "@9"),
+        ]
+        mock_tm.find_window_by_id = AsyncMock(return_value=MagicMock(window_id="@5"))
+        mock_tm.kill_window = AsyncMock()
+
+        query = AsyncMock()
+        bot = AsyncMock()
+        with patch("ccbot.handlers.sessions_dashboard.safe_edit"):
+            await handle_sessions_kill_confirm(query, 100, "@5", bot)
 
         mock_tm.kill_window.assert_called_once_with("@5")
         assert mock_sm.unbind_thread.call_count == 2
@@ -79,48 +68,32 @@ class TestKillCommand:
         mock_sm.unbind_thread.assert_any_call(200, 99)
         assert mock_clear.call_count == 2
 
-    async def test_kill_window_already_gone(self) -> None:
-        update = _make_update(100, 42)
-        ctx = _make_context()
+    async def test_window_already_gone(self, _patch_deps) -> None:
+        mock_sm, mock_tm, _ = _patch_deps
+        mock_sm.get_display_name.side_effect = lambda wid: "myproj"
+        mock_sm.iter_thread_bindings.return_value = [(100, 42, "@5")]
+        mock_tm.find_window_by_id = AsyncMock(return_value=None)
+        mock_tm.kill_window = AsyncMock()
 
-        with (
-            patch("ccbot.bot.session_manager") as mock_sm,
-            patch("ccbot.bot.tmux_manager") as mock_tm,
-            patch("ccbot.bot.clear_topic_state", new_callable=AsyncMock),
-        ):
-            mock_sm.resolve_window_for_thread.return_value = "@5"
-            mock_sm.get_display_name.return_value = "myproj"
-            mock_sm.iter_thread_bindings.return_value = [(100, 42, "@5")]
-            mock_tm.find_window_by_id = AsyncMock(return_value=None)
-            mock_tm.kill_window = AsyncMock()
-
-            await kill_command(update, ctx)
+        query = AsyncMock()
+        bot = AsyncMock()
+        with patch("ccbot.handlers.sessions_dashboard.safe_edit"):
+            await handle_sessions_kill_confirm(query, 100, "@5", bot)
 
         mock_tm.kill_window.assert_not_called()
         mock_sm.unbind_thread.assert_called_once_with(100, 42)
 
-    async def test_unbinds_all_users(self) -> None:
-        update = _make_update(100, 42)
-        ctx = _make_context()
+    async def test_refreshes_dashboard_after_kill(self, _patch_deps) -> None:
+        mock_sm, mock_tm, _ = _patch_deps
+        mock_sm.get_display_name.side_effect = lambda wid: "proj"
+        mock_sm.iter_thread_bindings.return_value = [(100, 42, "@5")]
+        mock_tm.find_window_by_id = AsyncMock(return_value=MagicMock(window_id="@5"))
+        mock_tm.kill_window = AsyncMock()
 
-        with (
-            patch("ccbot.bot.session_manager") as mock_sm,
-            patch("ccbot.bot.tmux_manager") as mock_tm,
-            patch("ccbot.bot.clear_topic_state", new_callable=AsyncMock) as mock_clear,
-        ):
-            mock_sm.resolve_window_for_thread.return_value = "@5"
-            mock_sm.get_display_name.return_value = "shared"
-            mock_sm.iter_thread_bindings.return_value = [
-                (100, 42, "@5"),
-                (200, 50, "@5"),
-                (300, 60, "@5"),
-            ]
-            mock_tm.find_window_by_id = AsyncMock(
-                return_value=MagicMock(window_id="@5")
-            )
-            mock_tm.kill_window = AsyncMock(return_value=True)
-
-            await kill_command(update, ctx)
-
-        assert mock_sm.unbind_thread.call_count == 3
-        assert mock_clear.call_count == 3
+        query = AsyncMock()
+        bot = AsyncMock()
+        with patch("ccbot.handlers.sessions_dashboard.safe_edit") as mock_edit:
+            await handle_sessions_kill_confirm(query, 100, "@5", bot)
+            mock_edit.assert_called_once()
+            text = mock_edit.call_args[0][1]
+            assert "Killed" in text

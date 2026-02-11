@@ -132,3 +132,30 @@ class TestSessionsRefresh:
             mock_edit.assert_called_once()
             assert query == mock_edit.call_args[0][0]
             assert "No active sessions" in mock_edit.call_args[0][1]
+
+
+class TestKillButtons:
+    async def test_alive_session_has_kill_button(self, _patch_deps) -> None:
+        mock_sm, mock_tm, _ = _patch_deps
+        mock_sm.get_all_thread_windows.return_value = {42: "@0"}
+        mock_sm.get_display_name.side_effect = lambda wid: "myproject"
+        mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
+
+        _text, keyboard = await _build_dashboard(100)
+        data = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
+        assert any(d.startswith("sess:kill:") for d in data)
+
+    async def test_dead_session_no_kill_button(self, _patch_deps) -> None:
+        mock_sm, mock_tm, _ = _patch_deps
+        mock_sm.get_all_thread_windows.return_value = {42: "@0"}
+        mock_sm.get_display_name.side_effect = lambda wid: "oldproject"
+        mock_tm.list_windows = AsyncMock(return_value=[])
+
+        _text, keyboard = await _build_dashboard(100)
+        data = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
+        assert not any(d.startswith("sess:kill:") for d in data)
+
+    async def test_empty_dashboard_no_kill_button(self, _patch_deps) -> None:
+        _text, keyboard = await _build_dashboard(100)
+        data = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
+        assert not any(d.startswith("sess:kill:") for d in data)

@@ -9,7 +9,8 @@ Constants:
   - CB_WIN_*: Window picker (bind existing unbound window)
   - CB_SCREENSHOT_*: Screenshot refresh
   - CB_ASK_*: Interactive UI navigation (arrows, enter, esc)
-  - CB_SESSIONS_*: Sessions dashboard
+  - CB_SESSIONS_*: Sessions dashboard (refresh, new, kill)
+  - CB_STATUS_*: Status message action buttons (esc, screenshot)
   - CB_KEYS_PREFIX: Screenshot control keys (kb:<key_id>:<window>)
 """
 
@@ -46,6 +47,12 @@ CB_ASK_REFRESH = "aq:ref:"  # aq:ref:<window>
 # Sessions dashboard
 CB_SESSIONS_REFRESH = "sess:ref"
 CB_SESSIONS_NEW = "sess:new"
+CB_SESSIONS_KILL = "sess:kill:"  # sess:kill:<window_id>
+CB_SESSIONS_KILL_CONFIRM = "sess:killok:"  # sess:killok:<window_id>
+
+# Status message action buttons
+CB_STATUS_ESC = "st:esc:"  # st:esc:<window_id>
+CB_STATUS_SCREENSHOT = "st:ss:"  # st:ss:<window_id>
 
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>

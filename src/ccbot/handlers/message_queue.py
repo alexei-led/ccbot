@@ -21,19 +21,38 @@ import logging
 from dataclasses import dataclass, field
 from typing import Literal
 
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter
 
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
 from ..terminal_parser import parse_status_line
 from ..tmux_manager import tmux_manager
+from .callback_data import CB_STATUS_ESC, CB_STATUS_SCREENSHOT
 from .message_sender import NO_LINK_PREVIEW, rate_limit_send_message
 
 logger = logging.getLogger(__name__)
 
 # Merge limit for content messages
 MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
+
+
+def _build_status_keyboard(window_id: str) -> InlineKeyboardMarkup:
+    """Build inline keyboard for status messages: [Esc] [Screenshot]."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "⎋ Esc",
+                    callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
+                ),
+                InlineKeyboardButton(
+                    "📸",
+                    callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
+                ),
+            ]
+        ]
+    )
 
 
 @dataclass
@@ -339,13 +358,14 @@ async def _convert_status_to_content(
             pass
         return None
 
-    # Edit status message to show content
+    # Edit status message to show content (remove status buttons)
     try:
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=msg_id,
             text=content_text,
             parse_mode="MarkdownV2",
+            reply_markup=None,
             link_preview_options=NO_LINK_PREVIEW,
         )
         return msg_id
@@ -358,6 +378,7 @@ async def _convert_status_to_content(
                 chat_id=chat_id,
                 message_id=msg_id,
                 text=content_text,
+                reply_markup=None,
                 link_preview_options=NO_LINK_PREVIEW,
             )
             return msg_id
@@ -407,12 +428,14 @@ async def _process_status_update_task(
             pass
         else:
             # Same window, text changed - edit in place
+            keyboard = _build_status_keyboard(wid)
             try:
                 await bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=msg_id,
                     text=convert_markdown(status_text),
                     parse_mode="MarkdownV2",
+                    reply_markup=keyboard,
                     link_preview_options=NO_LINK_PREVIEW,
                 )
                 _status_msg_info[skey] = (msg_id, wid, status_text)
@@ -424,6 +447,7 @@ async def _process_status_update_task(
                         chat_id=chat_id,
                         message_id=msg_id,
                         text=status_text,
+                        reply_markup=keyboard,
                         link_preview_options=NO_LINK_PREVIEW,
                     )
                     _status_msg_info[skey] = (msg_id, wid, status_text)
@@ -445,14 +469,16 @@ async def _do_send_status_message(
     window_id: str,
     text: str,
 ) -> None:
-    """Send a new status message and track it (internal, called from worker)."""
+    """Send a new status message with action buttons and track it."""
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+    keyboard = _build_status_keyboard(window_id)
     sent = await rate_limit_send_message(
         bot,
         chat_id,
         text,
+        reply_markup=keyboard,
         **_send_kwargs(thread_id),  # type: ignore[arg-type]
     )
     if sent:

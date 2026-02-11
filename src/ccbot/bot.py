@@ -4,29 +4,17 @@ Registers all command/callback/message handlers and manages the bot lifecycle.
 Each Telegram topic maps 1:1 to a tmux window (Claude session).
 
 Core responsibilities:
-  - Command handlers: /new (+ /start alias), /history, /screenshot, /esc, /kill, /sessions,
+  - Command handlers: /new (+ /start alias), /history, /sessions,
     plus forwarding unknown /commands to Claude Code via tmux.
   - Callback query handler: directory browser, history pagination,
-    interactive UI navigation, screenshot refresh.
+    interactive UI navigation, screenshot refresh, status action buttons
+    (esc, screenshot), sessions kill with confirmation.
   - Topic-based routing: each named topic binds to one tmux window.
     Unbound topics trigger the directory browser to create a new session.
   - Automatic cleanup: closing a topic kills the associated window
     (topic_closed_handler). Unsupported content (images, stickers, etc.)
     is rejected with a warning (unsupported_content_handler).
   - Bot lifecycle management: post_init, post_shutdown, create_bot.
-
-Related modules:
-  - cc_commands: CC command discovery and Telegram menu registration
-
-Handler modules (in handlers/):
-  - callback_data: Callback data constants
-  - message_queue: Per-user message queue management
-  - message_sender: Safe message sending helpers
-  - history: Message history pagination
-  - directory_browser: Directory browser UI
-  - interactive_ui: Interactive UI handling
-  - status_polling: Terminal status polling
-  - response_builder: Response message building
 
 Key functions: create_bot(), handle_new_message().
 """
@@ -74,8 +62,12 @@ from .handlers.callback_data import (
     CB_HISTORY_PREV,
     CB_KEYS_PREFIX,
     CB_SCREENSHOT_REFRESH,
+    CB_SESSIONS_KILL,
+    CB_SESSIONS_KILL_CONFIRM,
     CB_SESSIONS_NEW,
     CB_SESSIONS_REFRESH,
+    CB_STATUS_ESC,
+    CB_STATUS_SCREENSHOT,
     CB_WIN_BIND,
     CB_WIN_CANCEL,
     CB_WIN_NEW,
@@ -95,7 +87,12 @@ from .handlers.directory_browser import (
 )
 from .handlers.cleanup import clear_topic_state
 from .handlers.history import send_history
-from .handlers.sessions_dashboard import handle_sessions_refresh, sessions_command
+from .handlers.sessions_dashboard import (
+    handle_sessions_kill,
+    handle_sessions_kill_confirm,
+    handle_sessions_refresh,
+    sessions_command,
+)
 from .handlers.interactive_ui import (
     INTERACTIVE_TOOL_NAMES,
     clear_interactive_mode,
@@ -138,6 +135,11 @@ _status_poll_task: asyncio.Task | None = None
 
 def is_user_allowed(user_id: int | None) -> bool:
     return user_id is not None and config.is_user_allowed(user_id)
+
+
+def _user_owns_window(user_id: int, window_id: str) -> bool:
+    """Check if a user has any thread binding to the given window."""
+    return window_id in session_manager.get_all_thread_windows(user_id).values()
 
 
 def _get_thread_id(update: Update) -> int | None:
@@ -195,100 +197,6 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     await send_history(update.message, wid)
-
-
-async def screenshot_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Capture the current tmux pane and send it as an image."""
-    user = update.effective_user
-    if not user or not is_user_allowed(user.id):
-        return
-    if not update.message:
-        return
-
-    thread_id = _get_thread_id(update)
-    wid = session_manager.resolve_window_for_thread(user.id, thread_id)
-    if not wid:
-        await safe_reply(update.message, "❌ No session bound to this topic.")
-        return
-
-    w = await tmux_manager.find_window_by_id(wid)
-    if not w:
-        display = session_manager.get_display_name(wid)
-        await safe_reply(update.message, f"❌ Window '{display}' no longer exists.")
-        return
-
-    text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
-    if not text:
-        await safe_reply(update.message, "❌ Failed to capture pane content.")
-        return
-
-    png_bytes = await text_to_image(text, with_ansi=True)
-    keyboard = _build_screenshot_keyboard(wid)
-    await update.message.reply_document(
-        document=io.BytesIO(png_bytes),
-        filename="screenshot.png",
-        reply_markup=keyboard,
-    )
-
-
-async def kill_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Kill the tmux window bound to this topic and unbind all users."""
-    user = update.effective_user
-    if not user or not is_user_allowed(user.id):
-        return
-    if not update.message:
-        return
-
-    thread_id = _get_thread_id(update)
-    wid = session_manager.resolve_window_for_thread(user.id, thread_id)
-    if not wid:
-        await safe_reply(update.message, "❌ No session bound to this topic.")
-        return
-
-    display = session_manager.get_display_name(wid)
-
-    # Kill the tmux window (graceful if already gone)
-    w = await tmux_manager.find_window_by_id(wid)
-    if w:
-        await tmux_manager.kill_window(w.window_id)
-
-    # Unbind ALL users bound to this window (snapshot to avoid mutation during iteration)
-    for uid, tid, bound_wid in list(session_manager.iter_thread_bindings()):
-        if bound_wid == wid:
-            session_manager.unbind_thread(uid, tid)
-            await clear_topic_state(uid, tid, context.bot)
-
-    await safe_reply(
-        update.message, f"🗑 Killed window '{display}' and unbound all users."
-    )
-    logger.info("kill_command: killed window %s (%s), user=%d", wid, display, user.id)
-
-
-async def esc_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send Escape key to interrupt Claude."""
-    user = update.effective_user
-    if not user or not is_user_allowed(user.id):
-        return
-    if not update.message:
-        return
-
-    thread_id = _get_thread_id(update)
-    wid = session_manager.resolve_window_for_thread(user.id, thread_id)
-    if not wid:
-        await safe_reply(update.message, "❌ No session bound to this topic.")
-        return
-
-    w = await tmux_manager.find_window_by_id(wid)
-    if not w:
-        display = session_manager.get_display_name(wid)
-        await safe_reply(update.message, f"❌ Window '{display}' no longer exists.")
-        return
-
-    # Send Escape control character (no enter)
-    await tmux_manager.send_keys(w.window_id, "\x1b", enter=False)
-    await safe_reply(update.message, "⎋ Sent Escape")
 
 
 # --- Screenshot keyboard with quick control keys ---
@@ -1184,12 +1092,69 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     await clear_interactive_msg(user.id, context.bot, thread_id)
             await query.answer(_INTERACTIVE_KEY_LABELS.get(cb_prefix, ""))
 
+    # Status message action buttons: Esc and Screenshot
+    elif data.startswith(CB_STATUS_ESC):
+        window_id = data[len(CB_STATUS_ESC) :]
+        if not _user_owns_window(user.id, window_id):
+            await query.answer("Not your session", show_alert=True)
+            return
+        w = await tmux_manager.find_window_by_id(window_id)
+        if w:
+            await tmux_manager.send_keys(
+                w.window_id, "Escape", enter=False, literal=False
+            )
+            await query.answer("⎋ Sent Escape")
+        else:
+            await query.answer("Window not found", show_alert=True)
+    elif data.startswith(CB_STATUS_SCREENSHOT):
+        window_id = data[len(CB_STATUS_SCREENSHOT) :]
+        if not _user_owns_window(user.id, window_id):
+            await query.answer("Not your session", show_alert=True)
+            return
+        w = await tmux_manager.find_window_by_id(window_id)
+        if not w:
+            await query.answer("Window not found", show_alert=True)
+            return
+        text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+        if not text:
+            await query.answer("Failed to capture", show_alert=True)
+            return
+        png_bytes = await text_to_image(text, with_ansi=True)
+        keyboard = _build_screenshot_keyboard(window_id)
+        thread_id = _get_thread_id(update)
+        if thread_id is None:
+            await query.answer("Use in a topic", show_alert=True)
+            return
+        chat_id = session_manager.resolve_chat_id(user.id, thread_id)
+        await context.bot.send_document(
+            chat_id=chat_id,
+            document=io.BytesIO(png_bytes),
+            filename="screenshot.png",
+            reply_markup=keyboard,
+            message_thread_id=thread_id,
+        )
+        await query.answer("📸")
+
     # Sessions dashboard
     elif data == CB_SESSIONS_REFRESH:
         await handle_sessions_refresh(query, user.id)
         await query.answer("Refreshed")
     elif data == CB_SESSIONS_NEW:
         await query.answer("Create a new topic to start a session.")
+    elif data.startswith(CB_SESSIONS_KILL):
+        window_id = data[len(CB_SESSIONS_KILL) :]
+        if not _user_owns_window(user.id, window_id):
+            await query.answer("Not your session", show_alert=True)
+            return
+        await handle_sessions_kill(query, user.id, window_id)
+        await query.answer()
+    elif data.startswith(CB_SESSIONS_KILL_CONFIRM):
+        window_id = data[len(CB_SESSIONS_KILL_CONFIRM) :]
+        if not _user_owns_window(user.id, window_id):
+            await query.answer("Not your session", show_alert=True)
+            return
+        await handle_sessions_kill_confirm(query, user.id, window_id, context.bot)
+        await query.answer("Killed")
 
     # Screenshot quick keys: send key to tmux window
     elif data.startswith(CB_KEYS_PREFIX):
@@ -1466,11 +1431,6 @@ def create_bot() -> Application:
     application.add_handler(
         CommandHandler("history", history_command, filters=_group_filter)
     )
-    application.add_handler(
-        CommandHandler("screenshot", screenshot_command, filters=_group_filter)
-    )
-    application.add_handler(CommandHandler("esc", esc_command, filters=_group_filter))
-    application.add_handler(CommandHandler("kill", kill_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("sessions", sessions_command, filters=_group_filter)
     )

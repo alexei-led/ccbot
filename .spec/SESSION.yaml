@@ -1,5 +1,5 @@
 # Session state - auto-managed by specctl
-task: TASK-004-discover-cc-commands
+task: TASK-007-demote-commands-to-buttons
 step: planning
-started: 2026-02-11T11:17:26Z
-base_commit: c0b51c9
+started: 2026-02-11T12:13:50Z
+base_commit: e119a07

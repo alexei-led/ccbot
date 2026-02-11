@@ -34,9 +34,7 @@ CC_BUILTINS: dict[str, str] = {
 _BOT_COMMANDS: list[tuple[str, str]] = [
     ("new", "Create new Claude session"),
     ("history", "Message history for this topic"),
-    ("screenshot", "Terminal screenshot with control keys"),
-    ("esc", "Send Escape to interrupt Claude"),
-    ("kill", "Kill session and unbind this topic"),
+    ("sessions", "Sessions dashboard"),
 ]
 
 # Telegram limits: max 100 commands, descriptions max 256 chars

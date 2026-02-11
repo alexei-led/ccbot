@@ -1,7 +1,7 @@
 ---
 id: TASK-006
 title: Add /sessions dashboard command
-status: todo
+status: done
 req: REQ-002
 epic: EPIC-002
 ---
