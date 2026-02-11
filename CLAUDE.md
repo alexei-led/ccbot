@@ -35,6 +35,7 @@ ccbot hook --install                  # Auto-install Claude Code SessionStart ho
 
 - Config directory: `~/.ccbot/` by default, override with `CCBOT_DIR` env var.
 - `.env` loading priority: local `.env` > config dir `.env`.
+- Multi-instance: `CCBOT_GROUP_ID` (optional) restricts this instance to one Telegram group. `CCBOT_INSTANCE_NAME` (optional, defaults to hostname) is a display label. Without `CCBOT_GROUP_ID`, all groups are processed.
 - State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `monitor_state.json` (byte offsets).
 - Project structure: handlers in `src/ccbot/handlers/`, core modules in `src/ccbot/`, tests mirror source under `tests/ccbot/`.
 

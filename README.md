@@ -89,6 +89,8 @@ ALLOWED_USERS=your_telegram_user_id
 | `TMUX_SESSION_NAME`     | `ccbot`    | Tmux session name                                |
 | `CLAUDE_COMMAND`        | `claude`   | Command to run in new windows                    |
 | `MONITOR_POLL_INTERVAL` | `2.0`      | Polling interval in seconds                      |
+| `CCBOT_GROUP_ID`        | —          | Telegram group chat ID this instance owns        |
+| `CCBOT_INSTANCE_NAME`   | hostname   | Display name for this instance                   |
 
 > If running on a VPS where there's no interactive terminal to approve permissions, consider:
 >
@@ -228,6 +230,45 @@ The window must be in the `ccbot` tmux session (configurable via `TMUX_SESSION_N
 | `$CCBOT_DIR/session_map.json`   | Hook-generated `{tmux_session:window_id: {session_id, cwd, window_name}}` mappings |
 | `$CCBOT_DIR/monitor_state.json` | Monitor byte offsets per session (prevents duplicate notifications)                |
 | `~/.claude/projects/`           | Claude Code session data (read-only)                                               |
+
+## Multi-Instance Setup
+
+Multiple ccbot instances can share a single Telegram bot token, each owning a different Telegram group. When `CCBOT_GROUP_ID` is set, an instance silently ignores all updates from other groups.
+
+**Example: two instances on the same machine**
+
+Instance 1 (`~/.ccbot-work/.env`):
+
+```ini
+TELEGRAM_BOT_TOKEN=same_token_for_both
+ALLOWED_USERS=123456789
+CCBOT_GROUP_ID=-1001111111111
+CCBOT_INSTANCE_NAME=work
+CCBOT_DIR=~/.ccbot-work
+TMUX_SESSION_NAME=ccbot-work
+```
+
+Instance 2 (`~/.ccbot-personal/.env`):
+
+```ini
+TELEGRAM_BOT_TOKEN=same_token_for_both
+ALLOWED_USERS=123456789
+CCBOT_GROUP_ID=-1002222222222
+CCBOT_INSTANCE_NAME=personal
+CCBOT_DIR=~/.ccbot-personal
+TMUX_SESSION_NAME=ccbot-personal
+```
+
+Run both:
+
+```bash
+CCBOT_DIR=~/.ccbot-work ccbot &
+CCBOT_DIR=~/.ccbot-personal ccbot &
+```
+
+Without `CCBOT_GROUP_ID`, a single instance processes all groups (the default).
+
+To find your group's chat ID, add [@userinfobot](https://t.me/userinfobot) or [@RawDataBot](https://t.me/RawDataBot) to the group — it will reply with the chat ID (a negative number like `-1001234567890`).
 
 ## File Structure
 

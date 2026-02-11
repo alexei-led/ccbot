@@ -1,7 +1,7 @@
 ---
 id: TASK-003
 title: Update docs for multi-instance
-status: todo
+status: done
 req: REQ-001
 epic: EPIC-001
 depends: [TASK-001, TASK-002]
