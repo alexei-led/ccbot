@@ -10,6 +10,7 @@ Key class: Config (singleton instantiated as `config`).
 
 import logging
 import os
+import socket
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -69,6 +70,20 @@ class Config:
         # Claude Code session monitoring configuration
         self.claude_projects_path = Path.home() / ".claude" / "projects"
         self.monitor_poll_interval = float(os.getenv("MONITOR_POLL_INTERVAL", "2.0"))
+
+        # Multi-instance support
+        group_id_str = os.getenv("CCBOT_GROUP_ID")
+        if group_id_str is not None:
+            try:
+                self.group_id: int | None = int(group_id_str)
+            except ValueError as e:
+                raise ValueError(f"CCBOT_GROUP_ID must be a valid integer: {e}") from e
+        else:
+            self.group_id = None
+
+        self.instance_name: str = (
+            os.getenv("CCBOT_INSTANCE_NAME") or socket.gethostname()
+        )
 
         logger.debug(
             "Config initialized: dir=%s, token=%s..., allowed_users=%d, "

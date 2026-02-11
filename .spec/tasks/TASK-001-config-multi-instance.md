@@ -1,7 +1,7 @@
 ---
 id: TASK-001
 title: Add multi-instance config variables
-status: todo
+status: done
 req: REQ-001
 epic: EPIC-001
 ---

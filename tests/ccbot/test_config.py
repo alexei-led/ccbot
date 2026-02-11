@@ -1,5 +1,7 @@
 """Unit tests for Config — env var loading, validation, and user access."""
 
+import socket
+
 import pytest
 
 from ccbot.config import Config
@@ -37,6 +39,24 @@ class TestConfigValid:
         cfg = Config()
         assert cfg.is_user_allowed(99999) is False
 
+    def test_group_id_default_none(self):
+        cfg = Config()
+        assert cfg.group_id is None
+
+    def test_group_id_parsed_as_int(self, monkeypatch):
+        monkeypatch.setenv("CCBOT_GROUP_ID", "-1001234567890")
+        cfg = Config()
+        assert cfg.group_id == -1001234567890
+
+    def test_instance_name_defaults_to_hostname(self):
+        cfg = Config()
+        assert cfg.instance_name == socket.gethostname()
+
+    def test_instance_name_from_env(self, monkeypatch):
+        monkeypatch.setenv("CCBOT_INSTANCE_NAME", "bot-1")
+        cfg = Config()
+        assert cfg.instance_name == "bot-1"
+
 
 @pytest.mark.usefixtures("_base_env")
 class TestConfigMissingEnv:
@@ -53,4 +73,9 @@ class TestConfigMissingEnv:
     def test_non_numeric_allowed_users(self, monkeypatch):
         monkeypatch.setenv("ALLOWED_USERS", "abc")
         with pytest.raises(ValueError, match="non-numeric"):
+            Config()
+
+    def test_non_numeric_group_id(self, monkeypatch):
+        monkeypatch.setenv("CCBOT_GROUP_ID", "not-a-number")
+        with pytest.raises(ValueError, match="CCBOT_GROUP_ID must be a valid integer"):
             Config()
