@@ -1,5 +1,5 @@
-current_task: TASK-001
-current_step: verifying
-base_commit: 034f8eb
-branch: dev
-started_at: "2026-02-11"
+# Session state - auto-managed by specctl
+task: TASK-002-group-filter
+step: planning
+started: 2026-02-11T10:57:37Z
+base_commit: b8e28ce

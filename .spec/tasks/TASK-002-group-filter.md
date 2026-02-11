@@ -1,10 +1,11 @@
 ---
 id: TASK-002
 title: Add group filter to all handlers
-status: todo
+status: done
 req: REQ-001
 epic: EPIC-001
-depends: [TASK-001]
+depends:
+  - TASK-001
 ---
 
 # TASK-002: Add group filter to all handlers

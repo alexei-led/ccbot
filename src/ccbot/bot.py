@@ -156,6 +156,13 @@ def _get_thread_id(update: Update) -> int | None:
     return tid
 
 
+# Group filter: when CCBOT_GROUP_ID is set, only process updates from that group.
+# filters.ALL is a no-op — single-instance backward compat.
+_group_filter: filters.BaseFilter = (
+    filters.Chat(chat_id=config.group_id) if config.group_id else filters.ALL
+)
+
+
 # --- Command handlers ---
 
 
@@ -731,6 +738,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # CallbackQueryHandler doesn't support filters= param, so check inline.
+    if config.group_id:
+        chat = update.effective_chat
+        if not chat or chat.id != config.group_id:
+            return
+
     query = update.callback_query
     if not query or not query.data:
         return
@@ -1444,29 +1457,40 @@ def create_bot() -> Application:
         .build()
     )
 
-    application.add_handler(CommandHandler("new", new_command))
-    application.add_handler(CommandHandler("start", new_command))  # compat alias
-    application.add_handler(CommandHandler("history", history_command))
-    application.add_handler(CommandHandler("screenshot", screenshot_command))
-    application.add_handler(CommandHandler("esc", esc_command))
-    application.add_handler(CommandHandler("kill", kill_command))
+    application.add_handler(CommandHandler("new", new_command, filters=_group_filter))
+    application.add_handler(
+        CommandHandler("start", new_command, filters=_group_filter)  # compat alias
+    )
+    application.add_handler(
+        CommandHandler("history", history_command, filters=_group_filter)
+    )
+    application.add_handler(
+        CommandHandler("screenshot", screenshot_command, filters=_group_filter)
+    )
+    application.add_handler(CommandHandler("esc", esc_command, filters=_group_filter))
+    application.add_handler(CommandHandler("kill", kill_command, filters=_group_filter))
     application.add_handler(CallbackQueryHandler(callback_handler))
     # Topic closed event — auto-kill associated window
     application.add_handler(
         MessageHandler(
-            filters.StatusUpdate.FORUM_TOPIC_CLOSED,
+            filters.StatusUpdate.FORUM_TOPIC_CLOSED & _group_filter,
             topic_closed_handler,
         )
     )
     # Forward any other /command to Claude Code
-    application.add_handler(MessageHandler(filters.COMMAND, forward_command_handler))
     application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler)
+        MessageHandler(filters.COMMAND & _group_filter, forward_command_handler)
+    )
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND & _group_filter, text_handler)
     )
     # Catch-all: non-text content (images, stickers, voice, etc.)
     application.add_handler(
         MessageHandler(
-            ~filters.COMMAND & ~filters.TEXT & ~filters.StatusUpdate.ALL,
+            ~filters.COMMAND
+            & ~filters.TEXT
+            & ~filters.StatusUpdate.ALL
+            & _group_filter,
             unsupported_content_handler,
         )
     )
