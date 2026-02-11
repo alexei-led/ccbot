@@ -8,3 +8,4 @@
   13:49 START TASK-006-sessions-dashboard
   14:11 DONE TASK-006
   14:13 START TASK-007-demote-commands-to-buttons
+  16:42 DONE TASK-007

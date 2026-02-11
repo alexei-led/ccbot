@@ -1,7 +1,7 @@
 ---
 id: TASK-007
 title: Demote /esc, /kill, /screenshot to inline buttons
-status: in_progress
+status: done
 req: REQ-002
 epic: EPIC-002
 depends:
