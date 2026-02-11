@@ -15,6 +15,9 @@ Core responsibilities:
     is rejected with a warning (unsupported_content_handler).
   - Bot lifecycle management: post_init, post_shutdown, create_bot.
 
+Related modules:
+  - cc_commands: CC command discovery and Telegram menu registration
+
 Handler modules (in handlers/):
   - callback_data: Callback data constants
   - message_queue: Per-user message queue management
@@ -35,7 +38,6 @@ from pathlib import Path
 
 from telegram import (
     Bot,
-    BotCommand,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaDocument,
@@ -51,6 +53,7 @@ from telegram.ext import (
     filters,
 )
 
+from .cc_commands import register_commands
 from .config import config
 from .handlers.callback_data import (
     CB_ASK_DOWN,
@@ -128,15 +131,6 @@ session_monitor: SessionMonitor | None = None
 
 # Status polling task
 _status_poll_task: asyncio.Task | None = None
-
-# Claude Code commands shown in bot menu (forwarded via tmux)
-CC_COMMANDS: dict[str, str] = {
-    "clear": "↗ Clear conversation history",
-    "compact": "↗ Compact conversation context",
-    "cost": "↗ Show token/cost usage",
-    "help": "↗ Show Claude Code help",
-    "memory": "↗ Edit CLAUDE.md",
-}
 
 
 def is_user_allowed(user_id: int | None) -> bool:
@@ -1389,20 +1383,18 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
 async def post_init(application: Application) -> None:
     global session_monitor, _status_poll_task
 
-    await application.bot.delete_my_commands()
+    await register_commands(application.bot)
 
-    bot_commands = [
-        BotCommand("new", "Create new Claude session"),
-        BotCommand("history", "Message history for this topic"),
-        BotCommand("screenshot", "Terminal screenshot with control keys"),
-        BotCommand("esc", "Send Escape to interrupt Claude"),
-        BotCommand("kill", "Kill session and unbind this topic"),
-    ]
-    # Add Claude Code slash commands
-    for cmd_name, desc in CC_COMMANDS.items():
-        bot_commands.append(BotCommand(cmd_name, desc))
+    # Refresh CC commands every 10 minutes (picks up new skills/commands)
+    async def _refresh_commands(context: ContextTypes.DEFAULT_TYPE) -> None:
+        if context.bot:
+            try:
+                await register_commands(context.bot)
+            except Exception:
+                logger.exception("Failed to refresh CC commands, keeping previous menu")
 
-    await application.bot.set_my_commands(bot_commands)
+    if application.job_queue:
+        application.job_queue.run_repeating(_refresh_commands, interval=600, first=600)
 
     # Re-resolve stale window IDs from persisted state against live tmux windows
     await session_manager.resolve_stale_ids()
