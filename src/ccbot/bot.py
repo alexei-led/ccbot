@@ -4,7 +4,7 @@ Registers all command/callback/message handlers and manages the bot lifecycle.
 Each Telegram topic maps 1:1 to a tmux window (Claude session).
 
 Core responsibilities:
-  - Command handlers: /new (+ /start alias), /history, /screenshot, /esc, /kill,
+  - Command handlers: /new (+ /start alias), /history, /screenshot, /esc, /kill, /sessions,
     plus forwarding unknown /commands to Claude Code via tmux.
   - Callback query handler: directory browser, history pagination,
     interactive UI navigation, screenshot refresh.
@@ -74,6 +74,8 @@ from .handlers.callback_data import (
     CB_HISTORY_PREV,
     CB_KEYS_PREFIX,
     CB_SCREENSHOT_REFRESH,
+    CB_SESSIONS_NEW,
+    CB_SESSIONS_REFRESH,
     CB_WIN_BIND,
     CB_WIN_CANCEL,
     CB_WIN_NEW,
@@ -93,6 +95,7 @@ from .handlers.directory_browser import (
 )
 from .handlers.cleanup import clear_topic_state
 from .handlers.history import send_history
+from .handlers.sessions_dashboard import handle_sessions_refresh, sessions_command
 from .handlers.interactive_ui import (
     INTERACTIVE_TOOL_NAMES,
     clear_interactive_mode,
@@ -1181,6 +1184,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     await clear_interactive_msg(user.id, context.bot, thread_id)
             await query.answer(_INTERACTIVE_KEY_LABELS.get(cb_prefix, ""))
 
+    # Sessions dashboard
+    elif data == CB_SESSIONS_REFRESH:
+        await handle_sessions_refresh(query, user.id)
+        await query.answer("Refreshed")
+    elif data == CB_SESSIONS_NEW:
+        await query.answer("Create a new topic to start a session.")
+
     # Screenshot quick keys: send key to tmux window
     elif data.startswith(CB_KEYS_PREFIX):
         rest = data[len(CB_KEYS_PREFIX) :]
@@ -1461,6 +1471,9 @@ def create_bot() -> Application:
     )
     application.add_handler(CommandHandler("esc", esc_command, filters=_group_filter))
     application.add_handler(CommandHandler("kill", kill_command, filters=_group_filter))
+    application.add_handler(
+        CommandHandler("sessions", sessions_command, filters=_group_filter)
+    )
     application.add_handler(CallbackQueryHandler(callback_handler))
     # Topic closed event — auto-kill associated window
     application.add_handler(
