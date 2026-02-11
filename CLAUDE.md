@@ -7,9 +7,11 @@ Tech stack: Python, python-telegram-bot, tmux, uv.
 ## Common Commands
 
 ```bash
-uv run ruff check src/ tests/         # Lint — MUST pass before committing
-uv run ruff format src/ tests/        # Format — auto-fix, then verify with --check
-uv run pyright src/ccbot/             # Type check — MUST be 0 errors before committing
+make check                            # Run all: fmt, lint, typecheck, test
+make fmt                              # Format code
+make lint                             # Lint — MUST pass before committing
+make typecheck                        # Type check — MUST be 0 errors before committing
+make test                             # Run test suite
 ./scripts/restart.sh                  # Restart the ccbot service after code changes
 ccbot hook --install                  # Auto-install Claude Code SessionStart hook
 ```
@@ -34,12 +36,14 @@ ccbot hook --install                  # Auto-install Claude Code SessionStart ho
 - Config directory: `~/.ccbot/` by default, override with `CCBOT_DIR` env var.
 - `.env` loading priority: local `.env` > config dir `.env`.
 - State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `monitor_state.json` (byte offsets).
+- Project structure: handlers in `src/ccbot/handlers/`, core modules in `src/ccbot/`, tests mirror source under `tests/ccbot/`.
 
 ## Hook Configuration
 
 Auto-install: `ccbot hook --install`
 
 Or manually in `~/.claude/settings.json`:
+
 ```json
 {
   "hooks": {
@@ -51,6 +55,28 @@ Or manually in `~/.claude/settings.json`:
   }
 }
 ```
+
+## Spec-Driven Development
+
+Task management via `.spec/` directory. One task per session — complete fully before starting another.
+
+```
+.spec/
+├── reqs/     # REQ-*.md (WHAT — requirements, success criteria)
+├── epics/    # EPIC-*.md (grouping)
+├── tasks/    # TASK-*.md (HOW — implementation steps)
+├── memory/   # conventions.md, decisions.md
+└── SESSION.yaml
+```
+
+| Command        | Purpose                         |
+| -------------- | ------------------------------- |
+| `/spec:work`   | Select, plan, implement, verify |
+| `/spec:status` | Progress overview               |
+| `/spec:new`    | Create new task or requirement  |
+| `/spec:done`   | Mark complete with evidence     |
+
+Never mark done until: `make check` passes (fmt + lint + typecheck + test).
 
 ## Architecture Details
 
