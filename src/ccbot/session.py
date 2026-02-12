@@ -409,7 +409,7 @@ class SessionManager:
                         )
                         await self.load_session_map()
                         return True
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 pass
             await asyncio.sleep(interval)
         logger.warning(
@@ -431,7 +431,7 @@ class SessionManager:
             async with aiofiles.open(config.session_map_file, "r") as f:
                 content = await f.read()
             session_map = json.loads(content)
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return
 
         prefix = f"{config.tmux_session_name}:"

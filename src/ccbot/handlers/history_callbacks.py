@@ -51,7 +51,7 @@ async def handle_history_callback(
             end_byte = int(parts[-1])
             window_id = ":".join(parts[1:-2])
         offset = int(offset_str)
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         await query.answer("Invalid data")
         return
 

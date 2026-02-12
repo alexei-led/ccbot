@@ -246,7 +246,7 @@ def hook_main() -> None:
                 if map_file.exists():
                     try:
                         session_map = json.loads(map_file.read_text())
-                    except (json.JSONDecodeError, OSError):
+                    except json.JSONDecodeError, OSError:
                         logger.warning(
                             "Failed to read existing session_map, starting fresh"
                         )

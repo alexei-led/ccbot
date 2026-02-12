@@ -124,7 +124,7 @@ def build_directory_browser(
                 if d.is_dir() and not d.name.startswith(".")
             ]
         )
-    except (PermissionError, OSError):
+    except PermissionError, OSError:
         subdirs = []
 
     total_pages = max(1, (len(subdirs) + DIRS_PER_PAGE - 1) // DIRS_PER_PAGE)

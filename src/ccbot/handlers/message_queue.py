@@ -224,10 +224,13 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                 elif task.task_type == "status_clear":
                     await _do_clear_status_message(bot, user_id, task.thread_id or 0)
             except RetryAfter as e:
-                retry_secs = (
-                    e.retry_after
-                    if isinstance(e.retry_after, int)
-                    else int(e.retry_after.total_seconds())
+                retry_secs = min(
+                    60,
+                    (
+                        e.retry_after
+                        if isinstance(e.retry_after, int)
+                        else int(e.retry_after.total_seconds())
+                    ),
                 )
                 logger.warning(
                     "Flood control for user %s, pausing %ss", user_id, retry_secs

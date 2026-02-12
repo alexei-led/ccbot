@@ -135,7 +135,7 @@ async def send_history(
                     # ISO format: 2024-01-15T14:32:00.000Z
                     time_part = ts.split("T")[1] if "T" in ts else ts
                     hh_mm = time_part[:5]  # "14:32"
-                except (IndexError, TypeError):
+                except IndexError, TypeError:
                     hh_mm = ""
             else:
                 hh_mm = ""
