@@ -1,6 +1,6 @@
 # CCBot
 
-[![CI](https://github.com/alexei-led/ccbot/actions/workflows/ci.yml/badge.svg)](https://github.com/alexei-led/ccbot/actions/workflows/ci.yml)
+[![CI](https://github.com/alexei-led/ccbot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/alexei-led/ccbot/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/ccbot)](https://pypi.org/project/ccbot/)
 [![Python](https://img.shields.io/pypi/pyversions/ccbot)](https://pypi.org/project/ccbot/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
