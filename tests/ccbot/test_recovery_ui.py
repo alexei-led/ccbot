@@ -13,6 +13,7 @@ from ccbot.handlers.recovery_callbacks import (
     scan_sessions_for_cwd,
 )
 from ccbot.handlers.callback_data import (
+    CB_RECOVERY_BACK,
     CB_RECOVERY_CANCEL,
     CB_RECOVERY_CONTINUE,
     CB_RECOVERY_FRESH,
@@ -694,6 +695,56 @@ class TestRecoveryResumePickCallback:
         user_data[RECOVERY_SESSIONS] = [
             {"session_id": "sess-abc", "summary": "test"},
         ]
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        query.answer.assert_called_once()
+        assert "mismatch" in query.answer.call_args.args[0].lower()
+
+
+class TestRecoveryBackCallback:
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_back_shows_recovery_menu(
+        self,
+        mock_safe_edit: AsyncMock,
+    ) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        mock_safe_edit.assert_called_once()
+        assert "Choose an option" in mock_safe_edit.call_args.args[1]
+        query.answer.assert_called_once()
+
+    async def test_back_topic_mismatch_rejected(self) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@0", thread_id=99)
+        user_data = {PENDING_THREAD_ID: 42, RECOVERY_WINDOW_ID: "@0"}
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        query.answer.assert_called_once()
+        assert "mismatch" in query.answer.call_args.args[0].lower()
+
+    async def test_back_no_pending_state_rejected(self) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@0")
+        ctx = _make_context({})
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        query.answer.assert_called_once()
+        assert "mismatch" in query.answer.call_args.args[0].lower()
+
+    async def test_back_window_id_mismatch_rejected(self) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@999")
+        user_data = {PENDING_THREAD_ID: 42, RECOVERY_WINDOW_ID: "@0"}
         ctx = _make_context(user_data)
         query = update.callback_query
 

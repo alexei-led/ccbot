@@ -178,7 +178,7 @@ async def handle_recovery_callback(
 ) -> None:
     """Handle recovery UI callbacks."""
     if data.startswith(CB_RECOVERY_BACK):
-        await _handle_back(query, data)
+        await _handle_back(query, data, update, context)
     elif data.startswith(CB_RECOVERY_FRESH):
         await _handle_fresh(query, user_id, data, update, context)
     elif data.startswith(CB_RECOVERY_CONTINUE):
@@ -305,9 +305,27 @@ async def _create_and_bind_window(
 # ---------------------------------------------------------------------------
 
 
-async def _handle_back(query: CallbackQuery, data: str) -> None:
+async def _handle_back(
+    query: CallbackQuery,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
     """Handle CB_RECOVERY_BACK: return to the recovery options menu."""
     window_id = data[len(CB_RECOVERY_BACK) :]
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        await query.answer("Stale recovery", show_alert=True)
+        return
+    pending_tid = (
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
+    )
+    stored_wid = (
+        context.user_data.get(RECOVERY_WINDOW_ID) if context.user_data else None
+    )
+    if pending_tid is None or thread_id != pending_tid or stored_wid != window_id:
+        await query.answer("Stale recovery (topic mismatch)", show_alert=True)
+        return
     kb = build_recovery_keyboard(window_id)
     await safe_edit(
         query, "\u26a0\ufe0f Session ended. Choose an option:", reply_markup=kb
