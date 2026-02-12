@@ -20,6 +20,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aiofiles
+from telegram.error import TelegramError
 
 from .config import config
 from .monitor_state import MonitorState, TrackedSession
@@ -28,9 +29,9 @@ from .tmux_manager import tmux_manager
 from .transcript_parser import TranscriptParser
 from .utils import read_cwd_from_jsonl
 
-_CallbackError = (OSError, RuntimeError)
+_CallbackError = (OSError, RuntimeError, TelegramError)
 # Top-level loop resilience: catch any error to keep monitoring alive
-_LoopError = (OSError, RuntimeError, json.JSONDecodeError, ValueError)
+_LoopError = (OSError, RuntimeError, json.JSONDecodeError, ValueError, TelegramError)
 
 logger = logging.getLogger(__name__)
 

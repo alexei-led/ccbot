@@ -97,18 +97,21 @@ async def handle_screenshot_callback(
 ) -> None:
     """Handle screenshot, status button, and quick-key callbacks."""
     if data.startswith(CB_SCREENSHOT_REFRESH):
-        await _handle_refresh(query, data)
+        await _handle_refresh(query, user_id, data)
     elif data.startswith(CB_STATUS_ESC):
         await _handle_status_esc(query, user_id, data)
     elif data.startswith(CB_STATUS_SCREENSHOT):
         await _handle_status_screenshot(query, user_id, data, update)
     elif data.startswith(CB_KEYS_PREFIX):
-        await _handle_keys(query, data)
+        await _handle_keys(query, user_id, data)
 
 
-async def _handle_refresh(query: CallbackQuery, data: str) -> None:
+async def _handle_refresh(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_SCREENSHOT_REFRESH: refresh an existing screenshot."""
     window_id = data[len(CB_SCREENSHOT_REFRESH) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
     w = await tmux_manager.find_window_by_id(window_id)
     if not w:
         await query.answer("Window no longer exists", show_alert=True)
@@ -181,7 +184,7 @@ async def _handle_status_screenshot(
     await query.answer("\U0001f4f8")
 
 
-async def _handle_keys(query: CallbackQuery, data: str) -> None:
+async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_KEYS_PREFIX: send a quick key from screenshot keyboard."""
     rest = data[len(CB_KEYS_PREFIX) :]
     colon_idx = rest.find(":")
@@ -190,6 +193,10 @@ async def _handle_keys(query: CallbackQuery, data: str) -> None:
         return
     key_id = rest[:colon_idx]
     window_id = rest[colon_idx + 1 :]
+
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
 
     key_info = KEYS_SEND_MAP.get(key_id)
     if not key_info:
