@@ -35,6 +35,7 @@ from .directory_browser import (
     clear_browse_state,
 )
 from .message_sender import safe_edit, safe_send
+from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ async def _handle_select(
 ) -> None:
     """Handle CB_DIR_SELECT: navigate into a subdirectory."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
@@ -121,7 +122,7 @@ async def _handle_up(
 ) -> None:
     """Handle CB_DIR_UP: navigate to parent directory."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
@@ -155,7 +156,7 @@ async def _handle_page(
 ) -> None:
     """Handle CB_DIR_PAGE: paginate directory listing."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
@@ -195,15 +196,15 @@ async def _handle_confirm(
         else default_path
     )
     pending_thread_id: int | None = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
 
     confirm_thread_id = get_thread_id(update)
     if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
         clear_browse_state(context.user_data)
         if context.user_data is not None:
-            context.user_data.pop("_pending_thread_id", None)
-            context.user_data.pop("_pending_thread_text", None)
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
         return
 
@@ -243,7 +244,7 @@ async def _handle_confirm(
             )
 
             pending_text = (
-                context.user_data.get("_pending_thread_text")
+                context.user_data.get(PENDING_THREAD_TEXT)
                 if context.user_data
                 else None
             )
@@ -254,8 +255,8 @@ async def _handle_confirm(
                     len(pending_text),
                 )
                 if context.user_data is not None:
-                    context.user_data.pop("_pending_thread_text", None)
-                    context.user_data.pop("_pending_thread_id", None)
+                    context.user_data.pop(PENDING_THREAD_TEXT, None)
+                    context.user_data.pop(PENDING_THREAD_ID, None)
                 send_ok, send_msg = await session_manager.send_to_window(
                     created_wid,
                     pending_text,
@@ -269,14 +270,14 @@ async def _handle_confirm(
                         message_thread_id=pending_thread_id,
                     )
             elif context.user_data is not None:
-                context.user_data.pop("_pending_thread_id", None)
+                context.user_data.pop(PENDING_THREAD_ID, None)
         else:
             await safe_edit(query, f"✅ {message}")
     else:
         await safe_edit(query, f"❌ {message}")
         if pending_thread_id is not None and context.user_data is not None:
-            context.user_data.pop("_pending_thread_id", None)
-            context.user_data.pop("_pending_thread_text", None)
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
     await query.answer("Created" if success else "Failed")
 
 
@@ -287,14 +288,14 @@ async def _handle_cancel(
 ) -> None:
     """Handle CB_DIR_CANCEL: cancel directory browsing."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
         return
     clear_browse_state(context.user_data)
     if context.user_data is not None:
-        context.user_data.pop("_pending_thread_id", None)
-        context.user_data.pop("_pending_thread_text", None)
+        context.user_data.pop(PENDING_THREAD_ID, None)
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
     await safe_edit(query, "Cancelled")
     await query.answer("Cancelled")

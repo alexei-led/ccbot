@@ -252,17 +252,17 @@ def _send_kwargs(thread_id: int | None) -> dict[str, int]:
 
 async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> None:
     """Process a content message task."""
-    wid = task.window_id or ""
-    tid = task.thread_id or 0
+    window_id = task.window_id or ""
+    thread_id = task.thread_id or 0
     chat_id = session_manager.resolve_chat_id(user_id, task.thread_id)
 
     # 1. Handle tool_result editing (merged parts are edited together)
     if task.content_type == "tool_result" and task.tool_use_id:
-        _tkey = (task.tool_use_id, user_id, tid)
+        _tkey = (task.tool_use_id, user_id, thread_id)
         edit_msg_id = _tool_msg_ids.pop(_tkey, None)
         if edit_msg_id is not None:
             # Clear status message first
-            await _do_clear_status_message(bot, user_id, tid)
+            await _do_clear_status_message(bot, user_id, thread_id)
             # Join all parts for editing (merged content goes together)
             full_text = "\n\n".join(task.parts)
             try:
@@ -273,7 +273,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
                     parse_mode="MarkdownV2",
                     link_preview_options=NO_LINK_PREVIEW,
                 )
-                await _check_and_send_status(bot, user_id, wid, task.thread_id)
+                await _check_and_send_status(bot, user_id, window_id, task.thread_id)
                 return
             except RetryAfter:
                 raise
@@ -287,7 +287,9 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
                         text=plain_text,
                         link_preview_options=NO_LINK_PREVIEW,
                     )
-                    await _check_and_send_status(bot, user_id, wid, task.thread_id)
+                    await _check_and_send_status(
+                        bot, user_id, window_id, task.thread_id
+                    )
                     return
                 except RetryAfter:
                     raise
@@ -307,8 +309,8 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
             converted_msg_id = await _convert_status_to_content(
                 bot,
                 user_id,
-                tid,
-                wid,
+                thread_id,
+                window_id,
                 part,
             )
             if converted_msg_id is not None:
@@ -327,10 +329,10 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
 
     # 3. Record tool_use message ID for later editing
     if last_msg_id and task.tool_use_id and task.content_type == "tool_use":
-        _tool_msg_ids[(task.tool_use_id, user_id, tid)] = last_msg_id
+        _tool_msg_ids[(task.tool_use_id, user_id, thread_id)] = last_msg_id
 
     # 4. After content, check and send status
-    await _check_and_send_status(bot, user_id, wid, task.thread_id)
+    await _check_and_send_status(bot, user_id, window_id, task.thread_id)
 
 
 async def _convert_status_to_content(
@@ -395,15 +397,15 @@ async def _process_status_update_task(
     bot: Bot, user_id: int, task: MessageTask
 ) -> None:
     """Process a status update task."""
-    wid = task.window_id or ""
-    tid = task.thread_id or 0
+    window_id = task.window_id or ""
+    thread_id = task.thread_id or 0
     chat_id = session_manager.resolve_chat_id(user_id, task.thread_id)
-    skey = (user_id, tid)
+    skey = (user_id, thread_id)
     status_text = task.text or ""
 
     if not status_text:
         # No status text means clear status
-        await _do_clear_status_message(bot, user_id, tid)
+        await _do_clear_status_message(bot, user_id, thread_id)
         return
 
     # Send typing indicator if Claude is interruptible (working)
@@ -418,16 +420,18 @@ async def _process_status_update_task(
     if current_info:
         msg_id, stored_wid, last_text = current_info
 
-        if stored_wid != wid:
+        if stored_wid != window_id:
             # Window changed - delete old and send new
-            await _do_clear_status_message(bot, user_id, tid)
-            await _do_send_status_message(bot, user_id, tid, wid, status_text)
+            await _do_clear_status_message(bot, user_id, thread_id)
+            await _do_send_status_message(
+                bot, user_id, thread_id, window_id, status_text
+            )
         elif status_text == last_text:
             # Same content, skip edit
             pass
         else:
             # Same window, text changed - edit in place
-            keyboard = _build_status_keyboard(wid)
+            keyboard = _build_status_keyboard(window_id)
             try:
                 await bot.edit_message_text(
                     chat_id=chat_id,
@@ -437,7 +441,7 @@ async def _process_status_update_task(
                     reply_markup=keyboard,
                     link_preview_options=NO_LINK_PREVIEW,
                 )
-                _status_msg_info[skey] = (msg_id, wid, status_text)
+                _status_msg_info[skey] = (msg_id, window_id, status_text)
             except RetryAfter:
                 raise
             except TelegramError:
@@ -449,16 +453,18 @@ async def _process_status_update_task(
                         reply_markup=keyboard,
                         link_preview_options=NO_LINK_PREVIEW,
                     )
-                    _status_msg_info[skey] = (msg_id, wid, status_text)
+                    _status_msg_info[skey] = (msg_id, window_id, status_text)
                 except RetryAfter:
                     raise
                 except TelegramError as e:
                     logger.debug("Failed to edit status message: %s", e)
                     _status_msg_info.pop(skey, None)
-                    await _do_send_status_message(bot, user_id, tid, wid, status_text)
+                    await _do_send_status_message(
+                        bot, user_id, thread_id, window_id, status_text
+                    )
     else:
         # No existing status message, send new
-        await _do_send_status_message(bot, user_id, tid, wid, status_text)
+        await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)
 
 
 async def _do_send_status_message(
@@ -521,10 +527,12 @@ async def _check_and_send_status(
     if not pane_text:
         return
 
-    tid = thread_id or 0
+    thread_id_or_0 = thread_id or 0
     status_line = parse_status_line(pane_text)
     if status_line:
-        await _do_send_status_message(bot, user_id, tid, window_id, status_line)
+        await _do_send_status_message(
+            bot, user_id, thread_id_or_0, window_id, status_line
+        )
 
 
 async def enqueue_content_message(
@@ -592,10 +600,10 @@ def clear_tool_msg_ids_for_topic(user_id: int, thread_id: int | None = None) -> 
 
     Removes all entries in _tool_msg_ids that match the given user and thread.
     """
-    tid = thread_id or 0
+    thread_id_or_0 = thread_id or 0
     # Find and remove all matching keys
     keys_to_remove = [
-        key for key in _tool_msg_ids if key[1] == user_id and key[2] == tid
+        key for key in _tool_msg_ids if key[1] == user_id and key[2] == thread_id_or_0
     ]
     for key in keys_to_remove:
         _tool_msg_ids.pop(key, None)

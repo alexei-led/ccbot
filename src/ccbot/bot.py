@@ -150,12 +150,12 @@ async def history_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         return
 
     thread_id = _get_thread_id(update)
-    wid = session_manager.resolve_window_for_thread(user.id, thread_id)
-    if not wid:
+    window_id = session_manager.resolve_window_for_thread(user.id, thread_id)
+    if not window_id:
         await safe_reply(update.message, "\u274c No session bound to this topic.")
         return
 
-    await send_history(update.message, wid)
+    await send_history(update.message, window_id)
 
 
 async def topic_closed_handler(
@@ -170,10 +170,10 @@ async def topic_closed_handler(
     if thread_id is None:
         return
 
-    wid = session_manager.get_window_for_thread(user.id, thread_id)
-    if wid:
-        display = session_manager.get_display_name(wid)
-        w = await tmux_manager.find_window_by_id(wid)
+    window_id = session_manager.get_window_for_thread(user.id, thread_id)
+    if window_id:
+        display = session_manager.get_display_name(window_id)
+        w = await tmux_manager.find_window_by_id(window_id)
         if w:
             await tmux_manager.kill_window(w.window_id)
             logger.info(
@@ -217,30 +217,30 @@ async def forward_command_handler(
     cmd_text = update.message.text or ""
     # The full text is already a slash command like "/clear" or "/compact foo"
     cc_slash = cmd_text.split("@")[0]  # strip bot mention
-    wid = session_manager.resolve_window_for_thread(user.id, thread_id)
-    if not wid:
+    window_id = session_manager.resolve_window_for_thread(user.id, thread_id)
+    if not window_id:
         await safe_reply(update.message, "\u274c No session bound to this topic.")
         return
 
-    w = await tmux_manager.find_window_by_id(wid)
+    w = await tmux_manager.find_window_by_id(window_id)
     if not w:
-        display = session_manager.get_display_name(wid)
+        display = session_manager.get_display_name(window_id)
         await safe_reply(update.message, f"\u274c Window '{display}' no longer exists.")
         return
 
-    display = session_manager.get_display_name(wid)
+    display = session_manager.get_display_name(window_id)
     logger.info(
         "Forwarding command %s to window %s (user=%d)", cc_slash, display, user.id
     )
     await update.message.chat.send_action(ChatAction.TYPING)
-    success, message = await session_manager.send_to_window(wid, cc_slash)
+    success, message = await session_manager.send_to_window(window_id, cc_slash)
     if success:
         await safe_reply(update.message, f"\u26a1 [{display}] Sent: {cc_slash}")
         # If /clear command was sent, clear the session association
         # so we can detect the new session after first message
         if cc_slash.strip().lower() == "/clear":
             logger.info("Clearing session for window %s after /clear", display)
-            session_manager.clear_window_session(wid)
+            session_manager.clear_window_session(window_id)
     else:
         await safe_reply(update.message, f"\u274c {message}")
 
@@ -398,26 +398,26 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:
         logger.info("No active users for session %s", msg.session_id)
         return
 
-    for user_id, wid, thread_id in active_users:
+    for user_id, window_id, thread_id in active_users:
         # Handle interactive tools specially - capture terminal and send UI
         if msg.tool_name in INTERACTIVE_TOOL_NAMES and msg.content_type == "tool_use":
             # Mark interactive mode BEFORE sleeping so polling skips this window
-            set_interactive_mode(user_id, wid, thread_id)
+            set_interactive_mode(user_id, window_id, thread_id)
             # Flush pending messages (e.g. plan content) before sending interactive UI
             queue = get_message_queue(user_id)
             if queue:
                 await queue.join()
             # Wait briefly for Claude Code to render the question UI
             await asyncio.sleep(0.3)
-            handled = await handle_interactive_ui(bot, user_id, wid, thread_id)
+            handled = await handle_interactive_ui(bot, user_id, window_id, thread_id)
             if handled:
                 # Update user's read offset
-                session = await session_manager.resolve_session_for_window(wid)
+                session = await session_manager.resolve_session_for_window(window_id)
                 if session and session.file_path:
                     try:
                         file_size = Path(session.file_path).stat().st_size
                         session_manager.update_user_window_offset(
-                            user_id, wid, file_size
+                            user_id, window_id, file_size
                         )
                     except OSError:
                         pass
@@ -444,7 +444,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:
             await enqueue_content_message(
                 bot=bot,
                 user_id=user_id,
-                window_id=wid,
+                window_id=window_id,
                 parts=parts,
                 tool_use_id=msg.tool_use_id,
                 content_type=msg.content_type,
@@ -454,11 +454,13 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:
 
             # Update user's read offset to current file position
             # This marks these messages as "read" for this user
-            session = await session_manager.resolve_session_for_window(wid)
+            session = await session_manager.resolve_session_for_window(window_id)
             if session and session.file_path:
                 try:
                     file_size = Path(session.file_path).stat().st_size
-                    session_manager.update_user_window_offset(user_id, wid, file_size)
+                    session_manager.update_user_window_offset(
+                        user_id, window_id, file_size
+                    )
                 except OSError:
                     pass
 
@@ -485,9 +487,9 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
 
     # Collect unique chat_ids from existing bindings
     seen_chats: set[int] = set()
-    for uid, tid, _ in session_manager.iter_thread_bindings():
-        chat_id = session_manager.resolve_chat_id(uid, tid)
-        if chat_id != uid:  # Only group chats (not fallback to user_id)
+    for user_id, thread_id, _ in session_manager.iter_thread_bindings():
+        chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+        if chat_id != user_id:  # Only group chats (not fallback to user_id)
             seen_chats.add(chat_id)
 
     if not seen_chats:
@@ -518,28 +520,30 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
             # Bind one user to establish the route for this chat.
             # In cold-start (no existing bindings), use the first allowed user.
             bound = False
-            for uid, tid, _ in session_manager.iter_thread_bindings():
-                if session_manager.resolve_chat_id(uid, tid) == chat_id:
+            for user_id, thread_id, _ in session_manager.iter_thread_bindings():
+                if session_manager.resolve_chat_id(user_id, thread_id) == chat_id:
                     session_manager.bind_thread(
-                        uid,
+                        user_id,
                         topic.message_thread_id,
                         event.window_id,
                         window_name=topic_name,
                     )
                     session_manager.set_group_chat_id(
-                        uid, topic.message_thread_id, chat_id
+                        user_id, topic.message_thread_id, chat_id
                     )
                     bound = True
                     break
             if not bound and config.allowed_users:
-                uid = next(iter(config.allowed_users))
+                first_user_id = next(iter(config.allowed_users))
                 session_manager.bind_thread(
-                    uid,
+                    first_user_id,
                     topic.message_thread_id,
                     event.window_id,
                     window_name=topic_name,
                 )
-                session_manager.set_group_chat_id(uid, topic.message_thread_id, chat_id)
+                session_manager.set_group_chat_id(
+                    first_user_id, topic.message_thread_id, chat_id
+                )
         except TelegramError as e:
             logger.error(
                 "Failed to create topic for window %s in chat %d: %s",

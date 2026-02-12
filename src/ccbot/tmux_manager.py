@@ -370,7 +370,7 @@ class TmuxManager:
                     start_directory=str(path),
                 )
 
-                wid = window.window_id or ""
+                new_window_id = window.window_id or ""
 
                 # Start Claude Code if requested
                 if start_claude:
@@ -381,14 +381,14 @@ class TmuxManager:
                 logger.info(
                     "Created window '%s' (id=%s) at %s",
                     final_window_name,
-                    wid,
+                    new_window_id,
                     path,
                 )
                 return (
                     True,
                     f"Created window '{final_window_name}' at {path}",
                     final_window_name,
-                    wid,
+                    new_window_id,
                 )
 
             except Exception as e:  # noqa: BLE001

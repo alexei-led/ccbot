@@ -16,6 +16,11 @@ from ccbot.handlers.directory_browser import (
     STATE_KEY,
     STATE_SELECTING_WINDOW,
 )
+from ccbot.handlers.user_state import (
+    PENDING_THREAD_ID,
+    PENDING_THREAD_TEXT,
+    RECOVERY_WINDOW_ID,
+)
 
 _TH = "ccbot.handlers.text_handler"
 
@@ -23,7 +28,7 @@ _TH = "ccbot.handlers.text_handler"
 class TestCheckUiGuards:
     async def test_window_picker_same_thread_blocks(self) -> None:
         message = AsyncMock()
-        user_data = {STATE_KEY: STATE_SELECTING_WINDOW, "_pending_thread_id": 42}
+        user_data = {STATE_KEY: STATE_SELECTING_WINDOW, PENDING_THREAD_ID: 42}
 
         with patch(f"{_TH}.safe_reply", new_callable=AsyncMock) as mock_reply:
             result = await _check_ui_guards(user_data, 42, message)
@@ -36,20 +41,20 @@ class TestCheckUiGuards:
         message = AsyncMock()
         user_data = {
             STATE_KEY: STATE_SELECTING_WINDOW,
-            "_pending_thread_id": 99,
-            "_pending_thread_text": "old",
+            PENDING_THREAD_ID: 99,
+            PENDING_THREAD_TEXT: "old",
         }
 
         result = await _check_ui_guards(user_data, 42, message)
 
         assert result is False
         assert STATE_KEY not in user_data
-        assert "_pending_thread_id" not in user_data
-        assert "_pending_thread_text" not in user_data
+        assert PENDING_THREAD_ID not in user_data
+        assert PENDING_THREAD_TEXT not in user_data
 
     async def test_directory_browser_same_thread_blocks(self) -> None:
         message = AsyncMock()
-        user_data = {STATE_KEY: STATE_BROWSING_DIRECTORY, "_pending_thread_id": 42}
+        user_data = {STATE_KEY: STATE_BROWSING_DIRECTORY, PENDING_THREAD_ID: 42}
 
         with patch(f"{_TH}.safe_reply", new_callable=AsyncMock) as mock_reply:
             result = await _check_ui_guards(user_data, 42, message)
@@ -62,15 +67,15 @@ class TestCheckUiGuards:
         message = AsyncMock()
         user_data = {
             STATE_KEY: STATE_BROWSING_DIRECTORY,
-            "_pending_thread_id": 99,
-            "_pending_thread_text": "old",
+            PENDING_THREAD_ID: 99,
+            PENDING_THREAD_TEXT: "old",
         }
 
         result = await _check_ui_guards(user_data, 42, message)
 
         assert result is False
         assert STATE_KEY not in user_data
-        assert "_pending_thread_id" not in user_data
+        assert PENDING_THREAD_ID not in user_data
 
     async def test_no_state_continues(self) -> None:
         message = AsyncMock()
@@ -127,7 +132,7 @@ class TestHandleUnboundTopic:
         mock_picker.assert_called_once()
         mock_reply.assert_called_once()
         assert user_data[STATE_KEY] == STATE_SELECTING_WINDOW
-        assert user_data["_pending_thread_text"] == "hello"
+        assert user_data[PENDING_THREAD_TEXT] == "hello"
 
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")
@@ -176,8 +181,8 @@ class TestHandleUnboundTopic:
 
         await _handle_unbound_topic(100, 42, "my text", user_data, message)
 
-        assert user_data["_pending_thread_id"] == 42
-        assert user_data["_pending_thread_text"] == "my text"
+        assert user_data[PENDING_THREAD_ID] == 42
+        assert user_data[PENDING_THREAD_TEXT] == "my text"
 
 
 class TestHandleDeadWindow:
@@ -220,7 +225,7 @@ class TestHandleDeadWindow:
         assert result is True
         mock_reply.assert_called_once()
         assert "no longer running" in mock_reply.call_args.args[1]
-        assert user_data["_recovery_window_id"] == "@0"
+        assert user_data[RECOVERY_WINDOW_ID] == "@0"
 
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")

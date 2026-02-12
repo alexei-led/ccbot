@@ -105,11 +105,11 @@ Replace short aliases (`wid` -> `window_id`, etc.), centralize user-data key con
 
 **Steps:**
 
-- [ ] Run `/spec:work` on TASK-025
-- [ ] Replace all short variable aliases with full names
-- [ ] Centralize user-data key constants
-- [ ] Update all affected tests
-- [ ] Run `make check` - must pass
+- [x] Run `/spec:work` on TASK-025
+- [x] Replace all short variable aliases with full names
+- [x] Centralize user-data key constants
+- [x] Update all affected tests
+- [x] Run `make check` - must pass
 
 ### Task 5: TASK-026 - Harden exceptions and logging
 

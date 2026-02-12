@@ -30,6 +30,7 @@ from .directory_browser import (
     clear_window_picker_state,
 )
 from .message_sender import safe_edit, safe_send
+from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ async def _handle_bind(
 ) -> None:
     """Handle CB_WIN_BIND: bind existing unbound window to current topic."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale picker (topic mismatch)", show_alert=True)
@@ -111,11 +112,11 @@ async def _handle_bind(
     )
 
     pending_text = (
-        context.user_data.get("_pending_thread_text") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_TEXT) if context.user_data else None
     )
     if context.user_data is not None:
-        context.user_data.pop("_pending_thread_text", None)
-        context.user_data.pop("_pending_thread_id", None)
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
+        context.user_data.pop(PENDING_THREAD_ID, None)
     if pending_text:
         send_ok, send_msg = await session_manager.send_to_window(
             selected_wid, pending_text
@@ -138,7 +139,7 @@ async def _handle_new(
 ) -> None:
     """Handle CB_WIN_NEW: transition from window picker to directory browser."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale picker (topic mismatch)", show_alert=True)
@@ -162,14 +163,14 @@ async def _handle_cancel(
 ) -> None:
     """Handle CB_WIN_CANCEL: cancel the window picker."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is not None and get_thread_id(update) != pending_tid:
         await query.answer("Stale picker (topic mismatch)", show_alert=True)
         return
     clear_window_picker_state(context.user_data)
     if context.user_data is not None:
-        context.user_data.pop("_pending_thread_id", None)
-        context.user_data.pop("_pending_thread_text", None)
+        context.user_data.pop(PENDING_THREAD_ID, None)
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
     await safe_edit(query, "Cancelled")
     await query.answer("Cancelled")

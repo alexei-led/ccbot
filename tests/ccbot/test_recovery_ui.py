@@ -15,6 +15,11 @@ from ccbot.handlers.callback_data import (
     CB_RECOVERY_FRESH,
     CB_RECOVERY_RESUME,
 )
+from ccbot.handlers.user_state import (
+    PENDING_THREAD_ID,
+    PENDING_THREAD_TEXT,
+    RECOVERY_WINDOW_ID,
+)
 
 _RC = "ccbot.handlers.recovery_callbacks"
 
@@ -183,9 +188,9 @@ class TestTextHandlerDeadWindow:
             mock_path.cwd.return_value = mock_path.return_value
             await text_handler(update, ctx)
 
-        assert user_data["_pending_thread_text"] == "my pending message"
-        assert user_data["_pending_thread_id"] == 42
-        assert user_data["_recovery_window_id"] == "@0"
+        assert user_data[PENDING_THREAD_TEXT] == "my pending message"
+        assert user_data[PENDING_THREAD_ID] == 42
+        assert user_data[RECOVERY_WINDOW_ID] == "@0"
 
     @patch(f"{_TH}.tmux_manager")
     @patch(f"{_TH}.session_manager")
@@ -300,9 +305,9 @@ class TestRecoveryFreshCallback:
 
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@0")
         user_data = {
-            "_pending_thread_id": 42,
-            "_pending_thread_text": "hello",
-            "_recovery_window_id": "@0",
+            PENDING_THREAD_ID: 42,
+            PENDING_THREAD_TEXT: "hello",
+            RECOVERY_WINDOW_ID: "@0",
         }
         ctx = _make_context(user_data)
         query = update.callback_query
@@ -338,9 +343,9 @@ class TestRecoveryFreshCallback:
 
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@0")
         user_data = {
-            "_pending_thread_id": 42,
-            "_pending_thread_text": "hello",
-            "_recovery_window_id": "@0",
+            PENDING_THREAD_ID: 42,
+            PENDING_THREAD_TEXT: "hello",
+            RECOVERY_WINDOW_ID: "@0",
         }
         ctx = _make_context(user_data)
         query = update.callback_query
@@ -350,9 +355,9 @@ class TestRecoveryFreshCallback:
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_sm.send_to_window.assert_called_once_with("@5", "hello")
-        assert "_pending_thread_text" not in user_data
-        assert "_pending_thread_id" not in user_data
-        assert "_recovery_window_id" not in user_data
+        assert PENDING_THREAD_TEXT not in user_data
+        assert PENDING_THREAD_ID not in user_data
+        assert RECOVERY_WINDOW_ID not in user_data
 
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.session_manager")
@@ -368,9 +373,9 @@ class TestRecoveryFreshCallback:
 
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@0")
         user_data = {
-            "_pending_thread_id": 42,
-            "_pending_thread_text": "hello",
-            "_recovery_window_id": "@0",
+            PENDING_THREAD_ID: 42,
+            PENDING_THREAD_TEXT: "hello",
+            RECOVERY_WINDOW_ID: "@0",
         }
         ctx = _make_context(user_data)
         query = update.callback_query
@@ -384,7 +389,7 @@ class TestRecoveryFreshCallback:
 
     async def test_fresh_topic_mismatch_rejected(self) -> None:
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@0", thread_id=99)
-        user_data = {"_pending_thread_id": 42, "_recovery_window_id": "@0"}
+        user_data = {PENDING_THREAD_ID: 42, RECOVERY_WINDOW_ID: "@0"}
         ctx = _make_context(user_data)
         query = update.callback_query
 
@@ -406,8 +411,8 @@ class TestRecoveryFreshCallback:
     async def test_fresh_window_id_mismatch_rejected(self) -> None:
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@999")
         user_data = {
-            "_pending_thread_id": 42,
-            "_recovery_window_id": "@0",
+            PENDING_THREAD_ID: 42,
+            RECOVERY_WINDOW_ID: "@0",
         }
         ctx = _make_context(user_data)
         query = update.callback_query
@@ -426,18 +431,18 @@ class TestRecoveryCancelCallback:
     ) -> None:
         update = _make_callback_update(data=CB_RECOVERY_CANCEL)
         user_data = {
-            "_pending_thread_id": 42,
-            "_pending_thread_text": "hello",
-            "_recovery_window_id": "@0",
+            PENDING_THREAD_ID: 42,
+            PENDING_THREAD_TEXT: "hello",
+            RECOVERY_WINDOW_ID: "@0",
         }
         ctx = _make_context(user_data)
         query = update.callback_query
 
         await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        assert "_pending_thread_text" not in user_data
-        assert "_pending_thread_id" not in user_data
-        assert "_recovery_window_id" not in user_data
+        assert PENDING_THREAD_TEXT not in user_data
+        assert PENDING_THREAD_ID not in user_data
+        assert RECOVERY_WINDOW_ID not in user_data
         mock_safe_edit.assert_called_once()
 
 

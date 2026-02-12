@@ -45,6 +45,7 @@ from .message_sender import (
     safe_reply,
 )
 from .recovery_callbacks import build_recovery_keyboard
+from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
 from ..terminal_parser import extract_bash_output
@@ -157,7 +158,7 @@ async def _check_ui_guards(
 
     # Window picker guard
     if user_data.get(STATE_KEY) == STATE_SELECTING_WINDOW:
-        pending_tid = user_data.get("_pending_thread_id")
+        pending_tid = user_data.get(PENDING_THREAD_ID)
         if pending_tid == thread_id:
             await safe_reply(
                 message,
@@ -166,12 +167,12 @@ async def _check_ui_guards(
             return True
         # Stale picker state from a different thread — clear it
         clear_window_picker_state(user_data)
-        user_data.pop("_pending_thread_id", None)
-        user_data.pop("_pending_thread_text", None)
+        user_data.pop(PENDING_THREAD_ID, None)
+        user_data.pop(PENDING_THREAD_TEXT, None)
 
     # Directory browser guard
     if user_data.get(STATE_KEY) == STATE_BROWSING_DIRECTORY:
-        pending_tid = user_data.get("_pending_thread_id")
+        pending_tid = user_data.get(PENDING_THREAD_ID)
         if pending_tid == thread_id:
             await safe_reply(
                 message,
@@ -180,8 +181,8 @@ async def _check_ui_guards(
             return True
         # Stale browsing state from a different thread — clear it
         clear_browse_state(user_data)
-        user_data.pop("_pending_thread_id", None)
-        user_data.pop("_pending_thread_text", None)
+        user_data.pop(PENDING_THREAD_ID, None)
+        user_data.pop(PENDING_THREAD_TEXT, None)
 
     return False
 
@@ -197,8 +198,8 @@ async def _handle_unbound_topic(
 
     Returns True if the topic is unbound (handled), False if already bound.
     """
-    wid = session_manager.get_window_for_thread(user_id, thread_id)
-    if wid is not None:
+    window_id = session_manager.get_window_for_thread(user_id, thread_id)
+    if window_id is not None:
         return False
 
     all_windows = await tmux_manager.list_windows()
@@ -228,8 +229,8 @@ async def _handle_unbound_topic(
         if user_data is not None:
             user_data[STATE_KEY] = STATE_SELECTING_WINDOW
             user_data[UNBOUND_WINDOWS_KEY] = win_ids
-            user_data["_pending_thread_id"] = thread_id
-            user_data["_pending_thread_text"] = text
+            user_data[PENDING_THREAD_ID] = thread_id
+            user_data[PENDING_THREAD_TEXT] = text
         await safe_reply(message, msg_text, reply_markup=keyboard)
         return True
 
@@ -246,14 +247,14 @@ async def _handle_unbound_topic(
         user_data[BROWSE_PATH_KEY] = start_path
         user_data[BROWSE_PAGE_KEY] = 0
         user_data[BROWSE_DIRS_KEY] = subdirs
-        user_data["_pending_thread_id"] = thread_id
-        user_data["_pending_thread_text"] = text
+        user_data[PENDING_THREAD_ID] = thread_id
+        user_data[PENDING_THREAD_TEXT] = text
     await safe_reply(message, msg_text, reply_markup=keyboard)
     return True
 
 
 async def _handle_dead_window(
-    wid: str,
+    window_id: str,
     user_id: int,
     thread_id: int,
     text: str,
@@ -264,20 +265,20 @@ async def _handle_dead_window(
 
     Returns True if the window is dead (handled), False if still alive.
     """
-    w = await tmux_manager.find_window_by_id(wid)
+    w = await tmux_manager.find_window_by_id(window_id)
     if w:
         return False
 
-    display = session_manager.get_display_name(wid)
-    ws = session_manager.get_window_state(wid)
-    cwd = ws.cwd if ws.cwd else ""
+    display = session_manager.get_display_name(window_id)
+    window_state = session_manager.get_window_state(window_id)
+    cwd = window_state.cwd if window_state.cwd else ""
 
     if not cwd or not Path(cwd).is_dir():
         # No valid cwd — unbind and fall back to directory browser
         logger.info(
             "Dead window %s (no valid cwd), falling back to directory browser"
             " (user=%d, thread=%d)",
-            wid,
+            window_id,
             user_id,
             thread_id,
         )
@@ -289,24 +290,24 @@ async def _handle_dead_window(
             user_data[BROWSE_PATH_KEY] = start_path
             user_data[BROWSE_PAGE_KEY] = 0
             user_data[BROWSE_DIRS_KEY] = subdirs
-            user_data["_pending_thread_id"] = thread_id
-            user_data["_pending_thread_text"] = text
+            user_data[PENDING_THREAD_ID] = thread_id
+            user_data[PENDING_THREAD_TEXT] = text
         await safe_reply(message, msg_text, reply_markup=keyboard)
         return True
 
     # Show recovery UI
     logger.info(
         "Dead window %s (%s), showing recovery UI (user=%d, thread=%d)",
-        wid,
+        window_id,
         display,
         user_id,
         thread_id,
     )
     if user_data is not None:
-        user_data["_pending_thread_id"] = thread_id
-        user_data["_pending_thread_text"] = text
-        user_data["_recovery_window_id"] = wid
-    keyboard = build_recovery_keyboard(wid)
+        user_data[PENDING_THREAD_ID] = thread_id
+        user_data[PENDING_THREAD_TEXT] = text
+        user_data[RECOVERY_WINDOW_ID] = window_id
+    keyboard = build_recovery_keyboard(window_id)
     await safe_reply(
         message,
         f"\u26a0 Window `{display}` is no longer running.\n"
@@ -318,7 +319,7 @@ async def _handle_dead_window(
 
 
 async def _forward_message(
-    wid: str,
+    window_id: str,
     user_id: int,
     thread_id: int,
     text: str,
@@ -332,7 +333,7 @@ async def _forward_message(
     # Cancel any running bash capture — new message pushes pane content down
     _cancel_bash_capture(user_id, thread_id)
 
-    success, err_message = await session_manager.send_to_window(wid, text)
+    success, err_message = await session_manager.send_to_window(window_id, text)
     if not success:
         await safe_reply(message, f"\u274c {err_message}")
         return
@@ -341,15 +342,15 @@ async def _forward_message(
     if text.startswith("!") and len(text) > 1:
         bash_cmd = text[1:]  # strip leading "!"
         task = asyncio.create_task(
-            _capture_bash_output(bot, user_id, thread_id, wid, bash_cmd)
+            _capture_bash_output(bot, user_id, thread_id, window_id, bash_cmd)
         )
         _bash_capture_tasks[(user_id, thread_id)] = task
 
     # If in interactive mode, refresh the UI after sending text
     interactive_window = get_interactive_window(user_id, thread_id)
-    if interactive_window and interactive_window == wid:
+    if interactive_window and interactive_window == window_id:
         await asyncio.sleep(0.2)
-        await handle_interactive_ui(bot, user_id, wid, thread_id)
+        await handle_interactive_ui(bot, user_id, window_id, thread_id)
 
 
 async def handle_text_message(
@@ -391,13 +392,13 @@ async def handle_text_message(
         return
 
     # Bound topic — check if window is still alive
-    wid = session_manager.get_window_for_thread(user.id, thread_id)
-    assert wid is not None  # _handle_unbound_topic returned False
+    window_id = session_manager.get_window_for_thread(user.id, thread_id)
+    assert window_id is not None  # _handle_unbound_topic returned False
 
     if await _handle_dead_window(
-        wid, user.id, thread_id, text, context.user_data, message
+        window_id, user.id, thread_id, text, context.user_data, message
     ):
         return
 
     # Forward message to window
-    await _forward_message(wid, user.id, thread_id, text, context.bot, message)
+    await _forward_message(window_id, user.id, thread_id, text, context.bot, message)

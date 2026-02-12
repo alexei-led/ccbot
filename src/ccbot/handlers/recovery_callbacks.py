@@ -26,6 +26,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .message_sender import safe_edit, safe_send
+from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +93,10 @@ async def _handle_fresh(
         return
 
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     stored_wid = (
-        context.user_data.get("_recovery_window_id") if context.user_data else None
+        context.user_data.get(RECOVERY_WINDOW_ID) if context.user_data else None
     )
     if pending_tid is None or thread_id != pending_tid or stored_wid != old_wid:
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
@@ -106,9 +107,9 @@ async def _handle_fresh(
     if not cwd or not Path(cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         if context.user_data is not None:
-            context.user_data.pop("_pending_thread_id", None)
-            context.user_data.pop("_pending_thread_text", None)
-            context.user_data.pop("_recovery_window_id", None)
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
+            context.user_data.pop(RECOVERY_WINDOW_ID, None)
         await query.answer("Failed")
         return
 
@@ -120,9 +121,9 @@ async def _handle_fresh(
     if not success:
         await safe_edit(query, f"\u274c {message}")
         if context.user_data is not None:
-            context.user_data.pop("_pending_thread_id", None)
-            context.user_data.pop("_pending_thread_text", None)
-            context.user_data.pop("_recovery_window_id", None)
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
+            context.user_data.pop(RECOVERY_WINDOW_ID, None)
         await query.answer("Failed")
         return
 
@@ -144,12 +145,12 @@ async def _handle_fresh(
 
     # Forward pending text
     pending_text = (
-        context.user_data.get("_pending_thread_text") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_TEXT) if context.user_data else None
     )
     if context.user_data is not None:
-        context.user_data.pop("_pending_thread_text", None)
-        context.user_data.pop("_pending_thread_id", None)
-        context.user_data.pop("_recovery_window_id", None)
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
+        context.user_data.pop(PENDING_THREAD_ID, None)
+        context.user_data.pop(RECOVERY_WINDOW_ID, None)
     if pending_text:
         send_ok, send_msg = await session_manager.send_to_window(
             created_wid, pending_text
@@ -172,14 +173,14 @@ async def _handle_cancel(
 ) -> None:
     """Handle CB_RECOVERY_CANCEL: cancel recovery."""
     pending_tid = (
-        context.user_data.get("_pending_thread_id") if context.user_data else None
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
     if pending_tid is None or get_thread_id(update) != pending_tid:
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
         return
     if context.user_data is not None:
-        context.user_data.pop("_pending_thread_id", None)
-        context.user_data.pop("_pending_thread_text", None)
-        context.user_data.pop("_recovery_window_id", None)
+        context.user_data.pop(PENDING_THREAD_ID, None)
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
+        context.user_data.pop(RECOVERY_WINDOW_ID, None)
     await safe_edit(query, "Cancelled. Send a message to try again.")
     await query.answer("Cancelled")

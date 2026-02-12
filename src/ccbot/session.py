@@ -239,13 +239,15 @@ class SessionManager:
 
         # --- Migrate window_states ---
         new_window_states: dict[str, WindowState] = {}
-        for key, ws in self.window_states.items():
+        for key, window_state in self.window_states.items():
             if self._is_window_id(key):
                 if key in live_ids:
-                    new_window_states[key] = ws
+                    new_window_states[key] = window_state
                 else:
                     # Stale ID — try re-resolve by display name
-                    display = self.window_display_names.get(key, ws.window_name or key)
+                    display = self.window_display_names.get(
+                        key, window_state.window_name or key
+                    )
                     new_id = live_by_name.get(display)
                     if new_id:
                         logger.info(
@@ -254,8 +256,8 @@ class SessionManager:
                             new_id,
                             display,
                         )
-                        new_window_states[new_id] = ws
-                        ws.window_name = display
+                        new_window_states[new_id] = window_state
+                        window_state.window_name = display
                         self.window_display_names[new_id] = display
                         self.window_display_names.pop(key, None)
                         changed = True
@@ -269,8 +271,8 @@ class SessionManager:
                 new_id = live_by_name.get(key)
                 if new_id:
                     logger.info("Migrating window_state key %s -> %s", key, new_id)
-                    ws.window_name = key
-                    new_window_states[new_id] = ws
+                    window_state.window_name = key
+                    new_window_states[new_id] = window_state
                     self.window_display_names[new_id] = key
                     changed = True
                 else:
