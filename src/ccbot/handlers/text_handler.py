@@ -68,6 +68,26 @@ def _cancel_bash_capture(user_id: int, thread_id: int) -> None:
         task.cancel()
 
 
+async def _edit_bash_message(bot: Bot, chat_id: int, msg_id: int, output: str) -> None:
+    """Edit an existing bash-output message with MarkdownV2 fallback."""
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=msg_id,
+            text=convert_markdown(output),
+            parse_mode="MarkdownV2",
+            link_preview_options=NO_LINK_PREVIEW,
+        )
+    except TelegramError:
+        with contextlib.suppress(TelegramError):
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=msg_id,
+                text=output,
+                link_preview_options=NO_LINK_PREVIEW,
+            )
+
+
 async def _capture_bash_output(
     bot: Bot,
     user_id: int,
@@ -95,12 +115,7 @@ async def _capture_bash_output(
                 return
 
             output = extract_bash_output(raw, command)
-            if not output:
-                await asyncio.sleep(1.0)
-                continue
-
-            # Skip edit if nothing changed
-            if output == last_output:
+            if not output or output == last_output:
                 await asyncio.sleep(1.0)
                 continue
 
@@ -121,29 +136,15 @@ async def _capture_bash_output(
                 if sent:
                     msg_id = sent.message_id
             else:
-                # Subsequent captures — edit in place
-                try:
-                    await bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=msg_id,
-                        text=convert_markdown(output),
-                        parse_mode="MarkdownV2",
-                        link_preview_options=NO_LINK_PREVIEW,
-                    )
-                except TelegramError:
-                    with contextlib.suppress(TelegramError):
-                        await bot.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=msg_id,
-                            text=output,
-                            link_preview_options=NO_LINK_PREVIEW,
-                        )
+                await _edit_bash_message(bot, chat_id, msg_id, output)
 
             await asyncio.sleep(1.0)
     except asyncio.CancelledError:
         return
     finally:
-        _bash_capture_tasks.pop((user_id, thread_id), None)
+        key = (user_id, thread_id)
+        if _bash_capture_tasks.get(key) is asyncio.current_task():
+            _bash_capture_tasks.pop(key, None)
 
 
 async def _check_ui_guards(

@@ -350,12 +350,15 @@ class TestResumeCommand:
     @patch(f"{_RC}.scan_all_sessions")
     @patch(f"{_RC}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_RC}.get_thread_id", return_value=42)
+    @patch(f"{_RC}.config")
     async def test_shows_session_picker(
         self,
+        mock_config: MagicMock,
         _mock_thread_id: MagicMock,
         mock_safe_reply: AsyncMock,
         mock_scan: MagicMock,
     ) -> None:
+        mock_config.is_user_allowed.return_value = True
         mock_scan.return_value = [
             ResumeEntry("sess-1", "Fix bug", "/tmp/proj"),
             ResumeEntry("sess-2", "Add tests", "/tmp/proj"),
@@ -375,12 +378,15 @@ class TestResumeCommand:
     @patch(f"{_RC}.scan_all_sessions")
     @patch(f"{_RC}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_RC}.get_thread_id", return_value=42)
+    @patch(f"{_RC}.config")
     async def test_no_sessions_shows_message(
         self,
+        mock_config: MagicMock,
         _mock_thread_id: MagicMock,
         mock_safe_reply: AsyncMock,
         mock_scan: MagicMock,
     ) -> None:
+        mock_config.is_user_allowed.return_value = True
         mock_scan.return_value = []
 
         update = _make_update()
@@ -393,11 +399,14 @@ class TestResumeCommand:
 
     @patch(f"{_RC}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_RC}.get_thread_id", return_value=None)
+    @patch(f"{_RC}.config")
     async def test_no_topic_rejected(
         self,
+        mock_config: MagicMock,
         _mock_thread_id: MagicMock,
         mock_safe_reply: AsyncMock,
     ) -> None:
+        mock_config.is_user_allowed.return_value = True
         update = _make_update()
         ctx = _make_context()
 

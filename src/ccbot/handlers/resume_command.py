@@ -166,6 +166,10 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not update.message:
         return
 
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+
     thread_id = get_thread_id(update)
     if thread_id is None:
         await safe_reply(
