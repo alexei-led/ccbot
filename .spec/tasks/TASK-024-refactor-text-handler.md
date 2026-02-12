@@ -1,7 +1,7 @@
 ---
 id: TASK-024
 title: Refactor text_handler into explicit steps
-status: todo
+status: done
 priority: high
 req: REQ-006
 epic: EPIC-006
