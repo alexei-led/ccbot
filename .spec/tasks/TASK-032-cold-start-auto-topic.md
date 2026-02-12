@@ -1,7 +1,7 @@
 ---
 id: TASK-032
 title: Fix cold-start auto-topic creation with CCBOT_GROUP_ID
-status: in_progress
+status: done
 priority: high
 epic: EPIC-001
 depends: [TASK-002]

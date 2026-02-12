@@ -1,7 +1,7 @@
 ---
 id: TASK-033
 title: End-to-end test for manual tmux window sync
-status: in_progress
+status: done
 priority: medium
 epic: EPIC-001
 depends: [TASK-032]

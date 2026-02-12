@@ -219,10 +219,10 @@ Start with Phase A (5 minutes) + Phase B (the core ask about tmux sync), then co
 
 ## Verification
 
-- [ ] Manual test: create tmux window manually, verify topic auto-created in Telegram group
-- [ ] Manual test: cold-start scenario with CCBOT_GROUP_ID set, no existing bindings
-- [ ] Run full test suite: `make check`
-- [ ] Verify all spec task statuses match actual implementation state
+- [x] Manual test: create tmux window manually, verify topic auto-created in Telegram group
+- [x] Manual test: cold-start scenario with CCBOT_GROUP_ID set, no existing bindings
+- [x] Run full test suite: `make check`
+- [x] Verify all spec task statuses match actual implementation state
 
 ## Wrap-up
 

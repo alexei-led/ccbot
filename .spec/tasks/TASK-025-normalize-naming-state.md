@@ -1,7 +1,7 @@
 ---
 id: TASK-025
 title: Normalize naming and centralize state handling
-status: todo
+status: done
 priority: normal
 req: REQ-006
 epic: EPIC-006
