@@ -33,9 +33,9 @@ graph LR
   end
 
   subgraph machine["🖥️ Your Machine — tmux"]
-    W1["⚡ window @0\nclaude ↻ running"]
-    W2["⚡ window @1\nclaude ↻ running"]
-    W3["⚡ window @2\nclaude ↻ running"]
+    W1["⚡ window @0<br>claude ↻ running"]
+    W2["⚡ window @1<br>claude ↻ running"]
+    W3["⚡ window @2<br>claude ↻ running"]
   end
 
   T1 -- "text →" --> W1
