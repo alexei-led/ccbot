@@ -70,11 +70,11 @@ When `CCBOT_GROUP_ID` is configured, use it as the target group for auto-topic c
 
 **Steps:**
 
-- [ ] Create spec task via `/spec:new` for cold-start fix
-- [ ] In `_handle_new_window`, when no existing bindings found, fall back to `CCBOT_GROUP_ID` from config
-- [ ] Add guard: skip auto-topic if no group ID available (neither from bindings nor config)
-- [ ] Write tests for: cold-start with CCBOT_GROUP_ID set, cold-start without CCBOT_GROUP_ID, normal flow unchanged
-- [ ] Run `make check` - must pass
+- [x] Create spec task via `/spec:new` for cold-start fix
+- [x] In `_handle_new_window`, when no existing bindings found, fall back to `CCBOT_GROUP_ID` from config
+- [x] Add guard: skip auto-topic if no group ID available (neither from bindings nor config)
+- [x] Write tests for: cold-start with CCBOT_GROUP_ID set, cold-start without CCBOT_GROUP_ID, normal flow unchanged
+- [x] Run `make check` - must pass
 
 ### Task 3: NEW TASK - End-to-end test for manual tmux window sync
 

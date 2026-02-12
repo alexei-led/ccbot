@@ -491,10 +491,19 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
             seen_chats.add(chat_id)
 
     if not seen_chats:
-        logger.debug(
-            "No group chats found for auto-topic creation (window %s)", event.window_id
-        )
-        return
+        if config.group_id:
+            seen_chats.add(config.group_id)
+            logger.info(
+                "Cold-start: using CCBOT_GROUP_ID=%d for auto-topic (window %s)",
+                config.group_id,
+                event.window_id,
+            )
+        else:
+            logger.debug(
+                "No group chats found for auto-topic creation (window %s)",
+                event.window_id,
+            )
+            return
 
     for chat_id in seen_chats:
         try:
@@ -506,7 +515,9 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
                 chat_id,
                 event.window_id,
             )
-            # Bind all users that have bindings in this chat
+            # Bind one user to establish the route for this chat.
+            # In cold-start (no existing bindings), use the first allowed user.
+            bound = False
             for uid, tid, _ in session_manager.iter_thread_bindings():
                 if session_manager.resolve_chat_id(uid, tid) == chat_id:
                     session_manager.bind_thread(
@@ -518,7 +529,17 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
                     session_manager.set_group_chat_id(
                         uid, topic.message_thread_id, chat_id
                     )
-                    break  # One binding per chat is enough to establish the route
+                    bound = True
+                    break
+            if not bound and config.allowed_users:
+                uid = next(iter(config.allowed_users))
+                session_manager.bind_thread(
+                    uid,
+                    topic.message_thread_id,
+                    event.window_id,
+                    window_name=topic_name,
+                )
+                session_manager.set_group_chat_id(uid, topic.message_thread_id, chat_id)
         except TelegramError as e:
             logger.error(
                 "Failed to create topic for window %s in chat %d: %s",
