@@ -49,7 +49,7 @@ tmux new-window -n myproject -c ~/Code/myproject
 claude
 ```
 
-The window must be in the `ccbot` tmux session (configurable via `TMUX_SESSION_NAME`). The hook will register it automatically when Claude starts.
+The window must be in the `ccbot` tmux session (configurable via `TMUX_SESSION_NAME`). The hook will register it automatically when Claude starts, and the bot will create a matching Telegram topic. When `CCBOT_GROUP_ID` is set, this works even on a fresh instance with no existing bindings.
 
 ## Data Storage
 

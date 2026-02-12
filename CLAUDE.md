@@ -30,6 +30,9 @@ ccbot hook --install                  # Auto-install Claude Code SessionStart ho
 
 - Every `.py` file starts with a module-level docstring: purpose clear within 10 lines, one-sentence summary first line, then core responsibilities and key components.
 - Telegram interaction: prefer inline keyboards over reply keyboards; use `edit_message_text` for in-place updates; keep callback data under 64 bytes; use `answer_callback_query` for instant feedback.
+- Full variable names: `window_id` not `wid`, `thread_id` not `tid`, `session_id` not `sid`.
+- User-data keys: all `context.user_data` string keys are defined in `handlers/user_state.py` — import from there, never use raw strings.
+- Specific exceptions: catch specific exception types (`OSError`, `ValueError`, etc.), never bare `except Exception`.
 
 ## Configuration
 

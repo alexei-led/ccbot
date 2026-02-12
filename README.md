@@ -38,6 +38,7 @@ Other Telegram bots for Claude Code typically wrap the Claude Code SDK to create
 - **Slash command forwarding** — Any `/command` is forwarded to Claude Code (e.g. `/clear`, `/compact`, `/cost`)
 - **Sessions dashboard** — Overview of all active sessions with status and quick actions
 - **Message history** — Browse conversation history with pagination (newest first)
+- **Auto-sync tmux windows** — Create a tmux window and start Claude manually; the bot auto-creates a matching Telegram topic
 - **Auto-discovery** — Claude Code skills and custom commands appear in the Telegram menu automatically
 - **Persistent state** — Thread bindings and read offsets survive restarts
 
