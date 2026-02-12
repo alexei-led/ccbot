@@ -23,7 +23,7 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-pr@v3
+      - uses: mislav/bump-homebrew-formula-action@v3
         with:
           formula-name: ccbot
           homebrew-tap: alexei-led/homebrew-tap
