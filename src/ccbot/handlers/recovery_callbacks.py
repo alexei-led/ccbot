@@ -5,6 +5,7 @@ Handles inline keyboard callbacks for dead window recovery:
   - CB_RECOVERY_CONTINUE: Continue most recent session (claude --continue)
   - CB_RECOVERY_RESUME: Show session picker, resume selected (claude --resume)
   - CB_RECOVERY_PICK: User picks a specific session from the resume list
+  - CB_RECOVERY_BACK: Return to recovery options menu from session picker
   - CB_RECOVERY_CANCEL: Cancel recovery
 
 Key function: handle_recovery_callback (uniform callback handler signature).
