@@ -13,14 +13,18 @@ Key class: TmuxManager (singleton instantiated as `tmux_manager`).
 
 import asyncio
 import logging
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import libtmux
+from libtmux.exc import LibTmuxException
 
 from .config import config
 
 logger = logging.getLogger(__name__)
+
+_TmuxError = (LibTmuxException, OSError, subprocess.CalledProcessError)
 
 
 @dataclass
@@ -56,7 +60,7 @@ class TmuxManager:
         """Get the tmux session if it exists."""
         try:
             return self.server.sessions.get(session_name=self.session_name)
-        except Exception:  # noqa: BLE001
+        except _TmuxError:
             return None
 
     def get_or_create_session(self) -> libtmux.Session:
@@ -113,7 +117,7 @@ class TmuxManager:
                             pane_current_command=pane_cmd,
                         )
                     )
-                except Exception as e:  # noqa: BLE001
+                except _TmuxError as e:
                     logger.debug("Error getting window info: %s", e)
 
             return windows
@@ -182,7 +186,7 @@ class TmuxManager:
                     "Failed to capture pane %s: %s", window_id, stderr.decode("utf-8")
                 )
                 return None
-            except Exception as e:  # noqa: BLE001
+            except _TmuxError as e:
                 logger.error("Unexpected error capturing pane %s: %s", window_id, e)
                 return None
 
@@ -200,11 +204,67 @@ class TmuxManager:
                     return None
                 lines = pane.capture_pane()
                 return "\n".join(lines) if isinstance(lines, list) else str(lines)
-            except Exception as e:  # noqa: BLE001
+            except _TmuxError as e:
                 logger.error("Failed to capture pane %s: %s", window_id, e)
                 return None
 
         return await asyncio.to_thread(_sync_capture)
+
+    def _pane_send(
+        self, window_id: str, chars: str, *, enter: bool, literal: bool
+    ) -> bool:
+        """Synchronous helper: send keys to the active pane of a window."""
+        session = self.get_session()
+        if not session:
+            logger.error("No tmux session found")
+            return False
+        try:
+            window = session.windows.get(window_id=window_id)
+            if not window:
+                logger.error("Window %s not found", window_id)
+                return False
+            pane = window.active_pane
+            if not pane:
+                logger.error("No active pane in window %s", window_id)
+                return False
+            pane.send_keys(chars, enter=enter, literal=literal)
+            return True
+        except _TmuxError as e:
+            logger.error("Failed to send keys to window %s: %s", window_id, e)
+            return False
+
+    async def _send_literal_then_enter(self, window_id: str, text: str) -> bool:
+        """Send literal text followed by Enter with a delay.
+
+        Claude Code's TUI sometimes interprets a rapid-fire Enter
+        (arriving in the same input batch as the text) as a newline
+        rather than submit.  A 500ms gap lets the TUI process the
+        text before receiving Enter.
+
+        Handles ``!`` command mode: sends ``!`` first so the TUI switches
+        to bash mode, waits 1s, then sends the rest.
+        """
+        if text.startswith("!"):
+            if not await asyncio.to_thread(
+                self._pane_send, window_id, "!", enter=False, literal=True
+            ):
+                return False
+            rest = text[1:]
+            if rest:
+                await asyncio.sleep(1.0)
+                if not await asyncio.to_thread(
+                    self._pane_send, window_id, rest, enter=False, literal=True
+                ):
+                    return False
+        else:
+            if not await asyncio.to_thread(
+                self._pane_send, window_id, text, enter=False, literal=True
+            ):
+                return False
+        await asyncio.sleep(0.5)
+        return await asyncio.to_thread(
+            self._pane_send, window_id, "", enter=True, literal=False
+        )
 
     async def send_keys(
         self, window_id: str, text: str, enter: bool = True, literal: bool = True
@@ -222,90 +282,11 @@ class TmuxManager:
             True if successful, False otherwise
         """
         if literal and enter:
-            # Split into text + delay + Enter via libtmux.
-            # Claude Code's TUI sometimes interprets a rapid-fire Enter
-            # (arriving in the same input batch as the text) as a newline
-            # rather than submit.  A 500ms gap lets the TUI process the
-            # text before receiving Enter.
-            def _send_literal(chars: str) -> bool:
-                session = self.get_session()
-                if not session:
-                    logger.error("No tmux session found")
-                    return False
-                try:
-                    window = session.windows.get(window_id=window_id)
-                    if not window:
-                        logger.error("Window %s not found", window_id)
-                        return False
-                    pane = window.active_pane
-                    if not pane:
-                        logger.error("No active pane in window %s", window_id)
-                        return False
-                    pane.send_keys(chars, enter=False, literal=True)
-                    return True
-                except Exception as e:  # noqa: BLE001
-                    logger.error("Failed to send keys to window %s: %s", window_id, e)
-                    return False
+            return await self._send_literal_then_enter(window_id, text)
 
-            def _send_enter() -> bool:
-                session = self.get_session()
-                if not session:
-                    return False
-                try:
-                    window = session.windows.get(window_id=window_id)
-                    if not window:
-                        return False
-                    pane = window.active_pane
-                    if not pane:
-                        return False
-                    pane.send_keys("", enter=True, literal=False)
-                    return True
-                except Exception as e:  # noqa: BLE001
-                    logger.error("Failed to send Enter to window %s: %s", window_id, e)
-                    return False
-
-            # Claude Code's ! command mode: send "!" first so the TUI
-            # switches to bash mode, wait 1s, then send the rest.
-            if text.startswith("!"):
-                if not await asyncio.to_thread(_send_literal, "!"):
-                    return False
-                rest = text[1:]
-                if rest:
-                    await asyncio.sleep(1.0)
-                    if not await asyncio.to_thread(_send_literal, rest):
-                        return False
-            else:
-                if not await asyncio.to_thread(_send_literal, text):
-                    return False
-            await asyncio.sleep(0.5)
-            return await asyncio.to_thread(_send_enter)
-
-        # Other cases: special keys (literal=False) or no-enter
-        def _sync_send_keys() -> bool:
-            session = self.get_session()
-            if not session:
-                logger.error("No tmux session found")
-                return False
-
-            try:
-                window = session.windows.get(window_id=window_id)
-                if not window:
-                    logger.error("Window %s not found", window_id)
-                    return False
-
-                pane = window.active_pane
-                if not pane:
-                    logger.error("No active pane in window %s", window_id)
-                    return False
-
-                pane.send_keys(text, enter=enter, literal=literal)
-                return True
-
-            except Exception as e:  # noqa: BLE001
-                logger.error("Failed to send keys to window %s: %s", window_id, e)
-                return False
-
-        return await asyncio.to_thread(_sync_send_keys)
+        return await asyncio.to_thread(
+            self._pane_send, window_id, text, enter=enter, literal=literal
+        )
 
     async def kill_window(self, window_id: str) -> bool:
         """Kill a tmux window by its ID."""
@@ -321,7 +302,7 @@ class TmuxManager:
                 window.kill()
                 logger.info("Killed window %s", window_id)
                 return True
-            except Exception as e:  # noqa: BLE001
+            except _TmuxError as e:
                 logger.error("Failed to kill window %s: %s", window_id, e)
                 return False
 
@@ -391,7 +372,7 @@ class TmuxManager:
                     new_window_id,
                 )
 
-            except Exception as e:  # noqa: BLE001
+            except _TmuxError as e:
                 logger.error("Failed to create window: %s", e)
                 return False, f"Failed to create window: {e}", "", ""
 

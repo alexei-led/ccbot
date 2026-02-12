@@ -136,9 +136,9 @@ Enable C901, PLR0911, PLR0912, PLR0915, N ruff rules, fix violations.
 
 **Steps:**
 
-- [ ] Run `/spec:work` on TASK-027
-- [ ] Enable rules incrementally, fixing violations
-- [ ] Run `make check` - must pass
+- [x] Run `/spec:work` on TASK-027
+- [x] Enable rules incrementally, fixing violations
+- [x] Run `make check` - must pass
 
 ---
 

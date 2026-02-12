@@ -142,6 +142,70 @@ def _build_interactive_keyboard(
     return InlineKeyboardMarkup(rows)
 
 
+async def _edit_interactive_msg(
+    bot: Bot,
+    chat_id: int,
+    msg_id: int,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+    ikey: tuple[int, int],
+    window_id: str,
+) -> bool | None:
+    """Try to edit an existing interactive message.
+
+    Returns True/False on success/failure, or None if no edit was attempted.
+    """
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=msg_id,
+            text=text,
+            reply_markup=keyboard,
+            link_preview_options=NO_LINK_PREVIEW,
+        )
+        _interactive_mode[ikey] = window_id
+        return True
+    except BadRequest as e:
+        if "Message is not modified" in e.message:
+            return True  # Content identical, no-op
+        logger.warning("BadRequest editing interactive msg: %s", e.message)
+        return False
+    except TelegramError:
+        logger.warning("Failed to edit interactive message", exc_info=True)
+        return False
+
+
+async def _capture_interactive_content(
+    window_id: str,
+) -> tuple[str, str] | None:
+    """Capture pane and extract interactive UI content.
+
+    Returns (ui_name, text) if an interactive UI is detected, None otherwise.
+    """
+    w = await tmux_manager.find_window_by_id(window_id)
+    if not w:
+        return None
+
+    pane_text = await tmux_manager.capture_pane(w.window_id)
+    if not pane_text:
+        logger.debug("No pane text captured for window_id %s", window_id)
+        return None
+
+    if not is_interactive_ui(pane_text):
+        logger.debug(
+            "No interactive UI detected in window_id %s (last 3 lines: %s)",
+            window_id,
+            pane_text.strip().split("\n")[-3:],
+        )
+        return None
+
+    content = extract_interactive_content(pane_text)
+    if not content:
+        return None
+
+    return content.name, content.content
+
+
 async def handle_interactive_ui(
     bot: Bot,
     user_id: int,
@@ -154,66 +218,30 @@ async def handle_interactive_ui(
     RestoreCheckpoint UIs. Returns True if UI was detected and sent,
     False otherwise.
     """
+    captured = await _capture_interactive_content(window_id)
+    if not captured:
+        return False
+
+    ui_name, text = captured
     ikey = (user_id, thread_id or 0)
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    w = await tmux_manager.find_window_by_id(window_id)
-    if not w:
-        return False
+    keyboard = _build_interactive_keyboard(window_id, ui_name=ui_name)
 
-    # Capture plain text (no ANSI colors)
-    pane_text = await tmux_manager.capture_pane(w.window_id)
-    if not pane_text:
-        logger.debug("No pane text captured for window_id %s", window_id)
-        return False
-
-    # Quick check if it looks like an interactive UI
-    if not is_interactive_ui(pane_text):
-        logger.debug(
-            "No interactive UI detected in window_id %s (last 3 lines: %s)",
-            window_id,
-            pane_text.strip().split("\n")[-3:],
+    # Try editing existing interactive message first
+    existing_msg_id = _interactive_msgs.get(ikey)
+    if existing_msg_id:
+        return (
+            await _edit_interactive_msg(
+                bot, chat_id, existing_msg_id, text, keyboard, ikey, window_id
+            )
+            or False
         )
-        return False
 
-    # Extract content between separators
-    content = extract_interactive_content(pane_text)
-    if not content:
-        return False
-
-    # Build message with navigation keyboard
-    keyboard = _build_interactive_keyboard(window_id, ui_name=content.name)
-
-    # Send as plain text (no markdown conversion)
-    text = content.content
-
-    # Build thread kwargs for send_message
+    # Send new message
     thread_kwargs: dict[str, int] = {}
     if thread_id is not None:
         thread_kwargs["message_thread_id"] = thread_id
 
-    # Check if we have an existing interactive message to edit
-    existing_msg_id = _interactive_msgs.get(ikey)
-    if existing_msg_id:
-        try:
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=existing_msg_id,
-                text=text,
-                reply_markup=keyboard,
-                link_preview_options=NO_LINK_PREVIEW,
-            )
-            _interactive_mode[ikey] = window_id
-            return True
-        except BadRequest as e:
-            if "Message is not modified" in e.message:
-                return True  # Content identical, no-op
-            logger.warning("BadRequest editing interactive msg: %s", e.message)
-            return False
-        except Exception:  # noqa: BLE001
-            logger.warning("Failed to edit interactive message", exc_info=True)
-            return False
-
-    # Send new message
     logger.info(
         "Sending interactive UI to user %d for window_id %s", user_id, window_id
     )
@@ -227,8 +255,7 @@ async def handle_interactive_ui(
     if sent:
         _interactive_msgs[ikey] = sent.message_id
         _interactive_mode[ikey] = window_id
-        return True
-    return False
+    return sent is not None
 
 
 async def clear_interactive_msg(

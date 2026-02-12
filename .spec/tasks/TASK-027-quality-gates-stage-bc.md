@@ -1,7 +1,7 @@
 ---
 id: TASK-027
 title: "Quality gates Stage B+C: complexity + naming rules"
-status: todo
+status: done
 priority: normal
 req: REQ-006
 epic: EPIC-006

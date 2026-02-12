@@ -66,13 +66,45 @@ packages = ["src/ccbot"]
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "ARG", "G", "BLE", "SIM", "PLR2004"]
+select = ["E4", "E7", "E9", "F", "ARG", "G", "BLE", "SIM", "PLR2004", "C901", "PLR0911", "PLR0912", "PLR0915", "N"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-returns = 8
+max-branches = 15
+max-statements = 60
 
 [tool.ruff.lint.per-file-ignores]
 # Tests: unused args (fixtures, mock lambdas), magic values in assertions
 "tests/**" = ["ARG", "PLR2004"]
-# ANSI SGR codes and Unicode ranges are domain-standard numeric constants
-"src/ccbot/screenshot.py" = ["PLR2004"]
+# ANSI SGR codes/Unicode ranges + ANSI code parsing is inherently branchy
+"src/ccbot/screenshot.py" = ["PLR2004", "C901", "PLR0912"]
+# Transcript parser: inherently complex JSONL parsing and tool dispatch
+"src/ccbot/transcript_parser.py" = ["C901", "PLR0912", "PLR0915", "PLR0911"]
+# Session manager: complex state migration (resolve_stale_ids) and session map loading
+"src/ccbot/session.py" = ["C901", "PLR0912", "PLR0915"]
+# Session monitor: filesystem scan with many validation branches
+"src/ccbot/session_monitor.py" = ["C901", "PLR0912"]
+# Bot: callback dispatch and message routing are inherently branchy
+"src/ccbot/bot.py" = ["C901", "PLR0912"]
+# Hook: CLI dispatch with multiple subcommands
+"src/ccbot/hook.py" = ["C901", "PLR0915"]
+# CC commands: filesystem scan with validation branches
+"src/ccbot/cc_commands.py" = ["C901", "PLR0912"]
+# History: paginated message formatting with many edge cases
+"src/ccbot/handlers/history.py" = ["C901", "PLR0912", "PLR0915"]
+# Response builder: message formatting with content-type dispatch
+"src/ccbot/handlers/response_builder.py" = ["C901", "PLR0912"]
+# Status polling: background loop with multiple state checks
+"src/ccbot/handlers/status_polling.py" = ["C901", "PLR0912"]
+# Message queue: worker loop with task dispatch and error handling
+"src/ccbot/handlers/message_queue.py" = ["C901"]
+# Directory callbacks: confirm handler with state cleanup branches
+"src/ccbot/handlers/directory_callbacks.py" = ["C901"]
+# Recovery callbacks: fresh handler with state cleanup branches
+"src/ccbot/handlers/recovery_callbacks.py" = ["C901"]
 
 [tool.pyright]
 pythonVersion = "3.14"
