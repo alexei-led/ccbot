@@ -70,7 +70,7 @@ def scan_all_sessions() -> list[ResumeEntry]:
         if not index_file.exists():
             continue
         try:
-            index_data = json.loads(index_file.read_text())
+            index_data = json.loads(index_file.read_text(encoding="utf-8"))
         except _IndexParseError:
             continue
 

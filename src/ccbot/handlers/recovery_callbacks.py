@@ -25,6 +25,7 @@ from ..config import config
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import (
+    CB_RECOVERY_BACK,
     CB_RECOVERY_CANCEL,
     CB_RECOVERY_CONTINUE,
     CB_RECOVERY_FRESH,
@@ -98,7 +99,7 @@ def _build_resume_picker_keyboard(
         [
             InlineKeyboardButton(
                 "\u2b05 Back",
-                callback_data=f"{CB_RECOVERY_FRESH}{window_id}"[:64],
+                callback_data=f"{CB_RECOVERY_BACK}{window_id}"[:64],
             ),
             InlineKeyboardButton("\u2716 Cancel", callback_data=CB_RECOVERY_CANCEL),
         ]
@@ -128,7 +129,7 @@ def scan_sessions_for_cwd(cwd: str) -> list[_SessionEntry]:
         if not index_file.exists():
             continue
         try:
-            index_data = json.loads(index_file.read_text())
+            index_data = json.loads(index_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             continue
         except OSError:
@@ -176,7 +177,9 @@ async def handle_recovery_callback(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle recovery UI callbacks."""
-    if data.startswith(CB_RECOVERY_FRESH):
+    if data.startswith(CB_RECOVERY_BACK):
+        await _handle_back(query, data)
+    elif data.startswith(CB_RECOVERY_FRESH):
         await _handle_fresh(query, user_id, data, update, context)
     elif data.startswith(CB_RECOVERY_CONTINUE):
         await _handle_continue(query, user_id, data, update, context)
@@ -201,7 +204,7 @@ def _validate_recovery_state(
     """Validate common recovery preconditions.
 
     Returns (thread_id, old_window_id, cwd) on success, or None on failure
-    (caller should return early — query.answer is already called).
+    (caller should return early and call query.answer).
     """
     thread_id = get_thread_id(update)
     if thread_id is None:
@@ -300,6 +303,16 @@ async def _create_and_bind_window(
 # ---------------------------------------------------------------------------
 # Individual handlers
 # ---------------------------------------------------------------------------
+
+
+async def _handle_back(query: CallbackQuery, data: str) -> None:
+    """Handle CB_RECOVERY_BACK: return to the recovery options menu."""
+    window_id = data[len(CB_RECOVERY_BACK) :]
+    kb = build_recovery_keyboard(window_id)
+    await safe_edit(
+        query, "\u26a0\ufe0f Session ended. Choose an option:", reply_markup=kb
+    )
+    await query.answer()
 
 
 async def _handle_fresh(
