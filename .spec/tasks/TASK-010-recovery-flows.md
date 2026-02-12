@@ -1,7 +1,7 @@
 ---
 id: TASK-010
 title: Implement Fresh/Continue/Resume recovery flows
-status: todo
+status: done
 req: REQ-003
 epic: EPIC-003
 depends: [TASK-009]

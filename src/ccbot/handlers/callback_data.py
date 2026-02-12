@@ -57,8 +57,9 @@ CB_STATUS_SCREENSHOT = "st:ss:"  # st:ss:<window_id>
 
 # Recovery UI (dead window)
 CB_RECOVERY_FRESH = "rec:f:"  # rec:f:<window_id>
-CB_RECOVERY_CONTINUE = "rec:c:"  # rec:c:<window_id> (TASK-010)
-CB_RECOVERY_RESUME = "rec:r:"  # rec:r:<window_id> (TASK-010)
+CB_RECOVERY_CONTINUE = "rec:c:"  # rec:c:<window_id>
+CB_RECOVERY_RESUME = "rec:r:"  # rec:r:<window_id>
+CB_RECOVERY_PICK = "rec:p:"  # rec:p:<index> (resume picker selection)
 CB_RECOVERY_CANCEL = "rec:x"  # cancel recovery
 
 # Screenshot control keys

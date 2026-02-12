@@ -7,3 +7,4 @@ to prevent typos and enable IDE navigation.
 PENDING_THREAD_ID = "_pending_thread_id"
 PENDING_THREAD_TEXT = "_pending_thread_text"
 RECOVERY_WINDOW_ID = "_recovery_window_id"
+RECOVERY_SESSIONS = "_recovery_sessions"

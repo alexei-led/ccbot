@@ -165,10 +165,10 @@ Enable C901, PLR0911, PLR0912, PLR0915, N ruff rules, fix violations.
 
 **Steps:**
 
-- [ ] Run `/spec:work` on TASK-010
-- [ ] Implement three recovery options for dead sessions
-- [ ] Write tests
-- [ ] Run `make check` - must pass
+- [x] Run `/spec:work` on TASK-010
+- [x] Implement three recovery options for dead sessions
+- [x] Write tests
+- [x] Run `make check` - must pass
 
 ### Task 9: TASK-011 - /resume command
 

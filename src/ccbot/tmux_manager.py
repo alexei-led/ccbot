@@ -313,6 +313,7 @@ class TmuxManager:
         work_dir: str,
         window_name: str | None = None,
         start_claude: bool = True,
+        claude_args: str = "",
     ) -> tuple[bool, str, str, str]:
         """Create a new tmux window and optionally start Claude Code.
 
@@ -320,6 +321,8 @@ class TmuxManager:
             work_dir: Working directory for the new window
             window_name: Optional window name (defaults to directory name)
             start_claude: Whether to start claude command
+            claude_args: Extra arguments appended to the claude command
+                         (e.g. "--continue", "--resume <id>")
 
         Returns:
             Tuple of (success, message, window_name, window_id)
@@ -357,7 +360,10 @@ class TmuxManager:
                 if start_claude:
                     pane = window.active_pane
                     if pane:
-                        pane.send_keys(config.claude_command, enter=True)
+                        cmd = config.claude_command
+                        if claude_args:
+                            cmd = f"{cmd} {claude_args}"
+                        pane.send_keys(cmd, enter=True)
 
                 logger.info(
                     "Created window '%s' (id=%s) at %s",
