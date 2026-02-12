@@ -152,10 +152,10 @@ Enable C901, PLR0911, PLR0912, PLR0915, N ruff rules, fix violations.
 
 **Steps:**
 
-- [ ] Run `/spec:work` on TASK-008
-- [ ] Verify/fix forward_command_handler for skill and custom commands
-- [ ] Write tests
-- [ ] Run `make check` - must pass
+- [x] Run `/spec:work` on TASK-008
+- [x] Verify/fix forward_command_handler for skill and custom commands
+- [x] Write tests
+- [x] Run `make check` - must pass
 
 ### Task 8: TASK-010 - Fresh/Continue/Resume recovery flows
 

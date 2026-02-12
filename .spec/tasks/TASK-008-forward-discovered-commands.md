@@ -1,7 +1,7 @@
 ---
 id: TASK-008
 title: Update forward_command_handler for discovered commands
-status: todo
+status: done
 req: REQ-002
 epic: EPIC-002
 depends: [TASK-004]

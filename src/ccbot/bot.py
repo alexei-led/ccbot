@@ -34,7 +34,7 @@ from telegram.ext import (
     filters,
 )
 
-from .cc_commands import register_commands
+from .cc_commands import get_cc_name, register_commands
 from .config import config
 from .handlers.callback_data import (
     CB_DIR_CANCEL,
@@ -217,8 +217,16 @@ async def forward_command_handler(
         session_manager.set_group_chat_id(user.id, thread_id, chat.id)
 
     cmd_text = update.message.text or ""
-    # The full text is already a slash command like "/clear" or "/compact foo"
-    cc_slash = cmd_text.split("@")[0]  # strip bot mention
+    # Split into command word + arguments, then strip @botname from command
+    parts = cmd_text.split(None, 1)  # ["/cmd@botname", "optional args"]
+    raw_cmd = parts[0].split("@")[0] if parts else ""  # strip @botname
+    tg_cmd = raw_cmd.lstrip("/")
+    args = parts[1] if len(parts) > 1 else ""
+
+    # Resolve sanitized Telegram name back to original CC name
+    # e.g. "committing_code" -> "committing-code", "spec_work" -> "spec:work"
+    cc_name = get_cc_name(tg_cmd) or tg_cmd
+    cc_slash = f"/{cc_name} {args}".rstrip() if args else f"/{cc_name}"
     window_id = session_manager.resolve_window_for_thread(user.id, thread_id)
     if not window_id:
         await safe_reply(update.message, "\u274c No session bound to this topic.")
