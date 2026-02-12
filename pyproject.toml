@@ -64,6 +64,7 @@ packages = ["src/ccbot"]
 
 [tool.ruff]
 target-version = "py314"
+exclude = ["src/ccbot/_version.py"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "ARG", "G", "BLE", "SIM", "PLR2004", "C901", "PLR0911", "PLR0912", "PLR0915", "N"]
