@@ -43,10 +43,11 @@ async def clear_topic_state(
     # Clear tool message ID tracking
     clear_tool_msg_ids_for_topic(user_id, thread_id)
 
-    # Clear dead window notification tracking (lazy import to avoid circular dep)
-    from .status_polling import clear_dead_notification
+    # Clear dead window notification and autoclose tracking (lazy import to avoid circular dep)
+    from .status_polling import clear_autoclose_timer, clear_dead_notification
 
     clear_dead_notification(user_id, thread_id)
+    clear_autoclose_timer(user_id, thread_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)

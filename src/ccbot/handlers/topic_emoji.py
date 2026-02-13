@@ -3,6 +3,7 @@
 Updates topic names with status emoji prefixes to reflect session state:
   - Active (working): topic name prefixed with working emoji
   - Idle (waiting): topic name prefixed with idle emoji
+  - Done (Claude exited): topic name prefixed with done emoji
   - Dead (window gone): topic name prefixed with dead emoji
 
 Tracks per-topic state to avoid redundant API calls. Debounces transitions
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Emoji prefixes for session states
 EMOJI_ACTIVE = "\U0001f7e2"  # Green circle
 EMOJI_IDLE = "\U0001f4a4"  # Zzz / sleeping
+EMOJI_DONE = "\u2705"  # Check mark (Claude exited normally)
 EMOJI_DEAD = "\u274c"  # Cross mark
 _EMOJI_DEAD_OLD = "\u26ab"  # Legacy dead emoji (black circle, pre-2026-02)
 
@@ -59,7 +61,7 @@ async def update_topic_emoji(
         bot: Telegram Bot instance
         chat_id: Group chat ID
         thread_id: Forum topic thread ID
-        state: One of "active", "idle", "dead"
+        state: One of "active", "idle", "done", "dead"
         display_name: Base topic name (without emoji prefix)
     """
     if chat_id in _disabled_chats:
@@ -75,6 +77,7 @@ async def update_topic_emoji(
     emoji = {
         "active": EMOJI_ACTIVE,
         "idle": EMOJI_IDLE,
+        "done": EMOJI_DONE,
         "dead": EMOJI_DEAD,
     }.get(state, "")
 
@@ -133,7 +136,7 @@ async def update_topic_emoji(
 
 def strip_emoji_prefix(name: str) -> str:
     """Remove known emoji prefix from a topic name."""
-    for emoji in (EMOJI_ACTIVE, EMOJI_IDLE, EMOJI_DEAD, _EMOJI_DEAD_OLD):
+    for emoji in (EMOJI_ACTIVE, EMOJI_IDLE, EMOJI_DONE, EMOJI_DEAD, _EMOJI_DEAD_OLD):
         prefix = f"{emoji} "
         if name.startswith(prefix):
             return name[len(prefix) :]

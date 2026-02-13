@@ -1,10 +1,13 @@
 """Terminal status line polling for thread-bound windows.
 
 Provides background polling of terminal status lines for all active users:
-  - Detects Claude Code status (working, waiting, etc.)
+  - Detects Claude Code status (working, waiting, done, etc.)
   - Detects interactive UIs (permission prompts) not triggered via JSONL
   - Updates status messages in Telegram
   - Polls thread_bindings (each topic = one window)
+  - Detects Claude process exit (pane command reverts to shell)
+  - Syncs tmux window renames to Telegram topic titles
+  - Auto-closes stale topics after configurable timeout
   - Periodically probes topic existence via unpin_all_forum_topic_messages
     (silent no-op when no pins); cleans up deleted topics (kills tmux window
     + unbinds thread)
@@ -14,8 +17,10 @@ Key components:
   - TOPIC_CHECK_INTERVAL: Topic existence probe frequency (60 seconds)
   - status_poll_loop: Background polling task
   - update_status_message: Poll and enqueue status updates
+  - is_shell_prompt: Detect Claude exit (shell resumed in pane)
   - clear_dead_notification: Clear dead window notification tracking
   - Proactive recovery: sends recovery keyboard when a window dies
+  - Auto-close: closes topics stuck in done/dead state
 """
 
 import asyncio
@@ -26,6 +31,7 @@ from pathlib import Path
 from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 
+from ..config import config
 from ..session import session_manager
 from ..terminal_parser import is_interactive_ui, parse_status_line
 from ..tmux_manager import tmux_manager
@@ -38,7 +44,7 @@ from .cleanup import clear_topic_state
 from .message_queue import enqueue_status_update, get_message_queue
 from .message_sender import rate_limit_send_message
 from .recovery_callbacks import build_recovery_keyboard
-from .topic_emoji import update_topic_emoji
+from .topic_emoji import clear_topic_emoji_state, update_topic_emoji
 
 # Top-level loop resilience: catch any error to keep polling alive
 _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
@@ -54,6 +60,28 @@ TOPIC_CHECK_INTERVAL = 60.0  # seconds
 # Track which (user_id, thread_id, window_id) tuples have been notified about death
 _dead_notified: set[tuple[int, int, str]] = set()
 
+# Shell commands indicating Claude has exited and the shell prompt is back
+SHELL_COMMANDS = frozenset({"bash", "zsh", "fish", "sh", "dash", "tcsh", "csh", "ksh"})
+
+# Auto-close timers: (user_id, thread_id) -> (state, monotonic_time_entered)
+_autoclose_timers: dict[tuple[int, int], tuple[str, float]] = {}
+
+
+def is_shell_prompt(pane_current_command: str) -> bool:
+    """Check if the pane is running a shell (Claude has exited)."""
+    cmd = pane_current_command.strip().rsplit("/", 1)[-1]
+    return cmd in SHELL_COMMANDS
+
+
+def clear_autoclose_timer(user_id: int, thread_id: int) -> None:
+    """Remove autoclose timer for a topic (called on cleanup)."""
+    _autoclose_timers.pop((user_id, thread_id), None)
+
+
+def reset_autoclose_state() -> None:
+    """Reset all autoclose tracking (for testing)."""
+    _autoclose_timers.clear()
+
 
 def clear_dead_notification(user_id: int, thread_id: int) -> None:
     """Remove dead notification tracking for a topic (called on cleanup)."""
@@ -65,6 +93,58 @@ def clear_dead_notification(user_id: int, thread_id: int) -> None:
 def reset_dead_notification_state() -> None:
     """Reset all dead notification tracking (for testing)."""
     _dead_notified.clear()
+
+
+def _start_autoclose_timer(
+    user_id: int, thread_id: int, state: str, now: float
+) -> None:
+    """Start or maintain an autoclose timer for a topic in done/dead state."""
+    key = (user_id, thread_id)
+    existing = _autoclose_timers.get(key)
+    if existing is None or existing[0] != state:
+        _autoclose_timers[key] = (state, now)
+
+
+def _clear_autoclose_if_active(user_id: int, thread_id: int) -> None:
+    """Clear autoclose timer when topic becomes active/idle (session alive)."""
+    _autoclose_timers.pop((user_id, thread_id), None)
+
+
+async def _check_autoclose_timers(bot: Bot) -> None:
+    """Close topics whose done/dead timers have expired."""
+    if not _autoclose_timers:
+        return
+
+    now = time.monotonic()
+    expired: list[tuple[int, int]] = []
+
+    for (user_id, thread_id), (state, entered_at) in _autoclose_timers.items():
+        if state == "done":
+            timeout = config.autoclose_done_minutes * 60
+        elif state == "dead":
+            timeout = config.autoclose_dead_minutes * 60
+        else:
+            continue
+
+        if timeout <= 0:
+            continue
+
+        if now - entered_at >= timeout:
+            expired.append((user_id, thread_id))
+
+    for user_id, thread_id in expired:
+        _autoclose_timers.pop((user_id, thread_id), None)
+        chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+        try:
+            await bot.close_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
+            logger.info(
+                "Auto-closed topic: chat=%d thread=%d (user=%d)",
+                chat_id,
+                thread_id,
+                user_id,
+            )
+        except TelegramError as e:
+            logger.debug("Failed to auto-close topic thread=%d: %s", thread_id, e)
 
 
 async def update_status_message(
@@ -83,6 +163,20 @@ async def update_status_message(
         # Window gone, enqueue clear
         await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
         return
+
+    # Detect window rename → sync to Telegram topic title
+    if thread_id is not None:
+        stored_name = session_manager.get_display_name(window_id)
+        if stored_name and w.window_name != stored_name:
+            session_manager.set_display_name(window_id, w.window_name)
+            chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+            clear_topic_emoji_state(chat_id, thread_id)
+            logger.info(
+                "Window renamed: %s -> %s (window_id=%s)",
+                stored_name,
+                w.window_name,
+                window_id,
+            )
 
     pane_text = await tmux_manager.capture_pane(w.window_id)
     if not pane_text:
@@ -127,12 +221,20 @@ async def update_status_message(
             chat_id = session_manager.resolve_chat_id(user_id, thread_id)
             display = session_manager.get_display_name(window_id)
             await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+            _clear_autoclose_if_active(user_id, thread_id)
     else:
-        # No status line = idle (window alive but Claude not working)
+        # No status line — check if Claude exited (shell prompt) or just idle
         if thread_id is not None:
             chat_id = session_manager.resolve_chat_id(user_id, thread_id)
             display = session_manager.get_display_name(window_id)
-            await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+            if is_shell_prompt(w.pane_current_command):
+                # Claude exited, shell is back
+                await update_topic_emoji(bot, chat_id, thread_id, "done", display)
+                _start_autoclose_timer(user_id, thread_id, "done", time.monotonic())
+            else:
+                # Claude still running, just no spinner
+                await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+                _clear_autoclose_if_active(user_id, thread_id)
 
 
 async def status_poll_loop(bot: Bot) -> None:
@@ -196,6 +298,9 @@ async def status_poll_loop(bot: Bot) -> None:
                         await update_topic_emoji(
                             bot, chat_id, thread_id, "dead", display
                         )
+                        _start_autoclose_timer(
+                            user_id, thread_id, "dead", time.monotonic()
+                        )
                         # Send proactive recovery notification (once per death)
                         window_state = session_manager.get_window_state(wid)
                         cwd = window_state.cwd or ""
@@ -242,6 +347,10 @@ async def status_poll_loop(bot: Bot) -> None:
                         thread_id,
                         e,
                     )
+
+            # Check auto-close timers at end of each poll cycle
+            await _check_autoclose_timers(bot)
+
         except _LoopError:
             logger.exception("Status poll loop error")
 

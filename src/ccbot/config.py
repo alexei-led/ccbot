@@ -85,6 +85,10 @@ class Config:
             os.getenv("CCBOT_INSTANCE_NAME") or socket.gethostname()
         )
 
+        # Auto-close stale topics (minutes; 0 = disabled)
+        self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
+        self.autoclose_dead_minutes = int(os.getenv("AUTOCLOSE_DEAD_MINUTES", "10"))
+
         logger.debug(
             "Config initialized: dir=%s, token=%s..., allowed_users=%d, "
             "tmux_session=%s",

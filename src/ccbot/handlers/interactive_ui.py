@@ -18,7 +18,7 @@ import contextlib
 import logging
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import BadRequest, TelegramError
+from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ..session import session_manager
 from ..terminal_parser import extract_interactive_content, is_interactive_ui
@@ -170,6 +170,8 @@ async def _edit_interactive_msg(
             return True  # Content identical, no-op
         logger.warning("BadRequest editing interactive msg: %s", e.message)
         return False
+    except RetryAfter:
+        raise
     except TelegramError:
         logger.warning("Failed to edit interactive message", exc_info=True)
         return False

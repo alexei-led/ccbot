@@ -9,6 +9,7 @@ from ccbot.handlers.topic_emoji import (
     DEBOUNCE_SECONDS,
     EMOJI_ACTIVE,
     EMOJI_DEAD,
+    EMOJI_DONE,
     EMOJI_IDLE,
     clear_topic_emoji_state,
     reset_all_state,
@@ -30,6 +31,9 @@ class TestStripEmojiPrefix:
 
     def test_strips_idle(self) -> None:
         assert strip_emoji_prefix(f"{EMOJI_IDLE} myproject") == "myproject"
+
+    def test_strips_done(self) -> None:
+        assert strip_emoji_prefix(f"{EMOJI_DONE} myproject") == "myproject"
 
     def test_strips_dead(self) -> None:
         assert strip_emoji_prefix(f"{EMOJI_DEAD} myproject") == "myproject"
@@ -83,6 +87,15 @@ class TestUpdateTopicEmoji:
             chat_id=-100,
             message_thread_id=42,
             name=f"{EMOJI_IDLE} myproject",
+        )
+
+    async def test_sets_done_after_debounce(self) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "done", "myproject")
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_DONE} myproject",
         )
 
     async def test_sets_dead_after_debounce(self) -> None:
@@ -263,7 +276,9 @@ class TestStatusPollingIntegration:
         ):
             from ccbot.handlers.status_polling import update_status_message
 
-            mock_tm.find_window_by_id = AsyncMock(return_value=AsyncMock())
+            mock_window = AsyncMock()
+            mock_window.pane_current_command = "node"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "myproject"
@@ -272,6 +287,38 @@ class TestStatusPollingIntegration:
             await update_status_message(bot, 1, "@0", thread_id=42)
 
             mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "myproject")
+
+    async def test_done_when_shell_prompt(self) -> None:
+        with (
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji") as mock_emoji,
+            patch(
+                "ccbot.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.is_interactive_ui",
+                return_value=False,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.parse_status_line",
+                return_value=None,
+            ),
+        ):
+            from ccbot.handlers.status_polling import update_status_message
+
+            mock_window = AsyncMock()
+            mock_window.pane_current_command = "zsh"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "myproject"
+
+            bot = AsyncMock()
+            await update_status_message(bot, 1, "@0", thread_id=42)
+
+            mock_emoji.assert_called_once_with(bot, -100, 42, "done", "myproject")
 
     async def test_no_thread_id_skips_emoji(self) -> None:
         with (
