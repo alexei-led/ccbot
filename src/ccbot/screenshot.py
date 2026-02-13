@@ -302,8 +302,11 @@ async def text_to_image(
                 w += bbox[2] - bbox[0]
             max_width = max(max_width, w)
 
-        img_width = int(max_width) + padding * 2
-        img_height = line_height * len(lines) + padding * 2
+        # Ensure minimum dimensions to avoid degenerate images
+        img_width = max(int(max_width) + padding * 2, 200)
+        img_height = max(
+            line_height * len(lines) + padding * 2, line_height + padding * 2
+        )
 
         img = Image.new("RGB", (img_width, img_height), _DEFAULT_BG)
         draw = ImageDraw.Draw(img)

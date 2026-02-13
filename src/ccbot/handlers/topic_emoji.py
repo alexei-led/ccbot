@@ -5,15 +5,17 @@ Updates topic names with status emoji prefixes to reflect session state:
   - Idle (waiting): topic name prefixed with idle emoji
   - Dead (window gone): topic name prefixed with dead emoji
 
-Tracks per-topic state to avoid redundant API calls. Gracefully degrades
-when the bot lacks editForumTopic permission (disables per chat after first error).
+Tracks per-topic state to avoid redundant API calls. Debounces transitions
+to prevent rapid active/idle toggling from flooding the chat with rename
+messages. Gracefully degrades when the bot lacks editForumTopic permission.
 
 Key functions:
-  - update_topic_emoji: Update emoji for a specific topic
+  - update_topic_emoji: Update emoji for a specific topic (debounced)
   - clear_topic_emoji_state: Clean up tracking for a topic
 """
 
 import logging
+import time
 
 from telegram import Bot
 from telegram.error import BadRequest, TelegramError
@@ -25,8 +27,15 @@ EMOJI_ACTIVE = "\U0001f7e2"  # Green circle
 EMOJI_IDLE = "\U0001f4a4"  # Zzz / sleeping
 EMOJI_DEAD = "\u26ab"  # Black circle
 
+# Debounce: state must be stable for this many seconds before updating topic name.
+# Prevents rapid active↔idle toggling from flooding chat with rename messages.
+DEBOUNCE_SECONDS = 5.0
+
 # Topic state tracking: (chat_id, thread_id) -> current_state
 _topic_states: dict[tuple[int, int], str] = {}
+
+# Pending transitions: (chat_id, thread_id) -> (desired_state, first_seen_monotonic)
+_pending_transitions: dict[tuple[int, int], tuple[str, float]] = {}
 
 # Chats where editForumTopic is disabled due to permission errors
 _disabled_chats: set[int] = set()
@@ -41,6 +50,10 @@ async def update_topic_emoji(
 ) -> None:
     """Update topic name with emoji prefix reflecting session state.
 
+    Debounces transitions: the new state must be requested consistently for
+    DEBOUNCE_SECONDS before the API call is made. This prevents rapid
+    active/idle flickering from generating lots of "topic renamed" messages.
+
     Args:
         bot: Telegram Bot instance
         chat_id: Group chat ID
@@ -52,7 +65,10 @@ async def update_topic_emoji(
         return
 
     key = (chat_id, thread_id)
+
+    # Already in this state — no transition needed
     if _topic_states.get(key) == state:
+        _pending_transitions.pop(key, None)
         return
 
     emoji = {
@@ -63,6 +79,21 @@ async def update_topic_emoji(
 
     if not emoji:
         return
+
+    # Debounce: require the new state to be stable before applying
+    now = time.monotonic()
+    pending = _pending_transitions.get(key)
+    if pending is None or pending[0] != state:
+        # New or changed desired state — start debounce timer
+        _pending_transitions[key] = (state, now)
+        return
+
+    if now - pending[1] < DEBOUNCE_SECONDS:
+        # Not stable long enough yet
+        return
+
+    # Debounce passed — execute the transition
+    _pending_transitions.pop(key, None)
 
     # Strip any existing emoji prefix from display name
     clean_name = strip_emoji_prefix(display_name)
@@ -110,10 +141,13 @@ def strip_emoji_prefix(name: str) -> str:
 
 def clear_topic_emoji_state(chat_id: int, thread_id: int) -> None:
     """Clear emoji tracking for a topic (called on topic cleanup)."""
-    _topic_states.pop((chat_id, thread_id), None)
+    key = (chat_id, thread_id)
+    _topic_states.pop(key, None)
+    _pending_transitions.pop(key, None)
 
 
 def reset_all_state() -> None:
     """Reset all tracking state (for testing)."""
     _topic_states.clear()
+    _pending_transitions.clear()
     _disabled_chats.clear()

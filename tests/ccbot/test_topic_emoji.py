@@ -6,6 +6,7 @@ import pytest
 from telegram.error import BadRequest, TelegramError
 
 from ccbot.handlers.topic_emoji import (
+    DEBOUNCE_SECONDS,
     EMOJI_ACTIVE,
     EMOJI_DEAD,
     EMOJI_IDLE,
@@ -41,28 +42,52 @@ class TestStripEmojiPrefix:
         assert result == f"{EMOJI_IDLE} myproject"
 
 
+_PATCH_MONOTONIC = "ccbot.handlers.topic_emoji.time.monotonic"
+
+
+async def _debounced_update(
+    bot: AsyncMock,
+    chat_id: int,
+    thread_id: int,
+    state: str,
+    display_name: str,
+) -> None:
+    """Call update_topic_emoji twice with enough time gap to pass debounce."""
+    with patch(_PATCH_MONOTONIC) as mock_monotonic:
+        mock_monotonic.return_value = 0.0
+        await update_topic_emoji(bot, chat_id, thread_id, state, display_name)
+        mock_monotonic.return_value = DEBOUNCE_SECONDS + 0.1
+        await update_topic_emoji(bot, chat_id, thread_id, state, display_name)
+
+
 class TestUpdateTopicEmoji:
-    async def test_sets_active_emoji(self) -> None:
+    async def test_first_call_starts_debounce(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        with patch(_PATCH_MONOTONIC, return_value=0.0):
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        bot.edit_forum_topic.assert_not_called()
+
+    async def test_sets_active_after_debounce(self) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
             chat_id=-100,
             message_thread_id=42,
             name=f"{EMOJI_ACTIVE} myproject",
         )
 
-    async def test_sets_idle_emoji(self) -> None:
+    async def test_sets_idle_after_debounce(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "idle", "myproject")
+        await _debounced_update(bot, -100, 42, "idle", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
             chat_id=-100,
             message_thread_id=42,
             name=f"{EMOJI_IDLE} myproject",
         )
 
-    async def test_sets_dead_emoji(self) -> None:
+    async def test_sets_dead_after_debounce(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "dead", "myproject")
+        await _debounced_update(bot, -100, 42, "dead", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
             chat_id=-100,
             message_thread_id=42,
@@ -71,39 +96,71 @@ class TestUpdateTopicEmoji:
 
     async def test_skips_same_state(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.reset_mock()
         await update_topic_emoji(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_not_called()
 
     async def test_updates_on_state_change(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.reset_mock()
-        await update_topic_emoji(bot, -100, 42, "idle", "myproject")
+        await _debounced_update(bot, -100, 42, "idle", "myproject")
         bot.edit_forum_topic.assert_called_once()
 
     async def test_strips_existing_prefix(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "idle", f"{EMOJI_ACTIVE} myproject")
+        await _debounced_update(bot, -100, 42, "idle", f"{EMOJI_ACTIVE} myproject")
         bot.edit_forum_topic.assert_called_once_with(
             chat_id=-100,
             message_thread_id=42,
             name=f"{EMOJI_IDLE} myproject",
         )
 
+    async def test_rapid_toggling_suppressed(self) -> None:
+        bot = AsyncMock()
+        with patch(_PATCH_MONOTONIC) as mock_monotonic:
+            # Simulate rapid active/idle toggling every second
+            for i in range(10):
+                mock_monotonic.return_value = float(i)
+                state = "active" if i % 2 == 0 else "idle"
+                await update_topic_emoji(bot, -100, 42, state, "myproject")
+        bot.edit_forum_topic.assert_not_called()
+
+    async def test_stable_state_after_flickering(self) -> None:
+        bot = AsyncMock()
+        with patch(_PATCH_MONOTONIC) as mock_monotonic:
+            # Rapid toggling for 4 seconds
+            for i in range(4):
+                mock_monotonic.return_value = float(i)
+                state = "active" if i % 2 == 0 else "idle"
+                await update_topic_emoji(bot, -100, 42, state, "myproject")
+            bot.edit_forum_topic.assert_not_called()
+
+            # Settle on "active" for DEBOUNCE_SECONDS
+            mock_monotonic.return_value = 4.0
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+            mock_monotonic.return_value = 4.0 + DEBOUNCE_SECONDS + 0.1
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_ACTIVE} myproject",
+        )
+
     async def test_permission_error_disables_chat(self) -> None:
         bot = AsyncMock()
         bot.edit_forum_topic.side_effect = BadRequest("Not enough rights")
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.reset_mock()
-        await update_topic_emoji(bot, -100, 42, "idle", "myproject")
+        await _debounced_update(bot, -100, 42, "idle", "myproject")
         bot.edit_forum_topic.assert_not_called()
 
     async def test_topic_not_modified_still_tracks(self) -> None:
         bot = AsyncMock()
         bot.edit_forum_topic.side_effect = BadRequest("TOPIC_NOT_MODIFIED")
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.reset_mock()
         await update_topic_emoji(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_not_called()
@@ -111,7 +168,7 @@ class TestUpdateTopicEmoji:
     async def test_other_telegram_error_ignored(self) -> None:
         bot = AsyncMock()
         bot.edit_forum_topic.side_effect = TelegramError("Network error")
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         assert bot.edit_forum_topic.called
 
     async def test_invalid_state_ignored(self) -> None:
@@ -119,14 +176,38 @@ class TestUpdateTopicEmoji:
         await update_topic_emoji(bot, -100, 42, "unknown", "myproject")
         bot.edit_forum_topic.assert_not_called()
 
+    async def test_debounce_not_reached(self) -> None:
+        bot = AsyncMock()
+        with patch(_PATCH_MONOTONIC) as mock_monotonic:
+            mock_monotonic.return_value = 0.0
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+            mock_monotonic.return_value = DEBOUNCE_SECONDS - 0.1
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        bot.edit_forum_topic.assert_not_called()
+
 
 class TestClearTopicEmojiState:
     async def test_clear_allows_re_update(self) -> None:
         bot = AsyncMock()
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.reset_mock()
         clear_topic_emoji_state(-100, 42)
-        await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        await _debounced_update(bot, -100, 42, "active", "myproject")
+        bot.edit_forum_topic.assert_called_once()
+
+    async def test_clear_resets_pending_transition(self) -> None:
+        bot = AsyncMock()
+        with patch(_PATCH_MONOTONIC, return_value=0.0):
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+        clear_topic_emoji_state(-100, 42)
+        with patch(_PATCH_MONOTONIC) as mock_monotonic:
+            # Must start debounce from scratch after clear
+            mock_monotonic.return_value = 100.0
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
+            bot.edit_forum_topic.assert_not_called()
+            # Full cycle completes with fresh debounce
+            mock_monotonic.return_value = 100.0 + DEBOUNCE_SECONDS + 0.1
+            await update_topic_emoji(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once()
 
 

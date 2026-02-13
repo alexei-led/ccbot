@@ -174,14 +174,18 @@ async def _handle_status_screenshot(
         await query.answer("Use in a topic", show_alert=True)
         return
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    await query.get_bot().send_document(
-        chat_id=chat_id,
-        document=io.BytesIO(png_bytes),
-        filename="screenshot.png",
-        reply_markup=keyboard,
-        message_thread_id=thread_id,
-    )
-    await query.answer("\U0001f4f8")
+    try:
+        await query.get_bot().send_document(
+            chat_id=chat_id,
+            document=io.BytesIO(png_bytes),
+            filename="screenshot.png",
+            reply_markup=keyboard,
+            message_thread_id=thread_id,
+        )
+        await query.answer("\U0001f4f8")
+    except TelegramError as e:
+        logger.error("Failed to send screenshot: %s", e)
+        await query.answer("Failed to send screenshot", show_alert=True)
 
 
 async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:

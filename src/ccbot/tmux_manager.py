@@ -62,11 +62,16 @@ class TmuxManager:
             self._server = libtmux.Server()
         return self._server
 
+    def _reset_server(self) -> None:
+        """Reset cached server connection (e.g. after tmux server restart)."""
+        self._server = None
+
     def get_session(self) -> libtmux.Session | None:
         """Get the tmux session if it exists."""
         try:
             return self.server.sessions.get(session_name=self.session_name)
         except _TmuxError:
+            self._reset_server()
             return None
 
     def get_or_create_session(self) -> libtmux.Session:
@@ -170,33 +175,54 @@ class TmuxManager:
             with_ansi: If True, capture with ANSI color codes
 
         Returns:
-            The captured text, or None on failure.
+            The captured text (stripped of trailing whitespace),
+            or None on failure or empty content.
         """
         if with_ansi:
-            # Use async subprocess to call tmux capture-pane -e for ANSI colors
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "tmux",
-                    "capture-pane",
-                    "-e",
-                    "-p",
-                    "-t",
-                    window_id,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await proc.communicate()
-                if proc.returncode == 0:
-                    return stdout.decode("utf-8")
-                logger.error(
-                    "Failed to capture pane %s: %s", window_id, stderr.decode("utf-8")
-                )
-                return None
-            except _TmuxError as e:
-                logger.error("Unexpected error capturing pane %s: %s", window_id, e)
-                return None
+            return await self._capture_pane_ansi(window_id)
 
-        # Original implementation for plain text - wrap in thread
+        return await self._capture_pane_plain(window_id)
+
+    async def _capture_pane_ansi(self, window_id: str) -> str | None:
+        """Capture pane with ANSI colors via tmux subprocess."""
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "capture-pane",
+                "-e",
+                "-p",
+                "-t",
+                window_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            if proc.returncode != 0:
+                logger.error(
+                    "Failed to capture pane %s: %s",
+                    window_id,
+                    stderr.decode("utf-8", errors="replace"),
+                )
+                return None
+            text = stdout.decode("utf-8", errors="replace").rstrip()
+            return text if text else None
+        except TimeoutError:
+            logger.warning("Capture pane %s timed out", window_id)
+            if proc:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except ProcessLookupError:
+                    pass
+            return None
+        except OSError as e:
+            logger.error("Unexpected error capturing pane %s: %s", window_id, e)
+            return None
+
+    async def _capture_pane_plain(self, window_id: str) -> str | None:
+        """Capture pane as plain text via libtmux."""
+
         def _sync_capture() -> str | None:
             session = self.get_session()
             if not session:
@@ -209,9 +235,12 @@ class TmuxManager:
                 if not pane:
                     return None
                 lines = pane.capture_pane()
-                return "\n".join(lines) if isinstance(lines, list) else str(lines)
+                text = "\n".join(lines) if isinstance(lines, list) else str(lines)
+                text = text.rstrip()
+                return text if text else None
             except _TmuxError as e:
                 logger.error("Failed to capture pane %s: %s", window_id, e)
+                self._reset_server()
                 return None
 
         return await asyncio.to_thread(_sync_capture)
