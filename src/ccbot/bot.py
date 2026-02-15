@@ -20,11 +20,13 @@ Key functions: create_bot(), handle_new_message().
 import asyncio
 import contextlib
 import logging
+import os
+import signal
 from pathlib import Path
 
 from telegram import Bot, Update
 from telegram.constants import ChatAction
-from telegram.error import TelegramError
+from telegram.error import Conflict, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -637,6 +639,18 @@ async def post_shutdown(_application: Application) -> None:
         logger.info("Session monitor stopped")
 
 
+async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle bot-level errors from updater and handlers."""
+    if isinstance(context.error, Conflict):
+        logger.critical(
+            "Another bot instance is polling with the same token. "
+            "Shutting down to avoid conflicts."
+        )
+        os.kill(os.getpid(), signal.SIGINT)
+        return
+    logger.error("Unhandled bot error", exc_info=context.error)
+
+
 def create_bot() -> Application:
     application = (
         Application.builder()
@@ -646,6 +660,7 @@ def create_bot() -> Application:
         .build()
     )
 
+    application.add_error_handler(_error_handler)
     application.add_handler(CommandHandler("new", new_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("start", new_command, filters=_group_filter)  # compat alias

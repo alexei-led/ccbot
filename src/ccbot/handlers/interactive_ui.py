@@ -16,6 +16,7 @@ State dicts are keyed by (user_id, thread_id_or_0) for Telegram topic support.
 
 import contextlib
 import logging
+import time
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, RetryAfter, TelegramError
@@ -46,6 +47,10 @@ _interactive_msgs: dict[tuple[int, int], int] = {}
 
 # Track interactive mode: (user_id, thread_id_or_0) -> window_id
 _interactive_mode: dict[tuple[int, int], str] = {}
+
+# Cooldown to prevent flood when interactive sends fail repeatedly
+_send_cooldowns: dict[tuple[int, int], float] = {}
+_SEND_RETRY_INTERVAL = 5.0  # seconds between retries for failed sends
 
 
 def get_interactive_window(user_id: int, thread_id: int | None = None) -> str | None:
@@ -239,6 +244,12 @@ async def handle_interactive_ui(
             or False
         )
 
+    # Cooldown: prevent rapid retries when sends fail
+    now = time.monotonic()
+    last_attempt = _send_cooldowns.get(ikey, 0.0)
+    if now - last_attempt < _SEND_RETRY_INTERVAL:
+        return False
+
     # Send new message
     thread_kwargs: dict[str, int] = {}
     if thread_id is not None:
@@ -247,6 +258,7 @@ async def handle_interactive_ui(
     logger.info(
         "Sending interactive UI to user %d for window_id %s", user_id, window_id
     )
+    _send_cooldowns[ikey] = now
     sent = await rate_limit_send_message(
         bot,
         chat_id,
@@ -257,6 +269,7 @@ async def handle_interactive_ui(
     if sent:
         _interactive_msgs[ikey] = sent.message_id
         _interactive_mode[ikey] = window_id
+        _send_cooldowns.pop(ikey, None)
     return sent is not None
 
 
@@ -269,6 +282,7 @@ async def clear_interactive_msg(
     ikey = (user_id, thread_id or 0)
     msg_id = _interactive_msgs.pop(ikey, None)
     _interactive_mode.pop(ikey, None)
+    _send_cooldowns.pop(ikey, None)
     logger.debug(
         "Clear interactive msg: user=%d, thread=%s, msg_id=%s",
         user_id,
