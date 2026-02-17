@@ -28,7 +28,12 @@ from ..markdown_v2 import convert_markdown
 from ..session import session_manager
 from ..terminal_parser import parse_status_line
 from ..tmux_manager import tmux_manager
-from .callback_data import CB_STATUS_ESC, CB_STATUS_SCREENSHOT
+from .callback_data import (
+    CB_STATUS_ESC,
+    CB_STATUS_NOTIFY,
+    CB_STATUS_SCREENSHOT,
+    NOTIFY_MODE_ICONS,
+)
 from .message_sender import NO_LINK_PREVIEW, rate_limit_send_message
 import contextlib
 
@@ -41,8 +46,10 @@ logger = logging.getLogger(__name__)
 MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
 
 
-def _build_status_keyboard(window_id: str) -> InlineKeyboardMarkup:
-    """Build inline keyboard for status messages: [Esc] [Screenshot]."""
+def build_status_keyboard(window_id: str) -> InlineKeyboardMarkup:
+    """Build inline keyboard for status messages: [Esc] [Screenshot] [Bell]."""
+    mode = session_manager.get_notification_mode(window_id)
+    bell = NOTIFY_MODE_ICONS.get(mode, "🔔")
     return InlineKeyboardMarkup(
         [
             [
@@ -53,6 +60,10 @@ def _build_status_keyboard(window_id: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     "📸",
                     callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
+                ),
+                InlineKeyboardButton(
+                    bell,
+                    callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
                 ),
             ]
         ]
@@ -442,7 +453,7 @@ async def _process_status_update_task(
             pass
         else:
             # Same window, text changed - edit in place
-            keyboard = _build_status_keyboard(window_id)
+            keyboard = build_status_keyboard(window_id)
             try:
                 await bot.edit_message_text(
                     chat_id=chat_id,
@@ -489,7 +500,7 @@ async def _do_send_status_message(
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    keyboard = _build_status_keyboard(window_id)
+    keyboard = build_status_keyboard(window_id)
     sent = await rate_limit_send_message(
         bot,
         chat_id,
@@ -536,6 +547,11 @@ async def _check_and_send_status(
 
     pane_text = await tmux_manager.capture_pane(w.window_id)
     if not pane_text:
+        return
+
+    # Suppress status for muted/errors_only windows (mirrors update_status_message)
+    notif_mode = session_manager.get_notification_mode(window_id)
+    if notif_mode in ("muted", "errors_only"):
         return
 
     thread_id_or_0 = thread_id or 0

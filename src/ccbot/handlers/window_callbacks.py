@@ -49,7 +49,7 @@ async def handle_window_callback(
     if data.startswith(CB_WIN_BIND):
         await _handle_bind(query, user_id, data, update, context)
     elif data == CB_WIN_NEW:
-        await _handle_new(query, update, context)
+        await _handle_new(query, user_id, update, context)
     elif data == CB_WIN_CANCEL:
         await _handle_cancel(query, update, context)
 
@@ -134,6 +134,7 @@ async def _handle_bind(
 
 async def _handle_new(
     query: CallbackQuery,
+    user_id: int,
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
@@ -146,7 +147,7 @@ async def _handle_new(
         return
     clear_window_picker_state(context.user_data)
     start_path = str(Path.cwd())
-    msg_text, keyboard, subdirs = build_directory_browser(start_path)
+    msg_text, keyboard, subdirs = build_directory_browser(start_path, user_id=user_id)
     if context.user_data is not None:
         context.user_data[STATE_KEY] = STATE_BROWSING_DIRECTORY
         context.user_data[BROWSE_PATH_KEY] = start_path

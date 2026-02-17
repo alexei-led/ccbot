@@ -208,14 +208,19 @@ async def update_status_message(
     # Normal status line check
     status_line = parse_status_line(pane_text)
 
+    # Suppress status message updates for muted/errors_only windows,
+    # but only AFTER interactive UI detection, rename sync, and emoji updates above.
+    notif_mode = session_manager.get_notification_mode(window_id)
+
     if status_line:
-        await enqueue_status_update(
-            bot,
-            user_id,
-            window_id,
-            status_line,
-            thread_id=thread_id,
-        )
+        if notif_mode not in ("muted", "errors_only"):
+            await enqueue_status_update(
+                bot,
+                user_id,
+                window_id,
+                status_line,
+                thread_id=thread_id,
+            )
         # Update topic emoji to active (Claude is working)
         if thread_id is not None:
             chat_id = session_manager.resolve_chat_id(user_id, thread_id)
@@ -235,6 +240,45 @@ async def update_status_message(
                 # Claude still running, just no spinner
                 await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
                 _clear_autoclose_if_active(user_id, thread_id)
+
+
+async def _handle_dead_window_notification(
+    bot: Bot, user_id: int, thread_id: int, wid: str
+) -> None:
+    """Send proactive recovery notification for a dead window (once per death)."""
+    dead_key = (user_id, thread_id, wid)
+    if dead_key in _dead_notified:
+        return
+    chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+    display = session_manager.get_display_name(wid)
+    await update_topic_emoji(bot, chat_id, thread_id, "dead", display)
+    _start_autoclose_timer(user_id, thread_id, "dead", time.monotonic())
+
+    window_state = session_manager.get_window_state(wid)
+    cwd = window_state.cwd or ""
+    try:
+        dir_exists = cwd and await asyncio.to_thread(Path(cwd).is_dir)
+    except OSError:
+        dir_exists = False
+    if dir_exists:
+        keyboard = build_recovery_keyboard(wid)
+        text = (
+            f"\u26a0 Session `{display}` ended.\n"
+            f"\U0001f4c2 `{cwd}`\n\n"
+            "Tap a button or send a message to recover."
+        )
+    else:
+        text = f"\u26a0 Session `{display}` ended."
+        keyboard = None
+    sent = await rate_limit_send_message(
+        bot,
+        chat_id,
+        text,
+        message_thread_id=thread_id,
+        reply_markup=keyboard,
+    )
+    if sent:
+        _dead_notified.add(dead_key)
 
 
 async def status_poll_loop(bot: Bot) -> None:
@@ -286,49 +330,14 @@ async def status_poll_loop(bot: Bot) -> None:
             for user_id, thread_id, wid in list(session_manager.iter_thread_bindings()):
                 try:
                     # Already notified about this dead window — skip tmux check
-                    dead_key = (user_id, thread_id, wid)
-                    if dead_key in _dead_notified:
+                    if (user_id, thread_id, wid) in _dead_notified:
                         continue
 
                     w = await tmux_manager.find_window_by_id(wid)
                     if not w:
-                        # Mark topic as dead
-                        chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-                        display = session_manager.get_display_name(wid)
-                        await update_topic_emoji(
-                            bot, chat_id, thread_id, "dead", display
+                        await _handle_dead_window_notification(
+                            bot, user_id, thread_id, wid
                         )
-                        _start_autoclose_timer(
-                            user_id, thread_id, "dead", time.monotonic()
-                        )
-                        # Send proactive recovery notification (once per death)
-                        window_state = session_manager.get_window_state(wid)
-                        cwd = window_state.cwd or ""
-                        try:
-                            dir_exists = cwd and await asyncio.to_thread(
-                                Path(cwd).is_dir
-                            )
-                        except OSError:
-                            dir_exists = False
-                        if dir_exists:
-                            keyboard = build_recovery_keyboard(wid)
-                            text = (
-                                f"\u26a0 Session `{display}` ended.\n"
-                                f"\U0001f4c2 `{cwd}`\n\n"
-                                "Tap a button or send a message to recover."
-                            )
-                        else:
-                            text = f"\u26a0 Session `{display}` ended."
-                            keyboard = None
-                        sent = await rate_limit_send_message(
-                            bot,
-                            chat_id,
-                            text,
-                            message_thread_id=thread_id,
-                            reply_markup=keyboard,
-                        )
-                        if sent:
-                            _dead_notified.add(dead_key)
                         continue
 
                     queue = get_message_queue(user_id)

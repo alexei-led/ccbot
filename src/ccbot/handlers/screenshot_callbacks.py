@@ -31,7 +31,9 @@ from .callback_data import (
     CB_KEYS_PREFIX,
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_ESC,
+    CB_STATUS_NOTIFY,
     CB_STATUS_SCREENSHOT,
+    NOTIFY_MODE_LABELS,
 )
 from .callback_helpers import get_thread_id, user_owns_window
 
@@ -102,6 +104,8 @@ async def handle_screenshot_callback(
         await _handle_status_esc(query, user_id, data)
     elif data.startswith(CB_STATUS_SCREENSHOT):
         await _handle_status_screenshot(query, user_id, data, update)
+    elif data.startswith(CB_STATUS_NOTIFY):
+        await _handle_notify_toggle(query, user_id, data)
     elif data.startswith(CB_KEYS_PREFIX):
         await _handle_keys(query, user_id, data)
 
@@ -186,6 +190,24 @@ async def _handle_status_screenshot(
     except TelegramError as e:
         logger.error("Failed to send screenshot: %s", e)
         await query.answer("Failed to send screenshot", show_alert=True)
+
+
+async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_STATUS_NOTIFY: cycle notification mode for a window."""
+    window_id = data[len(CB_STATUS_NOTIFY) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    new_mode = session_manager.cycle_notification_mode(window_id)
+    label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
+    # Update keyboard in-place to reflect new bell icon (all modes keep the
+    # message so users can always toggle back)
+    from .message_queue import build_status_keyboard
+
+    keyboard = build_status_keyboard(window_id)
+    with contextlib.suppress(TelegramError):
+        await query.edit_message_reply_markup(reply_markup=keyboard)
+    await query.answer(label)
 
 
 async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
