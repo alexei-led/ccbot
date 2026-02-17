@@ -21,6 +21,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import signal
 from pathlib import Path
 
@@ -41,8 +42,10 @@ from .config import config
 from .handlers.callback_data import (
     CB_DIR_CANCEL,
     CB_DIR_CONFIRM,
+    CB_DIR_FAV,
     CB_DIR_PAGE,
     CB_DIR_SELECT,
+    CB_DIR_STAR,
     CB_DIR_UP,
     CB_HISTORY_NEXT,
     CB_HISTORY_PREV,
@@ -62,6 +65,7 @@ from .handlers.callback_data import (
     CB_SESSIONS_NEW,
     CB_SESSIONS_REFRESH,
     CB_STATUS_ESC,
+    CB_STATUS_NOTIFY,
     CB_STATUS_SCREENSHOT,
     CB_WIN_BIND,
     CB_WIN_CANCEL,
@@ -104,6 +108,7 @@ from .handlers.message_queue import (
 from .handlers.message_sender import safe_reply
 from .handlers.response_builder import build_response_parts
 from .handlers.status_polling import status_poll_loop
+from .handlers.file_handler import handle_document_message, handle_photo_message
 from .handlers.text_handler import handle_text_message
 from .session import session_manager
 from .session_monitor import NewMessage, NewWindowEvent, SessionMonitor
@@ -112,6 +117,11 @@ from .tmux_manager import tmux_manager
 logger = logging.getLogger(__name__)
 
 _CommandRefreshError = (TelegramError, OSError)
+
+# Error keyword pattern for errors_only notification mode (word boundaries)
+_ERROR_KEYWORDS_RE = re.compile(
+    r"\b(?:error|exception|failed|traceback|stderr|assertion)\b", re.IGNORECASE
+)
 
 # Session monitor instance
 session_monitor: SessionMonitor | None = None
@@ -276,7 +286,7 @@ async def unsupported_content_handler(
     logger.debug("Unsupported content from user %d", user.id)
     await safe_reply(
         update.message,
-        "\u26a0 Only text messages are supported. Images, stickers, voice, and other media cannot be forwarded to Claude Code.",
+        "\u26a0 Stickers, voice, video, and similar media are not supported. Use text, photos, or documents.",
     )
 
 
@@ -299,11 +309,20 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # Order matters: prefixes checked via startswith must be longest-first
 # to avoid false matches (e.g. CB_SESSIONS_KILL_CONFIRM before CB_SESSIONS_KILL).
 _CB_HISTORY = (CB_HISTORY_PREV, CB_HISTORY_NEXT)
-_CB_DIRECTORY = (CB_DIR_SELECT, CB_DIR_UP, CB_DIR_PAGE, CB_DIR_CONFIRM, CB_DIR_CANCEL)
+_CB_DIRECTORY = (
+    CB_DIR_FAV,
+    CB_DIR_STAR,
+    CB_DIR_SELECT,
+    CB_DIR_UP,
+    CB_DIR_PAGE,
+    CB_DIR_CONFIRM,
+    CB_DIR_CANCEL,
+)
 _CB_WINDOW = (CB_WIN_BIND, CB_WIN_NEW, CB_WIN_CANCEL)
 _CB_SCREENSHOT = (
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_ESC,
+    CB_STATUS_NOTIFY,
     CB_STATUS_SCREENSHOT,
     CB_KEYS_PREFIX,
 )
@@ -424,6 +443,24 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:
         return
 
     for user_id, window_id, thread_id in active_users:
+        # Check notification mode — skip suppressed messages.
+        # All tool_use/tool_result MUST pass through regardless of mode: the message
+        # queue edits tool_use messages in-place when tool_result arrives, so filtering
+        # one half would break pairing and leave orphaned messages. This means muted/
+        # errors_only sessions still deliver tool flow — an accepted trade-off.
+        notif_mode = session_manager.get_notification_mode(window_id)
+        is_tool_flow = msg.tool_name in INTERACTIVE_TOOL_NAMES or msg.content_type in (
+            "tool_use",
+            "tool_result",
+        )
+        if not is_tool_flow:
+            if notif_mode == "muted":
+                continue
+            if notif_mode == "errors_only" and not _ERROR_KEYWORDS_RE.search(
+                msg.text or ""
+            ):
+                continue
+
         # Handle interactive tools specially - capture terminal and send UI
         if msg.tool_name in INTERACTIVE_TOOL_NAMES and msg.content_type == "tool_use":
             # Mark interactive mode BEFORE sleeping so polling skips this window
@@ -638,6 +675,9 @@ async def post_shutdown(_application: Application) -> None:
         session_monitor.stop()
         logger.info("Session monitor stopped")
 
+    # Flush debounced state to disk AFTER workers/monitor stop (captures final mutations)
+    session_manager.flush_state()
+
 
 async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle bot-level errors from updater and handlers."""
@@ -689,11 +729,21 @@ def create_bot() -> Application:
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND & _group_filter, text_handler)
     )
-    # Catch-all: non-text content (images, stickers, voice, etc.)
+    # Photos
+    application.add_handler(
+        MessageHandler(filters.PHOTO & _group_filter, handle_photo_message)
+    )
+    # Documents
+    application.add_handler(
+        MessageHandler(filters.Document.ALL & _group_filter, handle_document_message)
+    )
+    # Catch-all: unsupported content (stickers, voice, video, etc.)
     application.add_handler(
         MessageHandler(
             ~filters.COMMAND
             & ~filters.TEXT
+            & ~filters.PHOTO
+            & ~filters.Document.ALL
             & ~filters.StatusUpdate.ALL
             & _group_filter,
             unsupported_content_handler,
