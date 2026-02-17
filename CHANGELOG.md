@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-02-17
+
+### Added
+
+- Directory favorites sidebar plus starred MRU controls for faster session bootstrapping
+- File handler uploads that forward captions to Claude Code alongside the document payload
+- Notification toggle to pause/resume Telegram alerts per topic
+
+### Changed
+
+- Directory browser now shows status keyboard tweaks for clarity when picking working directories
+- Status keyboard refreshed to better expose screenshot shortcuts and live indicators
+
+### Fixed
+
+- Session polling stability improvements that cover status, screenshot, and message filtering edge cases
+
 ## [0.2.0] - 2026-02-12
 
 Major rewrite as an independent fork of [six-ddc/ccbot](https://github.com/six-ddc/ccbot).
@@ -51,6 +68,7 @@ Major rewrite as an independent fork of [six-ddc/ccbot](https://github.com/six-d
 
 Initial release by [six-ddc](https://github.com/six-ddc).
 
-[Unreleased]: https://github.com/alexei-led/ccbot/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/alexei-led/ccbot/compare/v0.2.10...HEAD
+[0.2.10]: https://github.com/alexei-led/ccbot/compare/v0.2.0...v0.2.10
 [0.2.0]: https://github.com/alexei-led/ccbot/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alexei-led/ccbot/releases/tag/v0.1.0
