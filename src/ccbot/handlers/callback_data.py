@@ -25,6 +25,8 @@ CB_DIR_UP = "db:up"
 CB_DIR_CONFIRM = "db:confirm"
 CB_DIR_CANCEL = "db:cancel"
 CB_DIR_PAGE = "db:page:"
+CB_DIR_FAV = "db:fav:"  # db:fav:<idx> — select a favorite directory
+CB_DIR_STAR = "db:star:"  # db:star:<idx> — star/unstar a directory
 
 # Window picker (bind existing unbound window)
 CB_WIN_BIND = "wb:sel:"  # wb:sel:<index>
@@ -54,6 +56,7 @@ CB_SESSIONS_KILL_CONFIRM = "sess:killok:"  # sess:killok:<window_id>
 # Status message action buttons
 CB_STATUS_ESC = "st:esc:"  # st:esc:<window_id>
 CB_STATUS_SCREENSHOT = "st:ss:"  # st:ss:<window_id>
+CB_STATUS_NOTIFY = "st:nfy:"  # st:nfy:<window_id>
 
 # Recovery UI (dead window)
 CB_RECOVERY_FRESH = "rec:f:"  # rec:f:<window_id>
@@ -67,6 +70,17 @@ CB_RECOVERY_CANCEL = "rec:x"  # cancel recovery
 CB_RESUME_PICK = "res:p:"  # res:p:<index> (session selection)
 CB_RESUME_PAGE = "res:pg:"  # res:pg:<page> (pagination)
 CB_RESUME_CANCEL = "res:x"  # cancel resume browser
+
+# Notification mode metadata (single source of truth)
+NOTIFICATION_MODES: tuple[str, ...] = ("all", "errors_only", "muted")
+NOTIFY_MODE_ICONS: dict[str, str] = {
+    "all": "\U0001f514",
+    "errors_only": "\u26a0\ufe0f",
+    "muted": "\U0001f515",
+}
+NOTIFY_MODE_LABELS: dict[str, str] = {
+    k: f"{v} {k.replace('_', ' ').title()}" for k, v in NOTIFY_MODE_ICONS.items()
+}
 
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>

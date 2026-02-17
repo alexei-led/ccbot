@@ -6,6 +6,8 @@ Handles all inline keyboard callbacks for the directory browser UI:
   - CB_DIR_PAGE: Paginate directory listing
   - CB_DIR_CONFIRM: Confirm directory selection and create tmux window
   - CB_DIR_CANCEL: Cancel directory browsing
+  - CB_DIR_FAV: Select a favorite directory
+  - CB_DIR_STAR: Star/unstar a directory
 
 Key function: handle_directory_callback (uniform callback handler signature).
 """
@@ -22,8 +24,10 @@ from ..tmux_manager import tmux_manager
 from .callback_data import (
     CB_DIR_CANCEL,
     CB_DIR_CONFIRM,
+    CB_DIR_FAV,
     CB_DIR_PAGE,
     CB_DIR_SELECT,
+    CB_DIR_STAR,
     CB_DIR_UP,
 )
 from .callback_helpers import get_thread_id
@@ -31,6 +35,7 @@ from .directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
     BROWSE_PATH_KEY,
+    get_favorites,
     build_directory_browser,
     clear_browse_state,
 )
@@ -51,21 +56,113 @@ async def handle_directory_callback(
 
     Dispatches to the appropriate sub-handler based on callback data prefix.
     """
-    if data.startswith(CB_DIR_SELECT):
+    if data.startswith(CB_DIR_FAV):
+        await _handle_fav(query, user_id, data, update, context)
+    elif data.startswith(CB_DIR_STAR):
+        await _handle_star(query, user_id, data, update, context)
+    elif data.startswith(CB_DIR_SELECT):
         await _handle_select(query, user_id, data, update, context)
     elif data == CB_DIR_UP:
-        await _handle_up(query, update, context)
+        await _handle_up(query, user_id, update, context)
     elif data.startswith(CB_DIR_PAGE):
-        await _handle_page(query, data, update, context)
+        await _handle_page(query, user_id, data, update, context)
     elif data == CB_DIR_CONFIRM:
         await _handle_confirm(query, user_id, update, context)
     elif data == CB_DIR_CANCEL:
         await _handle_cancel(query, update, context)
 
 
+async def _resolve_fav_index(
+    query: CallbackQuery,
+    user_id: int,
+    data: str,
+    prefix: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> str | None:
+    """Validate pending thread, parse fav index, and return the fav path or None."""
+    pending_tid = (
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
+    )
+    if pending_tid is not None and get_thread_id(update) != pending_tid:
+        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+        return None
+    try:
+        idx = int(data[len(prefix) :])
+    except ValueError:
+        await query.answer("Invalid data")
+        return None
+
+    favorites, _starred = get_favorites(user_id)
+    if idx < 0 or idx >= len(favorites):
+        await query.answer("Favorite not found", show_alert=True)
+        return None
+    return favorites[idx]
+
+
+async def _handle_fav(
+    query: CallbackQuery,
+    user_id: int,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Handle CB_DIR_FAV: select a favorite directory and navigate into it."""
+    fav_path = await _resolve_fav_index(
+        query, user_id, data, CB_DIR_FAV, update, context
+    )
+    if fav_path is None:
+        return
+    if not Path(fav_path).is_dir():
+        await query.answer("Directory no longer exists", show_alert=True)
+        return
+
+    if context.user_data is not None:
+        context.user_data[BROWSE_PATH_KEY] = fav_path
+        context.user_data[BROWSE_PAGE_KEY] = 0
+
+    msg_text, keyboard, subdirs = build_directory_browser(fav_path, user_id=user_id)
+    if context.user_data is not None:
+        context.user_data[BROWSE_DIRS_KEY] = subdirs
+    await safe_edit(query, msg_text, reply_markup=keyboard)
+    await query.answer()
+
+
+async def _handle_star(
+    query: CallbackQuery,
+    user_id: int,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Handle CB_DIR_STAR: toggle star on a favorite directory."""
+    fav_path = await _resolve_fav_index(
+        query, user_id, data, CB_DIR_STAR, update, context
+    )
+    if fav_path is None:
+        return
+    now_starred = session_manager.toggle_user_star(user_id, fav_path)
+
+    # Rebuild browser at current path to update star icons
+    default_path = str(Path.cwd())
+    current_path = (
+        context.user_data.get(BROWSE_PATH_KEY, default_path)
+        if context.user_data
+        else default_path
+    )
+    current_page = context.user_data.get(BROWSE_PAGE_KEY, 0) if context.user_data else 0
+    msg_text, keyboard, subdirs = build_directory_browser(
+        current_path, current_page, user_id=user_id
+    )
+    if context.user_data is not None:
+        context.user_data[BROWSE_DIRS_KEY] = subdirs
+    await safe_edit(query, msg_text, reply_markup=keyboard)
+    await query.answer("⭐ Starred" if now_starred else "☆ Unstarred")
+
+
 async def _handle_select(
     query: CallbackQuery,
-    _user_id: int,
+    user_id: int,
     data: str,
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -108,7 +205,7 @@ async def _handle_select(
         context.user_data[BROWSE_PATH_KEY] = new_path_str
         context.user_data[BROWSE_PAGE_KEY] = 0
 
-    msg_text, keyboard, subdirs = build_directory_browser(new_path_str)
+    msg_text, keyboard, subdirs = build_directory_browser(new_path_str, user_id=user_id)
     if context.user_data is not None:
         context.user_data[BROWSE_DIRS_KEY] = subdirs
     await safe_edit(query, msg_text, reply_markup=keyboard)
@@ -117,6 +214,7 @@ async def _handle_select(
 
 async def _handle_up(
     query: CallbackQuery,
+    user_id: int,
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
@@ -141,7 +239,7 @@ async def _handle_up(
         context.user_data[BROWSE_PATH_KEY] = parent_path
         context.user_data[BROWSE_PAGE_KEY] = 0
 
-    msg_text, keyboard, subdirs = build_directory_browser(parent_path)
+    msg_text, keyboard, subdirs = build_directory_browser(parent_path, user_id=user_id)
     if context.user_data is not None:
         context.user_data[BROWSE_DIRS_KEY] = subdirs
     await safe_edit(query, msg_text, reply_markup=keyboard)
@@ -150,6 +248,7 @@ async def _handle_up(
 
 async def _handle_page(
     query: CallbackQuery,
+    user_id: int,
     data: str,
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -175,7 +274,9 @@ async def _handle_page(
     if context.user_data is not None:
         context.user_data[BROWSE_PAGE_KEY] = pg
 
-    msg_text, keyboard, subdirs = build_directory_browser(current_path, pg)
+    msg_text, keyboard, subdirs = build_directory_browser(
+        current_path, pg, user_id=user_id
+    )
     if context.user_data is not None:
         context.user_data[BROWSE_DIRS_KEY] = subdirs
     await safe_edit(query, msg_text, reply_markup=keyboard)
@@ -214,6 +315,8 @@ async def _handle_confirm(
         selected_path
     )
     if success:
+        # Update MRU only after successful window creation
+        session_manager.update_user_mru(user_id, selected_path)
         logger.info(
             "Window created: %s (id=%s) at %s (user=%d, thread=%s)",
             created_wname,

@@ -17,16 +17,25 @@ from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from ..session import session_manager
 from .callback_data import (
     CB_DIR_CANCEL,
     CB_DIR_CONFIRM,
+    CB_DIR_FAV,
     CB_DIR_PAGE,
     CB_DIR_SELECT,
+    CB_DIR_STAR,
     CB_DIR_UP,
     CB_WIN_BIND,
     CB_WIN_CANCEL,
     CB_WIN_NEW,
 )
+
+# Max favorites shown in directory browser
+_MAX_FAVORITES = 3
+
+# Max characters for a favorite path label before truncating
+_MAX_FAV_LABEL_LEN = 26
 
 # Directories per page in directory browser
 DIRS_PER_PAGE = 6
@@ -105,8 +114,62 @@ def build_window_picker(
     return text, InlineKeyboardMarkup(buttons), window_ids
 
 
+def get_favorites(user_id: int | None) -> tuple[list[str], set[str]]:
+    """Get deduplicated favorites list and starred set.
+
+    Returns (favorites, starred_set) where favorites is starred-first then MRU,
+    filtered to existing dirs, capped at _MAX_FAVORITES.
+    """
+    if user_id is None:
+        return [], set()
+    starred = session_manager.get_user_starred(user_id)
+    starred_set = set(starred)
+    mru = session_manager.get_user_mru(user_id)
+    seen: set[str] = set()
+    result: list[str] = []
+    for d in [*starred, *mru]:
+        if d not in seen:
+            try:
+                exists = Path(d).is_dir()
+            except OSError:
+                exists = False
+            if exists:
+                seen.add(d)
+                result.append(d)
+        if len(result) >= _MAX_FAVORITES:
+            break
+    return result, starred_set
+
+
+def _build_favorites_buttons(
+    favorites: list[str],
+    starred_set: set[str],
+) -> list[list[InlineKeyboardButton]]:
+    """Build favorite directory buttons (starred + MRU) with star toggles."""
+    if not favorites:
+        return []
+    rows: list[list[InlineKeyboardButton]] = []
+    for idx, fav_path in enumerate(favorites):
+        display_fav = fav_path.replace(str(Path.home()), "~")
+        trunc = _MAX_FAV_LABEL_LEN - 1
+        label = (
+            display_fav[:trunc] + "…"
+            if len(display_fav) > _MAX_FAV_LABEL_LEN
+            else display_fav
+        )
+        star_icon = "⭐" if fav_path in starred_set else "☆"
+        rows.append(
+            [
+                InlineKeyboardButton(f"📌 {label}", callback_data=f"{CB_DIR_FAV}{idx}"),
+                InlineKeyboardButton(star_icon, callback_data=f"{CB_DIR_STAR}{idx}"),
+            ]
+        )
+    rows.append([InlineKeyboardButton("── folders ──", callback_data="noop")])
+    return rows
+
+
 def build_directory_browser(
-    current_path: str, page: int = 0
+    current_path: str, page: int = 0, user_id: int | None = None
 ) -> tuple[str, InlineKeyboardMarkup, list[str]]:
     """Build directory browser UI.
 
@@ -127,12 +190,17 @@ def build_directory_browser(
     except PermissionError, OSError:
         subdirs = []
 
+    favorites, starred_set = get_favorites(user_id)
+    buttons: list[list[InlineKeyboardButton]] = _build_favorites_buttons(
+        favorites, starred_set
+    )
+
+    # Subdirectory listing
     total_pages = max(1, (len(subdirs) + DIRS_PER_PAGE - 1) // DIRS_PER_PAGE)
     page = max(0, min(page, total_pages - 1))
     start = page * DIRS_PER_PAGE
     page_dirs = subdirs[start : start + DIRS_PER_PAGE]
 
-    buttons: list[list[InlineKeyboardButton]] = []
     for i in range(0, len(page_dirs), 2):
         row = []
         for j, name in enumerate(page_dirs[i : i + 2]):
@@ -170,7 +238,7 @@ def build_directory_browser(
     buttons.append(action_row)
 
     display_path = str(path).replace(str(Path.home()), "~")
-    if not subdirs:
+    if not subdirs and not favorites:
         text = f"*Select Working Directory*\n\nCurrent: `{display_path}`\n\n_(No subdirectories)_"
     else:
         text = f"*Select Working Directory*\n\nCurrent: `{display_path}`\n\nTap a folder to enter, or select current directory"
