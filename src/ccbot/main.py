@@ -1,10 +1,9 @@
 """Application entry point — CLI dispatcher and bot bootstrap.
 
-Handles two execution modes:
+Handles three execution modes:
   1. `ccbot hook` — delegates to hook.hook_main() for Claude Code hook processing.
-  2. Default — configures logging (respects CCBOT_LOG_LEVEL env var),
-     initializes tmux session, and starts the Telegram bot polling loop
-     via bot.create_bot().
+  2. `ccbot --version` — prints version and exits.
+  3. `ccbot [run] [flags]` — configures logging, initializes tmux, starts bot.
 """
 
 import logging
@@ -14,19 +13,34 @@ import sys
 
 def main() -> None:
     """Main entry point."""
+    # Hook subcommand: early exit before CLI parsing (hook has its own argparse)
     if len(sys.argv) > 1 and sys.argv[1] == "hook":
         from .hook import hook_main
 
         hook_main()
         return
 
+    # Parse CLI flags and apply to environment before Config loads
+    from .cli import apply_args_to_env, parse_args
+
+    args = parse_args()
+
+    if args.version:
+        from . import __version__
+
+        print(f"ccbot {__version__}")
+        return
+
+    apply_args_to_env(args)
+
+    # Configure logging (respects CCBOT_LOG_LEVEL, possibly set by --verbose)
     log_level = os.environ.get("CCBOT_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         level=logging.WARNING,
     )
 
-    # Import config before enabling ccbot loggers — avoid leaking debug logs on config errors
+    # Import config after applying CLI overrides — avoid leaking debug logs on config errors
     try:
         from .config import config
     except ValueError as e:
