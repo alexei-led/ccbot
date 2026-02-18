@@ -134,8 +134,100 @@ def _install_hook() -> int:
     return 0
 
 
+def _uninstall_hook() -> int:
+    """Remove the ccbot hook from Claude's settings.json.
+
+    Returns 0 on success, 1 on error.
+    """
+    settings_file = _CLAUDE_SETTINGS_FILE
+    if not settings_file.exists():
+        print("No settings.json found — nothing to uninstall.")
+        return 0
+
+    try:
+        settings = json.loads(settings_file.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error reading {settings_file}: {e}", file=sys.stderr)
+        return 1
+
+    if not _is_hook_installed(settings):
+        print("Hook not installed — nothing to uninstall.")
+        return 0
+
+    # Remove ccbot hook entries from SessionStart
+    session_start = settings.get("hooks", {}).get("SessionStart", [])
+    new_session_start = []
+    for entry in session_start:
+        if not isinstance(entry, dict):
+            new_session_start.append(entry)
+            continue
+        inner_hooks = entry.get("hooks", [])
+        filtered = [
+            h
+            for h in inner_hooks
+            if not isinstance(h, dict)
+            or not (
+                h.get("command", "") == _HOOK_COMMAND_SUFFIX
+                or h.get("command", "").endswith("/" + _HOOK_COMMAND_SUFFIX)
+            )
+        ]
+        if filtered:
+            entry["hooks"] = filtered
+            new_session_start.append(entry)
+
+    settings["hooks"]["SessionStart"] = new_session_start
+
+    try:
+        settings_file.write_text(
+            json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
+        )
+    except OSError as e:
+        print(f"Error writing {settings_file}: {e}", file=sys.stderr)
+        return 1
+
+    print(f"Hook uninstalled from {settings_file}")
+    return 0
+
+
+def _hook_status() -> int:
+    """Show hook installation status.
+
+    Returns 0 if installed, 1 if not.
+    """
+    settings_file = _CLAUDE_SETTINGS_FILE
+    if not settings_file.exists():
+        print(f"Not installed ({settings_file} does not exist)")
+        return 1
+
+    try:
+        settings = json.loads(settings_file.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error reading {settings_file}: {e}", file=sys.stderr)
+        return 1
+
+    if _is_hook_installed(settings):
+        # Find the command path
+        for entry in settings.get("hooks", {}).get("SessionStart", []):
+            if not isinstance(entry, dict):
+                continue
+            for h in entry.get("hooks", []):
+                if not isinstance(h, dict):
+                    continue
+                cmd = h.get("command", "")
+                if cmd == _HOOK_COMMAND_SUFFIX or cmd.endswith(
+                    "/" + _HOOK_COMMAND_SUFFIX
+                ):
+                    print(f"Installed: {cmd}")
+                    return 0
+        print("Installed")
+        return 0
+
+    print("Not installed")
+    return 1
+
+
 def hook_main() -> None:
-    """Process a Claude Code hook event from stdin, or install the hook."""
+    """Process a Claude Code hook event from stdin, or manage hook installation."""
     # Configure logging for the hook subprocess (main.py logging doesn't apply here)
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -147,10 +239,21 @@ def hook_main() -> None:
         prog="ccbot hook",
         description="Claude Code session tracking hook",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--install",
         action="store_true",
         help="Install the hook into ~/.claude/settings.json",
+    )
+    group.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove the hook from ~/.claude/settings.json",
+    )
+    group.add_argument(
+        "--status",
+        action="store_true",
+        help="Check if the hook is installed",
     )
     # Parse only known args to avoid conflicts with stdin JSON
     args, _ = parser.parse_known_args(sys.argv[2:])
@@ -158,6 +261,12 @@ def hook_main() -> None:
     if args.install:
         logger.info("Hook install requested")
         sys.exit(_install_hook())
+
+    if args.uninstall:
+        sys.exit(_uninstall_hook())
+
+    if args.status:
+        sys.exit(_hook_status())
 
     # Normal hook processing: read JSON from stdin
     logger.debug("Processing hook event from stdin")

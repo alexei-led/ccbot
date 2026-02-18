@@ -6,7 +6,13 @@ import sys
 
 import pytest
 
-from ccbot.hook import _UUID_RE, _is_hook_installed, hook_main
+from ccbot.hook import (
+    _UUID_RE,
+    _hook_status,
+    _is_hook_installed,
+    _uninstall_hook,
+    hook_main,
+)
 
 
 class TestUuidRegex:
@@ -144,3 +150,77 @@ class TestHookMainValidation:
             },
         )
         assert not (tmp_path / "session_map.json").exists()
+
+
+class TestUninstallHook:
+    def test_uninstall_removes_hook(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings = {
+            "hooks": {
+                "SessionStart": [
+                    {
+                        "hooks": [
+                            {"type": "command", "command": "ccbot hook", "timeout": 5}
+                        ]
+                    }
+                ]
+            }
+        }
+        settings_file.write_text(json.dumps(settings))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _uninstall_hook()
+        assert result == 0
+
+        updated = json.loads(settings_file.read_text())
+        assert not _is_hook_installed(updated)
+
+    def test_uninstall_no_settings_file(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "nonexistent.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _uninstall_hook()
+        assert result == 0
+
+    def test_uninstall_not_installed(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(json.dumps({"hooks": {}}))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _uninstall_hook()
+        assert result == 0
+
+
+class TestHookStatus:
+    def test_installed(self, tmp_path, monkeypatch, capsys) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings = {
+            "hooks": {
+                "SessionStart": [
+                    {"hooks": [{"type": "command", "command": "/usr/bin/ccbot hook"}]}
+                ]
+            }
+        }
+        settings_file.write_text(json.dumps(settings))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _hook_status()
+        assert result == 0
+        assert "Installed" in capsys.readouterr().out
+
+    def test_not_installed(self, tmp_path, monkeypatch, capsys) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(json.dumps({"hooks": {}}))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _hook_status()
+        assert result == 1
+        assert "Not installed" in capsys.readouterr().out
+
+    def test_no_settings_file(self, tmp_path, monkeypatch, capsys) -> None:
+        settings_file = tmp_path / "nonexistent.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _hook_status()
+        assert result == 1
+        assert "Not installed" in capsys.readouterr().out
