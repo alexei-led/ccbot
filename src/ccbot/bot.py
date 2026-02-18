@@ -93,6 +93,7 @@ from .handlers.sessions_dashboard import (
     handle_sessions_refresh,
     sessions_command,
 )
+from .handlers.upgrade import upgrade_command
 from .handlers.interactive_ui import (
     INTERACTIVE_TOOL_NAMES,
     clear_interactive_mode,
@@ -788,6 +789,9 @@ def create_bot() -> Application:
     )
     application.add_handler(
         CommandHandler("unbind", unbind_command, filters=_group_filter)
+    )
+    application.add_handler(
+        CommandHandler("upgrade", upgrade_command, filters=_group_filter)
     )
     application.add_handler(CallbackQueryHandler(callback_handler))
     # Topic closed event — unbind window (kept alive for rebinding)

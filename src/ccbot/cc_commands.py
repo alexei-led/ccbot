@@ -37,6 +37,7 @@ _BOT_COMMANDS: list[tuple[str, str]] = [
     ("history", "Message history for this topic"),
     ("sessions", "Sessions dashboard"),
     ("resume", "Browse and resume past sessions"),
+    ("upgrade", "Upgrade ccbot and restart"),
 ]
 
 # Telegram limits: max 100 commands, descriptions max 256 chars

@@ -10,6 +10,9 @@ import logging
 import os
 import sys
 
+# Set by the upgrade handler to trigger os.execv() after run_polling() returns
+_restart_requested = False
+
 
 class _ShortNameFilter(logging.Filter):
     """Strip 'ccbot.' and 'handlers.' prefixes, cap at 20 chars."""
@@ -104,6 +107,10 @@ def run_bot() -> None:
 
     application = create_bot()
     application.run_polling(allowed_updates=["message", "callback_query"])
+
+    if _restart_requested:
+        logger.info("Restarting bot via os.execv(%s)", sys.argv)
+        os.execv(sys.argv[0], sys.argv)
 
 
 def main() -> None:
