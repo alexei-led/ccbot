@@ -13,7 +13,12 @@ make lint                             # Lint — MUST pass before committing
 make typecheck                        # Type check — MUST be 0 errors before committing
 make test                             # Run test suite
 ./scripts/restart.sh                  # Restart the ccbot service after code changes
+ccbot status                          # Show running state (no token needed)
+ccbot doctor                          # Validate setup and diagnose issues
+ccbot doctor --fix                    # Auto-fix issues (install hook, kill orphans)
 ccbot hook --install                  # Auto-install Claude Code SessionStart hook
+ccbot hook --uninstall                # Remove hook from ~/.claude/settings.json
+ccbot hook --status                   # Check if hook is installed
 ccbot --version                       # Show version
 ccbot --help                          # Show all available flags
 ccbot -v                              # Run bot with verbose (DEBUG) logging
