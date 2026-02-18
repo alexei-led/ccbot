@@ -300,6 +300,9 @@ async def _handle_confirm(
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
 
+    # Ack immediately to prevent Telegram from re-sending on double-click
+    await query.answer()
+
     confirm_thread_id = get_thread_id(update)
     if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
         clear_browse_state(context.user_data)
@@ -308,6 +311,24 @@ async def _handle_confirm(
             context.user_data.pop(PENDING_THREAD_TEXT, None)
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
         return
+
+    # Guard against double-click: if thread already has a window, skip
+    if pending_thread_id is not None:
+        existing_wid = session_manager.get_window_for_thread(user_id, pending_thread_id)
+        if existing_wid is not None:
+            display = session_manager.get_display_name(existing_wid)
+            logger.warning(
+                "Thread %d already bound to window %s (%s), ignoring duplicate confirm",
+                pending_thread_id,
+                existing_wid,
+                display,
+            )
+            clear_browse_state(context.user_data)
+            await safe_edit(
+                query,
+                f"✅ Already bound to window {display}.",
+            )
+            return
 
     clear_browse_state(context.user_data)
 
@@ -381,7 +402,7 @@ async def _handle_confirm(
         if pending_thread_id is not None and context.user_data is not None:
             context.user_data.pop(PENDING_THREAD_ID, None)
             context.user_data.pop(PENDING_THREAD_TEXT, None)
-    await query.answer("Created" if success else "Failed")
+    # query.answer() already called at the top of _handle_confirm
 
 
 async def _handle_cancel(
