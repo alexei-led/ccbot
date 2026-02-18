@@ -9,6 +9,7 @@ Key function: upgrade_command().
 
 import asyncio
 import logging
+import re
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -19,6 +20,9 @@ from .message_sender import safe_edit, safe_reply
 logger = logging.getLogger(__name__)
 
 _UPGRADE_TIMEOUT = 60
+
+# Match "Upgraded ccbot v0.2.0 -> v0.2.1" or similar uv output
+_VERSION_RE = re.compile(r"v(\d+\.\d+\S*)\s*$", re.MULTILINE)
 
 
 async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -43,19 +47,22 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=_UPGRADE_TIMEOUT
-        )
     except FileNotFoundError:
         await safe_edit(
             msg, "\u274c `uv` not found. Is ccbot installed via `uv tool install`?"
         )
         return
-    except TimeoutError:
-        await safe_edit(msg, "\u274c Upgrade timed out after 60s.")
-        return
     except OSError as exc:
         await safe_edit(msg, f"\u274c Upgrade failed: {exc}")
+        return
+
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=_UPGRADE_TIMEOUT
+        )
+    except TimeoutError:
+        proc.kill()
+        await safe_edit(msg, "\u274c Upgrade timed out after 60s.")
         return
 
     output = (stdout or b"").decode() + (stderr or b"").decode()
@@ -68,15 +75,15 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     # Detect whether an upgrade actually happened
-    # uv tool upgrade output: "Nothing to upgrade" when up-to-date,
-    # or "Upgraded ccbot ..." when upgraded
+    # uv output: "Nothing to upgrade" when up-to-date,
+    # "Upgraded ccbot v0.2.0 -> v0.2.1" when upgraded
     if "nothing to upgrade" in output.lower():
         await safe_edit(msg, f"\u2705 Already up to date (v{__version__}).")
         return
 
-    # Try to extract new version from uv tool list
-    new_version = await _get_installed_version()
-    version_text = f"v{new_version}" if new_version else "new version"
+    # Parse new version from uv upgrade output
+    match = _VERSION_RE.search(output)
+    version_text = f"v{match.group(1)}" if match else "new version"
 
     await safe_edit(msg, f"\u2705 Upgraded to {version_text}. Restarting...")
     logger.info(
@@ -87,29 +94,4 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     from .. import main as main_module
 
     main_module._restart_requested = True
-
-    # Brief delay so the edit message reaches Telegram
-    await asyncio.sleep(0.5)
     context.application.stop_running()
-
-
-async def _get_installed_version() -> str | None:
-    """Query uv tool list to get the currently installed ccbot version."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "uv",
-            "tool",
-            "list",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-    except OSError:
-        return None
-
-    for line in (stdout or b"").decode().splitlines():
-        if line.startswith("ccbot "):
-            # Format: "ccbot v0.2.1" or "ccbot 0.2.1"
-            version = line.split(None, 1)[1].lstrip("v")
-            return version
-    return None
