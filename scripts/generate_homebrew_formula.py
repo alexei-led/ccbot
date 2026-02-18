@@ -75,8 +75,8 @@ def wait_for_sdist(version: str) -> tuple[str, str]:
             time.sleep(POLL_INTERVAL)
 
 
-def resolve_deps(version: str) -> list[tuple[str, str]]:
-    """Use 'uv pip compile' to resolve all transitive deps."""
+def _compile_deps(version: str) -> list[tuple[str, str]]:
+    """Run 'uv pip compile' and parse output into (name, version) pairs."""
     with tempfile.TemporaryDirectory() as tmp:
         reqs_in = Path(tmp) / "in.txt"
         reqs_out = Path(tmp) / "out.txt"
@@ -105,6 +105,19 @@ def resolve_deps(version: str) -> list[tuple[str, str]]:
     return sorted(deps, key=lambda x: x[0].lower())
 
 
+def resolve_deps(version: str) -> list[tuple[str, str]]:
+    """Resolve deps with retries (uv index may lag behind PyPI API)."""
+    deadline = time.monotonic() + POLL_TIMEOUT
+    while True:
+        try:
+            return _compile_deps(version)
+        except subprocess.CalledProcessError:
+            if time.monotonic() >= deadline:
+                raise
+            print("Waiting for uv index to catch up...", file=sys.stderr)
+            time.sleep(POLL_INTERVAL)
+
+
 def resource_blocks(deps: list[tuple[str, str]]) -> str:
     blocks = []
     for name, ver in deps:
@@ -115,8 +128,11 @@ def resource_blocks(deps: list[tuple[str, str]]) -> str:
     return "\n\n".join(blocks)
 
 
+_EXPECTED_ARGS = 2  # script + version
+
+
 def main() -> None:
-    if len(sys.argv) != 2:
+    if len(sys.argv) != _EXPECTED_ARGS:
         raise SystemExit(f"Usage: {sys.argv[0]} <version>")
 
     version = sys.argv[1]
