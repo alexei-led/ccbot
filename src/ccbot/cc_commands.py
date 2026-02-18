@@ -28,6 +28,7 @@ CC_BUILTINS: dict[str, str] = {
     "cost": "↗ Show token/cost usage",
     "help": "↗ Show Claude Code help",
     "memory": "↗ Edit CLAUDE.md",
+    "model": "↗ Select model and thinking effort",
 }
 
 # Bot-native commands (registered first, not from CC)
