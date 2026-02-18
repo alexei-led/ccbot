@@ -1,9 +1,11 @@
 """Application entry point — CLI dispatcher and bot bootstrap.
 
-Handles three execution modes:
+Handles execution modes:
   1. `ccbot hook` — delegates to hook.hook_main() for Claude Code hook processing.
-  2. `ccbot --version` — prints version and exits.
-  3. `ccbot [run] [flags]` — configures logging, initializes tmux, starts bot.
+  2. `ccbot status` — show running state (no token needed).
+  3. `ccbot doctor` — validate setup and diagnose issues.
+  4. `ccbot --version` — prints version and exits.
+  5. `ccbot [run] [flags]` — configures logging, initializes tmux, starts bot.
 """
 
 import logging
@@ -13,11 +15,23 @@ import sys
 
 def main() -> None:
     """Main entry point."""
-    # Hook subcommand: early exit before CLI parsing (hook has its own argparse)
+    # Subcommands: early exit before CLI parsing (each has its own argparse)
     if len(sys.argv) > 1 and sys.argv[1] == "hook":
         from .hook import hook_main
 
         hook_main()
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "status":
+        from .status_cmd import status_main
+
+        status_main()
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        from .doctor_cmd import doctor_main
+
+        doctor_main(sys.argv[2:])
         return
 
     # Parse CLI flags and apply to environment before Config loads
