@@ -19,7 +19,7 @@ from .message_sender import safe_edit, safe_reply
 
 logger = logging.getLogger(__name__)
 
-_UPGRADE_TIMEOUT = 60
+_UPGRADE_TIMEOUT = 90
 
 # Match "Upgraded ccbot v0.2.0 -> v0.2.1" or similar uv output
 _VERSION_RE = re.compile(r"v(\d+\.\d+\S*)\s*$", re.MULTILINE)
