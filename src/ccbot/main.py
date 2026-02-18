@@ -13,6 +13,63 @@ import os
 import sys
 
 
+class _ShortNameFilter(logging.Filter):
+    """Strip 'ccbot.' and 'handlers.' prefixes, cap at 20 chars."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        name = record.name
+        if name.startswith("ccbot.handlers."):
+            name = name[len("ccbot.handlers.") :]
+        elif name.startswith("ccbot."):
+            name = name[len("ccbot.") :]
+        record.short_name = name[:20]  # type: ignore[attr-defined]
+        return True
+
+
+def setup_logging(log_level: str) -> None:
+    """Configure colored, compact logging for interactive CLI use."""
+    numeric_level = getattr(logging, log_level, None)
+    if not isinstance(numeric_level, int):
+        numeric_level = logging.INFO
+
+    try:
+        import colorlog
+
+        handler = colorlog.StreamHandler()
+        handler.setFormatter(
+            colorlog.ColoredFormatter(
+                "%(log_color)s%(asctime)s %(levelname)-8s %(short_name)-20s %(message)s",
+                datefmt="%H:%M:%S",
+                log_colors={
+                    "DEBUG": "cyan",
+                    "INFO": "green",
+                    "WARNING": "yellow",
+                    "ERROR": "red",
+                    "CRITICAL": "bold_red",
+                },
+            )
+        )
+    except ImportError:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)-8s %(short_name)-20s %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+
+    handler.addFilter(_ShortNameFilter())
+
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.WARNING)
+
+    logging.getLogger("ccbot").setLevel(numeric_level)
+    for name in ("httpx", "httpcore", "telegram.ext"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def main() -> None:
     """Main entry point."""
     # Subcommands: early exit before CLI parsing (each has its own argparse)
@@ -49,10 +106,7 @@ def main() -> None:
 
     # Configure logging (respects CCBOT_LOG_LEVEL, possibly set by --verbose)
     log_level = os.environ.get("CCBOT_LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        level=logging.WARNING,
-    )
+    setup_logging(log_level)
 
     # Import config after applying CLI overrides — avoid leaking debug logs on config errors
     try:
@@ -71,14 +125,6 @@ def main() -> None:
         print("Get your user ID from @userinfobot on Telegram.")
         sys.exit(1)
 
-    numeric_level = getattr(logging, log_level, None)
-    if not isinstance(numeric_level, int):
-        logging.warning("Invalid CCBOT_LOG_LEVEL=%r, defaulting to INFO", log_level)
-        numeric_level = logging.INFO
-    logging.getLogger("ccbot").setLevel(numeric_level)
-    # Silence chatty third-party loggers
-    for name in ("httpx", "httpcore", "telegram.ext"):
-        logging.getLogger(name).setLevel(logging.WARNING)
     logger = logging.getLogger(__name__)
 
     from .tmux_manager import tmux_manager

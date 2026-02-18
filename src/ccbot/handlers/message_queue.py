@@ -573,12 +573,6 @@ async def enqueue_content_message(
     thread_id: int | None = None,
 ) -> None:
     """Enqueue a content message task."""
-    logger.debug(
-        "Enqueue content: user=%d, window_id=%s, content_type=%s",
-        user_id,
-        window_id,
-        content_type,
-    )
     queue = get_or_create_queue(bot, user_id)
 
     task = MessageTask(

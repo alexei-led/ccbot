@@ -760,6 +760,10 @@ async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 def create_bot() -> Application:
+    # Suppress PTBUserWarning about JobQueue (we intentionally don't use it for core tasks)
+    import warnings
+
+    warnings.filterwarnings("ignore", message=".*JobQueue.*", category=UserWarning)
     application = (
         Application.builder()
         .token(config.telegram_bot_token)

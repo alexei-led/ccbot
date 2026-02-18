@@ -197,7 +197,6 @@ class SessionManager:
             }
             atomic_write_json(config.state_file, state)
             self._dirty = False
-            logger.debug("State saved to %s", config.state_file)
         except OSError, TypeError, ValueError:
             logger.exception("Failed to save state")
 
@@ -772,7 +771,7 @@ class SessionManager:
             return session
 
         # File no longer exists, clear state
-        logger.warning(
+        logger.debug(
             "Session file no longer exists for window_id %s (sid=%s, cwd=%s)",
             window_id,
             state.session_id,

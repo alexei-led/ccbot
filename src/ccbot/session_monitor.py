@@ -263,7 +263,7 @@ class SessionMonitor:
                         safe_offset = await f.tell()
                     elif line.strip():
                         # Partial JSONL line — don't advance offset past it
-                        logger.warning(
+                        logger.debug(
                             "Partial JSONL line in session %s, will retry next cycle",
                             session.session_id,
                         )
@@ -322,13 +322,6 @@ class SessionMonitor:
         # File changed, read new content from last offset
         new_entries = await self._read_new_lines(tracked, file_path)
         self._file_mtimes[session_id] = current_mtime
-
-        if new_entries:
-            logger.debug(
-                "Read %d new entries for session %s",
-                len(new_entries),
-                session_id,
-            )
 
         # Parse new entries using the shared logic, carrying over pending tools
         carry = self._pending_tools.get(session_id, {})
@@ -597,7 +590,7 @@ class SessionMonitor:
 
     def start(self) -> None:
         if self._running:
-            logger.warning("Monitor already running")
+            logger.debug("Monitor already running")
             return
         self._running = True
         self._task = asyncio.create_task(self._monitor_loop())

@@ -37,9 +37,7 @@ async def rate_limit_send(chat_id: int) -> None:
     if chat_id in _last_send_time:
         elapsed = now - _last_send_time[chat_id]
         if elapsed < MESSAGE_SEND_INTERVAL:
-            wait_time = MESSAGE_SEND_INTERVAL - elapsed
-            logger.debug("Rate limiting: waiting %.2fs for chat %d", wait_time, chat_id)
-            await asyncio.sleep(wait_time)
+            await asyncio.sleep(MESSAGE_SEND_INTERVAL - elapsed)
     _last_send_time[chat_id] = time.monotonic()
 
 
@@ -70,7 +68,7 @@ async def _send_with_fallback(
         except RetryAfter:
             raise
         except TelegramError as e:
-            logger.error("Failed to send message to %s: %s", chat_id, e)
+            logger.warning("Failed to send message to %s: %s", chat_id, e)
             return None
 
 
@@ -123,7 +121,7 @@ async def safe_edit(target: Any, text: str, **kwargs: Any) -> None:
         except RetryAfter:
             raise
         except TelegramError as e:
-            logger.error("Failed to edit message: %s", e)
+            logger.warning("Failed to edit message: %s", e)
 
 
 async def safe_send(
@@ -152,4 +150,4 @@ async def safe_send(
         except RetryAfter:
             raise
         except TelegramError as e:
-            logger.error("Failed to send message to %s: %s", chat_id, e)
+            logger.warning("Failed to send message to %s: %s", chat_id, e)

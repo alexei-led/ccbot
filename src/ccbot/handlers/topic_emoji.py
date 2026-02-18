@@ -118,20 +118,20 @@ async def update_topic_emoji(
             new_name,
         )
     except BadRequest as e:
-        if "Not enough rights" in str(e) or "TOPIC_NOT_MODIFIED" in str(e):
-            if "Not enough rights" in str(e):
-                _disabled_chats.add(chat_id)
-                logger.info(
-                    "Topic emoji disabled for chat %d: insufficient permissions",
-                    chat_id,
-                )
-            else:
-                # Topic already has the right name, update our tracking
-                _topic_states[key] = state
+        err_msg = str(e)
+        if "Not enough rights" in err_msg:
+            _disabled_chats.add(chat_id)
+            logger.info(
+                "Topic emoji disabled for chat %d: insufficient permissions",
+                chat_id,
+            )
+        elif "TOPIC_NOT_MODIFIED" in err_msg or "Topic_id_invalid" in err_msg:
+            # Expected no-ops: already correct name or invalid topic
+            _topic_states[key] = state
         else:
             logger.debug("Failed to update topic emoji: %s", e)
-    except TelegramError as e:
-        logger.debug("Failed to update topic emoji: %s", e)
+    except TelegramError:
+        pass
 
 
 def strip_emoji_prefix(name: str) -> str:

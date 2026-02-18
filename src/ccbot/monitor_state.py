@@ -82,9 +82,6 @@ class MonitorState:
         try:
             atomic_write_json(self.state_file, data)
             self._dirty = False
-            logger.debug(
-                "Saved %d tracked sessions to state", len(self.tracked_sessions)
-            )
         except OSError:
             logger.exception("Failed to save state file")
 
