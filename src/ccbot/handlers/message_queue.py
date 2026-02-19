@@ -26,7 +26,7 @@ from telegram.error import RetryAfter, TelegramError
 
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
-from ..terminal_parser import parse_status_line
+from ..terminal_parser import format_status_display, parse_status_line
 from ..tmux_manager import tmux_manager
 from .callback_data import (
     CB_STATUS_ESC,
@@ -423,7 +423,8 @@ async def _process_status_update_task(
     thread_id = task.thread_id or 0
     chat_id = session_manager.resolve_chat_id(user_id, task.thread_id)
     skey = (user_id, thread_id)
-    status_text = task.text or ""
+    raw_text = task.text or ""
+    status_text = format_status_display(raw_text) if raw_text else ""
 
     if not status_text:
         # No status text means clear status
@@ -433,7 +434,7 @@ async def _process_status_update_task(
     # Send typing indicator if Claude is interruptible (working)
     from telegram.constants import ChatAction
 
-    if "esc to interrupt" in status_text.lower():
+    if "esc to interrupt" in raw_text.lower():
         with contextlib.suppress(TelegramError):
             await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
@@ -558,7 +559,7 @@ async def _check_and_send_status(
     status_line = parse_status_line(pane_text)
     if status_line:
         await _do_send_status_message(
-            bot, user_id, thread_id_or_0, window_id, status_line
+            bot, user_id, thread_id_or_0, window_id, format_status_display(status_line)
         )
 
 

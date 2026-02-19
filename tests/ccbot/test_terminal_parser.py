@@ -5,6 +5,7 @@ import pytest
 from ccbot.terminal_parser import (
     extract_bash_output,
     extract_interactive_content,
+    format_status_display,
     is_interactive_ui,
     parse_status_line,
     strip_pane_chrome,
@@ -244,3 +245,59 @@ class TestExtractBashOutput:
         result = extract_bash_output(pane, "echo hi")
         assert result is not None
         assert not result.endswith("\n")
+
+
+# ── format_status_display ───────────────────────────────────────────────
+
+
+class TestFormatStatusDisplay:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("Reading src/foo.py", "…reading"),
+            ("Thinking about the problem", "…thinking"),
+            ("Reasoning through options", "…thinking"),
+            ("Editing main.py line 42", "…editing"),
+            ("Writing to file", "…writing"),
+            ("Running bash command", "…running"),
+            ("Searching for pattern", "…searching"),
+            ("grep -r foo .", "…searching"),
+            ("glob **/*.py", "…searching"),
+            ("Building the project", "…building"),
+            ("compiling module", "…building"),
+            ("Installing dependencies", "…installing"),
+            ("Fetching remote refs", "…fetching"),
+            ("git push origin main", "…pushing"),
+            ("git pull --rebase", "…pulling"),
+            ("git clone https://repo", "…cloning"),
+            ("git commit -m msg", "…committing"),
+            ("Deploying to prod", "…deploying"),
+            ("Debugging crash", "…debugging"),
+            ("Formatting code", "…formatting"),
+            ("Linting files", "…linting"),
+            ("Downloading artifact", "…downloading"),
+            ("Uploading results", "…uploading"),
+            ("Testing connection", "…testing"),
+            ("Deleting old files", "…deleting"),
+            ("Creating new module", "…creating"),
+            ("Checking types", "…checking"),
+            ("Updating dependencies", "…updating"),
+            ("Analyzing output", "…analyzing"),
+            ("Parsing JSON", "…parsing"),
+            ("Verifying results", "…verifying"),
+            ("esc to interrupt · working", "…working"),
+            ("Something completely novel", "…working"),
+            ("", "…working"),
+        ],
+    )
+    def test_known_patterns(self, raw: str, expected: str) -> None:
+        assert format_status_display(raw) == expected
+
+    def test_case_insensitive(self) -> None:
+        assert format_status_display("READING file") == "…reading"
+
+    def test_first_word_priority(self) -> None:
+        assert format_status_display("Writing tests for module") == "…writing"
+
+    def test_fallback_to_full_string(self) -> None:
+        assert format_status_display("foo bar testing baz") == "…testing"

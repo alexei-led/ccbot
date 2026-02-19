@@ -210,6 +210,65 @@ def parse_status_line(pane_text: str) -> str | None:
     return None
 
 
+# ── Status display formatting ──────────────────────────────────────────
+
+# Keyword → short label mapping for status display in Telegram.
+# First match wins; checked against the first word, then full string as fallback.
+_STATUS_KEYWORDS: list[tuple[str, str]] = [
+    ("think", "…thinking"),
+    ("reason", "…thinking"),
+    ("test", "…testing"),
+    ("read", "…reading"),
+    ("edit", "…editing"),
+    ("writ", "…writing"),
+    ("search", "…searching"),
+    ("grep", "…searching"),
+    ("glob", "…searching"),
+    ("install", "…installing"),
+    ("runn", "…running"),
+    ("bash", "…running"),
+    ("execut", "…running"),
+    ("compil", "…building"),
+    ("build", "…building"),
+    ("lint", "…linting"),
+    ("format", "…formatting"),
+    ("deploy", "…deploying"),
+    ("fetch", "…fetching"),
+    ("download", "…downloading"),
+    ("upload", "…uploading"),
+    ("commit", "…committing"),
+    ("push", "…pushing"),
+    ("pull", "…pulling"),
+    ("clone", "…cloning"),
+    ("debug", "…debugging"),
+    ("delet", "…deleting"),
+    ("creat", "…creating"),
+    ("check", "…checking"),
+    ("updat", "…updating"),
+    ("analyz", "…analyzing"),
+    ("analys", "…analyzing"),
+    ("pars", "…parsing"),
+    ("verif", "…verifying"),
+]
+
+
+def format_status_display(raw_status: str) -> str:
+    """Convert raw Claude Code status text to a short display label.
+
+    Matches the first word first (so "Writing tests" → "…writing", not "…testing"),
+    then falls back to scanning the full string. Returns "…working" if nothing matches.
+    """
+    lower = raw_status.lower()
+    first_word = lower.split(maxsplit=1)[0] if lower else ""
+    for keyword, label in _STATUS_KEYWORDS:
+        if keyword in first_word:
+            return label
+    for keyword, label in _STATUS_KEYWORDS:
+        if keyword in lower:
+            return label
+    return "…working"
+
+
 # ── Pane chrome stripping & bash output extraction ─────────────────────
 
 
