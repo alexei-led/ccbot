@@ -66,6 +66,8 @@ _FLAG_TO_ENV: list[tuple[str, str]] = [
     ("instance_name", "CCBOT_INSTANCE_NAME"),
     ("autoclose_done", "AUTOCLOSE_DONE_MINUTES"),
     ("autoclose_dead", "AUTOCLOSE_DEAD_MINUTES"),
+    ("provider", "CCBOT_PROVIDER"),
+    ("provider_command", "CCBOT_PROVIDER_COMMAND"),
 ]
 
 
@@ -162,6 +164,18 @@ def apply_args_to_env(**kwargs: object) -> None:
     callback=_validate_non_negative_int,
     envvar="AUTOCLOSE_DEAD_MINUTES",
     help="Auto-close dead sessions after N minutes (default: 10, 0=disabled).",
+)
+@click.option(
+    "--provider",
+    default=None,
+    envvar="CCBOT_PROVIDER",
+    help="Agent provider name (default: claude).",
+)
+@click.option(
+    "--provider-command",
+    default=None,
+    envvar="CCBOT_PROVIDER_COMMAND",
+    help="Override launch command for the provider.",
 )
 def run_cmd(**kwargs: object) -> None:
     """Start the bot with optional overrides."""

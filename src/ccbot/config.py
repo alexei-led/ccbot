@@ -85,6 +85,10 @@ class Config:
             os.getenv("CCBOT_INSTANCE_NAME") or socket.gethostname()
         )
 
+        # Provider selection
+        self.provider_name: str = os.getenv("CCBOT_PROVIDER", "claude")
+        self.provider_launch_command: str | None = os.getenv("CCBOT_PROVIDER_COMMAND")
+
         # Auto-close stale topics (minutes; 0 = disabled)
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
         self.autoclose_dead_minutes = int(os.getenv("AUTOCLOSE_DEAD_MINUTES", "10"))
