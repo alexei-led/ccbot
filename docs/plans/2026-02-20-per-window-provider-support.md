@@ -47,13 +47,13 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 - Modify: `src/ccbot/handlers/text_handler.py`
 - Modify: `src/ccbot/bot.py`
 
-- [ ] In `session_monitor._read_new_lines` and `_process_session_file`: look up the window_id for the session being processed, resolve provider from window state
-- [ ] In `session.py._get_session_direct` and `get_recent_messages`: accept optional `provider_name` parameter, resolve provider accordingly
-- [ ] In `status_polling.py`: resolve provider per window being polled (window_id is already available in the loop)
-- [ ] In `message_queue.py`, `interactive_ui.py`, `text_handler.py`, `bot.py`: resolve provider from window_id context where available
-- [ ] Keep `get_provider()` as fallback for contexts without a window (e.g., CLI commands like doctor/status)
-- [ ] Write tests verifying different windows can use different providers
-- [ ] Run `make check` - must pass
+- [x] In `session_monitor._read_new_lines` and `_process_session_file`: look up the window_id for the session being processed, resolve provider from window state
+- [x] In `session.py._get_session_direct` and `get_recent_messages`: accept optional `provider_name` parameter, resolve provider accordingly
+- [x] In `status_polling.py`: resolve provider per window being polled (window_id is already available in the loop)
+- [x] In `message_queue.py`, `interactive_ui.py`, `text_handler.py`, `bot.py`: resolve provider from window_id context where available
+- [x] Keep `get_provider()` as fallback for contexts without a window (e.g., CLI commands like doctor/status)
+- [x] Write tests verifying different windows can use different providers
+- [x] Run `make check` - must pass
 
 ### Task 3: Add provider selection to directory browser UI
 

@@ -193,3 +193,28 @@ class TestGetProviderForWindow:
         assert provider.capabilities.name == "claude"
 
         session_manager.window_states.pop("@3", None)
+
+    def test_different_windows_resolve_different_providers(self, monkeypatch) -> None:
+        from ccbot.providers import get_provider_for_window
+        from ccbot.session import SessionManager, WindowState, session_manager
+
+        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
+        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
+
+        session_manager.window_states["@10"] = WindowState(
+            session_id="s10", cwd="/tmp", provider_name="claude"
+        )
+        session_manager.window_states["@11"] = WindowState(
+            session_id="s11", cwd="/tmp", provider_name="codex"
+        )
+        session_manager.window_states["@12"] = WindowState(
+            session_id="s12", cwd="/tmp", provider_name="gemini"
+        )
+
+        assert get_provider_for_window("@10").capabilities.name == "claude"
+        assert get_provider_for_window("@11").capabilities.name == "codex"
+        assert get_provider_for_window("@12").capabilities.name == "gemini"
+
+        session_manager.window_states.pop("@10", None)
+        session_manager.window_states.pop("@11", None)
+        session_manager.window_states.pop("@12", None)

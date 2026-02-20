@@ -35,7 +35,7 @@ from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
 from ..config import config
-from ..providers import get_provider
+from ..providers import get_provider_for_window
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .interactive_ui import (
@@ -287,7 +287,7 @@ async def update_status_message(
     should_check_new_ui = True
 
     # Parse terminal status once and reuse the result
-    status = get_provider().parse_terminal_status(pane_text)
+    status = get_provider_for_window(window_id).parse_terminal_status(pane_text)
 
     if interactive_window == window_id:
         # User is in interactive mode for THIS window

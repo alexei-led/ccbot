@@ -216,7 +216,7 @@ class TestStatusPollingIntegration:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=True),
             ),
         ):
@@ -242,7 +242,7 @@ class TestStatusPollingIntegration:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=False),
             ),
         ):
@@ -276,7 +276,7 @@ class TestStatusPollingIntegration:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=False),
             ),
         ):
@@ -309,7 +309,7 @@ class TestStatusPollingIntegration:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=False),
             ),
         ):
@@ -338,7 +338,7 @@ class TestStatusPollingIntegration:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=True),
             ),
         ):

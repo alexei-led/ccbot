@@ -148,7 +148,7 @@ class TestWindowRenameSync:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=True),
             ),
             patch("ccbot.handlers.status_polling.rename_topic") as mock_rename,
@@ -181,7 +181,7 @@ class TestWindowRenameSync:
                 return_value=None,
             ),
             patch(
-                "ccbot.handlers.status_polling.get_provider",
+                "ccbot.handlers.status_polling.get_provider_for_window",
                 return_value=make_mock_provider(has_status=True),
             ),
             patch("ccbot.handlers.status_polling.rename_topic") as mock_rename,

@@ -24,7 +24,7 @@ from telegram.error import TelegramError
 
 from .config import config
 from .monitor_state import MonitorState, TrackedSession
-from .providers import get_provider
+from .providers import get_provider_for_window
 from .session import parse_session_map
 from .tmux_manager import tmux_manager
 from .utils import read_cwd_from_jsonl
@@ -224,13 +224,17 @@ class SessionMonitor:
         return await asyncio.to_thread(self._scan_projects_sync, active_cwds)
 
     async def _read_new_lines(
-        self, session: TrackedSession, file_path: Path
+        self, session: TrackedSession, file_path: Path, window_id: str = ""
     ) -> list[dict]:
         """Read new lines from a session file using byte offset for efficiency.
 
         Detects file truncation (e.g. after /clear) and resets offset.
         """
-        provider = get_provider()
+        provider = (
+            get_provider_for_window(window_id)
+            if window_id
+            else get_provider_for_window("")
+        )
         new_entries = []
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
@@ -280,7 +284,11 @@ class SessionMonitor:
         return new_entries
 
     async def _process_session_file(
-        self, session_id: str, file_path: Path, new_messages: list[NewMessage]
+        self,
+        session_id: str,
+        file_path: Path,
+        new_messages: list[NewMessage],
+        window_id: str = "",
     ) -> None:
         """Process a single session file for new messages.
 
@@ -321,12 +329,12 @@ class SessionMonitor:
             return
 
         # File changed, read new content from last offset
-        new_entries = await self._read_new_lines(tracked, file_path)
+        new_entries = await self._read_new_lines(tracked, file_path, window_id)
         self._file_mtimes[session_id] = current_mtime
 
         # Parse new entries using the shared logic, carrying over pending tools
         carry = self._pending_tools.get(session_id, {})
-        provider = get_provider()
+        provider = get_provider_for_window(window_id)
         agent_messages, remaining = provider.parse_transcript_entries(
             new_entries,
             pending_tools=carry,
@@ -370,6 +378,11 @@ class SessionMonitor:
         """
         new_messages: list[NewMessage] = []
 
+        # Build session_id -> window_id reverse map for per-window provider resolution
+        sid_to_wid: dict[str, str] = {}
+        for window_id, details in current_map.items():
+            sid_to_wid[details["session_id"]] = window_id
+
         # Separate entries with direct transcript_path from those needing scan
         direct_sessions: list[tuple[str, Path]] = []
         fallback_session_ids: set[str] = set()
@@ -387,7 +400,12 @@ class SessionMonitor:
         # Primary path: read directly from transcript_path
         for session_id, file_path in direct_sessions:
             try:
-                await self._process_session_file(session_id, file_path, new_messages)
+                await self._process_session_file(
+                    session_id,
+                    file_path,
+                    new_messages,
+                    window_id=sid_to_wid.get(session_id, ""),
+                )
             except OSError as e:
                 logger.debug("Error processing session %s: %s", session_id, e)
 
@@ -399,7 +417,10 @@ class SessionMonitor:
                     continue
                 try:
                     await self._process_session_file(
-                        session_info.session_id, session_info.file_path, new_messages
+                        session_info.session_id,
+                        session_info.file_path,
+                        new_messages,
+                        window_id=sid_to_wid.get(session_info.session_id, ""),
                     )
                 except OSError as e:
                     logger.debug(

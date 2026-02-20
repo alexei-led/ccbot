@@ -26,7 +26,7 @@ from telegram.error import RetryAfter, TelegramError
 
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
-from ..providers import get_provider
+from ..providers import get_provider_for_window
 from ..tmux_manager import tmux_manager
 from .callback_data import (
     CB_STATUS_ESC,
@@ -582,7 +582,7 @@ async def _check_and_send_status(
         return
 
     thread_id_or_0 = thread_id or 0
-    status = get_provider().parse_terminal_status(pane_text)
+    status = get_provider_for_window(window_id).parse_terminal_status(pane_text)
     if status and not status.is_interactive:
         await _do_send_status_message(
             bot, user_id, thread_id_or_0, window_id, status.display_label

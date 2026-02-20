@@ -127,6 +127,64 @@ class TestNewWindowDetection:
         cb.assert_called_once()
 
 
+class TestPerWindowProviderResolution:
+    async def test_process_session_file_passes_window_id(self, tmp_path) -> None:
+        """_process_session_file uses window_id for per-window provider resolution."""
+        session_file = tmp_path / "transcript.jsonl"
+        line = '{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}\n'
+        session_file.write_text(line)
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        tracked = TrackedSession(
+            session_id="sess-pw",
+            file_path=str(session_file),
+            last_byte_offset=0,
+        )
+        monitor.state.update_session(tracked)
+
+        new_messages = []
+        await monitor._process_session_file(
+            "sess-pw", session_file, new_messages, window_id="@42"
+        )
+        assert len(new_messages) == 1
+        assert "hello" in new_messages[0].text
+
+    async def test_check_for_updates_maps_session_to_window(self, tmp_path) -> None:
+        """check_for_updates passes correct window_id to _process_session_file."""
+        session_file = tmp_path / "transcript.jsonl"
+        session_file.write_text('{"type":"summary"}\n')
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+
+        captured_window_ids = []
+        original = monitor._process_session_file
+
+        async def spy(session_id, file_path, new_messages, window_id=""):
+            captured_window_ids.append(window_id)
+            return await original(
+                session_id, file_path, new_messages, window_id=window_id
+            )
+
+        monitor._process_session_file = spy
+
+        current_map = {
+            "@7": {
+                "session_id": "sess-map",
+                "cwd": "/proj",
+                "window_name": "proj",
+                "transcript_path": str(session_file),
+            },
+        }
+        await monitor.check_for_updates(current_map)
+        assert "@7" in captured_window_ids
+
+
 class TestReadNewLines:
     async def test_truncation_resets_offset(self, tmp_path) -> None:
         session_file = tmp_path / "test.jsonl"

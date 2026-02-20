@@ -33,7 +33,7 @@ import aiofiles
 
 from .config import config
 from .handlers.callback_data import NOTIFICATION_MODES
-from .providers import get_provider
+from .providers import get_provider_for_window
 from .tmux_manager import tmux_manager
 from .utils import atomic_write_json
 
@@ -739,7 +739,7 @@ class SessionManager:
         return config.claude_projects_path / encoded_cwd / f"{session_id}.jsonl"
 
     async def _get_session_direct(
-        self, session_id: str, cwd: str
+        self, session_id: str, cwd: str, window_id: str = ""
     ) -> ClaudeSession | None:
         """Get a ClaudeSession directly from session_id and cwd (no scanning)."""
         file_path = self._build_session_file_path(session_id, cwd)
@@ -758,7 +758,7 @@ class SessionManager:
         summary = ""
         last_user_msg = ""
         message_count = 0
-        provider = get_provider()
+        provider = get_provider_for_window(window_id)
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 async for line in f:
@@ -806,7 +806,7 @@ class SessionManager:
         if not state.session_id or not state.cwd:
             return None
 
-        session = await self._get_session_direct(state.session_id, state.cwd)
+        session = await self._get_session_direct(state.session_id, state.cwd, window_id)
         if session:
             return session
 
@@ -1038,7 +1038,7 @@ class SessionManager:
             return [], 0
 
         # Read JSONL entries (optionally filtered by byte range)
-        provider = get_provider()
+        provider = get_provider_for_window(window_id)
         entries: list[dict[str, Any]] = []
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
