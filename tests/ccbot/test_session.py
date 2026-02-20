@@ -347,3 +347,71 @@ class TestPruneSessionMap:
 
         result = json.loads(session_map_file.read_text())
         assert "ccbot:@5" not in result
+
+
+class TestWindowStateProviderName:
+    def test_default_provider_name_is_empty(self) -> None:
+        from ccbot.session import WindowState
+
+        ws = WindowState()
+        assert ws.provider_name == ""
+
+    def test_to_dict_omits_empty_provider(self) -> None:
+        from ccbot.session import WindowState
+
+        ws = WindowState(session_id="s1", cwd="/tmp")
+        d = ws.to_dict()
+        assert "provider_name" not in d
+
+    def test_to_dict_includes_provider_when_set(self) -> None:
+        from ccbot.session import WindowState
+
+        ws = WindowState(session_id="s1", cwd="/tmp", provider_name="codex")
+        d = ws.to_dict()
+        assert d["provider_name"] == "codex"
+
+    def test_from_dict_reads_provider(self) -> None:
+        from ccbot.session import WindowState
+
+        ws = WindowState.from_dict(
+            {"session_id": "s1", "cwd": "/tmp", "provider_name": "gemini"}
+        )
+        assert ws.provider_name == "gemini"
+
+    def test_from_dict_defaults_to_empty(self) -> None:
+        from ccbot.session import WindowState
+
+        ws = WindowState.from_dict({"session_id": "s1", "cwd": "/tmp"})
+        assert ws.provider_name == ""
+
+    def test_round_trip_serialization(self) -> None:
+        from ccbot.session import WindowState
+
+        original = WindowState(
+            session_id="s1",
+            cwd="/tmp",
+            window_name="proj",
+            provider_name="codex",
+        )
+        restored = WindowState.from_dict(original.to_dict())
+        assert restored.provider_name == "codex"
+        assert restored.session_id == "s1"
+
+
+class TestSetWindowProvider:
+    def test_set_and_get(self, mgr: SessionManager) -> None:
+        mgr.set_window_provider("@1", "codex")
+        assert mgr.get_window_provider_name("@1") == "codex"
+
+    def test_get_unset_returns_empty(self, mgr: SessionManager) -> None:
+        assert mgr.get_window_provider_name("@99") == ""
+
+    def test_set_empty_resets(self, mgr: SessionManager) -> None:
+        mgr.set_window_provider("@1", "codex")
+        mgr.set_window_provider("@1", "")
+        assert mgr.get_window_provider_name("@1") == ""
+
+    def test_creates_window_state_if_missing(self, mgr: SessionManager) -> None:
+        mgr.set_window_provider("@5", "gemini")
+        assert "@5" in mgr.window_states
+        assert mgr.window_states["@5"].provider_name == "gemini"

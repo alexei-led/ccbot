@@ -77,6 +77,22 @@ def _reset_provider() -> None:
     _registered = False
 
 
+def get_provider_for_window(window_id: str) -> AgentProvider:
+    """Return the provider for a specific window, falling back to config default.
+
+    Looks up provider_name from the window's WindowState. If empty or invalid,
+    falls back to the global config provider (get_provider()).
+    """
+    _ensure_registered()
+
+    from ccbot.session import session_manager
+
+    state = session_manager.window_states.get(window_id)
+    if state and state.provider_name and registry.is_valid(state.provider_name):
+        return registry.get(state.provider_name)
+    return get_provider()
+
+
 def resolve_capabilities(provider_name: str | None = None) -> ProviderCapabilities:
     """Resolve provider capabilities without requiring full Config.
 
@@ -109,6 +125,7 @@ __all__ = [
     "StatusUpdate",
     "UnknownProviderError",
     "get_provider",
+    "get_provider_for_window",
     "registry",
     "resolve_capabilities",
 ]

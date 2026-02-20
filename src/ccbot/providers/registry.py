@@ -32,6 +32,10 @@ class ProviderRegistry:
         self._providers[name] = provider_cls
         logger.debug("Registered provider %r", name)
 
+    def is_valid(self, name: str) -> bool:
+        """Return True if *name* is a registered provider."""
+        return name in self._providers
+
     def get(self, name: str) -> AgentProvider:
         """Instantiate and return the provider registered under *name*.
 

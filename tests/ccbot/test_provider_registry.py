@@ -1,4 +1,4 @@
-"""Tests for provider registry and config integration."""
+"""Tests for provider registry, config integration, and per-window resolution."""
 
 from unittest.mock import patch
 
@@ -117,3 +117,79 @@ class TestModuleLevelRegistry:
             assert caps.name == "claude"
         finally:
             _reset_provider()
+
+
+class TestRegistryIsValid:
+    def test_valid_name(self) -> None:
+        reg = ProviderRegistry()
+        reg.register("stub", _StubProvider)
+        assert reg.is_valid("stub") is True
+
+    def test_invalid_name(self) -> None:
+        reg = ProviderRegistry()
+        assert reg.is_valid("nonexistent") is False
+
+
+class TestGetProviderForWindow:
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        from ccbot.providers import _reset_provider
+
+        _reset_provider()
+        yield
+        _reset_provider()
+
+    def test_returns_window_specific_provider(self, monkeypatch) -> None:
+        from ccbot.providers import get_provider_for_window
+        from ccbot.session import SessionManager, WindowState, session_manager
+
+        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
+        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
+
+        session_manager.window_states["@1"] = WindowState(
+            session_id="s1", cwd="/tmp", provider_name="codex"
+        )
+        provider = get_provider_for_window("@1")
+        assert provider.capabilities.name == "codex"
+
+        session_manager.window_states.pop("@1", None)
+
+    def test_falls_back_to_global_when_empty(self, monkeypatch) -> None:
+        from ccbot.providers import get_provider_for_window
+        from ccbot.session import SessionManager, WindowState, session_manager
+
+        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
+        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
+
+        session_manager.window_states["@2"] = WindowState(
+            session_id="s2", cwd="/tmp", provider_name=""
+        )
+        provider = get_provider_for_window("@2")
+        assert provider.capabilities.name == "claude"
+
+        session_manager.window_states.pop("@2", None)
+
+    def test_falls_back_when_window_not_in_state(self, monkeypatch) -> None:
+        from ccbot.providers import get_provider_for_window
+        from ccbot.session import SessionManager
+
+        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
+        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
+
+        provider = get_provider_for_window("@999")
+        assert provider.capabilities.name == "claude"
+
+    def test_falls_back_on_invalid_provider_name(self, monkeypatch) -> None:
+        from ccbot.providers import get_provider_for_window
+        from ccbot.session import SessionManager, WindowState, session_manager
+
+        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
+        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
+
+        session_manager.window_states["@3"] = WindowState(
+            session_id="s3", cwd="/tmp", provider_name="nonexistent"
+        )
+        provider = get_provider_for_window("@3")
+        assert provider.capabilities.name == "claude"
+
+        session_manager.window_states.pop("@3", None)

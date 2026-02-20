@@ -80,6 +80,7 @@ class WindowState:
     window_name: str = ""
     transcript_path: str = ""
     notification_mode: str = "all"
+    provider_name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -92,6 +93,8 @@ class WindowState:
             d["transcript_path"] = self.transcript_path
         if self.notification_mode != "all":
             d["notification_mode"] = self.notification_mode
+        if self.provider_name:
+            d["provider_name"] = self.provider_name
         return d
 
     @classmethod
@@ -102,6 +105,7 @@ class WindowState:
             window_name=data.get("window_name", ""),
             transcript_path=data.get("transcript_path", ""),
             notification_mode=data.get("notification_mode", "all"),
+            provider_name=data.get("provider_name", ""),
         )
 
 
@@ -650,6 +654,20 @@ class SessionManager:
         state.notification_mode = "all"
         self._save_state()
         logger.info("Cleared session for window_id %s", window_id)
+
+    # --- Provider management ---
+
+    def set_window_provider(self, window_id: str, provider_name: str) -> None:
+        """Set the provider for a window. Empty string resets to config default."""
+        state = self.get_window_state(window_id)
+        if state.provider_name != provider_name:
+            state.provider_name = provider_name
+            self._save_state()
+
+    def get_window_provider_name(self, window_id: str) -> str:
+        """Get the provider name for a window (empty string = config default)."""
+        state = self.window_states.get(window_id)
+        return state.provider_name if state else ""
 
     # --- Notification mode ---
 

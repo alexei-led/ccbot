@@ -27,13 +27,13 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 - Modify: `src/ccbot/providers/__init__.py` (add `get_provider_for_window(window_id)` that looks up provider_name from WindowState, falling back to config default)
 - Modify: `src/ccbot/providers/registry.py` (add provider name validation helper)
 
-- [ ] Add `provider_name: str = ""` to `WindowState` dataclass (empty = use default from config)
-- [ ] Add serialization/deserialization in `to_dict()`/`from_dict()`
-- [ ] Add `get_provider_for_window(window_id: str) -> AgentProvider` in `providers/__init__.py` that resolves provider from window state, falling back to `config.provider_name`
-- [ ] Add `set_window_provider(window_id: str, provider_name: str)` on SessionManager
-- [ ] Write tests for WindowState serialization with provider_name
-- [ ] Write tests for get_provider_for_window resolution logic
-- [ ] Run `make check` - must pass
+- [x] Add `provider_name: str = ""` to `WindowState` dataclass (empty = use default from config)
+- [x] Add serialization/deserialization in `to_dict()`/`from_dict()`
+- [x] Add `get_provider_for_window(window_id: str) -> AgentProvider` in `providers/__init__.py` that resolves provider from window state, falling back to `config.provider_name`
+- [x] Add `set_window_provider(window_id: str, provider_name: str)` on SessionManager
+- [x] Write tests for WindowState serialization with provider_name
+- [x] Write tests for get_provider_for_window resolution logic
+- [x] Run `make check` - must pass
 
 ### Task 2: Replace global get_provider() calls with per-window resolution
 
