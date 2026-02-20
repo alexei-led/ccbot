@@ -93,15 +93,15 @@ starting interactive plan creation
 [26-02-20 19:04:09]   - Modify: `src/ccbot/providers/__init__.py` (add `detect_provider_from_command(command: str) -> str` utility)
 [26-02-20 19:04:09]   - Modify: `src/ccbot/bot.py` (`_handle_new_window` - set detected provider)
 [26-02-20 19:04:09]   - Modify: `src/ccbot/hook.py` (optionally write provider_name to session_map)
-[26-02-20 19:04:09]   - [ ] Add `detect_provider_from_command(pane_current_command: str) -> str` that maps "claude" -> "claude", "codex" -> "codex", "gemini" -> "gemini", unknown ->
+[26-02-20 19:04:09]   - [x] Add `detect_provider_from_command(pane_current_command: str) -> str` that maps "claude" -> "claude", "codex" -> "codex", "gemini" -> "gemini", unknown ->
 [26-02-20 19:04:09] config default
-[26-02-20 19:04:09]   - [ ] In `_handle_new_window` (bot.py): detect provider from window's pane_current_command (already in TmuxWindow), set it on the WindowState
-[26-02-20 19:04:09]   - [ ] When session_map is loaded and a new window appears, detect provider if not already set
-[26-02-20 19:04:09]   - [ ] In hook.py: optionally detect provider from the process tree or pane command and write it to session_map (only for Claude hook since other providers don't
+[26-02-20 19:04:09]   - [x] In `_handle_new_window` (bot.py): detect provider from window's pane_current_command (already in TmuxWindow), set it on the WindowState
+[26-02-20 19:04:09]   - [x] When session_map is loaded and a new window appears, detect provider if not already set
+[26-02-20 19:04:09]   - [x] In hook.py: optionally detect provider from the process tree or pane command and write it to session_map (only for Claude hook since other providers don't
 [26-02-20 19:04:09] have hooks)
-[26-02-20 19:04:09]   - [ ] Write tests for detect_provider_from_command with various inputs
-[26-02-20 19:04:09]   - [ ] Write tests for auto-detection during new window handling
-[26-02-20 19:04:09]   - [ ] Run `make check` - must pass
+[26-02-20 19:04:09]   - [x] Write tests for detect_provider_from_command with various inputs
+[26-02-20 19:04:09]   - [x] Write tests for auto-detection during new window handling
+[26-02-20 19:04:09]   - [x] Run `make check` - must pass
 [26-02-20 19:04:09] ### Task 5: Update recovery, resume, and provider-gated UX
 [26-02-20 19:04:09] **Files:**
 [26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/recovery_callbacks.py` (use per-window provider for resume/continue)
