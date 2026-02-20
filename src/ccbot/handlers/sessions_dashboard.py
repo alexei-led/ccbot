@@ -67,8 +67,9 @@ async def _build_dashboard(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         alive = window_id in live_ids
         status = "\U0001f7e2" if alive else "\u26ab"
 
-        # Session line with cwd detail
-        line = f"{status} {display_name}"
+        # Session line with provider tag and cwd detail
+        provider_tag = f" [{ws.provider_name}]" if ws.provider_name else ""
+        line = f"{status} {display_name}{provider_tag}"
         if ws.cwd:
             line += f"\n    {ws.cwd}"
         lines.append(line)

@@ -97,11 +97,11 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 - Modify: `src/ccbot/handlers/resume_command.py` (use per-window provider)
 - Modify: `src/ccbot/handlers/sessions_dashboard.py` (show provider per session)
 
-- [ ] In recovery callbacks: resolve provider from window state for capability checks (supports_resume, supports_continue) and launch command
-- [ ] In resume command: use per-window provider for resume args
-- [ ] In sessions dashboard: display provider name alongside each session
-- [ ] Write tests for recovery with different providers per window
-- [ ] Run `make check` - must pass
+- [x] In recovery callbacks: resolve provider from window state for capability checks (supports_resume, supports_continue) and launch command
+- [x] In resume command: use per-window provider for resume args
+- [x] In sessions dashboard: display provider name alongside each session
+- [x] Write tests for recovery with different providers per window
+- [x] Run `make check` - must pass
 
 ### Task 6: Verify acceptance criteria
 

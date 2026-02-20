@@ -128,8 +128,8 @@ class TestBuildRecoveryKeyboard:
                 assert len(btn.callback_data) <= 64
 
     def test_hides_continue_when_unsupported(self) -> None:
-        with patch("ccbot.handlers.recovery_callbacks.get_provider") as mock_gp:
-            caps = mock_gp.return_value.capabilities
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
             caps.supports_continue = False
             caps.supports_resume = True
             kb = build_recovery_keyboard("@0")
@@ -141,8 +141,8 @@ class TestBuildRecoveryKeyboard:
         assert any(d.startswith(CB_RECOVERY_RESUME) for d in datas)
 
     def test_hides_resume_when_unsupported(self) -> None:
-        with patch("ccbot.handlers.recovery_callbacks.get_provider") as mock_gp:
-            caps = mock_gp.return_value.capabilities
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
             caps.supports_continue = True
             caps.supports_resume = False
             kb = build_recovery_keyboard("@0")
@@ -154,8 +154,8 @@ class TestBuildRecoveryKeyboard:
         assert not any(d.startswith(CB_RECOVERY_RESUME) for d in datas)
 
     def test_fresh_only_when_no_continue_or_resume(self) -> None:
-        with patch("ccbot.handlers.recovery_callbacks.get_provider") as mock_gp:
-            caps = mock_gp.return_value.capabilities
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
             caps.supports_continue = False
             caps.supports_resume = False
             kb = build_recovery_keyboard("@0")
@@ -163,6 +163,15 @@ class TestBuildRecoveryKeyboard:
         action_row = kb.inline_keyboard[0]
         assert len(action_row) == 1
         assert action_row[0].callback_data.startswith(CB_RECOVERY_FRESH)
+
+    def test_uses_per_window_provider(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = True
+            caps.supports_resume = True
+            build_recovery_keyboard("@7")
+
+        mock_gpw.assert_called_once_with("@7")
 
 
 @pytest.fixture(autouse=True)
@@ -1014,3 +1023,76 @@ class TestScanSessionsForCwd:
 
         assert len(result) == 1
         assert result[0].summary == "a1b2c3d4-000"
+
+
+class TestRecoveryPerWindowProvider:
+    @patch(f"{_RC}.get_provider_for_window")
+    @patch(f"{_RC}.tmux_manager")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_continue_uses_per_window_provider(
+        self,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_tm: MagicMock,
+        mock_gpw: MagicMock,
+    ) -> None:
+        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_tm.create_window = AsyncMock(
+            return_value=(True, "Window created", "project", "@5")
+        )
+        mock_sm.wait_for_session_map_entry = AsyncMock()
+        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
+        mock_sm.resolve_chat_id.return_value = -100999
+        mock_gpw.return_value.make_launch_args.return_value = "--continue"
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_CONTINUE}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        mock_gpw.assert_called_with("@0")
+        mock_gpw.return_value.make_launch_args.assert_called_once_with(
+            use_continue=True
+        )
+
+    @patch(f"{_RC}.get_provider_for_window")
+    @patch(f"{_RC}.tmux_manager")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_resume_pick_uses_per_window_provider(
+        self,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_tm: MagicMock,
+        mock_gpw: MagicMock,
+    ) -> None:
+        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_tm.create_window = AsyncMock(
+            return_value=(True, "Window created", "project", "@5")
+        )
+        mock_sm.wait_for_session_map_entry = AsyncMock()
+        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
+        mock_sm.resolve_chat_id.return_value = -100999
+        mock_gpw.return_value.make_launch_args.return_value = "--resume sess-1"
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_PICK}0")
+        user_data = _recovery_user_data()
+        user_data[RECOVERY_SESSIONS] = [
+            {"session_id": "sess-1", "summary": "Fix login bug"},
+        ]
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        mock_gpw.assert_called_with("@0")
+        mock_gpw.return_value.make_launch_args.assert_called_once_with(
+            resume_id="sess-1"
+        )

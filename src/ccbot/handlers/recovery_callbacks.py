@@ -21,7 +21,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..providers import get_provider
+from ..providers import get_provider_for_window
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import (
@@ -61,7 +61,7 @@ def build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
     declares support for those capabilities.
     """
 
-    caps = get_provider().capabilities
+    caps = get_provider_for_window(window_id).capabilities
     options: list[InlineKeyboardButton] = [
         InlineKeyboardButton(
             "\U0001f195 Fresh",
@@ -410,7 +410,7 @@ async def _handle_continue(
         await query.answer("Failed")
         return
 
-    launch_args = get_provider().make_launch_args(use_continue=True)
+    launch_args = get_provider_for_window(old_wid).make_launch_args(use_continue=True)
     await _create_and_bind_window(
         query,
         user_id,
@@ -513,7 +513,9 @@ async def _handle_resume_pick(
         await query.answer("Failed")
         return
 
-    launch_args = get_provider().make_launch_args(resume_id=session_id)
+    launch_args = get_provider_for_window(old_wid).make_launch_args(
+        resume_id=session_id
+    )
     await _create_and_bind_window(
         query,
         user_id,

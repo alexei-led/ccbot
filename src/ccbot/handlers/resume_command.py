@@ -26,7 +26,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..providers import get_provider
+from ..providers import get_provider, get_provider_for_window
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
@@ -263,7 +263,10 @@ async def _handle_pick(
 
         clear_dead_notification(user_id, thread_id)
 
-    launch_args = get_provider().make_launch_args(resume_id=session_id)
+    provider = (
+        get_provider_for_window(old_window_id) if old_window_id else get_provider()
+    )
+    launch_args = provider.make_launch_args(resume_id=session_id)
     success, message, created_wname, created_wid = await tmux_manager.create_window(
         cwd, claude_args=launch_args
     )

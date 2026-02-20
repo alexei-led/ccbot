@@ -827,3 +827,88 @@ class TestResumeCancelCallback:
         await handle_resume_command_callback(query, 100, query.data, update, ctx)
 
         query.answer.assert_called_once_with("Cancelled")
+
+
+class TestResumePerWindowProvider:
+    @patch(f"{_RC}.get_provider_for_window")
+    @patch(f"{_RC}.tmux_manager")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    @patch(f"{_RC}.get_thread_id", return_value=42)
+    async def test_pick_uses_per_window_provider_when_bound(
+        self,
+        _mock_thread_id: MagicMock,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_tm: MagicMock,
+        mock_gpw: MagicMock,
+    ) -> None:
+        mock_sm.get_window_for_thread.return_value = "@3"
+        mock_tm.create_window = AsyncMock(
+            return_value=(True, "Window created", "project", "@5")
+        )
+        mock_sm.wait_for_session_map_entry = AsyncMock()
+        mock_sm.resolve_chat_id.return_value = -100999
+        mock_gpw.return_value.make_launch_args.return_value = "--resume sess-1"
+
+        update = _make_callback_update(data=f"{CB_RESUME_PICK}0")
+        user_data: dict = {
+            RESUME_SESSIONS: [
+                {
+                    "session_id": "sess-1",
+                    "summary": "Fix bug",
+                    "cwd": "/tmp/proj",
+                },
+            ],
+        }
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_resume_command_callback(query, 100, query.data, update, ctx)
+
+        mock_gpw.assert_called_once_with("@3")
+
+    @patch(f"{_RC}.get_provider")
+    @patch(f"{_RC}.tmux_manager")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    @patch(f"{_RC}.get_thread_id", return_value=42)
+    async def test_pick_falls_back_to_global_provider_when_unbound(
+        self,
+        _mock_thread_id: MagicMock,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_tm: MagicMock,
+        mock_gp: MagicMock,
+    ) -> None:
+        mock_sm.get_window_for_thread.return_value = None
+        mock_tm.create_window = AsyncMock(
+            return_value=(True, "Window created", "project", "@5")
+        )
+        mock_sm.wait_for_session_map_entry = AsyncMock()
+        mock_sm.resolve_chat_id.return_value = -100999
+        mock_gp.return_value.make_launch_args.return_value = "--resume sess-1"
+
+        update = _make_callback_update(data=f"{CB_RESUME_PICK}0")
+        user_data: dict = {
+            RESUME_SESSIONS: [
+                {
+                    "session_id": "sess-1",
+                    "summary": "Fix bug",
+                    "cwd": "/tmp/proj",
+                },
+            ],
+        }
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_resume_command_callback(query, 100, query.data, update, ctx)
+
+        mock_gp.assert_called_once()
+        mock_gp.return_value.make_launch_args.assert_called_once_with(
+            resume_id="sess-1"
+        )
