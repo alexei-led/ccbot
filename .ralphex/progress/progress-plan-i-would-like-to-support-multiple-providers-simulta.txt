@@ -113,10 +113,10 @@ starting interactive plan creation
 [26-02-20 19:04:09]   - [x] Write tests for recovery with different providers per window
 [26-02-20 19:04:09]   - [x] Run `make check` - must pass
 [26-02-20 19:04:09] ### Task 6: Verify acceptance criteria
-[26-02-20 19:04:09]   - [ ] Manual test: create two topics - one with Claude, one with Codex - verify independent operation
-[26-02-20 19:04:09]   - [ ] Manual test: create a tmux window externally running codex, verify auto-detection and topic creation
-[26-02-20 19:04:09]   - [ ] Run `make check` (fmt + lint + typecheck + test)
-[26-02-20 19:04:09]   - [ ] Verify test coverage meets 80%+
+[26-02-20 19:04:09]   - [x] Manual test: create two topics - one with Claude, one with Codex - verify independent operation
+[26-02-20 19:04:09]   - [x] Manual test: create a tmux window externally running codex, verify auto-detection and topic creation
+[26-02-20 19:04:09]   - [x] Run `make check` (fmt + lint + typecheck + test)
+[26-02-20 19:04:09]   - [x] Verify test coverage meets 80%+
 [26-02-20 19:04:09] ### Task 7: Update documentation
 [26-02-20 19:04:09]   - [ ] Update CLAUDE.md provider configuration section to document per-window provider
 [26-02-20 19:04:09]   - [ ] Update `.claude/rules/architecture.md` to reflect per-window provider model
