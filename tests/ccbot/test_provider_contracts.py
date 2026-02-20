@@ -19,6 +19,10 @@ from ccbot.providers.base import (
     StatusUpdate,
 )
 from ccbot.providers.claude import ClaudeProvider
+from ccbot.providers.codex import CodexProvider
+from ccbot.providers.gemini import (
+    GeminiProvider,
+)  # noqa: F401 (used in PROVIDER_FIXTURES)
 
 # ── Stub provider (minimal conforming implementation) ────────────────────
 
@@ -171,7 +175,12 @@ class StubProvider:
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
-PROVIDER_FIXTURES: list[type] = [StubProvider, ClaudeProvider]
+PROVIDER_FIXTURES: list[type] = [
+    StubProvider,
+    ClaudeProvider,
+    CodexProvider,
+    GeminiProvider,
+]
 
 
 @pytest.fixture(params=PROVIDER_FIXTURES, ids=lambda cls: cls.__name__)
