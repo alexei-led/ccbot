@@ -4,7 +4,8 @@ Handles all inline keyboard callbacks for the directory browser UI:
   - CB_DIR_SELECT: Navigate into a subdirectory
   - CB_DIR_UP: Navigate to parent directory
   - CB_DIR_PAGE: Paginate directory listing
-  - CB_DIR_CONFIRM: Confirm directory selection and create tmux window
+  - CB_DIR_CONFIRM: Confirm directory selection, show provider picker
+  - CB_PROV_SELECT: Select provider and create tmux window
   - CB_DIR_CANCEL: Cancel directory browsing
   - CB_DIR_FAV: Select a favorite directory
   - CB_DIR_STAR: Star/unstar a directory
@@ -19,6 +20,7 @@ from telegram import CallbackQuery, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from ..providers import registry as provider_registry
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import (
@@ -29,18 +31,20 @@ from .callback_data import (
     CB_DIR_SELECT,
     CB_DIR_STAR,
     CB_DIR_UP,
+    CB_PROV_SELECT,
 )
 from .callback_helpers import get_thread_id
 from .directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
     BROWSE_PATH_KEY,
-    get_favorites,
     build_directory_browser,
+    build_provider_picker,
     clear_browse_state,
+    get_favorites,
 )
 from .message_sender import safe_edit, safe_send
-from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
+from .user_state import PENDING_PROVIDER, PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +72,8 @@ async def handle_directory_callback(
         await _handle_page(query, user_id, data, update, context)
     elif data == CB_DIR_CONFIRM:
         await _handle_confirm(query, user_id, update, context)
+    elif data.startswith(CB_PROV_SELECT):
+        await _handle_provider_select(query, user_id, data, update, context)
     elif data == CB_DIR_CANCEL:
         await _handle_cancel(query, update, context)
 
@@ -289,7 +295,7 @@ async def _handle_confirm(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    """Handle CB_DIR_CONFIRM: confirm directory selection, create tmux window."""
+    """Handle CB_DIR_CONFIRM: confirm directory, show provider picker."""
     default_path = str(Path.cwd())
     selected_path = (
         context.user_data.get(BROWSE_PATH_KEY, default_path)
@@ -300,7 +306,6 @@ async def _handle_confirm(
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
 
-    # Ack immediately to prevent Telegram from re-sending on double-click
     await query.answer()
 
     confirm_thread_id = get_thread_id(update)
@@ -332,17 +337,75 @@ async def _handle_confirm(
 
     clear_browse_state(context.user_data)
 
+    # Show provider selection keyboard
+    text, keyboard = build_provider_picker(selected_path)
+    await safe_edit(query, text, reply_markup=keyboard)
+
+
+async def _handle_provider_select(
+    query: CallbackQuery,
+    user_id: int,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Handle CB_PROV_SELECT: select provider and create tmux window."""
+    provider_name = data[len(CB_PROV_SELECT) :]
+    if not provider_registry.is_valid(provider_name):
+        await query.answer("Unknown provider", show_alert=True)
+        return
+
+    default_path = str(Path.cwd())
+    selected_path = (
+        context.user_data.get(BROWSE_PATH_KEY, default_path)
+        if context.user_data
+        else default_path
+    )
+    pending_thread_id: int | None = (
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
+    )
+
+    await query.answer()
+
+    confirm_thread_id = get_thread_id(update)
+    if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
+        if context.user_data is not None:
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
+            context.user_data.pop(BROWSE_PATH_KEY, None)
+        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+        return
+
+    # Guard against double-click: if thread already has a window, skip
+    if pending_thread_id is not None:
+        existing_wid = session_manager.get_window_for_thread(user_id, pending_thread_id)
+        if existing_wid is not None:
+            display = session_manager.get_display_name(existing_wid)
+            logger.warning(
+                "Thread %d already bound to window %s (%s), ignoring duplicate provider select",
+                pending_thread_id,
+                existing_wid,
+                display,
+            )
+            await safe_edit(query, f"✅ Already bound to window {display}.")
+            return
+
+    # Resolve launch command from provider
+    provider = provider_registry.get(provider_name)
+    launch_command = provider.capabilities.launch_command
+
     success, message, created_wname, created_wid = await tmux_manager.create_window(
-        selected_path
+        selected_path, launch_command=launch_command
     )
     if success:
-        # Update MRU only after successful window creation
         session_manager.update_user_mru(user_id, selected_path)
+        session_manager.set_window_provider(created_wid, provider_name)
         logger.info(
-            "Window created: %s (id=%s) at %s (user=%d, thread=%s)",
+            "Window created: %s (id=%s) at %s provider=%s (user=%d, thread=%s)",
             created_wname,
             created_wid,
             selected_path,
+            provider_name,
             user_id,
             pending_thread_id,
         )
@@ -402,7 +465,6 @@ async def _handle_confirm(
         if pending_thread_id is not None and context.user_data is not None:
             context.user_data.pop(PENDING_THREAD_ID, None)
             context.user_data.pop(PENDING_THREAD_TEXT, None)
-    # query.answer() already called at the top of _handle_confirm
 
 
 async def _handle_cancel(
@@ -421,5 +483,6 @@ async def _handle_cancel(
     if context.user_data is not None:
         context.user_data.pop(PENDING_THREAD_ID, None)
         context.user_data.pop(PENDING_THREAD_TEXT, None)
+        context.user_data.pop(PENDING_PROVIDER, None)
     await safe_edit(query, "Cancelled")
     await query.answer("Cancelled")

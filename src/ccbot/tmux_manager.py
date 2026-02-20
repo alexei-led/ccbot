@@ -349,15 +349,17 @@ class TmuxManager:
         window_name: str | None = None,
         start_claude: bool = True,
         claude_args: str = "",
+        launch_command: str | None = None,
     ) -> tuple[bool, str, str, str]:
-        """Create a new tmux window and optionally start Claude Code.
+        """Create a new tmux window and optionally start an agent CLI.
 
         Args:
             work_dir: Working directory for the new window
             window_name: Optional window name (defaults to directory name)
-            start_claude: Whether to start claude command
-            claude_args: Extra arguments appended to the claude command
+            start_claude: Whether to start the agent CLI command
+            claude_args: Extra arguments appended to the launch command
                          (e.g. "--continue", "--resume <id>")
+            launch_command: Override the CLI command to run (default: config.claude_command)
 
         Returns:
             Tuple of (success, message, window_name, window_id)
@@ -391,11 +393,11 @@ class TmuxManager:
 
                 new_window_id = window.window_id or ""
 
-                # Start Claude Code if requested
+                # Start agent CLI if requested
                 if start_claude:
                     pane = window.active_pane
                     if pane:
-                        cmd = config.claude_command
+                        cmd = launch_command or config.claude_command
                         if claude_args:
                             cmd = f"{cmd} {claude_args}"
                         pane.send_keys(cmd, enter=True)

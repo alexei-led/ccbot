@@ -26,6 +26,7 @@ from .callback_data import (
     CB_DIR_SELECT,
     CB_DIR_STAR,
     CB_DIR_UP,
+    CB_PROV_SELECT,
     CB_WIN_BIND,
     CB_WIN_CANCEL,
     CB_WIN_NEW,
@@ -244,3 +245,35 @@ def build_directory_browser(
         text = f"*Select Working Directory*\n\nCurrent: `{display_path}`\n\nTap a folder to enter, or select current directory"
 
     return text, InlineKeyboardMarkup(buttons), subdirs
+
+
+# Provider display metadata: (label, icon)
+_PROVIDER_META: dict[str, tuple[str, str]] = {
+    "claude": ("Claude", "🟠"),
+    "codex": ("Codex", "🟢"),
+    "gemini": ("Gemini", "🔵"),
+}
+
+
+def build_provider_picker(selected_path: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Build provider selection keyboard shown after directory confirmation.
+
+    Returns: (text, keyboard).
+    """
+    display_path = selected_path.replace(str(Path.home()), "~")
+    text = (
+        f"*Select Provider*\n\nDirectory: `{display_path}`\n\nWhich agent CLI to use?"
+    )
+    buttons: list[list[InlineKeyboardButton]] = []
+    for name, (label, icon) in _PROVIDER_META.items():
+        suffix = " (default)" if name == "claude" else ""
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"{icon} {label}{suffix}",
+                    callback_data=f"{CB_PROV_SELECT}{name}",
+                )
+            ]
+        )
+    buttons.append([InlineKeyboardButton("Cancel", callback_data=CB_DIR_CANCEL)])
+    return text, InlineKeyboardMarkup(buttons)

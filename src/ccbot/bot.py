@@ -57,6 +57,7 @@ from .handlers.callback_data import (
     CB_DIR_SELECT,
     CB_DIR_STAR,
     CB_DIR_UP,
+    CB_PROV_SELECT,
     CB_HISTORY_NEXT,
     CB_HISTORY_PREV,
     CB_KEYS_PREFIX,
@@ -432,6 +433,7 @@ _CB_DIRECTORY = (
     CB_DIR_UP,
     CB_DIR_PAGE,
     CB_DIR_CONFIRM,
+    CB_PROV_SELECT,
     CB_DIR_CANCEL,
 )
 _CB_WINDOW = (CB_WIN_BIND, CB_WIN_NEW, CB_WIN_CANCEL)

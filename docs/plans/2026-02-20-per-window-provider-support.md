@@ -64,13 +64,13 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 - Modify: `src/ccbot/handlers/callback_data.py` (new callback constants)
 - Modify: `src/ccbot/tmux_manager.py` (accept launch_command override in create_window)
 
-- [ ] Add callback constants: `CB_PROV_SELECT = "prov:"` and individual provider buttons
-- [ ] After directory confirmation, show provider selection inline keyboard (Claude (default), Codex, Gemini) - single tap, Claude pre-selected
-- [ ] If user picks default (Claude), proceed as today. Otherwise store chosen provider in user_data
-- [ ] Modify `tmux_manager.create_window()` to accept optional `launch_command` parameter instead of always using `config.claude_command`
-- [ ] After window creation, call `set_window_provider(window_id, provider_name)` to persist the choice
-- [ ] Write tests for provider selection UI and callback handling
-- [ ] Run `make check` - must pass
+- [x] Add callback constants: `CB_PROV_SELECT = "prov:"` and individual provider buttons
+- [x] After directory confirmation, show provider selection inline keyboard (Claude (default), Codex, Gemini) - single tap, Claude pre-selected
+- [x] If user picks default (Claude), proceed as today. Otherwise store chosen provider in user_data
+- [x] Modify `tmux_manager.create_window()` to accept optional `launch_command` parameter instead of always using `config.claude_command`
+- [x] After window creation, call `set_window_provider(window_id, provider_name)` to persist the choice
+- [x] Write tests for provider selection UI and callback handling
+- [x] Run `make check` - must pass
 
 ### Task 4: Auto-detect provider for externally created windows
 

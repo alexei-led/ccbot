@@ -82,6 +82,9 @@ NOTIFY_MODE_LABELS: dict[str, str] = {
     k: f"{v} {k.replace('_', ' ').title()}" for k, v in NOTIFY_MODE_ICONS.items()
 }
 
+# Provider selection (directory browser flow)
+CB_PROV_SELECT = "prov:"  # prov:<provider_name>
+
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>
 
