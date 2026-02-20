@@ -68,6 +68,11 @@ async def clear_topic_state(
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
     clear_topic_emoji_state(chat_id, thread_id)
 
+    # Clear command history for this topic
+    from .command_history import clear_history
+
+    clear_history(user_id, thread_id)
+
     # Clear pending thread state from user_data
     if user_data is not None and user_data.get(PENDING_THREAD_ID) == thread_id:
         user_data.pop(PENDING_THREAD_ID, None)

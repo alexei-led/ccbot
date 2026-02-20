@@ -55,6 +55,31 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 - State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `monitor_state.json` (byte offsets).
 - Project structure: handlers in `src/ccbot/handlers/`, core modules in `src/ccbot/`, tests mirror source under `tests/ccbot/`.
 
+## Provider Configuration
+
+ccbot supports multiple agent CLI backends via the provider abstraction (`src/ccbot/providers/`). One provider is active per instance.
+
+| Setting               | Env Var                  | Default         |
+| --------------------- | ------------------------ | --------------- |
+| Provider name         | `CCBOT_PROVIDER`         | `claude`        |
+| Custom launch command | `CCBOT_PROVIDER_COMMAND` | (from provider) |
+
+### Provider Capability Matrix
+
+| Capability | Claude | Codex | Gemini |
+| ---------- | ------ | ----- | ------ |
+| Hook       | Yes    | No    | No     |
+| Resume     | Yes    | Yes   | Yes    |
+| Continue   | Yes    | No    | No     |
+| Transcript | JSONL  | JSONL | JSONL  |
+| Commands   | Yes    | Yes   | Yes    |
+
+Capabilities gate UX: `/resume` is hidden if the provider lacks resume support; recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers.
+
+### Migration Notes
+
+Existing Claude deployments need no changes — `claude` is the default provider. To switch providers, set `CCBOT_PROVIDER=codex` (or `gemini`) in your `.env` or environment. The hook subsystem (`ccbot hook --install`) is Claude-specific and skipped for other providers.
+
 ## Hook Configuration
 
 Auto-install: `ccbot hook --install`

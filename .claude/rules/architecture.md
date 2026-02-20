@@ -67,6 +67,14 @@
 │    after restart       │
 └────────────────────────┘
 
+Provider modules (providers/):
+  base.py             ─ AgentProvider protocol, ProviderCapabilities, event types
+  registry.py         ─ ProviderRegistry (name→factory map, singleton cache)
+  claude.py           ─ ClaudeProvider (hook, resume, continue, JSONL transcripts)
+  codex.py            ─ CodexProvider (resume, JSONL transcripts, no hook/continue)
+  gemini.py           ─ GeminiProvider (resume, JSONL transcripts, no hook/continue)
+  __init__.py         ─ get_provider() singleton, resolve_capabilities() for CLI
+
 Additional modules:
   cc_commands.py      ─ CC command discovery (skills, custom commands) + menu registration
   screenshot.py       ─ Terminal text → PNG rendering (ANSI color, font fallback)
@@ -101,3 +109,4 @@ State files (~/.ccbot/ or $CCBOT_DIR/):
 - Only sessions registered in `session_map.json` (via hook) are monitored.
 - Notifications delivered to users via thread bindings (topic → window_id → session).
 - **Startup re-resolution** — Window IDs reset on tmux server restart. On startup, `resolve_stale_ids()` matches persisted display names against live windows to re-map IDs. Old state.json files keyed by window name are auto-migrated.
+- **Provider abstraction** — All CLI-specific behavior (launch args, transcript parsing, terminal status, command discovery) is delegated to an `AgentProvider` protocol. Providers declare capabilities (`ProviderCapabilities`) that gate UX features: hook checks, resume/continue buttons, and command registration. The active provider is a lazy singleton resolved from `CCBOT_PROVIDER` env var (default: `claude`). CLI commands (`doctor`, `status`) use `resolve_capabilities()` to avoid importing Config.

@@ -41,7 +41,7 @@ from .recovery_callbacks import build_recovery_keyboard
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
-from ..terminal_parser import extract_bash_output
+from ..providers import get_provider
 from ..tmux_manager import tmux_manager
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ async def _capture_bash_output(
             if raw is None:
                 return
 
-            output = extract_bash_output(raw, command)
+            output = get_provider().extract_bash_output(raw, command)
             if not output or output == last_output:
                 await asyncio.sleep(1.0)
                 continue
@@ -338,6 +338,10 @@ async def _forward_message(
     if not success:
         await safe_reply(message, f"\u274c {err_message}")
         return
+
+    from .command_history import record_command
+
+    record_command(user_id, thread_id, text)
 
     # Start background capture for ! bash command output
     if text.startswith("!") and len(text) > 1:

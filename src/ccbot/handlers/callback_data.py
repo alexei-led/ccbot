@@ -84,3 +84,6 @@ NOTIFY_MODE_LABELS: dict[str, str] = {
 
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>
+
+# Idle status sentinel (shared between status_polling and message_queue)
+IDLE_STATUS_TEXT = "\u2713 Ready"

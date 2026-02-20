@@ -26,7 +26,7 @@ from telegram.error import RetryAfter, TelegramError
 
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
-from ..terminal_parser import format_status_display, parse_status_line
+from ..providers import get_provider
 from ..tmux_manager import tmux_manager
 from .callback_data import (
     CB_STATUS_ESC,
@@ -46,28 +46,47 @@ logger = logging.getLogger(__name__)
 MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
 
 
-def build_status_keyboard(window_id: str) -> InlineKeyboardMarkup:
-    """Build inline keyboard for status messages: [Esc] [Screenshot] [Bell]."""
+def build_status_keyboard(
+    window_id: str, history: list[str] | None = None
+) -> InlineKeyboardMarkup:
+    """Build inline keyboard for status messages: [↑ cmd] row + [Esc] [Screenshot] [Bell]."""
+    from .command_history import INLINE_QUERY_MAX, truncate_for_display
+
+    rows: list[list[InlineKeyboardButton]] = []
+
+    # History recall row (up to 2 buttons)
+    if history:
+        hist_row: list[InlineKeyboardButton] = []
+        for cmd in history[:2]:
+            label = truncate_for_display(cmd, 20)
+            query = cmd[:INLINE_QUERY_MAX]
+            hist_row.append(
+                InlineKeyboardButton(
+                    f"\u2191 {label}", switch_inline_query_current_chat=query
+                )
+            )
+        rows.append(hist_row)
+
+    # Control row
     mode = session_manager.get_notification_mode(window_id)
-    bell = NOTIFY_MODE_ICONS.get(mode, "🔔")
-    return InlineKeyboardMarkup(
+    bell = NOTIFY_MODE_ICONS.get(mode, "\U0001f514")
+    rows.append(
         [
-            [
-                InlineKeyboardButton(
-                    "⎋ Esc",
-                    callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    "📸",
-                    callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    bell,
-                    callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
-                ),
-            ]
+            InlineKeyboardButton(
+                "\u238b Esc",
+                callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
+            ),
+            InlineKeyboardButton(
+                "\U0001f4f8",
+                callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
+            ),
+            InlineKeyboardButton(
+                bell,
+                callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
+            ),
         ]
     )
+    return InlineKeyboardMarkup(rows)
 
 
 @dataclass
@@ -415,6 +434,18 @@ async def _convert_status_to_content(
             return None
 
 
+def _get_idle_history(
+    user_id: int, thread_id_or_0: int, status_text: str
+) -> list[str] | None:
+    """Return history list if the status is idle, else None."""
+    from .callback_data import IDLE_STATUS_TEXT
+    from .command_history import get_history
+
+    if status_text != IDLE_STATUS_TEXT:
+        return None
+    return get_history(user_id, thread_id_or_0, limit=2) or None
+
+
 async def _process_status_update_task(
     bot: Bot, user_id: int, task: MessageTask
 ) -> None:
@@ -423,20 +454,13 @@ async def _process_status_update_task(
     thread_id = task.thread_id or 0
     chat_id = session_manager.resolve_chat_id(user_id, task.thread_id)
     skey = (user_id, thread_id)
-    raw_text = task.text or ""
-    status_text = format_status_display(raw_text) if raw_text else ""
+    # task.text must be pre-formatted (display_label from StatusUpdate, not raw terminal text)
+    status_text = task.text or ""
 
     if not status_text:
         # No status text means clear status
         await _do_clear_status_message(bot, user_id, thread_id)
         return
-
-    # Send typing indicator if Claude is interruptible (working)
-    from telegram.constants import ChatAction
-
-    if "esc to interrupt" in raw_text.lower():
-        with contextlib.suppress(TelegramError):
-            await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     current_info = _status_msg_info.get(skey)
 
@@ -454,7 +478,8 @@ async def _process_status_update_task(
             pass
         else:
             # Same window, text changed - edit in place
-            keyboard = build_status_keyboard(window_id)
+            history = _get_idle_history(user_id, thread_id, status_text)
+            keyboard = build_status_keyboard(window_id, history=history)
             try:
                 await bot.edit_message_text(
                     chat_id=chat_id,
@@ -501,7 +526,8 @@ async def _do_send_status_message(
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    keyboard = build_status_keyboard(window_id)
+    history = _get_idle_history(user_id, thread_id_or_0, text)
+    keyboard = build_status_keyboard(window_id, history=history)
     sent = await rate_limit_send_message(
         bot,
         chat_id,
@@ -556,10 +582,10 @@ async def _check_and_send_status(
         return
 
     thread_id_or_0 = thread_id or 0
-    status_line = parse_status_line(pane_text)
-    if status_line:
+    status = get_provider().parse_terminal_status(pane_text)
+    if status and not status.is_interactive:
         await _do_send_status_message(
-            bot, user_id, thread_id_or_0, window_id, format_status_display(status_line)
+            bot, user_id, thread_id_or_0, window_id, status.display_label
         )
 
 

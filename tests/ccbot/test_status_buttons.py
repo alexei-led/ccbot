@@ -49,3 +49,37 @@ class TestBuildStatusKeyboard:
             kb = build_status_keyboard("@0")
             notify_btn = kb.inline_keyboard[0][2]
             assert notify_btn.text == expected_icon
+
+    def test_no_history_single_row(self) -> None:
+        kb = build_status_keyboard("@0")
+        assert len(kb.inline_keyboard) == 1
+
+    def test_history_adds_row(self) -> None:
+        kb = build_status_keyboard("@0", history=["hello", "world"])
+        assert len(kb.inline_keyboard) == 2
+        assert kb.inline_keyboard[0][0].switch_inline_query_current_chat == "hello"
+        assert kb.inline_keyboard[0][1].switch_inline_query_current_chat == "world"
+
+    def test_history_label_truncated(self) -> None:
+        long_cmd = "a" * 30
+        kb = build_status_keyboard("@0", history=[long_cmd])
+        label = kb.inline_keyboard[0][0].text
+        assert label.startswith("\u2191 ")
+        assert label.endswith("\u2026")
+        assert len(label) <= 2 + 20 + 1
+
+    def test_history_none_no_extra_row(self) -> None:
+        kb = build_status_keyboard("@0", history=None)
+        assert len(kb.inline_keyboard) == 1
+
+    def test_history_empty_list_no_extra_row(self) -> None:
+        kb = build_status_keyboard("@0", history=[])
+        assert len(kb.inline_keyboard) == 1
+
+    def test_history_query_clamped_to_inline_limit(self) -> None:
+        from ccbot.handlers.command_history import INLINE_QUERY_MAX
+
+        long_cmd = "x" * 300
+        kb = build_status_keyboard("@0", history=[long_cmd])
+        btn = kb.inline_keyboard[0][0]
+        assert len(btn.switch_inline_query_current_chat) == INLINE_QUERY_MAX
