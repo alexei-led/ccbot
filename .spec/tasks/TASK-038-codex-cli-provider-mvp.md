@@ -1,7 +1,7 @@
 ---
 id: TASK-038
 title: Add Codex CLI provider MVP
-status: todo
+status: done
 priority: medium
 req: REQ-008
 epic: EPIC-008

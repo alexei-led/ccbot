@@ -1,7 +1,7 @@
 ---
 id: TASK-040
 title: Capability-aware UX and operational tooling
-status: todo
+status: done
 priority: medium
 req: REQ-008
 epic: EPIC-008

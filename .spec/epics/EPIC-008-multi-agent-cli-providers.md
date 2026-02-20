@@ -2,7 +2,7 @@
 id: EPIC-008
 title: Multi-Agent CLI Providers
 reqs: [REQ-008]
-status: todo
+status: done
 ---
 
 # EPIC-008: Multi-Agent CLI Providers

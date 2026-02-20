@@ -1,7 +1,7 @@
 ---
 id: TASK-041
 title: Docs, rollout plan, and final verification
-status: todo
+status: done
 priority: medium
 req: REQ-008
 epic: EPIC-008

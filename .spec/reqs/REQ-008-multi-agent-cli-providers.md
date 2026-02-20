@@ -3,7 +3,7 @@ id: REQ-008
 title: Multi-Agent CLI Provider Architecture
 version: 1
 priority: high
-status: in_progress
+status: done
 epic: EPIC-008
 ---
 

@@ -11,3 +11,8 @@ DONE TASK-034: Provider baseline characterization and contracts
 18:12 DONE TASK-035: Provider registry, capability policy, config integration
 22:22 DONE TASK-037
 08:54 DONE TASK-036
+09:44 DONE TASK-038 (Codex provider MVP - already complete)
+09:44 DONE TASK-039 (Gemini provider MVP - implementation complete)
+DONE TASK-040: Capability-aware UX and operational tooling
+DONE TASK-041: Docs, rollout plan, and final verification
+DONE EPIC-008: Multi-Agent CLI Provider Architecture
