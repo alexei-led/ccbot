@@ -93,6 +93,28 @@ def get_provider_for_window(window_id: str) -> AgentProvider:
     return get_provider()
 
 
+def detect_provider_from_command(pane_current_command: str) -> str:
+    """Detect provider name from a tmux pane's running process.
+
+    Maps known process names to provider names:
+    - "claude" -> "claude"
+    - "codex" -> "codex"
+    - "gemini" -> "gemini"
+
+    Returns the config default for unrecognized commands.
+    """
+    _ensure_registered()
+    cmd = pane_current_command.strip().lower()
+    # Check if any registered provider name appears in the command
+    for name in ("claude", "codex", "gemini"):
+        if name in cmd:
+            return name
+
+    from ccbot.config import config
+
+    return config.provider_name
+
+
 def resolve_capabilities(provider_name: str | None = None) -> ProviderCapabilities:
     """Resolve provider capabilities without requiring full Config.
 
@@ -124,6 +146,7 @@ __all__ = [
     "SessionStartEvent",
     "StatusUpdate",
     "UnknownProviderError",
+    "detect_provider_from_command",
     "get_provider",
     "get_provider_for_window",
     "registry",

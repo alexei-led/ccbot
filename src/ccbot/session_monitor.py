@@ -515,21 +515,28 @@ class SessionMonitor:
                 self._pending_tools.pop(session_id, None)
             self.state.save_if_dirty()
 
-        # Detect new windows and fire callback
+        # Detect new windows: set provider from session_map if available, then fire callback
         new_windows = current_windows - old_windows
-        if new_windows and self._new_window_callback:
+        if new_windows:
+            from .session import session_manager as _sm
+
             for window_id in new_windows:
                 details = current_map[window_id]
-                event = NewWindowEvent(
-                    window_id=window_id,
-                    session_id=details["session_id"],
-                    window_name=details.get("window_name", ""),
-                    cwd=details.get("cwd", ""),
-                )
-                try:
-                    await self._new_window_callback(event)
-                except _CallbackError:
-                    logger.exception("New window callback error for %s", window_id)
+                provider_name = details.get("provider_name", "")
+                if provider_name:
+                    _sm.set_window_provider(window_id, provider_name)
+
+                if self._new_window_callback:
+                    event = NewWindowEvent(
+                        window_id=window_id,
+                        session_id=details["session_id"],
+                        window_name=details.get("window_name", ""),
+                        cwd=details.get("cwd", ""),
+                    )
+                    try:
+                        await self._new_window_callback(event)
+                    except _CallbackError:
+                        logger.exception("New window callback error for %s", window_id)
 
         # Update last known map
         self._last_session_map = current_map

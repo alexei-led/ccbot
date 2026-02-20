@@ -1,0 +1,209 @@
+"""Tests for provider auto-detection from tmux pane commands."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from ccbot.providers import _reset_provider, detect_provider_from_command
+from ccbot.session_monitor import SessionMonitor
+
+
+class TestDetectProviderFromCommand:
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        _reset_provider()
+        yield
+        _reset_provider()
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            pytest.param("claude", "claude", id="bare-claude"),
+            pytest.param("codex", "codex", id="bare-codex"),
+            pytest.param("gemini", "gemini", id="bare-gemini"),
+            pytest.param("/usr/local/bin/claude", "claude", id="full-path-claude"),
+            pytest.param("/opt/bin/codex --resume", "codex", id="codex-with-args"),
+            pytest.param("gemini-cli", "gemini", id="gemini-cli-variant"),
+            pytest.param("Claude", "claude", id="case-insensitive-claude"),
+            pytest.param("CODEX", "codex", id="uppercase-codex"),
+            pytest.param("  claude  ", "claude", id="whitespace-padded"),
+        ],
+    )
+    def test_known_commands(self, command: str, expected: str) -> None:
+        assert detect_provider_from_command(command) == expected
+
+    def test_unknown_command_returns_config_default(self) -> None:
+        result = detect_provider_from_command("vim")
+        assert result == "claude"  # config default
+
+    def test_unknown_command_respects_config_provider(self) -> None:
+        mock_config = MagicMock()
+        mock_config.provider_name = "codex"
+        with patch("ccbot.config.config", mock_config):
+            result = detect_provider_from_command("bash")
+            assert result == "codex"
+
+    def test_empty_command_returns_default(self) -> None:
+        result = detect_provider_from_command("")
+        assert result == "claude"
+
+    def test_priority_order_first_match(self) -> None:
+        # "claude" is checked first, so "claude-codex" matches "claude"
+        assert detect_provider_from_command("claude-codex") == "claude"
+
+
+class TestHandleNewWindowAutoDetection:
+    @pytest.mark.asyncio
+    @patch("ccbot.bot.tmux_manager")
+    @patch("ccbot.bot.session_manager")
+    @patch("ccbot.bot.config")
+    @patch("ccbot.bot.detect_provider_from_command", return_value="codex")
+    async def test_sets_detected_provider(
+        self,
+        mock_detect: MagicMock,
+        mock_config: MagicMock,
+        mock_sm: MagicMock,
+        mock_tmux: MagicMock,
+    ) -> None:
+        from ccbot.bot import _handle_new_window
+        from ccbot.session_monitor import NewWindowEvent
+
+        mock_config.group_id = None
+        mock_sm.iter_thread_bindings.return_value = []
+
+        mock_window = MagicMock()
+        mock_window.pane_current_command = "codex"
+        mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
+
+        event = NewWindowEvent(
+            window_id="@5", session_id="uuid-1", window_name="proj", cwd="/tmp/proj"
+        )
+        bot = AsyncMock()
+
+        await _handle_new_window(event, bot)
+
+        mock_detect.assert_called_once_with("codex")
+        mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
+
+    @pytest.mark.asyncio
+    @patch("ccbot.bot.tmux_manager")
+    @patch("ccbot.bot.session_manager")
+    @patch("ccbot.bot.config")
+    @patch("ccbot.bot.detect_provider_from_command")
+    async def test_skips_detection_when_no_pane_command(
+        self,
+        mock_detect: MagicMock,
+        mock_config: MagicMock,
+        mock_sm: MagicMock,
+        mock_tmux: MagicMock,
+    ) -> None:
+        from ccbot.bot import _handle_new_window
+        from ccbot.session_monitor import NewWindowEvent
+
+        mock_config.group_id = None
+        mock_sm.iter_thread_bindings.return_value = []
+
+        mock_window = MagicMock()
+        mock_window.pane_current_command = ""
+        mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
+
+        event = NewWindowEvent(
+            window_id="@6", session_id="uuid-2", window_name="proj", cwd="/tmp"
+        )
+        bot = AsyncMock()
+
+        await _handle_new_window(event, bot)
+
+        mock_detect.assert_not_called()
+        mock_sm.set_window_provider.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("ccbot.bot.tmux_manager")
+    @patch("ccbot.bot.session_manager")
+    @patch("ccbot.bot.config")
+    @patch("ccbot.bot.detect_provider_from_command")
+    async def test_skips_detection_when_window_not_found(
+        self,
+        mock_detect: MagicMock,
+        mock_config: MagicMock,
+        mock_sm: MagicMock,
+        mock_tmux: MagicMock,
+    ) -> None:
+        from ccbot.bot import _handle_new_window
+        from ccbot.session_monitor import NewWindowEvent
+
+        mock_config.group_id = None
+        mock_sm.iter_thread_bindings.return_value = []
+
+        mock_tmux.find_window_by_id = AsyncMock(return_value=None)
+
+        event = NewWindowEvent(
+            window_id="@7", session_id="uuid-3", window_name="proj", cwd="/tmp"
+        )
+        bot = AsyncMock()
+
+        await _handle_new_window(event, bot)
+
+        mock_detect.assert_not_called()
+        mock_sm.set_window_provider.assert_not_called()
+
+
+class TestSessionMonitorProviderFromMap:
+    @pytest.mark.asyncio
+    async def test_sets_provider_from_session_map(self, tmp_path) -> None:
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            poll_interval=0.1,
+            state_file=tmp_path / "monitor_state.json",
+        )
+        monitor._last_session_map = {}
+
+        new_map = {
+            "@5": {
+                "session_id": "uuid-1",
+                "cwd": "/tmp",
+                "window_name": "proj",
+                "provider_name": "codex",
+            }
+        }
+
+        with (
+            patch.object(
+                monitor,
+                "_load_current_session_map",
+                new_callable=AsyncMock,
+                return_value=new_map,
+            ),
+            patch("ccbot.session.session_manager") as mock_sm,
+        ):
+            await monitor._detect_and_cleanup_changes()
+            mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
+
+    @pytest.mark.asyncio
+    async def test_skips_provider_when_not_in_map(self, tmp_path) -> None:
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            poll_interval=0.1,
+            state_file=tmp_path / "monitor_state.json",
+        )
+        monitor._last_session_map = {}
+
+        new_map = {
+            "@6": {
+                "session_id": "uuid-2",
+                "cwd": "/tmp",
+                "window_name": "proj",
+            }
+        }
+
+        with (
+            patch.object(
+                monitor,
+                "_load_current_session_map",
+                new_callable=AsyncMock,
+                return_value=new_map,
+            ),
+            patch("ccbot.session.session_manager") as mock_sm,
+        ):
+            await monitor._detect_and_cleanup_changes()
+            mock_sm.set_window_provider.assert_not_called()

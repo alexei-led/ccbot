@@ -306,6 +306,7 @@ def _process_hook_stdin() -> None:
                     "cwd": cwd,
                     "window_name": window_name,
                     "transcript_path": transcript_path,
+                    "provider_name": "claude",
                 }
 
                 # Clean up old-format key ("session:window_name") if it exists.

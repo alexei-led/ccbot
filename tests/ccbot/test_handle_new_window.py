@@ -7,10 +7,21 @@ and RetryAfter backoff behavior.
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from telegram.error import RetryAfter, TelegramError
 
 from ccbot.bot import _handle_new_window
 from ccbot.session_monitor import NewWindowEvent
+
+
+@pytest.fixture(autouse=True)
+def _mock_tmux():
+    """Mock tmux_manager.find_window_by_id for all tests in this module."""
+    mock_window = MagicMock()
+    mock_window.pane_current_command = ""
+    with patch("ccbot.bot.tmux_manager") as mock_tmux:
+        mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
+        yield mock_tmux
 
 
 def _make_event(

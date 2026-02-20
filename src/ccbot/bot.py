@@ -47,7 +47,7 @@ from telegram.ext import (
 )
 
 from .cc_commands import get_cc_name, register_commands
-from .providers import get_provider
+from .providers import detect_provider_from_command, get_provider
 from .config import config
 from .handlers.callback_data import (
     CB_DIR_CANCEL,
@@ -662,6 +662,18 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
                 "New window %s already bound, skipping topic creation", event.window_id
             )
             return
+
+    # Auto-detect provider from the running process in this tmux window
+    w = await tmux_manager.find_window_by_id(event.window_id)
+    if w and w.pane_current_command:
+        detected = detect_provider_from_command(w.pane_current_command)
+        session_manager.set_window_provider(event.window_id, detected)
+        logger.info(
+            "Auto-detected provider %r for window %s (command=%s)",
+            detected,
+            event.window_id,
+            w.pane_current_command,
+        )
 
     topic_name = event.window_name or Path(event.cwd).name or event.window_id
 

@@ -81,13 +81,13 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 - Modify: `src/ccbot/bot.py` (`_handle_new_window` - set detected provider)
 - Modify: `src/ccbot/hook.py` (optionally write provider_name to session_map)
 
-- [ ] Add `detect_provider_from_command(pane_current_command: str) -> str` that maps "claude" -> "claude", "codex" -> "codex", "gemini" -> "gemini", unknown -> config default
-- [ ] In `_handle_new_window` (bot.py): detect provider from window's pane_current_command (already in TmuxWindow), set it on the WindowState
-- [ ] When session_map is loaded and a new window appears, detect provider if not already set
-- [ ] In hook.py: optionally detect provider from the process tree or pane command and write it to session_map (only for Claude hook since other providers don't have hooks)
-- [ ] Write tests for detect_provider_from_command with various inputs
-- [ ] Write tests for auto-detection during new window handling
-- [ ] Run `make check` - must pass
+- [x] Add `detect_provider_from_command(pane_current_command: str) -> str` that maps "claude" -> "claude", "codex" -> "codex", "gemini" -> "gemini", unknown -> config default
+- [x] In `_handle_new_window` (bot.py): detect provider from window's pane_current_command (already in TmuxWindow), set it on the WindowState
+- [x] When session_map is loaded and a new window appears, detect provider if not already set
+- [x] In hook.py: optionally detect provider from the process tree or pane command and write it to session_map (only for Claude hook since other providers don't have hooks)
+- [x] Write tests for detect_provider_from_command with various inputs
+- [x] Write tests for auto-detection during new window handling
+- [x] Run `make check` - must pass
 
 ### Task 5: Update recovery, resume, and provider-gated UX
 
