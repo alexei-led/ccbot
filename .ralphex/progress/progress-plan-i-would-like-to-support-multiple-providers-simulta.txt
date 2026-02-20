@@ -80,13 +80,13 @@ starting interactive plan creation
 [26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/directory_callbacks.py` (handle provider selection callback, store in state)
 [26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/callback_data.py` (new callback constants)
 [26-02-20 19:04:09]   - Modify: `src/ccbot/tmux_manager.py` (accept launch_command override in create_window)
-[26-02-20 19:04:09]   - [ ] Add callback constants: `CB_PROV_SELECT = "prov:"` and individual provider buttons
-[26-02-20 19:04:09]   - [ ] After directory confirmation, show provider selection inline keyboard (Claude (default), Codex, Gemini) - single tap, Claude pre-selected
-[26-02-20 19:04:09]   - [ ] If user picks default (Claude), proceed as today. Otherwise store chosen provider in user_data
-[26-02-20 19:04:09]   - [ ] Modify `tmux_manager.create_window()` to accept optional `launch_command` parameter instead of always using `config.claude_command`
-[26-02-20 19:04:09]   - [ ] After window creation, call `set_window_provider(window_id, provider_name)` to persist the choice
-[26-02-20 19:04:09]   - [ ] Write tests for provider selection UI and callback handling
-[26-02-20 19:04:09]   - [ ] Run `make check` - must pass
+[26-02-20 19:04:09]   - [x] Add callback constants: `CB_PROV_SELECT = "prov:"` and individual provider buttons
+[26-02-20 19:04:09]   - [x] After directory confirmation, show provider selection inline keyboard (Claude (default), Codex, Gemini) - single tap, Claude pre-selected
+[26-02-20 19:04:09]   - [x] If user picks default (Claude), proceed as today. Otherwise store chosen provider in user_data
+[26-02-20 19:04:09]   - [x] Modify `tmux_manager.create_window()` to accept optional `launch_command` parameter instead of always using `config.claude_command`
+[26-02-20 19:04:09]   - [x] After window creation, call `set_window_provider(window_id, provider_name)` to persist the choice
+[26-02-20 19:04:09]   - [x] Write tests for provider selection UI and callback handling
+[26-02-20 19:04:09]   - [x] Run `make check` - must pass
 [26-02-20 19:04:09] ### Task 4: Auto-detect provider for externally created windows
 [26-02-20 19:04:09] **Files:**
 [26-02-20 19:04:09]   - Modify: `src/ccbot/session_monitor.py` (detect provider in new window callback)
