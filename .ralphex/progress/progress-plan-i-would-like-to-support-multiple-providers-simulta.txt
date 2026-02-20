@@ -1,0 +1,135 @@
+# Ralphex Progress Log
+Plan: (no plan - review only)
+Branch: main
+Mode: plan
+Started: 2026-02-20 19:02:19
+------------------------------------------------------------
+
+starting interactive plan creation
+[26-02-20 19:02:19] plan request: I would like to support multiple providers simultaniously by one bot. currently provider (claude code, codex or gemini) is a global setting. I would like to be able to define it per tmux window: when starting new topic (default to cc, but be able to use codex or gemini) and also when stating a new tmux window with any provider inside detect it automatically and use properly.
+
+--- plan iteration 1 ---
+[26-02-20 19:02:35] First iteration, no prior Q&A. Let me explore the codebase to understand the current provider system and how windows/topics are created.
+[26-02-20 19:02:44] Now let me look at how windows are created and how the provider is used during session creation and monitoring.
+[26-02-20 19:02:59] Now let me look at the hook system and how session_map is written.
+[26-02-20 19:03:06] Now let me check how the provider is used in the monitor's check_for_updates and in the status polling.
+[26-02-20 19:03:12] Now I have a good understanding of the architecture. Let me look at how the provider is detected for externally-created windows (the auto-detect requirement).
+[26-02-20 19:03:17] Now let me check how the cc_commands module discovers commands and what the doctor command checks.
+[26-02-20 19:03:27] Good. I now have a solid understanding. The key points:
+[26-02-20 19:03:27]   1. Currently, provider is a global singleton (`get_provider()` returns one instance)
+[26-02-20 19:03:27]   2. `config.claude_command` is used in `tmux_manager.create_window` to launch the CLI
+[26-02-20 19:03:27]   3. `config.provider_name` is read from `CCBOT_PROVIDER` env var
+[26-02-20 19:03:27]   4. The provider is used in: session_monitor (parsing transcripts), session.py (parsing history), status_polling (parsing terminal), and various handlers
+[26-02-20 19:03:27]   5. All `get_provider()` calls assume a single global provider
+[26-02-20 19:03:27] The core change: provider needs to be per-window, stored in `WindowState`, and resolved dynamically instead of globally.
+[26-02-20 19:03:27] I have enough information to draft the plan. Let me also quickly check what auto-detection could look like - how to detect which CLI is running in a tmux pane.
+[26-02-20 19:04:09] `pane_current_command` is already available on `TmuxWindow` - this can be used to detect which CLI is running (claude, codex, gemini). Now I have everything
+[26-02-20 19:04:09] needed for a comprehensive plan.
+[26-02-20 19:04:09] <<<RALPHEX:PLAN_DRAFT>>>
+[26-02-20 19:04:09] # Per-Window Provider Support
+[26-02-20 19:04:09] ## Overview
+[26-02-20 19:04:09] Make the provider (claude/codex/gemini) a per-window attribute instead of a global singleton. When creating a new topic, default to claude but allow choosing
+[26-02-20 19:04:09] codex or gemini. When a tmux window is created externally, auto-detect the provider from the running process name (pane_current_command).
+[26-02-20 19:04:09] ## Context
+[26-02-20 19:04:09]   - Files involved: `src/ccbot/providers/__init__.py`, `src/ccbot/session.py`, `src/ccbot/session_monitor.py`, `src/ccbot/tmux_manager.py`, `src/ccbot/config.py`,
+[26-02-20 19:04:09] `src/ccbot/handlers/directory_browser.py`, `src/ccbot/handlers/directory_callbacks.py`, `src/ccbot/handlers/status_polling.py`,
+[26-02-20 19:04:09] `src/ccbot/handlers/recovery_callbacks.py`, `src/ccbot/handlers/resume_command.py`, `src/ccbot/handlers/message_queue.py`,
+[26-02-20 19:04:09] `src/ccbot/handlers/interactive_ui.py`, `src/ccbot/handlers/text_handler.py`, `src/ccbot/bot.py`, `src/ccbot/hook.py`
+[26-02-20 19:04:09]   - Related patterns: Provider registry already maps names to classes; WindowState already has per-window state; pane_current_command already detected
+[26-02-20 19:04:09]   - Dependencies: None new
+[26-02-20 19:04:09] ## Development Approach
+[26-02-20 19:04:09]   - **Testing approach**: Regular (code first, then tests)
+[26-02-20 19:04:09]   - Complete each task fully before moving to the next
+[26-02-20 19:04:09]   - **CRITICAL: every task MUST include new/updated tests**
+[26-02-20 19:04:09]   - **CRITICAL: all tests must pass before starting next task**
+[26-02-20 19:04:09] ## Implementation Steps
+[26-02-20 19:04:09] ### Task 1: Add provider_name to WindowState and introduce get_provider_for_window()
+[26-02-20 19:04:09] **Files:**
+[26-02-20 19:04:09]   - Modify: `src/ccbot/session.py` (add `provider_name` field to WindowState)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/providers/__init__.py` (add `get_provider_for_window(window_id)` that looks up provider_name from WindowState, falling back to config
+[26-02-20 19:04:09] default)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/providers/registry.py` (add provider name validation helper)
+[26-02-20 19:04:09]   - [x] Add `provider_name: str = ""` to `WindowState` dataclass (empty = use default from config)
+[26-02-20 19:04:09]   - [x] Add serialization/deserialization in `to_dict()`/`from_dict()`
+[26-02-20 19:04:09]   - [x] Add `get_provider_for_window(window_id: str) -> AgentProvider` in `providers/__init__.py` that resolves provider from window state, falling back to
+[26-02-20 19:04:09] `config.provider_name`
+[26-02-20 19:04:09]   - [x] Add `set_window_provider(window_id: str, provider_name: str)` on SessionManager
+[26-02-20 19:04:09]   - [x] Write tests for WindowState serialization with provider_name
+[26-02-20 19:04:09]   - [x] Write tests for get_provider_for_window resolution logic
+[26-02-20 19:04:09]   - [x] Run `make check` - must pass
+[26-02-20 19:04:09] ### Task 2: Replace global get_provider() calls with per-window resolution
+[26-02-20 19:04:09] **Files:**
+[26-02-20 19:04:09]   - Modify: `src/ccbot/session_monitor.py` (pass provider per session/window)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/session.py` (`_get_session_direct`, `get_recent_messages`)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/status_polling.py`
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/message_queue.py`
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/interactive_ui.py`
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/text_handler.py`
+[26-02-20 19:04:09]   - Modify: `src/ccbot/bot.py`
+[26-02-20 19:04:09]   - [x] In `session_monitor._read_new_lines` and `_process_session_file`: look up the window_id for the session being processed, resolve provider from window
+[26-02-20 19:04:09] state
+[26-02-20 19:04:09]   - [x] In `session.py._get_session_direct` and `get_recent_messages`: accept optional `provider_name` parameter, resolve provider accordingly
+[26-02-20 19:04:09]   - [x] In `status_polling.py`: resolve provider per window being polled (window_id is already available in the loop)
+[26-02-20 19:04:09]   - [x] In `message_queue.py`, `interactive_ui.py`, `text_handler.py`, `bot.py`: resolve provider from window_id context where available
+[26-02-20 19:04:09]   - [x] Keep `get_provider()` as fallback for contexts without a window (e.g., CLI commands like doctor/status)
+[26-02-20 19:04:09]   - [x] Write tests verifying different windows can use different providers
+[26-02-20 19:04:09]   - [x] Run `make check` - must pass
+[26-02-20 19:04:09] ### Task 3: Add provider selection to directory browser UI
+[26-02-20 19:04:09] **Files:**
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/directory_browser.py` (add provider step after directory confirmation)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/directory_callbacks.py` (handle provider selection callback, store in state)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/callback_data.py` (new callback constants)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/tmux_manager.py` (accept launch_command override in create_window)
+[26-02-20 19:04:09]   - [ ] Add callback constants: `CB_PROV_SELECT = "prov:"` and individual provider buttons
+[26-02-20 19:04:09]   - [ ] After directory confirmation, show provider selection inline keyboard (Claude (default), Codex, Gemini) - single tap, Claude pre-selected
+[26-02-20 19:04:09]   - [ ] If user picks default (Claude), proceed as today. Otherwise store chosen provider in user_data
+[26-02-20 19:04:09]   - [ ] Modify `tmux_manager.create_window()` to accept optional `launch_command` parameter instead of always using `config.claude_command`
+[26-02-20 19:04:09]   - [ ] After window creation, call `set_window_provider(window_id, provider_name)` to persist the choice
+[26-02-20 19:04:09]   - [ ] Write tests for provider selection UI and callback handling
+[26-02-20 19:04:09]   - [ ] Run `make check` - must pass
+[26-02-20 19:04:09] ### Task 4: Auto-detect provider for externally created windows
+[26-02-20 19:04:09] **Files:**
+[26-02-20 19:04:09]   - Modify: `src/ccbot/session_monitor.py` (detect provider in new window callback)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/providers/__init__.py` (add `detect_provider_from_command(command: str) -> str` utility)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/bot.py` (`_handle_new_window` - set detected provider)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/hook.py` (optionally write provider_name to session_map)
+[26-02-20 19:04:09]   - [ ] Add `detect_provider_from_command(pane_current_command: str) -> str` that maps "claude" -> "claude", "codex" -> "codex", "gemini" -> "gemini", unknown ->
+[26-02-20 19:04:09] config default
+[26-02-20 19:04:09]   - [ ] In `_handle_new_window` (bot.py): detect provider from window's pane_current_command (already in TmuxWindow), set it on the WindowState
+[26-02-20 19:04:09]   - [ ] When session_map is loaded and a new window appears, detect provider if not already set
+[26-02-20 19:04:09]   - [ ] In hook.py: optionally detect provider from the process tree or pane command and write it to session_map (only for Claude hook since other providers don't
+[26-02-20 19:04:09] have hooks)
+[26-02-20 19:04:09]   - [ ] Write tests for detect_provider_from_command with various inputs
+[26-02-20 19:04:09]   - [ ] Write tests for auto-detection during new window handling
+[26-02-20 19:04:09]   - [ ] Run `make check` - must pass
+[26-02-20 19:04:09] ### Task 5: Update recovery, resume, and provider-gated UX
+[26-02-20 19:04:09] **Files:**
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/recovery_callbacks.py` (use per-window provider for resume/continue)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/resume_command.py` (use per-window provider)
+[26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/sessions_dashboard.py` (show provider per session)
+[26-02-20 19:04:09]   - [ ] In recovery callbacks: resolve provider from window state for capability checks (supports_resume, supports_continue) and launch command
+[26-02-20 19:04:09]   - [ ] In resume command: use per-window provider for resume args
+[26-02-20 19:04:09]   - [ ] In sessions dashboard: display provider name alongside each session
+[26-02-20 19:04:09]   - [ ] Write tests for recovery with different providers per window
+[26-02-20 19:04:09]   - [ ] Run `make check` - must pass
+[26-02-20 19:04:09] ### Task 6: Verify acceptance criteria
+[26-02-20 19:04:09]   - [ ] Manual test: create two topics - one with Claude, one with Codex - verify independent operation
+[26-02-20 19:04:09]   - [ ] Manual test: create a tmux window externally running codex, verify auto-detection and topic creation
+[26-02-20 19:04:09]   - [ ] Run `make check` (fmt + lint + typecheck + test)
+[26-02-20 19:04:09]   - [ ] Verify test coverage meets 80%+
+[26-02-20 19:04:09] ### Task 7: Update documentation
+[26-02-20 19:04:09]   - [ ] Update CLAUDE.md provider configuration section to document per-window provider
+[26-02-20 19:04:09]   - [ ] Update `.claude/rules/architecture.md` to reflect per-window provider model
+[26-02-20 19:04:09]   - [ ] Move this plan to `docs/plans/completed/`
+[26-02-20 19:04:09] <<<RALPHEX:END>>>
+[26-02-20 19:04:10] plan draft ready for review
+[26-02-20 19:07:08] DRAFT REVIEW: accept
+[26-02-20 19:07:08] draft accepted, continuing to write plan file...
+
+--- plan iteration 2 ---
+[26-02-20 19:07:23] The user accepted the draft. Let me write the plan file to disk.
+[26-02-20 19:07:54] <<<RALPHEX:PLAN_READY>>>
+[26-02-20 19:07:55] plan creation completed
+
+------------------------------------------------------------
+Completed: 2026-02-20 19:18:31 (16m12s)
