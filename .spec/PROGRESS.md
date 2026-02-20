@@ -9,3 +9,5 @@
 DONE TASK-034: Provider baseline characterization and contracts
 17:47 START TASK-035-provider-registry-and-capability-policy
 18:12 DONE TASK-035: Provider registry, capability policy, config integration
+22:22 DONE TASK-037
+08:54 DONE TASK-036
