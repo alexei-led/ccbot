@@ -118,9 +118,9 @@ starting interactive plan creation
 [26-02-20 19:04:09]   - [x] Run `make check` (fmt + lint + typecheck + test)
 [26-02-20 19:04:09]   - [x] Verify test coverage meets 80%+
 [26-02-20 19:04:09] ### Task 7: Update documentation
-[26-02-20 19:04:09]   - [x] Update CLAUDE.md provider configuration section to document per-window provider
-[26-02-20 19:04:09]   - [x] Update `.claude/rules/architecture.md` to reflect per-window provider model
-[26-02-20 19:04:09]   - [x] Move this plan to `docs/plans/completed/`
+[26-02-20 19:04:09]   - [ ] Update CLAUDE.md provider configuration section to document per-window provider
+[26-02-20 19:04:09]   - [ ] Update `.claude/rules/architecture.md` to reflect per-window provider model
+[26-02-20 19:04:09]   - [ ] Move this plan to `docs/plans/completed/`
 [26-02-20 19:04:09] <<<RALPHEX:END>>>
 [26-02-20 19:04:10] plan draft ready for review
 [26-02-20 19:07:08] DRAFT REVIEW: accept
