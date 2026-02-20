@@ -401,15 +401,16 @@ class TestWindowStateProviderName:
 class TestSetWindowProvider:
     def test_set_and_get(self, mgr: SessionManager) -> None:
         mgr.set_window_provider("@1", "codex")
-        assert mgr.get_window_provider_name("@1") == "codex"
+        assert mgr.window_states["@1"].provider_name == "codex"
 
     def test_get_unset_returns_empty(self, mgr: SessionManager) -> None:
-        assert mgr.get_window_provider_name("@99") == ""
+        state = mgr.window_states.get("@99")
+        assert state is None
 
     def test_set_empty_resets(self, mgr: SessionManager) -> None:
         mgr.set_window_provider("@1", "codex")
         mgr.set_window_provider("@1", "")
-        assert mgr.get_window_provider_name("@1") == ""
+        assert mgr.window_states["@1"].provider_name == ""
 
     def test_creates_window_state_if_missing(self, mgr: SessionManager) -> None:
         mgr.set_window_provider("@5", "gemini")

@@ -44,7 +44,7 @@ from .directory_browser import (
     get_favorites,
 )
 from .message_sender import safe_edit, safe_send
-from .user_state import PENDING_PROVIDER, PENDING_THREAD_ID, PENDING_THREAD_TEXT
+from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -483,6 +483,5 @@ async def _handle_cancel(
     if context.user_data is not None:
         context.user_data.pop(PENDING_THREAD_ID, None)
         context.user_data.pop(PENDING_THREAD_TEXT, None)
-        context.user_data.pop(PENDING_PROVIDER, None)
     await safe_edit(query, "Cancelled")
     await query.answer("Cancelled")

@@ -277,6 +277,7 @@ async def _create_and_bind_window(
     *,
     claude_args: str = "",
     success_label: str = "Session started.",
+    old_window_id: str = "",
 ) -> bool:
     """Create a new tmux window, bind it, rename topic, forward pending text.
 
@@ -298,6 +299,13 @@ async def _create_and_bind_window(
         return False
 
     await session_manager.wait_for_session_map_entry(created_wid)
+
+    # Propagate provider from old window to new window
+    if old_window_id:
+        old_provider = session_manager.get_window_state(old_window_id).provider_name
+        if old_provider:
+            session_manager.set_window_provider(created_wid, old_provider)
+
     session_manager.bind_thread(
         user_id, thread_id, created_wid, window_name=created_wname
     )
@@ -386,6 +394,7 @@ async def _handle_fresh(
         cwd,
         context,
         success_label="Fresh session started.",
+        old_window_id=old_wid,
     )
 
 
@@ -419,6 +428,7 @@ async def _handle_continue(
         context,
         claude_args=launch_args,
         success_label="Continuing previous session.",
+        old_window_id=old_wid,
     )
 
 
@@ -524,6 +534,7 @@ async def _handle_resume_pick(
         context,
         claude_args=launch_args,
         success_label=f"Resuming session: {picked['summary'][:40]}",
+        old_window_id=old_wid,
     )
 
 

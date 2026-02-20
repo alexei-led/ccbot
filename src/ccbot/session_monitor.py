@@ -230,11 +230,7 @@ class SessionMonitor:
 
         Detects file truncation (e.g. after /clear) and resets offset.
         """
-        provider = (
-            get_provider_for_window(window_id)
-            if window_id
-            else get_provider_for_window("")
-        )
+        provider = get_provider_for_window(window_id)
         new_entries = []
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:

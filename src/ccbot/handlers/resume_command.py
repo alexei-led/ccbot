@@ -169,18 +169,21 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not user or not config.is_user_allowed(user.id):
         return
 
-    if not get_provider().capabilities.supports_resume:
-        await safe_reply(
-            update.message,
-            "\u274c Resume is not supported by the current provider.",
-        )
-        return
-
     thread_id = get_thread_id(update)
     if thread_id is None:
         await safe_reply(
             update.message,
             "\u274c Please use /resume in a named topic.",
+        )
+        return
+
+    # Check resume capability using per-window provider (or global fallback)
+    window_id = session_manager.get_window_for_thread(user.id, thread_id)
+    provider = get_provider_for_window(window_id) if window_id else get_provider()
+    if not provider.capabilities.supports_resume:
+        await safe_reply(
+            update.message,
+            "\u274c Resume is not supported by the current provider.",
         )
         return
 
@@ -255,9 +258,13 @@ async def _handle_pick(
         await query.answer("Failed")
         return
 
-    # Unbind existing window if any
+    # Unbind existing window and resolve its provider before replacing
     old_window_id = session_manager.get_window_for_thread(user_id, thread_id)
+    old_provider_name = ""
     if old_window_id:
+        old_provider_name = session_manager.get_window_state(
+            old_window_id
+        ).provider_name
         session_manager.unbind_thread(user_id, thread_id)
         from .status_polling import clear_dead_notification
 
@@ -277,6 +284,8 @@ async def _handle_pick(
         return
 
     await session_manager.wait_for_session_map_entry(created_wid)
+    if old_provider_name:
+        session_manager.set_window_provider(created_wid, old_provider_name)
     session_manager.bind_thread(
         user_id, thread_id, created_wid, window_name=created_wname
     )

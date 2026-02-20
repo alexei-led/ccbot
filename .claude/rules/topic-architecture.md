@@ -32,19 +32,20 @@ window_display_names: dict[str, str]        # window_id → window_name (for dis
 ```python
 # session_map.json (key format: "tmux_session:window_id")
 {
-  "ccbot:@0": {"session_id": "uuid-xxx", "cwd": "/path/to/project", "window_name": "project"},
-  "ccbot:@5": {"session_id": "uuid-yyy", "cwd": "/path/to/project", "window_name": "project-2"}
+  "ccbot:@0": {"session_id": "uuid-xxx", "cwd": "/path/to/project", "window_name": "project", "provider_name": "claude", "transcript_path": "..."},
+  "ccbot:@5": {"session_id": "uuid-yyy", "cwd": "/path/to/project", "window_name": "project-2", "provider_name": "codex", "transcript_path": "..."}
 }
 ```
 
 - Storage: `session_map.json`
-- Written when: Claude Code's `SessionStart` hook fires
+- Written when: Claude Code's `SessionStart` hook fires (always sets `provider_name: "claude"`; other providers have no hook)
 - Property: one window maps to one session; session_id changes after `/clear`
 - Purpose: SessionMonitor uses this mapping to decide which sessions to watch
 
 ## Message Flows
 
 **Outbound** (user → Claude):
+
 ```
 User sends "hello" in topic (thread_id=42)
   → thread_bindings[user_id][42] → "@0"
@@ -52,13 +53,14 @@ User sends "hello" in topic (thread_id=42)
 ```
 
 **Inbound** (Claude → user):
+
 ```
 SessionMonitor reads new message (session_id = "uuid-xxx")
   → Iterate thread_bindings, find (user, thread) whose window_id maps to this session
   → Deliver message to user in the correct topic (thread_id)
 ```
 
-**New topic flow**: First message in an unbound topic → directory browser → select directory → create window → bind topic → forward pending message.
+**New topic flow**: First message in an unbound topic → directory browser → select directory → select provider → create window with chosen provider → bind topic → forward pending message.
 
 **Topic lifecycle**: Closing/deleting a topic auto-kills the associated tmux window and unbinds the thread. Stale bindings (window deleted externally) are cleaned up by the status polling loop.
 
@@ -67,5 +69,6 @@ SessionMonitor reads new message (session_id = "uuid-xxx")
 **Startup cleanup**: On bot startup, all tracked sessions not present in session_map are cleaned up, preventing monitoring of closed sessions.
 
 **Runtime change detection**: Each polling cycle checks for session_map changes:
+
 - Window's session_id changed (e.g., after `/clear`) → clean up old session
 - Window deleted → clean up corresponding session

@@ -59,6 +59,7 @@ def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, s
                 "cwd": info.get("cwd", ""),
                 "window_name": info.get("window_name", ""),
                 "transcript_path": info.get("transcript_path", ""),
+                "provider_name": info.get("provider_name", ""),
             }
     return result
 
@@ -663,11 +664,6 @@ class SessionManager:
         if state.provider_name != provider_name:
             state.provider_name = provider_name
             self._save_state()
-
-    def get_window_provider_name(self, window_id: str) -> str:
-        """Get the provider name for a window (empty string = config default)."""
-        state = self.window_states.get(window_id)
-        return state.provider_name if state else ""
 
     # --- Notification mode ---
 
