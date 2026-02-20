@@ -1,9 +1,8 @@
-"""Provider registry — maps provider names to classes, instantiates on demand.
+"""Provider registry — maps provider names to classes, caches instances.
 
 The module-level ``registry`` singleton starts empty; providers are
 registered lazily via ``_ensure_registered()`` in ``ccbot.providers.__init__``
-before first use. ``get()`` creates a **new instance** on each call — use
-``get_provider()`` from ``ccbot.providers`` for cached singleton access.
+before first use. ``get()`` caches one instance per provider name.
 """
 
 import logging
@@ -20,16 +19,18 @@ class UnknownProviderError(LookupError):
 class ProviderRegistry:
     """Maps provider name strings to AgentProvider classes.
 
-    Note: ``get()`` creates a **new instance** on each call. Use
-    ``get_provider()`` from ``ccbot.providers`` for cached singleton access.
+    Instances are cached per name — ``get()`` returns the same instance
+    for repeated calls with the same name.
     """
 
     def __init__(self) -> None:
         self._providers: dict[str, type[AgentProvider]] = {}
+        self._instances: dict[str, AgentProvider] = {}
 
     def register(self, name: str, provider_cls: type[AgentProvider]) -> None:
         """Register a provider class under *name* (overwrites silently)."""
         self._providers[name] = provider_cls
+        self._instances.pop(name, None)  # invalidate cached instance
         logger.debug("Registered provider %r", name)
 
     def is_valid(self, name: str) -> bool:
@@ -37,17 +38,21 @@ class ProviderRegistry:
         return name in self._providers
 
     def get(self, name: str) -> AgentProvider:
-        """Instantiate and return the provider registered under *name*.
+        """Return a cached provider instance for *name*.
 
         Raises ``UnknownProviderError`` if *name* is not registered.
         """
+        if name in self._instances:
+            return self._instances[name]
         cls = self._providers.get(name)
         if cls is None:
             available = ", ".join(sorted(self._providers)) or "(none)"
             raise UnknownProviderError(
                 f"Unknown provider {name!r}. Available: {available}"
             )
-        return cls()
+        instance = cls()
+        self._instances[name] = instance
+        return instance
 
 
 registry = ProviderRegistry()

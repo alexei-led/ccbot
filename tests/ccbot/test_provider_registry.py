@@ -32,10 +32,18 @@ class TestProviderRegistry:
         reg.register("stub", _OtherProvider)
         assert reg.get("stub").capabilities.name == "other"
 
-    def test_get_returns_new_instance_each_call(self) -> None:
+    def test_get_caches_instance_per_name(self) -> None:
         reg = ProviderRegistry()
         reg.register("stub", _StubProvider)
         a = reg.get("stub")
+        b = reg.get("stub")
+        assert a is b
+
+    def test_re_register_invalidates_cache(self) -> None:
+        reg = ProviderRegistry()
+        reg.register("stub", _StubProvider)
+        a = reg.get("stub")
+        reg.register("stub", _StubProvider)
         b = reg.get("stub")
         assert a is not b
 

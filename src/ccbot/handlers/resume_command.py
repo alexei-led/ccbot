@@ -255,8 +255,9 @@ async def _create_resume_window(
     if success:
         if provider.capabilities.supports_hook:
             await session_manager.wait_for_session_map_entry(created_wid)
-        if old_provider_name:
-            session_manager.set_window_provider(created_wid, old_provider_name)
+        # Always persist provider — use old window's provider or the resolved default
+        provider_to_set = old_provider_name or provider.capabilities.name
+        session_manager.set_window_provider(created_wid, provider_to_set)
 
     return success, message, created_wname, created_wid, old_provider_name
 
