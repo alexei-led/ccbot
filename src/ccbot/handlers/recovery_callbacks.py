@@ -21,7 +21,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..providers import get_provider_for_window
+from ..providers import get_provider, get_provider_for_window
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import (
@@ -289,17 +289,11 @@ async def _create_and_bind_window(
 
     clear_dead_notification(user_id, thread_id)
 
-    # Resolve launch command from old window's provider
-    launch_command = None
-    old_provider_name = ""
-    old_provider = None
-    if old_window_id:
-        old_provider_name = session_manager.get_window_state(
-            old_window_id
-        ).provider_name
-        if old_provider_name:
-            old_provider = get_provider_for_window(old_window_id)
-            launch_command = old_provider.capabilities.launch_command
+    # Resolve provider from old window (falls back to global default)
+    provider = (
+        get_provider_for_window(old_window_id) if old_window_id else get_provider()
+    )
+    launch_command = provider.capabilities.launch_command
 
     success, message, created_wname, created_wid = await tmux_manager.create_window(
         cwd, claude_args=claude_args, launch_command=launch_command
@@ -311,15 +305,11 @@ async def _create_and_bind_window(
         return False
 
     # Only wait for session_map if provider supports hooks (avoids 5s timeout)
-    if old_provider:
-        if old_provider.capabilities.supports_hook:
-            await session_manager.wait_for_session_map_entry(created_wid)
-    else:
+    if provider.capabilities.supports_hook:
         await session_manager.wait_for_session_map_entry(created_wid)
 
-    # Propagate provider from old window to new window
-    if old_provider_name:
-        session_manager.set_window_provider(created_wid, old_provider_name)
+    # Propagate provider to new window
+    session_manager.set_window_provider(created_wid, provider.capabilities.name)
 
     session_manager.bind_thread(
         user_id, thread_id, created_wid, window_name=created_wname

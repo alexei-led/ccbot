@@ -96,18 +96,21 @@ def get_provider_for_window(window_id: str) -> AgentProvider:
 def detect_provider_from_command(pane_current_command: str) -> str:
     """Detect provider name from a tmux pane's running process.
 
-    Maps known process names to provider names:
-    - "claude" -> "claude"
-    - "codex" -> "codex"
-    - "gemini" -> "gemini"
-
+    Matches the basename of the command against known provider names
+    to avoid false positives from paths containing provider names.
     Returns the config default for unrecognized commands.
     """
-    _ensure_registered()
     cmd = pane_current_command.strip().lower()
-    # Check if any registered provider name appears in the command
+    if not cmd:
+        from ccbot.config import config
+
+        return config.provider_name
+
+    # Match basename only (first token) to avoid false positives
+    # from paths like /home/claude/bin/vim
+    basename = os.path.basename(cmd.split()[0])
     for name in ("claude", "codex", "gemini"):
-        if name in cmd:
+        if basename == name or basename.startswith(name + "-"):
             return name
 
     from ccbot.config import config

@@ -617,11 +617,20 @@ class SessionManager:
         # Clean up window_states entries not in current session_map.
         # Protect entries whose session_id is still referenced by old-format
         # keys — those sessions are valid but haven't re-triggered the hook yet.
+        # Also protect entries bound to a topic (hookless providers like codex/gemini
+        # never appear in session_map but still need their window state preserved).
+        bound_wids = {
+            wid
+            for user_bindings in self.thread_bindings.values()
+            for wid in user_bindings.values()
+            if wid
+        }
         stale_wids = [
             w
             for w in self.window_states
             if w
             and w not in valid_wids
+            and w not in bound_wids
             and self.window_states[w].session_id not in old_format_sids
         ]
         for wid in stale_wids:

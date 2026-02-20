@@ -380,7 +380,7 @@ class TestRecoveryFreshCallback:
 
         mock_sm.unbind_thread.assert_called_once_with(100, 42)
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/project", claude_args="", launch_command=None
+            "/tmp/project", claude_args="", launch_command="claude"
         )
         mock_sm.bind_thread.assert_called_once_with(
             100, 42, "@5", window_name="project"
@@ -509,7 +509,7 @@ class TestRecoveryContinueCallback:
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/project", claude_args="--continue", launch_command=None
+            "/tmp/project", claude_args="--continue", launch_command="claude"
         )
         mock_sm.bind_thread.assert_called_once_with(
             100, 42, "@5", window_name="project"
@@ -688,7 +688,7 @@ class TestRecoveryResumePickCallback:
         mock_tm.create_window.assert_called_once_with(
             "/tmp/project",
             claude_args="--resume a1b2c3d4-0000-0000-0000-000000000001",
-            launch_command=None,
+            launch_command="claude",
         )
         mock_sm.bind_thread.assert_called_once()
 
@@ -733,7 +733,7 @@ class TestRecoveryResumePickCallback:
         mock_tm.create_window.assert_called_once_with(
             "/tmp/project",
             claude_args="--resume a1b2c3d4-0000-0000-0000-000000000002",
-            launch_command=None,
+            launch_command="claude",
         )
 
     async def test_pick_invalid_index_rejected(self) -> None:

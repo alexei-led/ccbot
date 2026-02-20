@@ -228,17 +228,13 @@ async def _create_resume_window(
     thread_id: int,
     session_id: str,
     cwd: str,
-) -> tuple[bool, str, str, str, str]:
+) -> tuple[bool, str, str, str]:
     """Unbind old window, create a new one with resume args.
 
-    Returns (success, message, window_name, window_id, old_provider_name).
+    Returns (success, message, window_name, window_id).
     """
     old_window_id = session_manager.get_window_for_thread(user_id, thread_id)
-    old_provider_name = ""
     if old_window_id:
-        old_provider_name = session_manager.get_window_state(
-            old_window_id
-        ).provider_name
         session_manager.unbind_thread(user_id, thread_id)
         from .status_polling import clear_dead_notification
 
@@ -255,11 +251,9 @@ async def _create_resume_window(
     if success:
         if provider.capabilities.supports_hook:
             await session_manager.wait_for_session_map_entry(created_wid)
-        # Always persist provider — use old window's provider or the resolved default
-        provider_to_set = old_provider_name or provider.capabilities.name
-        session_manager.set_window_provider(created_wid, provider_to_set)
+        session_manager.set_window_provider(created_wid, provider.capabilities.name)
 
-    return success, message, created_wname, created_wid, old_provider_name
+    return success, message, created_wname, created_wid
 
 
 async def _handle_pick(
@@ -297,7 +291,7 @@ async def _handle_pick(
         await query.answer("Failed")
         return
 
-    success, message, created_wname, created_wid, _ = await _create_resume_window(
+    success, message, created_wname, created_wid = await _create_resume_window(
         user_id, thread_id, session_id, cwd
     )
     if not success:
