@@ -112,6 +112,6 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 
 ### Task 7: Update documentation
 
-- [ ] Update CLAUDE.md provider configuration section to document per-window provider
-- [ ] Update `.claude/rules/architecture.md` to reflect per-window provider model
-- [ ] Move this plan to `docs/plans/completed/`
+- [x] Update CLAUDE.md provider configuration section to document per-window provider
+- [x] Update `.claude/rules/architecture.md` to reflect per-window provider model
+- [x] Move this plan to `docs/plans/completed/`

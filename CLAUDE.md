@@ -57,12 +57,27 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 
 ## Provider Configuration
 
-ccbot supports multiple agent CLI backends via the provider abstraction (`src/ccbot/providers/`). One provider is active per instance.
+ccbot supports multiple agent CLI backends via the provider abstraction (`src/ccbot/providers/`). Providers are resolved per-window — different topics can use different providers simultaneously.
 
 | Setting               | Env Var                  | Default         |
 | --------------------- | ------------------------ | --------------- |
-| Provider name         | `CCBOT_PROVIDER`         | `claude`        |
+| Default provider      | `CCBOT_PROVIDER`         | `claude`        |
 | Custom launch command | `CCBOT_PROVIDER_COMMAND` | (from provider) |
+
+### Per-Window Provider Model
+
+Each tmux window tracks its own provider in `WindowState.provider_name`. Resolution order:
+
+1. Window's stored `provider_name` (set during topic creation or auto-detected)
+2. Config default (`CCBOT_PROVIDER` env var, defaults to `claude`)
+
+Key functions:
+
+- `get_provider_for_window(window_id)` — resolves provider instance for a specific window
+- `detect_provider_from_command(pane_current_command)` — auto-detects provider from process name (claude/codex/gemini)
+- `set_window_provider(window_id, provider_name)` — persists provider choice on SessionManager
+
+When creating a topic via the directory browser, users can choose the provider (Claude default, Codex, Gemini). Externally created tmux windows are auto-detected from `pane_current_command`. The global `get_provider()` remains as fallback for CLI commands without window context (e.g., `doctor`, `status`).
 
 ### Provider Capability Matrix
 
@@ -74,11 +89,11 @@ ccbot supports multiple agent CLI backends via the provider abstraction (`src/cc
 | Transcript | JSONL  | JSONL | JSONL  |
 | Commands   | Yes    | Yes   | Yes    |
 
-Capabilities gate UX: `/resume` is hidden if the provider lacks resume support; recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers.
+Capabilities gate UX per-window: `/resume` is hidden if the window's provider lacks resume support; recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers.
 
 ### Migration Notes
 
-Existing Claude deployments need no changes — `claude` is the default provider. To switch providers, set `CCBOT_PROVIDER=codex` (or `gemini`) in your `.env` or environment. The hook subsystem (`ccbot hook --install`) is Claude-specific and skipped for other providers.
+Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccbot hook --install`) is Claude-specific and skipped for other providers.
 
 ## Hook Configuration
 

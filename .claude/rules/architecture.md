@@ -73,7 +73,7 @@ Provider modules (providers/):
   claude.py           ─ ClaudeProvider (hook, resume, continue, JSONL transcripts)
   codex.py            ─ CodexProvider (resume, JSONL transcripts, no hook/continue)
   gemini.py           ─ GeminiProvider (resume, JSONL transcripts, no hook/continue)
-  __init__.py         ─ get_provider() singleton, resolve_capabilities() for CLI
+  __init__.py         ─ get_provider_for_window(), detect_provider_from_command(), get_provider() fallback
 
 Additional modules:
   cc_commands.py      ─ CC command discovery (skills, custom commands) + menu registration
@@ -109,4 +109,4 @@ State files (~/.ccbot/ or $CCBOT_DIR/):
 - Only sessions registered in `session_map.json` (via hook) are monitored.
 - Notifications delivered to users via thread bindings (topic → window_id → session).
 - **Startup re-resolution** — Window IDs reset on tmux server restart. On startup, `resolve_stale_ids()` matches persisted display names against live windows to re-map IDs. Old state.json files keyed by window name are auto-migrated.
-- **Provider abstraction** — All CLI-specific behavior (launch args, transcript parsing, terminal status, command discovery) is delegated to an `AgentProvider` protocol. Providers declare capabilities (`ProviderCapabilities`) that gate UX features: hook checks, resume/continue buttons, and command registration. The active provider is a lazy singleton resolved from `CCBOT_PROVIDER` env var (default: `claude`). CLI commands (`doctor`, `status`) use `resolve_capabilities()` to avoid importing Config.
+- **Per-window provider** — All CLI-specific behavior (launch args, transcript parsing, terminal status, command discovery) is delegated to an `AgentProvider` protocol. Providers declare capabilities (`ProviderCapabilities`) that gate UX features per-window: hook checks, resume/continue buttons, and command registration. Each window stores its `provider_name` in `WindowState`; `get_provider_for_window(window_id)` resolves the correct provider instance, falling back to the config default. Externally created windows are auto-detected via `detect_provider_from_command(pane_current_command)`. The global `get_provider()` singleton remains for CLI commands (`doctor`, `status`) that lack window context.
