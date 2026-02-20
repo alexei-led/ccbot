@@ -7,10 +7,8 @@ call ``registry.register()`` at import time.  Handlers call
 """
 
 import logging
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ccbot.providers.base import AgentProvider
+from ccbot.providers.base import AgentProvider
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +18,11 @@ class UnknownProviderError(KeyError):
 
 
 class ProviderRegistry:
-    """Maps provider name strings to AgentProvider classes."""
+    """Maps provider name strings to AgentProvider classes.
+
+    Note: ``get()`` creates a **new instance** on each call. Use
+    ``get_provider()`` from ``ccbot.providers`` for cached singleton access.
+    """
 
     def __init__(self) -> None:
         self._providers: dict[str, type[AgentProvider]] = {}

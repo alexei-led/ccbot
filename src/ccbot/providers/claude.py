@@ -7,19 +7,23 @@ that translates between the provider protocol and existing module APIs.
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, cast
 
 from ccbot.cc_commands import CC_BUILTINS, discover_cc_commands
-from ccbot.hook import _UUID_RE
+from ccbot.hook import UUID_RE
 from ccbot.providers.base import (
     AgentMessage,
+    ContentType,
+    DiscoveredCommand,
+    MessageRole,
     ProviderCapabilities,
     SessionStartEvent,
     StatusUpdate,
 )
-from ccbot.providers.registry import registry
+
 from ccbot.terminal_parser import (
     UI_PATTERNS,
+    extract_bash_output,
     extract_interactive_content,
     format_status_display,
     parse_status_line,
@@ -42,6 +46,13 @@ class ClaudeProvider:
         builtin_commands=tuple(CC_BUILTINS.keys()),
     )
 
+    # Maps transcript message_type → AgentMessage content_type.
+    # Only entries that differ from passthrough; everything else uses message_type as-is.
+    _CONTENT_TYPE_OVERRIDES: ClassVar[dict[str, str]] = {
+        "user": "text",
+        "assistant": "text",
+    }
+
     @property
     def capabilities(self) -> ProviderCapabilities:
         return self._CAPS
@@ -51,13 +62,21 @@ class ClaudeProvider:
         resume_id: str | None = None,
         use_continue: bool = False,
     ) -> str:
+        """Build Claude Code CLI args string for launching or resuming a session."""
         if resume_id:
+            if not UUID_RE.match(resume_id):
+                raise ValueError(f"Invalid resume_id: {resume_id!r}")
             return f"--resume {resume_id}"
         if use_continue:
             return "--continue"
         return ""
 
     def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
+        """Parse a Claude Code SessionStart hook payload.
+
+        Validates session_id (UUID format), cwd (absolute path), and
+        rejects payloads missing required fields.
+        """
         session_id = payload.get("session_id", "")
         cwd = payload.get("cwd", "")
         transcript_path = payload.get("transcript_path", "")
@@ -66,7 +85,7 @@ class ClaudeProvider:
         if not session_id or not cwd:
             return None
 
-        if not _UUID_RE.match(session_id):
+        if not UUID_RE.match(session_id):
             return None
 
         if not os.path.isabs(cwd):
@@ -80,6 +99,7 @@ class ClaudeProvider:
         )
 
     def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
+        """Delegate to TranscriptParser.parse_line."""
         return TranscriptParser.parse_line(line)
 
     def parse_transcript_entries(
@@ -87,24 +107,26 @@ class ClaudeProvider:
         entries: list[dict[str, Any]],
         pending_tools: dict[str, Any],
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
+        """Parse JSONL entries via TranscriptParser and wrap as AgentMessages."""
         parsed, remaining = TranscriptParser.parse_entries(entries, pending_tools)
 
-        messages: list[AgentMessage] = []
-        for entry in parsed:
-            messages.append(
-                AgentMessage(
-                    session_id="",
-                    text=entry.text,
-                    role=entry.role,  # type: ignore[arg-type]
-                    content_type=entry.content_type,  # type: ignore[arg-type]
-                    tool_use_id=entry.tool_use_id,
-                    tool_name=entry.tool_name,
-                )
+        messages = [
+            AgentMessage(
+                session_id="",
+                text=e.text,
+                role=cast(MessageRole, e.role),
+                content_type=cast(ContentType, e.content_type),
+                tool_use_id=e.tool_use_id,
+                tool_name=e.tool_name,
+                timestamp=e.timestamp,
             )
+            for e in parsed
+        ]
 
         return messages, remaining
 
     def parse_terminal_status(self, pane_text: str) -> StatusUpdate | None:
+        """Parse pane text; interactive UI takes precedence over status line."""
         interactive = extract_interactive_content(pane_text)
         if interactive:
             return StatusUpdate(
@@ -125,10 +147,40 @@ class ClaudeProvider:
 
         return None
 
-    def discover_commands(self, base_dir: str) -> list[str]:
+    def extract_bash_output(self, pane_text: str, command: str) -> str | None:
+        return extract_bash_output(pane_text, command)
+
+    def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
+        return TranscriptParser.is_user_message(entry)
+
+    def parse_history_entry(self, entry: dict[str, Any]) -> AgentMessage | None:
+        """Parse a single transcript entry for history display."""
+        parsed = TranscriptParser.parse_message(entry)
+        if parsed is None or not parsed.text:
+            return None
+        raw_role = entry.get("type", "assistant")
+        if raw_role not in ("user", "assistant"):
+            return None
+        role: MessageRole = raw_role  # type: ignore[assignment]
+        raw_ct = self._CONTENT_TYPE_OVERRIDES.get(
+            parsed.message_type, parsed.message_type
+        )
+        content_type: ContentType = raw_ct  # type: ignore[assignment]
+        return AgentMessage(
+            session_id="",
+            text=parsed.text,
+            role=role,
+            content_type=content_type,
+            tool_name=parsed.tool_name,
+            timestamp=TranscriptParser.get_timestamp(entry),
+        )
+
+    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
         claude_dir = Path(base_dir) if base_dir else None
         commands = discover_cc_commands(claude_dir)
-        return [cmd.name for cmd in commands]
-
-
-registry.register("claude", ClaudeProvider)
+        return [
+            DiscoveredCommand(
+                name=cmd.name, description=cmd.description, source=cmd.source
+            )
+            for cmd in commands
+        ]
