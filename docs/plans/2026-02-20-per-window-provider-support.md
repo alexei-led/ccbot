@@ -105,10 +105,10 @@ Make the provider (claude/codex/gemini) a per-window attribute instead of a glob
 
 ### Task 6: Verify acceptance criteria
 
-- [ ] Manual test: create two topics - one with Claude, one with Codex - verify independent operation
-- [ ] Manual test: create a tmux window externally running codex, verify auto-detection and topic creation
-- [ ] Run `make check` (fmt + lint + typecheck + test)
-- [ ] Verify test coverage meets 80%+
+- [x] Manual test: create two topics - one with Claude, one with Codex - verify independent operation
+- [x] Manual test: create a tmux window externally running codex, verify auto-detection and topic creation
+- [x] Run `make check` (fmt + lint + typecheck + test)
+- [x] Verify test coverage meets 80%+
 
 ### Task 7: Update documentation
 
