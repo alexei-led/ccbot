@@ -107,11 +107,11 @@ starting interactive plan creation
 [26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/recovery_callbacks.py` (use per-window provider for resume/continue)
 [26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/resume_command.py` (use per-window provider)
 [26-02-20 19:04:09]   - Modify: `src/ccbot/handlers/sessions_dashboard.py` (show provider per session)
-[26-02-20 19:04:09]   - [ ] In recovery callbacks: resolve provider from window state for capability checks (supports_resume, supports_continue) and launch command
-[26-02-20 19:04:09]   - [ ] In resume command: use per-window provider for resume args
-[26-02-20 19:04:09]   - [ ] In sessions dashboard: display provider name alongside each session
-[26-02-20 19:04:09]   - [ ] Write tests for recovery with different providers per window
-[26-02-20 19:04:09]   - [ ] Run `make check` - must pass
+[26-02-20 19:04:09]   - [x] In recovery callbacks: resolve provider from window state for capability checks (supports_resume, supports_continue) and launch command
+[26-02-20 19:04:09]   - [x] In resume command: use per-window provider for resume args
+[26-02-20 19:04:09]   - [x] In sessions dashboard: display provider name alongside each session
+[26-02-20 19:04:09]   - [x] Write tests for recovery with different providers per window
+[26-02-20 19:04:09]   - [x] Run `make check` - must pass
 [26-02-20 19:04:09] ### Task 6: Verify acceptance criteria
 [26-02-20 19:04:09]   - [ ] Manual test: create two topics - one with Claude, one with Codex - verify independent operation
 [26-02-20 19:04:09]   - [ ] Manual test: create a tmux window externally running codex, verify auto-detection and topic creation
