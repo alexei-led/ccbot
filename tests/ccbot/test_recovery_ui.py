@@ -359,7 +359,9 @@ class TestRecoveryFreshCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.get_window_state.return_value = MagicMock(
+            cwd="/tmp/project", provider_name=""
+        )
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -377,7 +379,9 @@ class TestRecoveryFreshCallback:
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_sm.unbind_thread.assert_called_once_with(100, 42)
-        mock_tm.create_window.assert_called_once_with("/tmp/project", claude_args="")
+        mock_tm.create_window.assert_called_once_with(
+            "/tmp/project", claude_args="", launch_command=None
+        )
         mock_sm.bind_thread.assert_called_once_with(
             100, 42, "@5", window_name="project"
         )
@@ -485,7 +489,9 @@ class TestRecoveryContinueCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.get_window_state.return_value = MagicMock(
+            cwd="/tmp/project", provider_name=""
+        )
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -503,7 +509,7 @@ class TestRecoveryContinueCallback:
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/project", claude_args="--continue"
+            "/tmp/project", claude_args="--continue", launch_command=None
         )
         mock_sm.bind_thread.assert_called_once_with(
             100, 42, "@5", window_name="project"
@@ -650,7 +656,9 @@ class TestRecoveryResumePickCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.get_window_state.return_value = MagicMock(
+            cwd="/tmp/project", provider_name=""
+        )
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -678,7 +686,9 @@ class TestRecoveryResumePickCallback:
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/project", claude_args="--resume a1b2c3d4-0000-0000-0000-000000000001"
+            "/tmp/project",
+            claude_args="--resume a1b2c3d4-0000-0000-0000-000000000001",
+            launch_command=None,
         )
         mock_sm.bind_thread.assert_called_once()
 
@@ -691,7 +701,9 @@ class TestRecoveryResumePickCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.get_window_state.return_value = MagicMock(
+            cwd="/tmp/project", provider_name=""
+        )
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -719,7 +731,9 @@ class TestRecoveryResumePickCallback:
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/project", claude_args="--resume a1b2c3d4-0000-0000-0000-000000000002"
+            "/tmp/project",
+            claude_args="--resume a1b2c3d4-0000-0000-0000-000000000002",
+            launch_command=None,
         )
 
     async def test_pick_invalid_index_rejected(self) -> None:

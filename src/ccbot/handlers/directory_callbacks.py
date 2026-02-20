@@ -335,11 +335,44 @@ async def _handle_confirm(
             )
             return
 
-    clear_browse_state(context.user_data)
-
-    # Show provider selection keyboard
+    # Show provider selection keyboard (keep browse state for _handle_provider_select)
     text, keyboard = build_provider_picker(selected_path)
     await safe_edit(query, text, reply_markup=keyboard)
+
+
+async def _validate_provider_select(
+    query: CallbackQuery,
+    user_id: int,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    pending_thread_id: int | None,
+) -> bool:
+    """Validate provider select callback; returns True if request should proceed."""
+    confirm_thread_id = get_thread_id(update)
+    if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
+        if context.user_data is not None:
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
+        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+        return False
+
+    await query.answer()
+
+    # Guard against double-click: if thread already has a window, skip
+    if pending_thread_id is not None:
+        existing_wid = session_manager.get_window_for_thread(user_id, pending_thread_id)
+        if existing_wid is not None:
+            display = session_manager.get_display_name(existing_wid)
+            logger.warning(
+                "Thread %d already bound to window %s (%s), ignoring duplicate provider select",
+                pending_thread_id,
+                existing_wid,
+                display,
+            )
+            await safe_edit(query, f"✅ Already bound to window {display}.")
+            return False
+
+    return True
 
 
 async def _handle_provider_select(
@@ -365,30 +398,13 @@ async def _handle_provider_select(
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
 
-    await query.answer()
+    # Clear browse state now that we've read the path
+    clear_browse_state(context.user_data)
 
-    confirm_thread_id = get_thread_id(update)
-    if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
-        if context.user_data is not None:
-            context.user_data.pop(PENDING_THREAD_ID, None)
-            context.user_data.pop(PENDING_THREAD_TEXT, None)
-            context.user_data.pop(BROWSE_PATH_KEY, None)
-        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+    if not await _validate_provider_select(
+        query, user_id, update, context, pending_thread_id
+    ):
         return
-
-    # Guard against double-click: if thread already has a window, skip
-    if pending_thread_id is not None:
-        existing_wid = session_manager.get_window_for_thread(user_id, pending_thread_id)
-        if existing_wid is not None:
-            display = session_manager.get_display_name(existing_wid)
-            logger.warning(
-                "Thread %d already bound to window %s (%s), ignoring duplicate provider select",
-                pending_thread_id,
-                existing_wid,
-                display,
-            )
-            await safe_edit(query, f"✅ Already bound to window {display}.")
-            return
 
     # Resolve launch command from provider
     provider = provider_registry.get(provider_name)
@@ -409,7 +425,8 @@ async def _handle_provider_select(
             user_id,
             pending_thread_id,
         )
-        await session_manager.wait_for_session_map_entry(created_wid)
+        if provider.capabilities.supports_hook:
+            await session_manager.wait_for_session_map_entry(created_wid)
 
         if pending_thread_id is not None:
             session_manager.bind_thread(

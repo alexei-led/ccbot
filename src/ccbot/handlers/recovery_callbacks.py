@@ -289,8 +289,19 @@ async def _create_and_bind_window(
 
     clear_dead_notification(user_id, thread_id)
 
+    # Resolve launch command from old window's provider
+    launch_command = None
+    old_provider_name = ""
+    if old_window_id:
+        old_provider_name = session_manager.get_window_state(
+            old_window_id
+        ).provider_name
+        if old_provider_name:
+            provider = get_provider_for_window(old_window_id)
+            launch_command = provider.capabilities.launch_command
+
     success, message, created_wname, created_wid = await tmux_manager.create_window(
-        cwd, claude_args=claude_args
+        cwd, claude_args=claude_args, launch_command=launch_command
     )
     if not success:
         await safe_edit(query, f"\u274c {message}")
@@ -298,13 +309,17 @@ async def _create_and_bind_window(
         await query.answer("Failed")
         return False
 
-    await session_manager.wait_for_session_map_entry(created_wid)
+    # Only wait for session_map if provider supports hooks (avoids 5s timeout)
+    if old_window_id:
+        provider = get_provider_for_window(old_window_id)
+        if provider.capabilities.supports_hook:
+            await session_manager.wait_for_session_map_entry(created_wid)
+    else:
+        await session_manager.wait_for_session_map_entry(created_wid)
 
     # Propagate provider from old window to new window
-    if old_window_id:
-        old_provider = session_manager.get_window_state(old_window_id).provider_name
-        if old_provider:
-            session_manager.set_window_provider(created_wid, old_provider)
+    if old_provider_name:
+        session_manager.set_window_provider(created_wid, old_provider_name)
 
     session_manager.bind_thread(
         user_id, thread_id, created_wid, window_name=created_wname

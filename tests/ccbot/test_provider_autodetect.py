@@ -70,6 +70,7 @@ class TestHandleNewWindowAutoDetection:
 
         mock_config.group_id = None
         mock_sm.iter_thread_bindings.return_value = []
+        mock_sm.get_window_state.return_value = MagicMock(provider_name="")
 
         mock_window = MagicMock()
         mock_window.pane_current_command = "codex"

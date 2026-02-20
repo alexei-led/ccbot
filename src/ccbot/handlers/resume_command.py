@@ -223,6 +223,44 @@ async def handle_resume_command_callback(
         await _handle_cancel(query, context)
 
 
+async def _create_resume_window(
+    user_id: int,
+    thread_id: int,
+    session_id: str,
+    cwd: str,
+) -> tuple[bool, str, str, str, str]:
+    """Unbind old window, create a new one with resume args.
+
+    Returns (success, message, window_name, window_id, old_provider_name).
+    """
+    old_window_id = session_manager.get_window_for_thread(user_id, thread_id)
+    old_provider_name = ""
+    if old_window_id:
+        old_provider_name = session_manager.get_window_state(
+            old_window_id
+        ).provider_name
+        session_manager.unbind_thread(user_id, thread_id)
+        from .status_polling import clear_dead_notification
+
+        clear_dead_notification(user_id, thread_id)
+
+    provider = (
+        get_provider_for_window(old_window_id) if old_window_id else get_provider()
+    )
+    launch_args = provider.make_launch_args(resume_id=session_id)
+    launch_command = provider.capabilities.launch_command
+    success, message, created_wname, created_wid = await tmux_manager.create_window(
+        cwd, claude_args=launch_args, launch_command=launch_command
+    )
+    if success:
+        if provider.capabilities.supports_hook:
+            await session_manager.wait_for_session_map_entry(created_wid)
+        if old_provider_name:
+            session_manager.set_window_provider(created_wid, old_provider_name)
+
+    return success, message, created_wname, created_wid, old_provider_name
+
+
 async def _handle_pick(
     query: CallbackQuery,
     user_id: int,
@@ -258,24 +296,8 @@ async def _handle_pick(
         await query.answer("Failed")
         return
 
-    # Unbind existing window and resolve its provider before replacing
-    old_window_id = session_manager.get_window_for_thread(user_id, thread_id)
-    old_provider_name = ""
-    if old_window_id:
-        old_provider_name = session_manager.get_window_state(
-            old_window_id
-        ).provider_name
-        session_manager.unbind_thread(user_id, thread_id)
-        from .status_polling import clear_dead_notification
-
-        clear_dead_notification(user_id, thread_id)
-
-    provider = (
-        get_provider_for_window(old_window_id) if old_window_id else get_provider()
-    )
-    launch_args = provider.make_launch_args(resume_id=session_id)
-    success, message, created_wname, created_wid = await tmux_manager.create_window(
-        cwd, claude_args=launch_args
+    success, message, created_wname, created_wid, _ = await _create_resume_window(
+        user_id, thread_id, session_id, cwd
     )
     if not success:
         await safe_edit(query, f"\u274c {message}")
@@ -283,9 +305,6 @@ async def _handle_pick(
         await query.answer("Failed")
         return
 
-    await session_manager.wait_for_session_map_entry(created_wid)
-    if old_provider_name:
-        session_manager.set_window_provider(created_wid, old_provider_name)
     session_manager.bind_thread(
         user_id, thread_id, created_wid, window_name=created_wname
     )

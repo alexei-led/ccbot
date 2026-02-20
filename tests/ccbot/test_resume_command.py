@@ -460,7 +460,9 @@ class TestResumePickCallback:
             await handle_resume_command_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/proj", claude_args="--resume a1b2c3d4-0000-0000-0000-000000000001"
+            "/tmp/proj",
+            claude_args="--resume a1b2c3d4-0000-0000-0000-000000000001",
+            launch_command="claude",
         )
         mock_sm.bind_thread.assert_called_once_with(
             100, 42, "@5", window_name="project"
@@ -627,7 +629,9 @@ class TestResumePickCallback:
             await handle_resume_command_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
-            "/tmp/proj", claude_args="--resume a1b2c3d4-0000-0000-0000-000000000002"
+            "/tmp/proj",
+            claude_args="--resume a1b2c3d4-0000-0000-0000-000000000002",
+            launch_command="claude",
         )
 
     @patch(f"{_RC}.tmux_manager")

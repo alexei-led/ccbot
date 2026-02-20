@@ -136,9 +136,9 @@ class TestHandleConfirmShowsProviderPicker:
 
         await _handle_confirm(query, 100, update, context)
 
-        assert "state" not in user_data
-        assert "browse_page" not in user_data
-        assert "browse_dirs" not in user_data
+        # Browse state kept for _handle_provider_select (cleared there instead)
+        assert "browse_path" in user_data
+        assert "state" in user_data
 
 
 class TestHandleProviderSelect:
