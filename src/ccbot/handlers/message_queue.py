@@ -46,28 +46,47 @@ logger = logging.getLogger(__name__)
 MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
 
 
-def build_status_keyboard(window_id: str) -> InlineKeyboardMarkup:
-    """Build inline keyboard for status messages: [Esc] [Screenshot] [Bell]."""
+def build_status_keyboard(
+    window_id: str, history: list[str] | None = None
+) -> InlineKeyboardMarkup:
+    """Build inline keyboard for status messages: [↑ cmd] row + [Esc] [Screenshot] [Bell]."""
+    from .command_history import INLINE_QUERY_MAX, truncate_for_display
+
+    rows: list[list[InlineKeyboardButton]] = []
+
+    # History recall row (up to 2 buttons)
+    if history:
+        hist_row: list[InlineKeyboardButton] = []
+        for cmd in history[:2]:
+            label = truncate_for_display(cmd, 20)
+            query = cmd[:INLINE_QUERY_MAX]
+            hist_row.append(
+                InlineKeyboardButton(
+                    f"\u2191 {label}", switch_inline_query_current_chat=query
+                )
+            )
+        rows.append(hist_row)
+
+    # Control row
     mode = session_manager.get_notification_mode(window_id)
-    bell = NOTIFY_MODE_ICONS.get(mode, "🔔")
-    return InlineKeyboardMarkup(
+    bell = NOTIFY_MODE_ICONS.get(mode, "\U0001f514")
+    rows.append(
         [
-            [
-                InlineKeyboardButton(
-                    "⎋ Esc",
-                    callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    "📸",
-                    callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    bell,
-                    callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
-                ),
-            ]
+            InlineKeyboardButton(
+                "\u238b Esc",
+                callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
+            ),
+            InlineKeyboardButton(
+                "\U0001f4f8",
+                callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
+            ),
+            InlineKeyboardButton(
+                bell,
+                callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
+            ),
         ]
     )
+    return InlineKeyboardMarkup(rows)
 
 
 @dataclass
@@ -415,6 +434,18 @@ async def _convert_status_to_content(
             return None
 
 
+def _get_idle_history(
+    user_id: int, thread_id_or_0: int, status_text: str
+) -> list[str] | None:
+    """Return history list if the status is idle, else None."""
+    from .callback_data import IDLE_STATUS_TEXT
+    from .command_history import get_history
+
+    if status_text != IDLE_STATUS_TEXT:
+        return None
+    return get_history(user_id, thread_id_or_0, limit=2) or None
+
+
 async def _process_status_update_task(
     bot: Bot, user_id: int, task: MessageTask
 ) -> None:
@@ -447,7 +478,8 @@ async def _process_status_update_task(
             pass
         else:
             # Same window, text changed - edit in place
-            keyboard = build_status_keyboard(window_id)
+            history = _get_idle_history(user_id, thread_id, status_text)
+            keyboard = build_status_keyboard(window_id, history=history)
             try:
                 await bot.edit_message_text(
                     chat_id=chat_id,
@@ -494,7 +526,8 @@ async def _do_send_status_message(
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    keyboard = build_status_keyboard(window_id)
+    history = _get_idle_history(user_id, thread_id_or_0, text)
+    keyboard = build_status_keyboard(window_id, history=history)
     sent = await rate_limit_send_message(
         bot,
         chat_id,

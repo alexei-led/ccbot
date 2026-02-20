@@ -347,6 +347,13 @@ async def update_status_message(
                 await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
                 _clear_autoclose_if_active(user_id, thread_id)
                 _last_typing_sent.pop((user_id, thread_id), None)
+                # Show "✓ Ready" status with history buttons
+                if notif_mode not in ("muted", "errors_only"):
+                    from .callback_data import IDLE_STATUS_TEXT
+
+                    await enqueue_status_update(
+                        bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
+                    )
             else:
                 # Never seen a spinner — still starting up, show as active
                 await _send_typing_throttled(bot, user_id, thread_id)

@@ -339,6 +339,10 @@ async def _forward_message(
         await safe_reply(message, f"\u274c {err_message}")
         return
 
+    from .command_history import record_command
+
+    record_command(user_id, thread_id, text)
+
     # Start background capture for ! bash command output
     if text.startswith("!") and len(text) > 1:
         bash_cmd = text[1:]  # strip leading "!"

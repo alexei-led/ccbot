@@ -26,7 +26,14 @@ import signal
 import time
 from pathlib import Path
 
-from telegram import Bot, Update
+from telegram import (
+    Bot,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    Update,
+)
 from telegram.constants import ChatAction
 from telegram.error import Conflict, RetryAfter, TelegramError
 from telegram.ext import (
@@ -34,6 +41,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    InlineQueryHandler,
     MessageHandler,
     filters,
 )
@@ -126,6 +134,9 @@ _CommandRefreshError = (TelegramError, OSError)
 _ERROR_KEYWORDS_RE = re.compile(
     r"\b(?:error|exception|failed|traceback|stderr|assertion)\b", re.IGNORECASE
 )
+
+# Max label length for /recall command buttons (wider than status bar buttons)
+_RECALL_LABEL_MAX = 40
 
 # Session monitor instance
 session_monitor: SessionMonitor | None = None
@@ -304,6 +315,10 @@ async def forward_command_handler(
     await update.message.chat.send_action(ChatAction.TYPING)
     success, message = await session_manager.send_to_window(window_id, cc_slash)
     if success:
+        if thread_id is not None:
+            from .handlers.command_history import record_command
+
+            record_command(user.id, thread_id, cc_slash)
         await safe_reply(update.message, f"\u26a1 [{display}] Sent: {cc_slash}")
         # If /clear command was sent, clear the session association
         # so we can detect the new session after first message
@@ -312,6 +327,66 @@ async def forward_command_handler(
             session_manager.clear_window_session(window_id)
     else:
         await safe_reply(update.message, f"\u274c {message}")
+
+
+async def recall_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show recent command history for the current topic."""
+    user = update.effective_user
+    if not user or not is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    if thread_id is None:
+        await safe_reply(update.message, "\u274c Use this command inside a topic.")
+        return
+
+    from .handlers.command_history import (
+        INLINE_QUERY_MAX,
+        get_history,
+        truncate_for_display,
+    )
+
+    history = get_history(user.id, thread_id, limit=10)
+    if not history:
+        await safe_reply(update.message, "\U0001f4cb No command history yet.")
+        return
+
+    rows = []
+    for cmd in history:
+        label = truncate_for_display(cmd, _RECALL_LABEL_MAX)
+        query = cmd[:INLINE_QUERY_MAX]
+        rows.append(
+            [InlineKeyboardButton(label, switch_inline_query_current_chat=query)]
+        )
+    keyboard = InlineKeyboardMarkup(rows)
+    await safe_reply(
+        update.message, "\U0001f4cb Recent commands:", reply_markup=keyboard
+    )
+
+
+async def inline_query_handler(
+    update: Update, _context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Echo query text as a sendable inline result."""
+    if not update.inline_query:
+        return
+    user = update.effective_user
+    if not user or not is_user_allowed(user.id):
+        return
+    text = update.inline_query.query.strip()
+    if not text:
+        await update.inline_query.answer([])
+        return
+
+    result = InlineQueryResultArticle(
+        id="cmd",
+        title=text,
+        description="Tap to send",
+        input_message_content=InputTextMessageContent(message_text=text),
+    )
+    await update.inline_query.answer([result], cache_time=0, is_personal=True)
 
 
 async def unsupported_content_handler(
@@ -798,6 +873,9 @@ def create_bot() -> Application:
     application.add_handler(
         CommandHandler("upgrade", upgrade_command, filters=_group_filter)
     )
+    application.add_handler(
+        CommandHandler("recall", recall_command, filters=_group_filter)
+    )
     application.add_handler(CallbackQueryHandler(callback_handler))
     # Topic closed event — unbind window (kept alive for rebinding)
     application.add_handler(
@@ -833,5 +911,7 @@ def create_bot() -> Application:
             unsupported_content_handler,
         )
     )
+    # Inline query handler (serves switch_inline_query_current_chat from history buttons)
+    application.add_handler(InlineQueryHandler(inline_query_handler))
 
     return application
