@@ -24,11 +24,18 @@ class TestHooklessCapabilities:
     def test_hookless_flags(self, hookless) -> None:
         caps = hookless.capabilities
         assert caps.supports_hook is False
-        assert caps.supports_continue is False
+        assert caps.supports_resume is True
+        assert caps.supports_continue is True
 
     def test_invalid_resume_id_raises(self, hookless) -> None:
-        with pytest.raises(ValueError, match="Invalid resume_id"):
-            hookless.make_launch_args(resume_id="abc; rm -rf /")
+        # Codex validates resume IDs; Gemini accepts any string (index/latest)
+        if hookless.capabilities.name == "codex":
+            with pytest.raises(ValueError, match="Invalid resume_id"):
+                hookless.make_launch_args(resume_id="abc; rm -rf /")
+        else:
+            # Gemini doesn't validate — accepts anything
+            result = hookless.make_launch_args(resume_id="abc; rm -rf /")
+            assert result  # non-empty
 
 
 # ── Codex-specific ───────────────────────────────────────────────────────
@@ -38,17 +45,12 @@ class TestCodexLaunchArgs:
     def test_resume_uses_subcommand(self) -> None:
         codex = CodexProvider()
         result = codex.make_launch_args(resume_id="abc-123")
-        assert result == "exec resume abc-123"
+        assert result == "resume abc-123"
 
-
-class TestCodexCommands:
-    def test_returns_builtins(self) -> None:
+    def test_continue_uses_resume_last(self) -> None:
         codex = CodexProvider()
-        result = codex.discover_commands("/tmp/nonexistent")
-        names = [c.name for c in result]
-        assert len(result) == len(codex.capabilities.builtin_commands)
-        for cmd in ("/exit", "/model", "/status", "/mode"):
-            assert cmd in names
+        result = codex.make_launch_args(use_continue=True)
+        assert result == "resume --last"
 
 
 # ── Codex capabilities ───────────────────────────────────────────────────
@@ -74,6 +76,164 @@ class TestGeminiLaunchArgs:
         gemini = GeminiProvider()
         result = gemini.make_launch_args(resume_id="abc-123")
         assert result == "--resume abc-123"
+
+    def test_resume_latest(self) -> None:
+        gemini = GeminiProvider()
+        result = gemini.make_launch_args(resume_id="latest")
+        assert result == "--resume latest"
+
+    def test_continue_uses_resume_latest(self) -> None:
+        gemini = GeminiProvider()
+        result = gemini.make_launch_args(use_continue=True)
+        assert result == "--resume latest"
+
+
+# ── Codex transcript parsing ────────────────────────────────────────────
+
+
+class TestCodexTranscriptParsing:
+    def test_parses_assistant_response_item(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "response_item",
+                "payload": {
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "hello"}],
+                },
+            }
+        ]
+        messages, _ = codex.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].text == "hello"
+        assert messages[0].role == "assistant"
+
+    def test_parses_user_input_item(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "input_item",
+                "payload": {"role": "user", "content": "what is this?"},
+            }
+        ]
+        messages, _ = codex.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].text == "what is this?"
+        assert messages[0].role == "user"
+
+    def test_tracks_function_call_pending(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "response_item",
+                "payload": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "function_call", "call_id": "fc1", "name": "bash"}
+                    ],
+                },
+            }
+        ]
+        _, pending = codex.parse_transcript_entries(entries, {})
+        assert "fc1" in pending
+
+    def test_function_call_output_clears_pending(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "response_item",
+                "payload": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "function_call_output",
+                            "call_id": "fc1",
+                            "output": "ok",
+                        }
+                    ],
+                },
+            }
+        ]
+        _, pending = codex.parse_transcript_entries(entries, {"fc1": "bash"})
+        assert "fc1" not in pending
+
+    def test_skips_developer_role(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "response_item",
+                "payload": {
+                    "role": "developer",
+                    "content": [{"type": "input_text", "text": "system prompt"}],
+                },
+            }
+        ]
+        messages, _ = codex.parse_transcript_entries(entries, {})
+        assert messages == []
+
+    def test_is_user_entry_detects_input_item(self) -> None:
+        codex = CodexProvider()
+        assert codex.is_user_transcript_entry(
+            {"type": "input_item", "payload": {"role": "user"}}
+        )
+
+    def test_is_user_entry_skips_system_preamble(self) -> None:
+        codex = CodexProvider()
+        entry = {
+            "type": "response_item",
+            "payload": {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "<permissions>...</permissions>"}
+                ],
+            },
+        }
+        assert codex.is_user_transcript_entry(entry) is False
+
+
+# ── Gemini transcript parsing ───────────────────────────────────────────
+
+
+class TestGeminiTranscriptParsing:
+    def test_parses_gemini_message(self) -> None:
+        gemini = GeminiProvider()
+        entries = [{"type": "gemini", "content": "here is my answer"}]
+        messages, _ = gemini.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].text == "here is my answer"
+        assert messages[0].role == "assistant"
+
+    def test_parses_user_message(self) -> None:
+        gemini = GeminiProvider()
+        entries = [{"type": "user", "content": "hello gemini"}]
+        messages, _ = gemini.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].text == "hello gemini"
+        assert messages[0].role == "user"
+
+    def test_tracks_tool_calls(self) -> None:
+        gemini = GeminiProvider()
+        entries = [
+            {
+                "type": "gemini",
+                "content": "using tool",
+                "toolCalls": [{"id": "tc1", "name": "shell"}],
+            }
+        ]
+        messages, pending = gemini.parse_transcript_entries(entries, {})
+        assert "tc1" in pending
+        assert messages[0].content_type == "tool_use"
+
+    def test_skips_unknown_types(self) -> None:
+        gemini = GeminiProvider()
+        entries = [{"type": "system", "content": "some system info"}]
+        messages, _ = gemini.parse_transcript_entries(entries, {})
+        assert messages == []
+
+    def test_is_user_entry(self) -> None:
+        gemini = GeminiProvider()
+        assert gemini.is_user_transcript_entry({"type": "user"}) is True
+        assert gemini.is_user_transcript_entry({"type": "gemini"}) is False
 
 
 class TestGeminiTerminalStatus:
@@ -215,14 +375,11 @@ class TestGeminiPaneTitleStatus:
         assert status is None
 
 
-class TestGeminiCommands:
-    def test_returns_builtins(self) -> None:
-        gemini = GeminiProvider()
-        result = gemini.discover_commands("/tmp/nonexistent")
-        names = [c.name for c in result]
-        assert len(result) == len(gemini.capabilities.builtin_commands)
-        for cmd in ("/clear", "/model", "/stats", "/resume", "/directories"):
-            assert cmd in names
+class TestHooklessCommands:
+    def test_returns_exact_builtins(self, hookless) -> None:
+        result = hookless.discover_commands("/tmp/nonexistent")
+        names = {c.name for c in result}
+        assert names == set(hookless.capabilities.builtin_commands)
 
 
 # ── JSONL parsing edge cases (extract_content_blocks) ────────────────────

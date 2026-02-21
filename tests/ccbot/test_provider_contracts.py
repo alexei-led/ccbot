@@ -119,9 +119,9 @@ class TestMakeLaunchArgs:
         caps = provider.capabilities
         result = provider.make_launch_args(use_continue=True)
         if caps.supports_continue:
-            assert "--continue" in result
+            assert result != ""  # Each provider has its own continue syntax
         else:
-            assert "--continue" not in result
+            assert result == ""
 
 
 class TestParseHookPayload:
@@ -172,6 +172,78 @@ class TestParseTranscriptLine:
         assert result["type"] == "assistant"
 
 
+def _make_assistant_entry(
+    provider: AgentProvider, text: str = "hello"
+) -> dict[str, Any]:
+    """Build an assistant transcript entry in the correct format for the provider."""
+    name = provider.capabilities.name
+    if name == "codex":
+        return {
+            "type": "response_item",
+            "payload": {
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": text}],
+            },
+        }
+    if name == "gemini":
+        return {"type": "gemini", "content": text}
+    # Claude / stub — standard JSONL
+    return {
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": text}]},
+    }
+
+
+def _make_tool_use_entry(provider: AgentProvider) -> dict[str, Any]:
+    """Build a tool_use transcript entry in the correct format."""
+    name = provider.capabilities.name
+    if name == "codex":
+        return {
+            "type": "response_item",
+            "payload": {
+                "role": "assistant",
+                "content": [{"type": "function_call", "call_id": "t1", "name": "Read"}],
+            },
+        }
+    if name == "gemini":
+        return {
+            "type": "gemini",
+            "content": "Using tool",
+            "toolCalls": [{"id": "t1", "name": "Read"}],
+        }
+    return {
+        "type": "assistant",
+        "message": {
+            "content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]
+        },
+    }
+
+
+def _make_tool_result_entry(provider: AgentProvider) -> dict[str, Any]:
+    """Build a tool_result transcript entry in the correct format."""
+    name = provider.capabilities.name
+    if name == "codex":
+        return {
+            "type": "response_item",
+            "payload": {
+                "role": "assistant",
+                "content": [
+                    {"type": "function_call_output", "call_id": "t1", "output": "ok"}
+                ],
+            },
+        }
+    if name == "gemini":
+        # Gemini doesn't have explicit tool_result entries — tool calls are
+        # tracked in pending but never cleared by a result entry.
+        return {"type": "gemini", "content": "result ok"}
+    return {
+        "type": "user",
+        "message": {
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]
+        },
+    }
+
+
 class TestParseTranscriptEntries:
     def test_empty_returns_empty(self, provider: AgentProvider) -> None:
         messages, pending = provider.parse_transcript_entries([], {})
@@ -179,12 +251,7 @@ class TestParseTranscriptEntries:
         assert isinstance(pending, dict)
 
     def test_message_fields(self, provider: AgentProvider) -> None:
-        entries = [
-            {
-                "type": "assistant",
-                "message": {"content": [{"type": "text", "text": "hello"}]},
-            }
-        ]
+        entries = [_make_assistant_entry(provider, "hello")]
         messages, _ = provider.parse_transcript_entries(entries, {})
         assert len(messages) == 1
         msg = messages[0]
@@ -193,45 +260,21 @@ class TestParseTranscriptEntries:
         assert msg.role == "assistant"
 
     def test_pending_carry_over(self, provider: AgentProvider) -> None:
-        entries = [
-            {
-                "type": "assistant",
-                "message": {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "id": "t1",
-                            "name": "Read",
-                            "input": {},
-                        }
-                    ]
-                },
-            }
-        ]
+        entries = [_make_tool_use_entry(provider)]
         _, pending = provider.parse_transcript_entries(entries, {})
         assert "t1" in pending
 
     def test_pending_resolved_on_result(self, provider: AgentProvider) -> None:
         entries = [
-            {
-                "type": "assistant",
-                "message": {
-                    "content": [
-                        {"type": "tool_use", "id": "t1", "name": "Read", "input": {}}
-                    ]
-                },
-            },
-            {
-                "type": "user",
-                "message": {
-                    "content": [
-                        {"type": "tool_result", "tool_use_id": "t1", "content": "ok"}
-                    ]
-                },
-            },
+            _make_tool_use_entry(provider),
+            _make_tool_result_entry(provider),
         ]
         _, pending = provider.parse_transcript_entries(entries, {})
-        assert "t1" not in pending
+        # Gemini doesn't have explicit tool_result entries
+        if provider.capabilities.name == "gemini":
+            assert "t1" in pending
+        else:
+            assert "t1" not in pending
 
 
 class TestParseTerminalStatus:
@@ -278,48 +321,73 @@ class TestExtractBashOutput:
 
 
 class TestIsUserTranscriptEntry:
-    @pytest.mark.parametrize(
-        "entry,expected",
-        [
-            ({"type": "user"}, True),
-            ({"type": "assistant"}, False),
-            ({}, False),
-        ],
-        ids=["user", "assistant", "empty"],
-    )
-    def test_detection(
-        self, provider: AgentProvider, entry: dict[str, Any], expected: bool
-    ) -> None:
-        assert provider.is_user_transcript_entry(entry) is expected
+    def test_user_entry_detected(self, provider: AgentProvider) -> None:
+        name = provider.capabilities.name
+        if name == "codex":
+            entry = {"type": "input_item", "payload": {"role": "user"}}
+        elif name == "gemini":
+            entry = {"type": "user"}
+        else:
+            entry = {"type": "user"}
+        assert provider.is_user_transcript_entry(entry) is True
+
+    def test_non_user_not_detected(self, provider: AgentProvider) -> None:
+        name = provider.capabilities.name
+        if name == "codex":
+            entry = {"type": "response_item", "payload": {"role": "assistant"}}
+        elif name == "gemini":
+            entry = {"type": "gemini"}
+        else:
+            entry = {"type": "assistant"}
+        assert provider.is_user_transcript_entry(entry) is False
+
+    def test_empty_not_detected(self, provider: AgentProvider) -> None:
+        assert provider.is_user_transcript_entry({}) is False
 
 
 class TestParseHistoryEntry:
     def test_non_message_returns_none(self, provider: AgentProvider) -> None:
         assert provider.parse_history_entry({"type": "summary"}) is None
 
-    @pytest.mark.parametrize(
-        "role,text",
-        [("assistant", "hello world"), ("user", "my question")],
-        ids=["assistant", "user"],
-    )
-    def test_message_parsed(
-        self, provider: AgentProvider, role: str, text: str
-    ) -> None:
-        entry = {
-            "type": role,
-            "message": {"content": [{"type": "text", "text": text}]},
-        }
+    def test_assistant_message_parsed(self, provider: AgentProvider) -> None:
+        entry = _make_assistant_entry(provider, "hello world")
         result = provider.parse_history_entry(entry)
         assert result is not None
         assert isinstance(result, AgentMessage)
-        assert result.role == role
-        assert result.text == text
+        assert result.role == "assistant"
+        assert result.text == "hello world"
+
+    def test_user_message_parsed(self, provider: AgentProvider) -> None:
+        name = provider.capabilities.name
+        if name == "codex":
+            entry = {
+                "type": "input_item",
+                "payload": {"role": "user", "content": "my question"},
+            }
+        elif name == "gemini":
+            entry = {"type": "user", "content": "my question"}
+        else:
+            entry = {
+                "type": "user",
+                "message": {"content": [{"type": "text", "text": "my question"}]},
+            }
+        result = provider.parse_history_entry(entry)
+        assert result is not None
+        assert isinstance(result, AgentMessage)
+        assert result.role == "user"
+        assert result.text == "my question"
 
     def test_empty_content_returns_none(self, provider: AgentProvider) -> None:
-        entry = {
-            "type": "assistant",
-            "message": {"content": []},
-        }
+        name = provider.capabilities.name
+        if name == "codex":
+            entry = {
+                "type": "response_item",
+                "payload": {"role": "assistant", "content": []},
+            }
+        elif name == "gemini":
+            entry = {"type": "gemini", "content": ""}
+        else:
+            entry = {"type": "assistant", "message": {"content": []}}
         assert provider.parse_history_entry(entry) is None
 
 

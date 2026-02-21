@@ -1,33 +1,58 @@
 """Gemini CLI provider — Google's terminal agent behind AgentProvider protocol.
 
 Gemini CLI uses directory-scoped sessions with automatic persistence. Resume
-uses ``--resume <id>`` flag syntax. No SessionStart hook — session detection
-requires external wrapping.
+uses ``--resume <index|latest>`` flag syntax (index number or "latest", not
+a session UUID). No SessionStart hook — session detection requires external
+wrapping.
 
 Terminal UI: Gemini CLI uses ``@inquirer/select`` for interactive prompts.
 Permission prompts start with "Action Required" and list numbered options
 with a ``●`` (U+25CF) marker on the selected choice.
+
+Transcript format: single JSON file per session (NOT JSONL) with structure:
+  ``{sessionId, projectHash, startTime, lastUpdated, messages: [...]}``
+Messages use ``type`` field with values ``"user"`` / ``"gemini"`` (not
+``"assistant"``), and ``content`` is a plain string (not content blocks).
 """
 
+import json
 import re
+from typing import Any, cast
 
 from ccbot.providers._jsonl import JsonlProvider
-from ccbot.providers.base import ProviderCapabilities, StatusUpdate
+from ccbot.providers.base import (
+    AgentMessage,
+    ContentType,
+    MessageRole,
+    ProviderCapabilities,
+    SessionStartEvent,
+    StatusUpdate,
+)
 from ccbot.terminal_parser import UIPattern, extract_interactive_content
 
-# Gemini CLI known slash commands.
+# Gemini CLI known slash commands
 _GEMINI_BUILTINS: dict[str, str] = {
+    "/chat": "Save, resume, list, or delete named sessions",
     "/clear": "Clear screen and chat context",
-    "/model": "Switch model mid-session",
     "/compress": "Summarize chat context to save tokens",
     "/copy": "Copy last response to clipboard",
-    "/help": "Display available commands",
-    "/commands": "Manage custom commands",
-    "/mcp": "List MCP servers and tools",
-    "/stats": "Show session statistics",
-    "/resume": "Browse and select previous sessions",
-    "/bug": "File issue or bug report",
+    "/diff": "View file changes",
     "/directories": "Manage accessible directories",
+    "/help": "Display available commands",
+    "/mcp": "List MCP servers and tools",
+    "/memory": "Show or manage GEMINI.md context",
+    "/model": "Switch model mid-session",
+    "/restore": "List or restore project state checkpoints",
+    "/skills": "Enable, list, or reload agent skills",
+    "/stats": "Show session statistics",
+    "/tools": "List accessible tools",
+    "/vim": "Toggle Vim input mode",
+}
+
+# Gemini role → our MessageRole mapping
+_GEMINI_ROLE_MAP: dict[str, MessageRole] = {
+    "user": "user",
+    "gemini": "assistant",
 }
 
 # ── Gemini CLI UI patterns ──────────────────────────────────────────────
@@ -74,7 +99,7 @@ class GeminiProvider(JsonlProvider):
         launch_command="gemini",
         supports_hook=False,
         supports_resume=True,
-        supports_continue=False,
+        supports_continue=True,
         supports_structured_transcript=True,
         transcript_format="jsonl",
         terminal_ui_patterns=("PermissionPrompt",),
@@ -83,6 +108,112 @@ class GeminiProvider(JsonlProvider):
     )
 
     _BUILTINS = _GEMINI_BUILTINS
+
+    def make_launch_args(
+        self,
+        resume_id: str | None = None,
+        use_continue: bool = False,
+    ) -> str:
+        """Build Gemini CLI args for launching or resuming a session.
+
+        Resume uses ``--resume <index|latest>`` — accepts a numeric index
+        or ``"latest"``, NOT a UUID.
+        Continue uses ``--resume latest`` to pick up the most recent session.
+        """
+        if resume_id:
+            return f"--resume {resume_id}"
+        if use_continue:
+            return "--resume latest"
+        return ""
+
+    # ── Gemini-specific transcript parsing ────────────────────────────
+
+    def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
+        """Parse a line from a Gemini transcript.
+
+        Gemini sessions are single JSON files, not JSONL. When read line-by-line
+        by the monitor (which streams lines), individual lines won't be valid JSON.
+        This method handles both cases gracefully.
+        """
+        if not line or not line.strip():
+            return None
+        try:
+            result = json.loads(line)
+            return result if isinstance(result, dict) else None
+        except json.JSONDecodeError:
+            return None
+
+    def parse_transcript_entries(
+        self,
+        entries: list[dict[str, Any]],
+        pending_tools: dict[str, Any],
+    ) -> tuple[list[AgentMessage], dict[str, Any]]:
+        """Parse Gemini transcript entries into AgentMessages.
+
+        Gemini messages use ``type`` field ("user"/"gemini") instead of ``role``,
+        and ``content`` is a plain string (not content blocks).  ``toolCalls``
+        is a separate array field.
+        """
+        messages: list[AgentMessage] = []
+        pending = dict(pending_tools)
+
+        for entry in entries:
+            # Support both top-level messages and entries from the messages array
+            msg_type = entry.get("type", "")
+            role = _GEMINI_ROLE_MAP.get(msg_type)
+            if not role:
+                continue
+
+            content = entry.get("content", "")
+            text = content if isinstance(content, str) else ""
+            content_type: ContentType = "text"
+
+            # Track tool calls from gemini messages
+            tool_calls = entry.get("toolCalls", [])
+            if isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    if isinstance(tc, dict) and tc.get("id"):
+                        pending[tc["id"]] = tc.get("name", "unknown")
+                        content_type = "tool_use"
+
+            if text:
+                messages.append(
+                    AgentMessage(
+                        text=text,
+                        role=cast(MessageRole, role),
+                        content_type=content_type,
+                        timestamp=entry.get("timestamp"),
+                    )
+                )
+
+        return messages, pending
+
+    def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
+        """Check if this Gemini entry is a human turn."""
+        return entry.get("type") == "user"
+
+    def parse_history_entry(self, entry: dict[str, Any]) -> AgentMessage | None:
+        """Parse a single Gemini transcript entry for history display."""
+        msg_type = entry.get("type", "")
+        role = _GEMINI_ROLE_MAP.get(msg_type)
+        if not role:
+            return None
+        content = entry.get("content", "")
+        text = content if isinstance(content, str) else ""
+        if not text:
+            return None
+        return AgentMessage(
+            text=text,
+            role=cast(MessageRole, role),
+            content_type="text",
+            timestamp=entry.get("timestamp"),
+        )
+
+    def parse_hook_payload(
+        self,
+        payload: dict[str, Any],  # noqa: ARG002 — protocol signature
+    ) -> SessionStartEvent | None:
+        return None
 
     def parse_terminal_status(
         self, pane_text: str, *, pane_title: str = ""
