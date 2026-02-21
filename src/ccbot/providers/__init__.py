@@ -98,13 +98,12 @@ def detect_provider_from_command(pane_current_command: str) -> str:
 
     Matches the basename of the command against known provider names
     to avoid false positives from paths containing provider names.
-    Returns the config default for unrecognized commands.
+    Returns empty string for unrecognized or empty commands so callers
+    can distinguish "no match" from a confident detection.
     """
     cmd = pane_current_command.strip().lower()
     if not cmd:
-        from ccbot.config import config
-
-        return config.provider_name
+        return ""
 
     # Match basename only (first token) to avoid false positives
     # from paths like /home/claude/bin/vim
@@ -113,9 +112,7 @@ def detect_provider_from_command(pane_current_command: str) -> str:
         if basename == name or basename.startswith(name + "-"):
             return name
 
-    from ccbot.config import config
-
-    return config.provider_name
+    return ""
 
 
 def resolve_capabilities(provider_name: str | None = None) -> ProviderCapabilities:

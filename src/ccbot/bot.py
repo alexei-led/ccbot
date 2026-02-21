@@ -663,19 +663,22 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
             )
             return
 
-    # Auto-detect provider from the running process (only if not already set)
+    # Auto-detect provider from the running process (only if not already set).
+    # detect_provider_from_command returns "" for unrecognized commands (shells),
+    # so we only persist when a known CLI is confidently identified.
     existing_provider = session_manager.get_window_state(event.window_id).provider_name
     if not existing_provider:
         w = await tmux_manager.find_window_by_id(event.window_id)
         if w and w.pane_current_command:
             detected = detect_provider_from_command(w.pane_current_command)
-            session_manager.set_window_provider(event.window_id, detected)
-            logger.info(
-                "Auto-detected provider %r for window %s (command=%s)",
-                detected,
-                event.window_id,
-                w.pane_current_command,
-            )
+            if detected:
+                session_manager.set_window_provider(event.window_id, detected)
+                logger.info(
+                    "Auto-detected provider %r for window %s (command=%s)",
+                    detected,
+                    event.window_id,
+                    w.pane_current_command,
+                )
 
     topic_name = event.window_name or Path(event.cwd).name or event.window_id
 

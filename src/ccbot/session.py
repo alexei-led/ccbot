@@ -602,6 +602,13 @@ class SessionManager:
             if new_transcript and state.transcript_path != new_transcript:
                 state.transcript_path = new_transcript
                 changed = True
+            # Sync provider_name from session_map (hook data is authoritative).
+            # The hook fires when a CLI actually starts, so it reflects the
+            # real provider — overwrite stale values, not just empty ones.
+            new_provider = info.get("provider_name", "")
+            if new_provider and state.provider_name != new_provider:
+                state.provider_name = new_provider
+                changed = True
             # Initialize display name from session_map only when unknown.
             # session_map window_name comes from SessionStart and may be stale
             # after later tmux renames.
@@ -668,11 +675,14 @@ class SessionManager:
     # --- Provider management ---
 
     def set_window_provider(self, window_id: str, provider_name: str) -> None:
-        """Set the provider for a window. Empty string resets to config default."""
+        """Set the provider for a window. Empty string resets to config default.
+
+        Always saves state unconditionally — callers may have mutated
+        other WindowState fields (e.g. cwd) that piggyback on this save.
+        """
         state = self.get_window_state(window_id)
-        if state.provider_name != provider_name:
-            state.provider_name = provider_name
-            self._save_state()
+        state.provider_name = provider_name
+        self._save_state()
 
     # --- Notification mode ---
 

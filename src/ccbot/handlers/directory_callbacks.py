@@ -415,6 +415,12 @@ async def _handle_provider_select(
     )
     if success:
         session_manager.update_user_mru(user_id, selected_path)
+        # Set cwd before set_window_provider so it's included in the save.
+        # Recovery needs cwd for hookless providers (codex/gemini) that never
+        # write session_map.json. For Claude, the hook overwrites via
+        # load_session_map — harmless duplication.
+        window_state = session_manager.get_window_state(created_wid)
+        window_state.cwd = selected_path
         session_manager.set_window_provider(created_wid, provider_name)
         logger.info(
             "Window created: %s (id=%s) at %s provider=%s (user=%d, thread=%s)",

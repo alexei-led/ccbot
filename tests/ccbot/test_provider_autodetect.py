@@ -32,20 +32,14 @@ class TestDetectProviderFromCommand:
     def test_known_commands(self, command: str, expected: str) -> None:
         assert detect_provider_from_command(command) == expected
 
-    def test_unknown_command_returns_config_default(self) -> None:
-        result = detect_provider_from_command("vim")
-        assert result == "claude"  # config default
+    def test_unknown_command_returns_empty(self) -> None:
+        assert detect_provider_from_command("vim") == ""
 
-    def test_unknown_command_respects_config_provider(self) -> None:
-        mock_config = MagicMock()
-        mock_config.provider_name = "codex"
-        with patch("ccbot.config.config", mock_config):
-            result = detect_provider_from_command("bash")
-            assert result == "codex"
+    def test_shell_command_returns_empty(self) -> None:
+        assert detect_provider_from_command("bash") == ""
 
-    def test_empty_command_returns_default(self) -> None:
-        result = detect_provider_from_command("")
-        assert result == "claude"
+    def test_empty_command_returns_empty(self) -> None:
+        assert detect_provider_from_command("") == ""
 
     def test_priority_order_first_match(self) -> None:
         # "claude" is checked first, so "claude-codex" matches "claude"
@@ -146,6 +140,39 @@ class TestHandleNewWindowAutoDetection:
         await _handle_new_window(event, bot)
 
         mock_detect.assert_not_called()
+        mock_sm.set_window_provider.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("ccbot.bot.tmux_manager")
+    @patch("ccbot.bot.session_manager")
+    @patch("ccbot.bot.config")
+    @patch("ccbot.bot.detect_provider_from_command", return_value="")
+    async def test_skips_provider_set_for_unrecognized_command(
+        self,
+        mock_detect: MagicMock,
+        mock_config: MagicMock,
+        mock_sm: MagicMock,
+        mock_tmux: MagicMock,
+    ) -> None:
+        from ccbot.bot import _handle_new_window
+        from ccbot.session_monitor import NewWindowEvent
+
+        mock_config.group_id = None
+        mock_sm.iter_thread_bindings.return_value = []
+        mock_sm.get_window_state.return_value = MagicMock(provider_name="")
+
+        mock_window = MagicMock()
+        mock_window.pane_current_command = "bash"
+        mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
+
+        event = NewWindowEvent(
+            window_id="@8", session_id="uuid-4", window_name="proj", cwd="/tmp"
+        )
+        bot = AsyncMock()
+
+        await _handle_new_window(event, bot)
+
+        mock_detect.assert_called_once_with("bash")
         mock_sm.set_window_provider.assert_not_called()
 
 
