@@ -25,7 +25,6 @@ class TestHooklessCapabilities:
         caps = hookless.capabilities
         assert caps.supports_hook is False
         assert caps.supports_continue is False
-        assert caps.terminal_ui_patterns == ()
 
     def test_invalid_resume_id_raises(self, hookless) -> None:
         with pytest.raises(ValueError, match="Invalid resume_id"):
@@ -52,7 +51,22 @@ class TestCodexCommands:
             assert cmd in names
 
 
+# ── Codex capabilities ───────────────────────────────────────────────────
+
+
+class TestCodexCapabilities:
+    def test_no_terminal_ui_patterns(self) -> None:
+        codex = CodexProvider()
+        assert codex.capabilities.terminal_ui_patterns == ()
+
+
 # ── Gemini-specific ──────────────────────────────────────────────────────
+
+
+class TestGeminiCapabilities:
+    def test_declares_permission_prompt(self) -> None:
+        gemini = GeminiProvider()
+        assert "PermissionPrompt" in gemini.capabilities.terminal_ui_patterns
 
 
 class TestGeminiLaunchArgs:
@@ -60,6 +74,145 @@ class TestGeminiLaunchArgs:
         gemini = GeminiProvider()
         result = gemini.make_launch_args(resume_id="abc-123")
         assert result == "--resume abc-123"
+
+
+class TestGeminiTerminalStatus:
+    """Gemini CLI interactive UI detection via parse_terminal_status."""
+
+    SHELL_PERMISSION_PANE = (
+        "some previous output\n"
+        "\n"
+        "Action Required\n"
+        "? Shell pwd && git branch --show-current && git status -s && ls -F "
+        "[current working directory /Users/alexei/Workspace] "
+        "(Check current directory, git branch, status, and list …\n"
+        "pwd && git branch --show-current && git status -s && ls -F\n"
+        "Allow execution of: 'pwd, git, git, ls'?\n"
+        "● 1. Allow once\n"
+        "  2. Allow for this session\n"
+        "  3. Allow for all future sessions\n"
+        "  4. No, suggest changes (esc\n"
+    )
+
+    WRITE_PERMISSION_PANE = (
+        "✦ I'll create the file now.\n"
+        "\n"
+        "Action Required\n"
+        "? WriteFile /tmp/test.txt (Create test file)\n"
+        "Allow write to: '/tmp/test.txt'?\n"
+        "● 1. Allow once\n"
+        "  2. Allow for this session\n"
+        "  3. Allow for all future sessions\n"
+        "  4. No, suggest changes (esc)\n"
+    )
+
+    def test_detects_shell_permission(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(self.SHELL_PERMISSION_PANE)
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "PermissionPrompt"
+
+    def test_detects_write_permission(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(self.WRITE_PERMISSION_PANE)
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "PermissionPrompt"
+
+    def test_permission_content_includes_options(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(self.SHELL_PERMISSION_PANE)
+        assert status is not None
+        assert "Allow once" in status.raw_text
+        assert "Allow for this session" in status.raw_text
+        assert "Action Required" in status.raw_text
+
+    def test_returns_none_for_non_interactive_pane(self) -> None:
+        gemini = GeminiProvider()
+        pane = "Working on something...\nProcessing files\n"
+        status = gemini.parse_terminal_status(pane)
+        assert status is None
+
+    def test_returns_none_for_normal_output(self) -> None:
+        gemini = GeminiProvider()
+        pane = "\u2726 Here is your answer.\n\nSome normal output text.\n> \n"
+        status = gemini.parse_terminal_status(pane)
+        assert status is None
+
+    def test_returns_none_for_gemini_chrome(self) -> None:
+        gemini = GeminiProvider()
+        pane = (
+            "✦ Here is your answer.\n"
+            "[INSERT] ~/Workspace/ccbot (main)           "
+            "no sandbox (see /docs)           "
+            "/model Auto (Gemini 3) 100% context left | 375.5 MB\n"
+        )
+        status = gemini.parse_terminal_status(pane)
+        assert status is None
+
+    def test_no_interactive_when_bottom_marker_missing(self) -> None:
+        pane = "Action Required\n? Shell ls -la\nAllow execution of: 'ls'?\n"
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(pane)
+        assert status is None
+
+    def test_no_false_positive_from_response_text(self) -> None:
+        pane = (
+            "\u2726 Here's what you need to know:\n"
+            "\n"
+            "Action Required: You must update the config file.\n"
+            "Edit settings.json and set the flag to true.\n"
+            "Then restart the service.\n"
+            "> \n"
+        )
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(pane)
+        assert status is None
+
+
+class TestGeminiPaneTitleStatus:
+    """Gemini CLI pane-title-based state detection."""
+
+    def test_working_title_returns_working_status(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status("some output", pane_title="Working: ✦")
+        assert status is not None
+        assert status.is_interactive is False
+        assert status.display_label == "\u2026working"
+
+    def test_action_required_title_with_matching_content(self) -> None:
+        gemini = GeminiProvider()
+        pane = (
+            "Action Required\n"
+            "? Shell ls\n"
+            "Allow execution of: 'ls'?\n"
+            "● 1. Allow once\n"
+            "  2. No, suggest changes (esc\n"
+        )
+        status = gemini.parse_terminal_status(pane, pane_title="Action Required: ✋")
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "PermissionPrompt"
+
+    def test_action_required_title_without_matching_content(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(
+            "some output", pane_title="Action Required: ✋"
+        )
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "PermissionPrompt"
+
+    def test_ready_title_returns_none(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status("some output", pane_title="Ready: ◇")
+        assert status is None
+
+    def test_empty_pane_title_uses_content_only(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status("normal output\n", pane_title="")
+        assert status is None
 
 
 class TestGeminiCommands:

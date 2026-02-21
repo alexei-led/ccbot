@@ -117,7 +117,12 @@ class ClaudeProvider:
 
         return messages, remaining
 
-    def parse_terminal_status(self, pane_text: str) -> StatusUpdate | None:
+    def parse_terminal_status(
+        self,
+        pane_text: str,
+        *,
+        pane_title: str = "",  # noqa: ARG002
+    ) -> StatusUpdate | None:
         """Parse pane text; interactive UI takes precedence over status line."""
         interactive = extract_interactive_content(pane_text)
         if interactive:

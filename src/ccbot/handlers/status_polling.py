@@ -37,6 +37,7 @@ from telegram.error import BadRequest, TelegramError
 from ..config import config
 from ..providers import get_provider_for_window
 from ..session import session_manager
+from ..session_monitor import get_active_monitor
 from ..tmux_manager import tmux_manager
 from .interactive_ui import (
     clear_interactive_msg,
@@ -81,6 +82,17 @@ _has_seen_status: set[str] = set()
 # Telegram typing action expires after ~5s; we re-send every 4s.
 _TYPING_INTERVAL = 4.0
 _last_typing_sent: dict[tuple[int, int], float] = {}
+
+# Transcript activity heuristic: if transcript was written to within this many
+# seconds, treat the window as active even without a terminal status signal.
+_ACTIVITY_THRESHOLD = 10.0
+
+# Startup timeout: after this many seconds without any status or transcript
+# activity, transition from "starting up" to idle instead of staying green forever.
+_STARTUP_TIMEOUT = 30.0
+_startup_times: dict[
+    str, float
+] = {}  # window_id -> monotonic time first seen without status
 
 
 def is_shell_prompt(pane_current_command: str) -> bool:
@@ -138,11 +150,13 @@ def clear_typing_state(user_id: int, thread_id: int) -> None:
 def clear_seen_status(window_id: str) -> None:
     """Clear startup status tracking for a window (called on cleanup)."""
     _has_seen_status.discard(window_id)
+    _startup_times.pop(window_id, None)
 
 
 def reset_seen_status_state() -> None:
     """Reset all startup status tracking (for testing)."""
     _has_seen_status.clear()
+    _startup_times.clear()
 
 
 def reset_typing_state() -> None:
@@ -247,6 +261,107 @@ async def _check_autoclose_timers(bot: Bot) -> None:
             logger.debug("Failed to auto-close topic thread=%d: %s", thread_id, e)
 
 
+def _check_transcript_activity(window_id: str, now: float) -> bool:
+    """Check if recent transcript writes indicate an active agent.
+
+    Returns True if transcript was written to within _ACTIVITY_THRESHOLD.
+    Side-effect: marks window as "has seen status" and clears startup timer.
+    """
+    session_id = session_manager.get_session_id_for_window(window_id)
+    if not session_id:
+        return False
+
+    mon = get_active_monitor()
+    if not mon:
+        return False
+    last_activity = mon.get_last_activity(session_id)
+    if last_activity and (now - last_activity) < _ACTIVITY_THRESHOLD:
+        _has_seen_status.add(window_id)
+        _startup_times.pop(window_id, None)
+        return True
+    return False
+
+
+async def _transition_to_idle(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int,
+    chat_id: int,
+    display: str,
+    notif_mode: str,
+) -> None:
+    """Transition a window to idle state (emoji, autoclose, typing, status)."""
+    _startup_times.pop(window_id, None)
+    await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+    _clear_autoclose_if_active(user_id, thread_id)
+    _last_typing_sent.pop((user_id, thread_id), None)
+    if notif_mode not in ("muted", "errors_only"):
+        from .callback_data import IDLE_STATUS_TEXT
+
+        await enqueue_status_update(
+            bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
+        )
+
+
+async def _handle_no_status(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int | None,
+    pane_current_command: str,
+    notif_mode: str,
+) -> None:
+    """Handle a window with no provider-detected terminal status.
+
+    Falls back to transcript activity heuristic, then shell/idle/startup detection.
+    """
+    now = time.monotonic()
+    is_active = _check_transcript_activity(window_id, now)
+
+    if is_active:
+        await _send_typing_throttled(bot, user_id, thread_id)
+        if thread_id is not None:
+            chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+            display = session_manager.get_display_name(window_id)
+            await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+            _clear_autoclose_if_active(user_id, thread_id)
+        return
+
+    if thread_id is None:
+        return
+
+    chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+    display = session_manager.get_display_name(window_id)
+
+    if is_shell_prompt(pane_current_command):
+        _startup_times.pop(window_id, None)
+        await update_topic_emoji(bot, chat_id, thread_id, "done", display)
+        _start_autoclose_timer(user_id, thread_id, "done", now)
+        _last_typing_sent.pop((user_id, thread_id), None)
+    elif window_id in _has_seen_status:
+        await _transition_to_idle(
+            bot, user_id, window_id, thread_id, chat_id, display, notif_mode
+        )
+    elif window_id not in _startup_times:
+        # First poll without status — start grace period
+        _startup_times[window_id] = now
+        await _send_typing_throttled(bot, user_id, thread_id)
+        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+        _clear_autoclose_if_active(user_id, thread_id)
+    elif now - _startup_times[window_id] >= _STARTUP_TIMEOUT:
+        # Startup timed out — treat as idle
+        _has_seen_status.add(window_id)
+        await _transition_to_idle(
+            bot, user_id, window_id, thread_id, chat_id, display, notif_mode
+        )
+    else:
+        # Still in startup grace period
+        await _send_typing_throttled(bot, user_id, thread_id)
+        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+        _clear_autoclose_if_active(user_id, thread_id)
+
+
 async def update_status_message(
     bot: Bot,
     user_id: int,
@@ -287,7 +402,11 @@ async def update_status_message(
     should_check_new_ui = True
 
     # Parse terminal status once and reuse the result
-    status = get_provider_for_window(window_id).parse_terminal_status(pane_text)
+    provider = get_provider_for_window(window_id)
+    pane_title = ""
+    if provider.capabilities.uses_pane_title:
+        pane_title = await tmux_manager.get_pane_title(w.window_id)
+    status = provider.parse_terminal_status(pane_text, pane_title=pane_title)
 
     if interactive_window == window_id:
         # User is in interactive mode for THIS window
@@ -317,6 +436,7 @@ async def update_status_message(
 
     if status_line:
         _has_seen_status.add(window_id)
+        _startup_times.pop(window_id, None)
         await _send_typing_throttled(bot, user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
             await enqueue_status_update(
@@ -326,39 +446,16 @@ async def update_status_message(
                 status_line,
                 thread_id=thread_id,
             )
-        # Update topic emoji to active (Claude is working)
+        # Update topic emoji to active (agent is working)
         if thread_id is not None:
             chat_id = session_manager.resolve_chat_id(user_id, thread_id)
             display = session_manager.get_display_name(window_id)
             await update_topic_emoji(bot, chat_id, thread_id, "active", display)
             _clear_autoclose_if_active(user_id, thread_id)
     else:
-        # No status line — check if Claude exited (shell prompt) or just idle
-        if thread_id is not None:
-            chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-            display = session_manager.get_display_name(window_id)
-            if is_shell_prompt(w.pane_current_command):
-                # Claude exited, shell is back
-                await update_topic_emoji(bot, chat_id, thread_id, "done", display)
-                _start_autoclose_timer(user_id, thread_id, "done", time.monotonic())
-                _last_typing_sent.pop((user_id, thread_id), None)
-            elif window_id in _has_seen_status:
-                # Was active before, now idle (spinner disappeared)
-                await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
-                _clear_autoclose_if_active(user_id, thread_id)
-                _last_typing_sent.pop((user_id, thread_id), None)
-                # Show "✓ Ready" status with history buttons
-                if notif_mode not in ("muted", "errors_only"):
-                    from .callback_data import IDLE_STATUS_TEXT
-
-                    await enqueue_status_update(
-                        bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
-                    )
-            else:
-                # Never seen a spinner — still starting up, show as active
-                await _send_typing_throttled(bot, user_id, thread_id)
-                await update_topic_emoji(bot, chat_id, thread_id, "active", display)
-                _clear_autoclose_if_active(user_id, thread_id)
+        await _handle_no_status(
+            bot, user_id, window_id, thread_id, w.pane_current_command, notif_mode
+        )
 
 
 async def _handle_dead_window_notification(

@@ -806,6 +806,10 @@ async def post_init(application: Application) -> None:
     await session_manager.resolve_stale_ids()
 
     monitor = SessionMonitor()
+    # Expose to other modules (status_polling activity heuristic)
+    from ccbot.session_monitor import set_active_monitor
+
+    set_active_monitor(monitor)
 
     async def message_callback(msg: NewMessage) -> None:
         await handle_new_message(msg, application.bot)

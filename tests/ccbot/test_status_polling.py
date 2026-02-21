@@ -1,4 +1,7 @@
-"""Tests for status polling: shell detection, autoclose timers, rename sync."""
+"""Tests for status polling: shell detection, autoclose timers, rename sync,
+activity heuristic, and startup timeout."""
+
+import time
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,19 +12,25 @@ from conftest import make_mock_provider
 from ccbot.handlers.status_polling import (
     _autoclose_timers,
     _check_autoclose_timers,
+    _check_transcript_activity,
     _clear_autoclose_if_active,
+    _has_seen_status,
     _start_autoclose_timer,
+    _startup_times,
     clear_autoclose_timer,
     is_shell_prompt,
     reset_autoclose_state,
+    reset_seen_status_state,
 )
 
 
 @pytest.fixture(autouse=True)
 def _reset():
     reset_autoclose_state()
+    reset_seen_status_state()
     yield
     reset_autoclose_state()
+    reset_seen_status_state()
 
 
 class TestIsShellPrompt:
@@ -161,6 +170,7 @@ class TestWindowRenameSync:
             mock_window.pane_current_command = "node"
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "old-name"
 
@@ -194,6 +204,7 @@ class TestWindowRenameSync:
             mock_window.pane_current_command = "node"
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "myproject"
 
@@ -202,3 +213,144 @@ class TestWindowRenameSync:
 
             mock_sm.set_display_name.assert_not_called()
             mock_rename.assert_not_called()
+
+
+class TestTranscriptActivityHeuristic:
+    def test_active_when_recent_transcript(self) -> None:
+        now = time.monotonic()
+        mock_monitor = MagicMock()
+        mock_monitor.get_last_activity.return_value = now - 5.0
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch(
+                "ccbot.handlers.status_polling.get_active_monitor",
+                return_value=mock_monitor,
+            ),
+        ):
+            mock_sm.get_session_id_for_window.return_value = "sess-123"
+            result = _check_transcript_activity("@0", now)
+        assert result is True
+        assert "@0" in _has_seen_status
+
+    def test_inactive_when_stale_transcript(self) -> None:
+        now = time.monotonic()
+        mock_monitor = MagicMock()
+        mock_monitor.get_last_activity.return_value = now - 20.0
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch(
+                "ccbot.handlers.status_polling.get_active_monitor",
+                return_value=mock_monitor,
+            ),
+        ):
+            mock_sm.get_session_id_for_window.return_value = "sess-123"
+            result = _check_transcript_activity("@0", now)
+        assert result is False
+        assert "@0" not in _has_seen_status
+
+    def test_inactive_when_no_session(self) -> None:
+        now = time.monotonic()
+        with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
+            mock_sm.get_session_id_for_window.return_value = None
+            result = _check_transcript_activity("@0", now)
+        assert result is False
+
+    def test_inactive_when_no_monitor(self) -> None:
+        now = time.monotonic()
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch(
+                "ccbot.handlers.status_polling.get_active_monitor",
+                return_value=None,
+            ),
+        ):
+            mock_sm.get_session_id_for_window.return_value = "sess-123"
+            result = _check_transcript_activity("@0", now)
+        assert result is False
+
+    def test_clears_startup_timer_on_activity(self) -> None:
+        now = time.monotonic()
+        _startup_times["@0"] = now - 15.0
+        mock_monitor = MagicMock()
+        mock_monitor.get_last_activity.return_value = now - 3.0
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch(
+                "ccbot.handlers.status_polling.get_active_monitor",
+                return_value=mock_monitor,
+            ),
+        ):
+            mock_sm.get_session_id_for_window.return_value = "sess-123"
+            result = _check_transcript_activity("@0", now)
+        assert result is True
+        assert "@0" not in _startup_times
+
+
+class TestStartupTimeout:
+    async def test_first_poll_records_startup_time(self) -> None:
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch("ccbot.handlers.status_polling._send_typing_throttled"),
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=False,
+            ),
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 1000.0
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
+        assert "@0" in _startup_times
+
+    async def test_startup_timeout_transitions_to_idle(self) -> None:
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        bot = AsyncMock()
+        _startup_times["@0"] = 1000.0
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji") as mock_emoji,
+            patch("ccbot.handlers.status_polling.enqueue_status_update"),
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=False,
+            ),
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 1000.0 + 31.0
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
+        assert "@0" in _has_seen_status
+        assert "@0" not in _startup_times
+        mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "project")
+
+    async def test_startup_grace_period_sends_typing(self) -> None:
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        bot = AsyncMock()
+        _startup_times["@0"] = 1000.0
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji") as mock_emoji,
+            patch(
+                "ccbot.handlers.status_polling._send_typing_throttled"
+            ) as mock_typing,
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=False,
+            ),
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 1010.0
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
+        mock_typing.assert_called_once_with(bot, 1, 42)
+        mock_emoji.assert_called_once_with(bot, -100, 42, "active", "project")
+        assert "@0" not in _has_seen_status

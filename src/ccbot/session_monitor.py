@@ -14,6 +14,7 @@ Key classes: SessionMonitor, NewMessage, SessionInfo.
 import asyncio
 import json
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Awaitable, Callable
@@ -108,6 +109,12 @@ class SessionMonitor:
         self._last_session_map: dict[str, dict[str, str]] = {}  # window_key -> details
         # In-memory mtime cache for quick file change detection (not persisted)
         self._file_mtimes: dict[str, float] = {}  # session_id -> last_seen_mtime
+        # Transcript activity timestamps for status heuristic (monotonic time)
+        self._last_activity: dict[str, float] = {}  # session_id -> monotonic time
+
+    def get_last_activity(self, session_id: str) -> float | None:
+        """Get monotonic timestamp of last transcript activity for a session."""
+        return self._last_activity.get(session_id)
 
     def set_message_callback(
         self, callback: Callable[[NewMessage], Awaitable[None]]
@@ -328,6 +335,10 @@ class SessionMonitor:
         new_entries = await self._read_new_lines(tracked, file_path, window_id)
         self._file_mtimes[session_id] = current_mtime
 
+        # Record transcript activity for status heuristic
+        if new_entries:
+            self._last_activity[session_id] = time.monotonic()
+
         # Parse new entries using the shared logic, carrying over pending tools
         carry = self._pending_tools.get(session_id, {})
         provider = get_provider_for_window(window_id)
@@ -466,6 +477,7 @@ class SessionMonitor:
                 self.state.remove_session(session_id)
                 self._file_mtimes.pop(session_id, None)
                 self._pending_tools.pop(session_id, None)
+                self._last_activity.pop(session_id, None)
             self.state.save_if_dirty()
 
     async def _detect_and_cleanup_changes(self) -> dict[str, dict[str, str]]:
@@ -509,6 +521,7 @@ class SessionMonitor:
                 self.state.remove_session(session_id)
                 self._file_mtimes.pop(session_id, None)
                 self._pending_tools.pop(session_id, None)
+                self._last_activity.pop(session_id, None)
             self.state.save_if_dirty()
 
         # Detect new windows: set provider from session_map if available, then fire callback
@@ -628,3 +641,19 @@ class SessionMonitor:
             self._task = None
         self.state.save()
         logger.info("Session monitor stopped and state saved")
+
+
+# Module-level holder for the active monitor instance.
+# Set once by bot.py post_init before any polling starts.
+_active_monitor: SessionMonitor | None = None
+
+
+def set_active_monitor(monitor: SessionMonitor) -> None:
+    """Set the active SessionMonitor instance (called by bot.py post_init)."""
+    global _active_monitor  # noqa: PLW0603
+    _active_monitor = monitor
+
+
+def get_active_monitor() -> SessionMonitor | None:
+    """Return the active SessionMonitor instance."""
+    return _active_monitor

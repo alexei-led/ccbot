@@ -236,24 +236,31 @@ class TestParseTranscriptEntries:
 
 class TestParseTerminalStatus:
     def test_empty_returns_none(self, provider: AgentProvider) -> None:
-        assert provider.parse_terminal_status("") is None
+        assert provider.parse_terminal_status("", pane_title="") is None
 
     def test_status_update_fields(self, provider: AgentProvider) -> None:
-        # Use spinner format that works for Claude; Codex/Gemini parse last line
+        # Claude detects spinner format; hookless providers (Codex, Gemini)
+        # return None for non-interactive panes (no spinner support).
         sep = "─" * 30
         pane = f"output\n✻ Reading files\n{sep}\n❯ \n{sep}\n"
-        result = provider.parse_terminal_status(pane)
-        assert result is not None
-        assert isinstance(result, StatusUpdate)
-        assert isinstance(result.raw_text, str)
-        assert isinstance(result.display_label, str)
+        result = provider.parse_terminal_status(pane, pane_title="")
+        if provider.capabilities.name == "claude":
+            assert result is not None
+            assert isinstance(result, StatusUpdate)
+            assert isinstance(result.raw_text, str)
+            assert isinstance(result.display_label, str)
+        else:
+            assert result is None
 
     def test_plain_text_not_interactive(self, provider: AgentProvider) -> None:
         sep = "─" * 30
         pane = f"output\n✻ Reading files\n{sep}\n❯ \n{sep}\n"
-        result = provider.parse_terminal_status(pane)
-        assert result is not None
-        assert result.is_interactive is False
+        result = provider.parse_terminal_status(pane, pane_title="")
+        if provider.capabilities.name == "claude":
+            assert result is not None
+            assert result.is_interactive is False
+        else:
+            assert result is None
 
 
 class TestExtractBashOutput:

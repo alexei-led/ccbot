@@ -153,17 +153,23 @@ def _try_extract(lines: list[str], pattern: UIPattern) -> InteractiveUIContent |
 # ── Public API ───────────────────────────────────────────────────────────
 
 
-def extract_interactive_content(pane_text: str) -> InteractiveUIContent | None:
+def extract_interactive_content(
+    pane_text: str,
+    patterns: list[UIPattern] | None = None,
+) -> InteractiveUIContent | None:
     """Extract content from an interactive UI in terminal output.
 
     Tries each UI pattern in declaration order; first match wins.
     Returns None if no recognizable interactive UI is found.
+
+    ``patterns`` defaults to ``UI_PATTERNS`` (Claude Code).  Providers with
+    different terminal UIs pass their own pattern list.
     """
     if not pane_text:
         return None
 
     lines = pane_text.strip().split("\n")
-    for pattern in UI_PATTERNS:
+    for pattern in patterns or UI_PATTERNS:
         result = _try_extract(lines, pattern)
         if result:
             return result

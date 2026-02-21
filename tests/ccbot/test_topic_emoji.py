@@ -224,6 +224,7 @@ class TestStatusPollingIntegration:
 
             mock_tm.find_window_by_id = AsyncMock(return_value=MagicMock())
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "myproject"
 
@@ -257,6 +258,7 @@ class TestStatusPollingIntegration:
             mock_window.pane_current_command = "node"
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "myproject"
 
@@ -291,6 +293,7 @@ class TestStatusPollingIntegration:
             mock_window.pane_current_command = "node"
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "newproject"
 
@@ -319,6 +322,7 @@ class TestStatusPollingIntegration:
             mock_window.pane_current_command = "zsh"
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_display_name.return_value = "myproject"
 
@@ -346,6 +350,7 @@ class TestStatusPollingIntegration:
 
             mock_tm.find_window_by_id = AsyncMock(return_value=MagicMock())
             mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
 
             bot = AsyncMock()
             await update_status_message(bot, 1, "@0", thread_id=None)

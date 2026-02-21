@@ -9,7 +9,6 @@ Shared helpers:
   - parse_jsonl_line: parse a single JSONL line
   - parse_jsonl_entries: parse a batch of entries into AgentMessages
   - extract_content_blocks: extract text + track tool_use/tool_result
-  - parse_last_line_status: parse terminal pane last line as status
   - extract_bang_output: extract ``!`` command output from pane text
   - is_user_entry: check if entry is a human turn
   - parse_jsonl_history_entry: parse a single entry for history display
@@ -95,24 +94,6 @@ def parse_jsonl_entries(
                 )
             )
     return messages, pending
-
-
-def parse_last_line_status(pane_text: str) -> StatusUpdate | None:
-    """Parse the last non-empty line of pane text as a basic status update.
-
-    MVP implementation for providers whose TUI patterns are not yet
-    characterized — returns the last line as-is without interactive UI
-    detection.
-    """
-    if not pane_text or not pane_text.strip():
-        return None
-    last_line = pane_text.strip().splitlines()[-1].strip()
-    if not last_line:
-        return None
-    return StatusUpdate(
-        raw_text=last_line,
-        display_label=last_line,
-    )
 
 
 def extract_bang_output(pane_text: str, command: str) -> str | None:
@@ -204,8 +185,17 @@ class JsonlProvider:
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         return parse_jsonl_entries(entries, pending_tools)
 
-    def parse_terminal_status(self, pane_text: str) -> StatusUpdate | None:
-        return parse_last_line_status(pane_text)
+    def parse_terminal_status(
+        self,
+        pane_text: str,  # noqa: ARG002
+        *,
+        pane_title: str = "",  # noqa: ARG002
+    ) -> StatusUpdate | None:
+        # Non-Claude CLIs lack spinner-based status lines. Their bottom chrome
+        # (e.g. "[INSERT] ~/path ..." for Gemini, "? for shortcuts ..." for Codex)
+        # is not useful as a status indicator. Subclasses override for interactive
+        # UI detection (see GeminiProvider).
+        return None
 
     def extract_bash_output(self, pane_text: str, command: str) -> str | None:
         return extract_bang_output(pane_text, command)

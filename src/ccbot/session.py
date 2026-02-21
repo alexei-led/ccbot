@@ -656,6 +656,11 @@ class SessionManager:
         if changed:
             self._save_state()
 
+    def get_session_id_for_window(self, window_id: str) -> str | None:
+        """Look up session_id for a window from window_states."""
+        state = self.window_states.get(window_id)
+        return state.session_id if state and state.session_id else None
+
     # --- Window state management ---
 
     def get_window_state(self, window_id: str) -> WindowState:

@@ -102,6 +102,7 @@ class ProviderCapabilities:
     supports_structured_transcript: bool = False
     transcript_format: Literal["jsonl", "plain"] = "jsonl"
     terminal_ui_patterns: tuple[str, ...] = ()
+    uses_pane_title: bool = False  # Provider reads OSC pane title for status
     builtin_commands: tuple[str, ...] = ()
 
 
@@ -157,8 +158,14 @@ class AgentProvider(Protocol):
         """
         ...
 
-    def parse_terminal_status(self, pane_text: str) -> StatusUpdate | None:
+    def parse_terminal_status(
+        self, pane_text: str, *, pane_title: str = ""
+    ) -> StatusUpdate | None:
         """Parse captured pane text into a StatusUpdate.
+
+        Args:
+            pane_text: Captured terminal pane content.
+            pane_title: Terminal title set via OSC escapes (e.g. Gemini CLI).
 
         Returns None if no status line or interactive UI is detected.
         """

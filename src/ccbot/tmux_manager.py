@@ -220,6 +220,39 @@ class TmuxManager:
             logger.exception("Unexpected error capturing pane %s", window_id)
             return None
 
+    async def get_pane_title(self, window_id: str) -> str:
+        """Get the terminal title of a window's active pane.
+
+        Some CLIs (e.g. Gemini) broadcast state via OSC escape sequences
+        that set the terminal title. Returns empty string on failure.
+        """
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "display-message",
+                "-p",
+                "-t",
+                window_id,
+                "#{pane_title}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            if proc.returncode != 0:
+                return ""
+            return stdout.decode("utf-8", errors="replace").strip()
+        except TimeoutError:
+            if proc:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except ProcessLookupError:
+                    pass
+            return ""
+        except OSError:
+            return ""
+
     async def _capture_pane_plain(self, window_id: str) -> str | None:
         """Capture pane as plain text via libtmux."""
 

@@ -444,6 +444,62 @@ class TestCheckForUpdates:
         assert "hello" in msgs[0].text
 
 
+class TestActivityTracking:
+    def test_get_last_activity_returns_none_for_unknown(
+        self, monitor: SessionMonitor
+    ) -> None:
+        assert monitor.get_last_activity("unknown-session") is None
+
+    async def test_get_last_activity_updated_after_new_entries(self, tmp_path) -> None:
+        session_file = tmp_path / "transcript.jsonl"
+        line = (
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}\n'
+        )
+        session_file.write_text(line)
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        tracked = TrackedSession(
+            session_id="sess-act",
+            file_path=str(session_file),
+            last_byte_offset=0,
+        )
+        monitor.state.update_session(tracked)
+
+        new_messages: list = []
+        await monitor._process_session_file(
+            "sess-act", session_file, new_messages, window_id="@1"
+        )
+        last = monitor.get_last_activity("sess-act")
+        assert last is not None
+        assert last > 0
+
+    async def test_get_last_activity_not_updated_without_entries(
+        self, tmp_path
+    ) -> None:
+        session_file = tmp_path / "transcript.jsonl"
+        session_file.write_text("")
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        tracked = TrackedSession(
+            session_id="sess-empty",
+            file_path=str(session_file),
+            last_byte_offset=0,
+        )
+        monitor.state.update_session(tracked)
+
+        new_messages: list = []
+        await monitor._process_session_file(
+            "sess-empty", session_file, new_messages, window_id="@1"
+        )
+        assert monitor.get_last_activity("sess-empty") is None
+
+
 class TestScanProjects:
     def test_scan_projects_sync_reads_index(self, tmp_path) -> None:
         projects_path = tmp_path / "projects"
