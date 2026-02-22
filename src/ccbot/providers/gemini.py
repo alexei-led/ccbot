@@ -25,6 +25,7 @@ from ccbot.providers.base import (
     ContentType,
     MessageRole,
     ProviderCapabilities,
+    RESUME_ID_RE,
     SessionStartEvent,
     StatusUpdate,
 )
@@ -122,6 +123,9 @@ class GeminiProvider(JsonlProvider):
         Continue uses ``--resume latest`` to pick up the most recent session.
         """
         if resume_id:
+            # Allow numeric indices and "latest" in addition to standard IDs
+            if not (resume_id == "latest" or RESUME_ID_RE.match(resume_id)):
+                raise ValueError(f"Invalid resume_id: {resume_id!r}")
             return f"--resume {resume_id}"
         if use_continue:
             return "--resume latest"

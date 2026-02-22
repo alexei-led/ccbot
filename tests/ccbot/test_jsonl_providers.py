@@ -30,14 +30,12 @@ class TestHooklessCapabilities:
         assert caps.supports_continue is True
 
     def test_invalid_resume_id_raises(self, hookless) -> None:
-        # Codex validates resume IDs; Gemini accepts any string (index/latest)
-        if hookless.capabilities.name == "codex":
-            with pytest.raises(ValueError, match="Invalid resume_id"):
-                hookless.make_launch_args(resume_id="abc; rm -rf /")
-        else:
-            # Gemini doesn't validate — accepts anything
-            result = hookless.make_launch_args(resume_id="abc; rm -rf /")
-            assert result  # non-empty
+        with pytest.raises(ValueError, match="Invalid resume_id"):
+            hookless.make_launch_args(resume_id="abc; rm -rf /")
+
+    def test_valid_resume_ids(self, hookless) -> None:
+        assert hookless.make_launch_args(resume_id="abc-123")
+        assert hookless.make_launch_args(resume_id="session_42")
 
 
 # ── Codex-specific ───────────────────────────────────────────────────────

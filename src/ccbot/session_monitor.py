@@ -333,18 +333,29 @@ class SessionMonitor:
         tracked = self.state.get_session(session_id)
 
         if tracked is None:
-            # For new sessions, initialize offset to end of file
-            # to avoid re-processing old messages
+            # For new sessions, initialize offset to skip old messages.
+            # Incremental providers (JSONL) use byte offset; whole-file
+            # providers (Gemini JSON) use message count.
+            provider = get_provider_for_window(window_id)
             try:
                 st = file_path.stat()
                 file_size, current_mtime = st.st_size, st.st_mtime
             except OSError:
                 file_size = 0
                 current_mtime = 0.0
+
+            if provider.capabilities.supports_incremental_read:
+                initial_offset = file_size
+            else:
+                # Whole-file provider: count existing messages to skip them
+                _, initial_offset = await asyncio.to_thread(
+                    provider.read_transcript_file, str(file_path), 0
+                )
+
             tracked = TrackedSession(
                 session_id=session_id,
                 file_path=str(file_path),
-                last_byte_offset=file_size,
+                last_byte_offset=initial_offset,
             )
             self.state.update_session(tracked)
             self._file_mtimes[session_id] = current_mtime
@@ -353,6 +364,8 @@ class SessionMonitor:
 
         # Check mtime and size to see if file has changed.
         # Size check catches writes within the same second (mtime granularity).
+        # For whole-file providers (Gemini), last_byte_offset is a message count
+        # so only mtime is meaningful for change detection.
         try:
             st = file_path.stat()
             current_mtime, current_size = st.st_mtime, st.st_size
@@ -360,8 +373,14 @@ class SessionMonitor:
             return
 
         last_mtime = self._file_mtimes.get(session_id, 0.0)
-        if current_mtime <= last_mtime and current_size <= tracked.last_byte_offset:
-            return
+        provider = get_provider_for_window(window_id)
+        if provider.capabilities.supports_incremental_read:
+            if current_mtime <= last_mtime and current_size <= tracked.last_byte_offset:
+                return
+        else:
+            # Whole-file provider: only mtime is a valid change signal
+            if current_mtime <= last_mtime:
+                return
 
         # File changed, read new content from last offset
         new_entries = await self._read_new_lines(tracked, file_path, window_id)
