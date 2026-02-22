@@ -178,7 +178,7 @@ For persistent operation, run ccbot as a systemd service or under a process mana
 ```bash
 # systemd user service (~/.config/systemd/user/ccbot.service)
 [Unit]
-Description=CCBot - Telegram bridge for Claude Code
+Description=CCBot - Command & Control Bot for AI coding agents
 After=network.target
 
 [Service]

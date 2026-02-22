@@ -44,7 +44,7 @@ class _DefaultToRun(click.Group):
 @click.group(
     cls=_DefaultToRun,
     invoke_without_command=True,
-    help="Telegram bot bridging Telegram topics to Claude Code sessions via tmux.",
+    help="Command & Control Bot — manage AI coding agents from Telegram via tmux.",
 )
 @click.version_option(package_name="ccbot", prog_name="ccbot")
 @click.pass_context

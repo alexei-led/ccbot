@@ -1,7 +1,7 @@
 [project]
 name = "ccbot"
 dynamic = ["version"]
-description = "Telegram bot that bridges Telegram Forum topics to Claude Code sessions via tmux"
+description = "Command & Control Bot — manage AI coding agents from Telegram via tmux"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"

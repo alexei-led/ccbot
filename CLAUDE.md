@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-ccbot — Telegram bot that bridges Telegram Forum topics to Claude Code sessions via tmux windows. Each topic is bound to one tmux window running one Claude Code instance.
+ccbot (Command & Control Bot) — manage AI coding agents from Telegram via tmux. Each Telegram Forum topic is bound to one tmux window running one agent CLI instance (Claude Code, Codex, or Gemini).
 
 Tech stack: Python, python-telegram-bot, tmux, uv.
 
