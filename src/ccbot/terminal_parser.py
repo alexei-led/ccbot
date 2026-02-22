@@ -250,12 +250,14 @@ STATUS_SPINNERS = frozenset(["·", "✻", "✽", "✶", "✳", "✢"])
 _BRAILLE_START = 0x2800
 _BRAILLE_END = 0x28FF
 _NON_SPINNER_RANGES = ((0x2500, 0x257F),)  # box-drawing characters
-_NON_SPINNER_CHARS = frozenset("─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬>|·")
-# Note: · (U+00B7 MIDDLE DOT) is in STATUS_SPINNERS so the fast-path catches it
-# before _NON_SPINNER_CHARS is checked.
+_NON_SPINNER_CHARS = frozenset("─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬>|+<=~")
 
-# Unicode categories that spinner characters typically belong to
-_SPINNER_CATEGORIES = frozenset({"So", "Sm", "Po"})
+# Unicode categories that spinner characters typically belong to.
+# So = Symbol Other (✻, ✽, ✶, ✳, ✢, ☐, ✔, ☒)
+# Sm = Symbol Math (∘, ⊛)
+# Note: Po (Punctuation Other) is excluded — it includes common ASCII chars
+# like !, #, %, @, *, / that would cause false positives.
+_SPINNER_CATEGORIES = frozenset({"So", "Sm"})
 
 
 def is_likely_spinner(char: str) -> bool:
@@ -287,8 +289,8 @@ def parse_status_line(pane_text: str, *, pane_rows: int | None = None) -> str | 
     """Extract the Claude Code status line from terminal output.
 
     The status line sits above a chrome separator (a line of ``─`` characters).
-    Uses ``find_chrome_boundary()`` to locate the chrome block, then checks
-    the lines immediately above it for a spinner character.
+    Scans from the bottom up for separators, then checks the lines immediately
+    above each separator for a spinner character.
 
     When ``pane_rows`` is provided, the separator scan is limited to the
     bottom 40% of the screen as an optimization.

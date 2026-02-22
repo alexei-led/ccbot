@@ -69,6 +69,26 @@ class TestIsLikelySpinner:
     def test_other_symbol_detected(self):
         assert is_likely_spinner("⚡") is True
 
+    @pytest.mark.parametrize(
+        "char",
+        ["!", "#", "%", "@", "*", "/", "\\", "~", "?", ",", "."],
+        ids=[
+            "bang",
+            "hash",
+            "pct",
+            "at",
+            "star",
+            "slash",
+            "bslash",
+            "tilde",
+            "qmark",
+            "comma",
+            "dot",
+        ],
+    )
+    def test_ascii_punctuation_rejected(self, char: str):
+        assert is_likely_spinner(char) is False
+
 
 # ── parse_status_line ────────────────────────────────────────────────────
 
@@ -572,6 +592,14 @@ class TestParseFromScreen:
 
         screen = self._make_screen(raw)
         assert parse_from_screen(screen) is None
+
+    def test_cursor_at_row_zero(self):
+        from ccbot.screen_buffer import ScreenBuffer
+        from ccbot.terminal_parser import parse_from_screen
+
+        buf = ScreenBuffer(columns=80, rows=5)
+        # Cursor stays at row 0, col 0 — empty screen
+        assert parse_from_screen(buf) is None
 
     def test_ansi_stripped_matches_plain_text(self):
         plain = "  ☐ Option A\n  ☐ Option B\n  Enter to select\n"
