@@ -596,3 +596,102 @@ class TestScanProjects:
         )
         result = monitor._scan_projects_sync({"/tmp/something"})
         assert result == []
+
+
+class TestWholeFileTranscriptReading:
+    """Test _read_new_lines delegation for providers with supports_incremental_read=False."""
+
+    _GEMINI_TRANSCRIPT = {
+        "sessionId": "g1",
+        "messages": [
+            {"type": "user", "content": "hello"},
+            {"type": "gemini", "content": "hi there"},
+            {"type": "user", "content": "thanks"},
+        ],
+    }
+
+    async def test_gemini_reads_whole_file(self, tmp_path) -> None:
+        transcript = tmp_path / "transcript.json"
+        transcript.write_text(json.dumps(self._GEMINI_TRANSCRIPT))
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        tracked = TrackedSession(
+            session_id="g1",
+            file_path=str(transcript),
+            last_byte_offset=0,
+        )
+
+        with patch(
+            "ccbot.session_monitor.get_provider_for_window",
+            return_value=_make_gemini_provider(),
+        ):
+            entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
+
+        assert len(entries) == 3
+        assert tracked.last_byte_offset == 3
+
+    async def test_gemini_incremental_after_update(self, tmp_path) -> None:
+        transcript = tmp_path / "transcript.json"
+        data = dict(self._GEMINI_TRANSCRIPT)
+        data["messages"] = list(data["messages"][:2])
+        transcript.write_text(json.dumps(data))
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        tracked = TrackedSession(
+            session_id="g1",
+            file_path=str(transcript),
+            last_byte_offset=2,
+        )
+
+        data["messages"] = list(self._GEMINI_TRANSCRIPT["messages"])
+        transcript.write_text(json.dumps(data))
+
+        with patch(
+            "ccbot.session_monitor.get_provider_for_window",
+            return_value=_make_gemini_provider(),
+        ):
+            entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
+
+        assert len(entries) == 1
+        assert entries[0]["content"] == "thanks"
+        assert tracked.last_byte_offset == 3
+
+    async def test_gemini_end_to_end_process_session(self, tmp_path) -> None:
+        transcript = tmp_path / "transcript.json"
+        transcript.write_text(json.dumps(self._GEMINI_TRANSCRIPT))
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        tracked = TrackedSession(
+            session_id="g1",
+            file_path=str(transcript),
+            last_byte_offset=0,
+        )
+        monitor.state.update_session(tracked)
+
+        new_messages: list = []
+        with patch(
+            "ccbot.session_monitor.get_provider_for_window",
+            return_value=_make_gemini_provider(),
+        ):
+            await monitor._process_session_file(
+                "g1", transcript, new_messages, window_id="@5"
+            )
+
+        assert len(new_messages) == 3
+        assert new_messages[0].text == "hello"
+        assert new_messages[1].text == "hi there"
+
+
+def _make_gemini_provider():
+    from ccbot.providers.gemini import GeminiProvider
+
+    return GeminiProvider()

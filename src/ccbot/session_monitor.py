@@ -235,10 +235,19 @@ class SessionMonitor:
     ) -> list[dict]:
         """Read new lines from a session file using byte offset for efficiency.
 
+        For providers with ``supports_incremental_read=False`` (e.g. Gemini),
+        delegates to the provider's ``read_transcript_file()`` method which
+        reads the entire JSON file and tracks progress by message count.
+
         Detects file truncation (e.g. after /clear) and resets offset.
         """
         provider = get_provider_for_window(window_id)
-        new_entries = []
+
+        # Whole-file providers (Gemini): read entire JSON, track by message count
+        if not provider.capabilities.supports_incremental_read:
+            return await self._read_whole_file(session, file_path, provider)
+
+        new_entries: list[dict] = []
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 # Get file size to detect truncation
@@ -285,6 +294,29 @@ class SessionMonitor:
         except OSError:
             logger.exception("Error reading session file %s", file_path)
         return new_entries
+
+    async def _read_whole_file(
+        self,
+        session: TrackedSession,
+        file_path: Path,
+        provider: Any,
+    ) -> list[dict]:
+        """Read a whole-file transcript (e.g. Gemini JSON) via the provider.
+
+        Uses ``last_byte_offset`` as a message count tracker (not a byte offset)
+        since the entire file is re-read each time.
+        """
+        try:
+            new_entries, new_offset = await asyncio.to_thread(
+                provider.read_transcript_file,
+                str(file_path),
+                session.last_byte_offset,
+            )
+            session.last_byte_offset = new_offset
+            return new_entries
+        except OSError:
+            logger.exception("Error reading transcript file %s", file_path)
+            return []
 
     async def _process_session_file(
         self,

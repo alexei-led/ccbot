@@ -112,12 +112,12 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 - Modify: `src/ccbot/providers/gemini.py`
 - Modify: `src/ccbot/session_monitor.py`
 
-- [ ] In `GeminiProvider`, override a new method `read_transcript_file(file_path: Path, last_offset: int) -> tuple[list[dict], int]` that reads the entire JSON file (not line-by-line), parses the top-level object, extracts the `messages` array, and returns only messages newer than what was seen last (tracked by message count, not byte offset)
-- [ ] Add `supports_incremental_read` to `ProviderCapabilities` (default True, set False for Gemini) — the monitor uses this to choose between line-by-line JSONL reading and whole-file JSON reading
-- [ ] In `session_monitor._read_new_lines()`: check `provider.capabilities.supports_incremental_read`; if False, delegate to `provider.read_transcript_file()` instead of the line-by-line loop
-- [ ] Remove the broken `parse_transcript_line()` override in GeminiProvider (the base class version is unused when whole-file reading is active)
-- [ ] Write tests: create a sample Gemini JSON transcript, verify messages are correctly extracted and incremental tracking works (new messages detected after file update)
-- [ ] Run `make check` - must pass
+- [x] In `GeminiProvider`, override a new method `read_transcript_file(file_path: Path, last_offset: int) -> tuple[list[dict], int]` that reads the entire JSON file (not line-by-line), parses the top-level object, extracts the `messages` array, and returns only messages newer than what was seen last (tracked by message count, not byte offset)
+- [x] Add `supports_incremental_read` to `ProviderCapabilities` (default True, set False for Gemini) — the monitor uses this to choose between line-by-line JSONL reading and whole-file JSON reading
+- [x] In `session_monitor._read_new_lines()`: check `provider.capabilities.supports_incremental_read`; if False, delegate to `provider.read_transcript_file()` instead of the line-by-line loop
+- [x] Remove the broken `parse_transcript_line()` override in GeminiProvider (the base class version is unused when whole-file reading is active)
+- [x] Write tests: create a sample Gemini JSON transcript, verify messages are correctly extracted and incremental tracking works (new messages detected after file update)
+- [x] Run `make check` - must pass
 
 ### Task 7: Verify acceptance criteria
 

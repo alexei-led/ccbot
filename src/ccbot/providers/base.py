@@ -100,6 +100,7 @@ class ProviderCapabilities:
     supports_resume: bool = False
     supports_continue: bool = False
     supports_structured_transcript: bool = False
+    supports_incremental_read: bool = True  # False → whole-file JSON (e.g. Gemini)
     transcript_format: Literal["jsonl", "plain"] = "jsonl"
     terminal_ui_patterns: tuple[str, ...] = ()
     uses_pane_title: bool = False  # Provider reads OSC pane title for status
@@ -144,6 +145,19 @@ class AgentProvider(Protocol):
         """Parse a single raw transcript line into a structured dict.
 
         Returns None for empty, invalid, or skipped lines.
+        """
+        ...
+
+    def read_transcript_file(
+        self, file_path: str, last_offset: int
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Read a whole-file transcript and return new entries since last_offset.
+
+        For providers with ``supports_incremental_read=False`` (e.g. Gemini),
+        this reads the entire file as JSON, extracts the messages array, and
+        returns only messages after index ``last_offset``.
+
+        Returns (new_entries, new_offset).
         """
         ...
 

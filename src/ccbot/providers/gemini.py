@@ -101,6 +101,7 @@ class GeminiProvider(JsonlProvider):
         supports_resume=True,
         supports_continue=True,
         supports_structured_transcript=True,
+        supports_incremental_read=False,
         transcript_format="jsonl",
         terminal_ui_patterns=("PermissionPrompt",),
         uses_pane_title=True,
@@ -128,20 +129,31 @@ class GeminiProvider(JsonlProvider):
 
     # ── Gemini-specific transcript parsing ────────────────────────────
 
-    def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
-        """Parse a line from a Gemini transcript.
+    def read_transcript_file(
+        self, file_path: str, last_offset: int
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Read Gemini's single-JSON transcript and return new messages.
 
-        Gemini sessions are single JSON files, not JSONL. When read line-by-line
-        by the monitor (which streams lines), individual lines won't be valid JSON.
-        This method handles both cases gracefully.
+        Gemini transcripts are a single JSON object with a ``messages`` array,
+        not JSONL. ``last_offset`` tracks the number of messages already seen.
+        Returns (new_message_entries, updated_offset).
         """
-        if not line or not line.strip():
-            return None
         try:
-            result = json.loads(line)
-            return result if isinstance(result, dict) else None
-        except json.JSONDecodeError:
-            return None
+            with open(file_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError, OSError:
+            return [], last_offset
+
+        if not isinstance(data, dict):
+            return [], last_offset
+
+        messages = data.get("messages", [])
+        if not isinstance(messages, list):
+            return [], last_offset
+
+        new_entries = messages[last_offset:]
+        new_offset = len(messages)
+        return [m for m in new_entries if isinstance(m, dict)], new_offset
 
     def parse_transcript_entries(
         self,
