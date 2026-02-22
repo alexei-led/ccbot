@@ -1,49 +1,22 @@
-# Fork Information
+# Origin
 
-This project is a maintained fork of [six-ddc/ccbot](https://github.com/six-ddc/ccbot).
+CCBot was originally created by [six-ddc](https://github.com/six-ddc) as a Telegram bridge for Claude Code ([six-ddc/ccbot](https://github.com/six-ddc/ccbot), released February 7, 2026).
 
-## Original Project
+This project started as a fork on February 8, 2026 and has since been developed independently as a standalone project. The codebase has been largely rewritten — the original provided the initial idea and foundation, but the current implementation shares very little code with the upstream.
 
-- **Author**: [six-ddc](https://github.com/six-ddc)
-- **Repository**: https://github.com/six-ddc/ccbot
-- **License**: MIT
+## Why a Separate Project
 
-## Fork Timeline
+The original ccbot was a clean proof-of-concept. I needed more features for my own workflow and wanted to move faster than upstream, so I took it in a different direction:
 
-- **Original release**: February 7, 2026
-- **Fork created**: February 8, 2026
-- **Maintained by**: [Alexei Ledenev](https://github.com/alexei-led)
+- **Multi-provider support** — Claude Code, Codex CLI, and Gemini CLI as interchangeable backends
+- **Topic-only architecture** — 1 topic = 1 tmux window = 1 agent session, no legacy routing
+- **Interactive UI** — inline keyboards for permission prompts, plan approval, and question answering
+- **Recovery flows** — Fresh/Continue/Resume for dead sessions, provider-aware
+- **Per-user message queue** — FIFO ordering, message merging, rate limiting
+- **MarkdownV2 output** — with automatic plain text fallback
+- **1000+ test suite** — with CI enforcement, type checking, and lint rules
+- **Python 3.14** — using modern language features
 
-## Rationale
+## Thanks
 
-This fork is maintained independently to support:
-
-- **Multi-instance deployment** — run multiple bot instances, each bound to a specific Telegram group
-- **Topic-only architecture** — simplified routing with 1 topic = 1 tmux window = 1 Claude session
-- **Interactive UI** — inline keyboards for AskUserQuestion, ExitPlanMode, and Permission prompts
-- **Recovery flows** — Fresh/Continue/Resume options for dead sessions
-- **Quality gates** — comprehensive test suite, type checking, and lint rules
-
-## Key Divergences
-
-- Complete rewrite of session routing (window ID-based instead of window name)
-- Hook-based session tracking replacing manual session management
-- Per-user message queue with FIFO ordering and message merging
-- MarkdownV2 output with automatic fallback
-- Python 3.14 requirement (up from 3.12)
-- 350+ test suite with CI enforcement
-
-## Syncing with Upstream
-
-The upstream remote is configured as `upstream`:
-
-```bash
-# Fetch upstream changes
-git fetch upstream
-
-# Compare branches
-git log --oneline upstream/main..HEAD
-
-# Cherry-pick specific commits if needed
-git cherry-pick <commit-hash>
-```
+Thanks to [six-ddc](https://github.com/six-ddc) for the original idea and the initial implementation that got this started.

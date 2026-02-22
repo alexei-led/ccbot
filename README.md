@@ -12,15 +12,15 @@ Control AI coding agents from your phone. CCBot bridges Telegram to tmux — mon
 
 ## Why CCBot?
 
-Claude Code runs in your terminal. When you step away — commuting, on the couch, or just away from your desk — the session keeps working, but you lose visibility and control.
+AI coding agents run in your terminal. When you step away — commuting, on the couch, or just away from your desk — the session keeps working, but you lose visibility and control.
 
-CCBot fixes this. The key insight: it operates on **tmux**, not the Claude Code SDK. Your Claude Code process stays exactly where it is, in a tmux window on your machine. CCBot reads its output and sends keystrokes to it. This means:
+CCBot fixes this. The key insight: it operates on **tmux**, not any agent's SDK. Your agent process stays exactly where it is, in a tmux window on your machine. CCBot reads its output and sends keystrokes to it. This means:
 
-- **Desktop to phone, mid-conversation** — Claude is working on a refactor? Walk away and keep monitoring from Telegram
+- **Desktop to phone, mid-conversation** — your agent is working on a refactor? Walk away and keep monitoring from Telegram
 - **Phone back to desktop, anytime** — `tmux attach` and you're back in the terminal with full scrollback
-- **Multiple sessions in parallel** — Each Telegram topic maps to a separate tmux window
+- **Multiple sessions in parallel** — Each Telegram topic maps to a separate tmux window, each can run a different agent
 
-Other Telegram bots for Claude Code wrap the SDK to create isolated API sessions that can't be resumed in your terminal. CCBot is different — it's a thin control layer over tmux, so the terminal remains the source of truth.
+Other Telegram bots wrap agent SDKs to create isolated API sessions that can't be resumed in your terminal. CCBot is different — it's a thin control layer over tmux, so the terminal remains the source of truth.
 
 ## How It Works
 
@@ -55,13 +55,13 @@ graph LR
   style W3 fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
 ```
 
-Each Telegram Forum topic binds to one tmux window running one Claude Code instance. Messages you type in the topic are sent as keystrokes to the tmux pane; Claude's output is parsed from session transcripts and delivered back as Telegram messages.
+Each Telegram Forum topic binds to one tmux window running an agent CLI. Messages you type in the topic are sent as keystrokes to the tmux pane; the agent's output is parsed from session transcripts and delivered back as Telegram messages.
 
 ## Features
 
 **Session control**
 
-- Send messages and `/commands` directly to Claude Code (`/clear`, `/compact`, `/cost`, etc.)
+- Send messages and `/commands` directly to your agent (`/clear`, `/compact`, `/cost`, etc.)
 - Interactive prompts (AskUserQuestion, ExitPlanMode, Permission) rendered as inline keyboards
 - Terminal screenshots — capture the current pane as a PNG image
 - Sessions dashboard (`/sessions`) — overview of all sessions with status and kill buttons
@@ -69,7 +69,7 @@ Each Telegram Forum topic binds to one tmux window running one Claude Code insta
 **Real-time monitoring**
 
 - Assistant responses, thinking content, tool use/result pairs, and command output
-- Live status line with spinner text (what Claude is currently doing)
+- Live status line showing what the agent is currently doing
 - MarkdownV2 formatting with automatic plain text fallback
 
 **Session management**
@@ -89,7 +89,7 @@ Each Telegram Forum topic binds to one tmux window running one Claude Code insta
 
 **Extensibility**
 
-- Auto-discovers Claude Code skills and custom commands into the Telegram menu
+- Auto-discovers agent skills and custom commands into the Telegram menu
 - Multi-instance support — run separate bots per Telegram group on the same machine
 - Configurable via environment variables
 
@@ -146,9 +146,9 @@ Open your Telegram group, create a new topic, send a message — a directory bro
 
 See **[docs/guides.md](docs/guides.md)** for CLI reference, configuration, upgrading, multi-instance setup, session recovery, and more.
 
-## Credits
+## Acknowledgments
 
-CCBot is a maintained fork of [ccbot](https://github.com/six-ddc/ccbot) by [six-ddc](https://github.com/six-ddc). See [FORK.md](FORK.md) for the fork history and divergences.
+CCBot started as a fork of [ccbot](https://github.com/six-ddc/ccbot) by [six-ddc](https://github.com/six-ddc), who created the original Telegram-to-Claude-Code bridge. This project has since been rewritten and developed independently with multi-provider support, topic-based architecture, interactive UI, and a comprehensive test suite. Thanks to six-ddc for the initial idea and implementation.
 
 ## License
 
