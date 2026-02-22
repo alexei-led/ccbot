@@ -51,7 +51,7 @@ class ScreenBuffer:
         return self._screen.cursor.x
 
     def get_line(self, row: int) -> str:
-        """Get a single rendered line by row index."""
+        """Get a single rendered line by row index (negative indices rejected)."""
         lines = self._screen.display
         if 0 <= row < len(lines):
             return lines[row].rstrip()
@@ -59,6 +59,8 @@ class ScreenBuffer:
 
     def bottom_lines(self, n: int) -> list[str]:
         """Get the last N rendered lines (stripped)."""
+        if n <= 0:
+            return []
         lines = self.display
         return lines[-n:] if n < len(lines) else lines
 

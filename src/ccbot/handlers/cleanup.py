@@ -49,6 +49,7 @@ async def clear_topic_state(
     from .status_polling import (
         clear_autoclose_timer,
         clear_dead_notification,
+        clear_screen_buffer,
         clear_seen_status,
         clear_typing_state,
     )
@@ -58,6 +59,7 @@ async def clear_topic_state(
     clear_typing_state(user_id, thread_id)
     if window_id:
         clear_seen_status(window_id)
+        clear_screen_buffer(window_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)

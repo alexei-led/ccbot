@@ -138,6 +138,33 @@ class TestReset:
         assert buf.cursor_col == 0
 
 
+class TestBottomLinesEdgeCases:
+    def test_zero_returns_empty(self):
+        buf = ScreenBuffer(columns=40, rows=5)
+        buf.feed("a\r\nb\r\nc")
+        assert buf.bottom_lines(0) == []
+
+    def test_negative_returns_empty(self):
+        buf = ScreenBuffer(columns=40, rows=5)
+        buf.feed("a\r\nb")
+        assert buf.bottom_lines(-1) == []
+
+
+class TestSequentialFeeds:
+    def test_incremental_feed_accumulates(self):
+        buf = ScreenBuffer(columns=40, rows=5)
+        buf.feed("hello")
+        buf.feed(" world")
+        assert buf.display[0] == "hello world"
+
+    def test_reset_then_feed(self):
+        buf = ScreenBuffer(columns=40, rows=5)
+        buf.feed("old content")
+        buf.reset()
+        buf.feed("new content")
+        assert buf.display[0] == "new content"
+
+
 class TestRealWorldCapture:
     """Test with content resembling real Claude Code terminal output."""
 
