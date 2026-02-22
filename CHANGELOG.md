@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-02-22
+
+### Added
+
+- Multi-provider support: Claude Code, OpenAI Codex CLI, and Google Gemini CLI as agent backends
+- Per-topic provider selection via directory browser (Claude default, Codex, Gemini)
+- Auto-detection of provider from externally created tmux windows
+- Provider-aware recovery UI (Fresh/Continue/Resume adapt to each provider's capabilities)
+- Gemini CLI terminal status detection via pane title and interactive UI patterns
+- Codex and Gemini transcript parsing with provider-specific formats
+- Provider capability matrix gating UX features per-window
+
+### Fixed
+
+- Codex resume syntax corrected to `resume <id>` subcommand (was `exec resume`)
+- Gemini resume accepts index numbers and "latest" (not just UUIDs)
+- Both Codex and Gemini now correctly support Continue (resume last session)
+
 ## [0.2.11] - 2026-02-17
 
 ### Fixed
@@ -74,7 +92,8 @@ Major rewrite as an independent fork of [six-ddc/ccbot](https://github.com/six-d
 
 Initial release by [six-ddc](https://github.com/six-ddc).
 
-[Unreleased]: https://github.com/alexei-led/ccbot/compare/v0.2.11...HEAD
+[Unreleased]: https://github.com/alexei-led/ccbot/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/alexei-led/ccbot/compare/v0.2.11...v1.0.0
 [0.2.11]: https://github.com/alexei-led/ccbot/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/alexei-led/ccbot/compare/v0.2.0...v0.2.10
 [0.2.0]: https://github.com/alexei-led/ccbot/compare/v0.1.0...v0.2.0

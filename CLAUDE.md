@@ -81,15 +81,16 @@ When creating a topic via the directory browser, users can choose the provider (
 
 ### Provider Capability Matrix
 
-| Capability | Claude | Codex | Gemini |
-| ---------- | ------ | ----- | ------ |
-| Hook       | Yes    | No    | No     |
-| Resume     | Yes    | Yes   | Yes    |
-| Continue   | Yes    | No    | No     |
-| Transcript | JSONL  | JSONL | JSONL  |
-| Commands   | Yes    | Yes   | Yes    |
+| Capability       | Claude           | Codex              | Gemini                      |
+| ---------------- | ---------------- | ------------------ | --------------------------- |
+| Hook             | Yes              | No                 | No                          |
+| Resume           | Yes (`--resume`) | Yes (`resume`)     | Yes (`--resume idx/latest`) |
+| Continue         | Yes              | Yes                | Yes                         |
+| Transcript       | JSONL            | JSONL              | JSON (single file)          |
+| Commands         | Yes              | Yes                | Yes                         |
+| Status detection | Spinner parsing  | Activity heuristic | Pane title + interactive UI |
 
-Capabilities gate UX per-window: `/resume` is hidden if the window's provider lacks resume support; recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers.
+Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers. Codex and Gemini have no SessionStart hook — session tracking for these providers requires manual `session_map.json` entries or auto-detection from running processes.
 
 ### Migration Notes
 

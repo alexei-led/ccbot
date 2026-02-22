@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/github/license/alexei-led/ccbot)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Control [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions from your phone. CCBot bridges Telegram to tmux — monitor output, respond to prompts, and manage sessions without touching your computer.
+Control AI coding agents from your phone. CCBot bridges Telegram to tmux — monitor output, respond to prompts, and manage sessions without touching your computer. Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), and [Gemini CLI](https://github.com/google-gemini/gemini-cli).
 
 ## Why CCBot?
 
@@ -34,8 +34,8 @@ graph LR
 
   subgraph machine["🖥️ Your Machine — tmux"]
     W1["⚡ window @0<br>claude ↻ running"]
-    W2["⚡ window @1<br>claude ↻ running"]
-    W3["⚡ window @2<br>claude ↻ running"]
+    W2["⚡ window @1<br>codex ↻ running"]
+    W3["⚡ window @2<br>gemini ↻ running"]
   end
 
   T1 -- "text →" --> W1
@@ -80,6 +80,13 @@ Each Telegram Forum topic binds to one tmux window running one Claude Code insta
 - Message history with paginated browsing (`/history`)
 - Persistent state — bindings and read offsets survive restarts
 
+**Multi-provider support**
+
+- Claude Code (default), OpenAI Codex CLI, and Google Gemini CLI
+- Per-topic provider selection — different topics can use different agents simultaneously
+- Auto-detects provider from externally created tmux windows
+- Provider-aware recovery (Continue/Resume buttons adapt to each provider's capabilities)
+
 **Extensibility**
 
 - Auto-discovers Claude Code skills and custom commands into the Telegram menu
@@ -92,7 +99,7 @@ Each Telegram Forum topic binds to one tmux window running one Claude Code insta
 
 - **Python 3.14+**
 - **tmux** — installed and in PATH
-- **Claude Code** — the `claude` CLI installed and authenticated
+- **At least one agent CLI** — `claude` (default), `codex`, or `gemini` installed and authenticated
 
 ### Install
 
@@ -119,13 +126,13 @@ ALLOWED_USERS=your_telegram_user_id
 
 > Get your user ID from [@userinfobot](https://t.me/userinfobot) on Telegram.
 
-### Install the session hook
+### Install the session hook (Claude Code only)
 
 ```bash
 ccbot hook --install
 ```
 
-This registers a Claude Code `SessionStart` hook so the bot can auto-track which session runs in each tmux window.
+This registers a Claude Code `SessionStart` hook so the bot can auto-track which session runs in each tmux window. Not needed for Codex or Gemini — those providers are auto-detected from running processes.
 
 ### Run
 
@@ -133,7 +140,7 @@ This registers a Claude Code `SessionStart` hook so the bot can auto-track which
 ccbot
 ```
 
-Open your Telegram group, create a new topic, send a message — a directory browser appears. Pick a project directory and you're connected to Claude Code.
+Open your Telegram group, create a new topic, send a message — a directory browser appears. Pick a project directory, choose your agent (Claude, Codex, or Gemini), and you're connected.
 
 ## Documentation
 

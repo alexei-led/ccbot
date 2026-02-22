@@ -26,19 +26,21 @@ ccbot -v                     # Run with debug logging
 
 All settings accept both CLI flags and environment variables. CLI flags take precedence. `TELEGRAM_BOT_TOKEN` is env-only for security (flags are visible in `ps`).
 
-| Variable / Flag                                | Default        | Description                                      |
-| ---------------------------------------------- | -------------- | ------------------------------------------------ |
-| `TELEGRAM_BOT_TOKEN`                           | _(required)_   | Bot token from @BotFather (env only)             |
-| `ALLOWED_USERS` / `--allowed-users`            | _(required)_   | Comma-separated Telegram user IDs                |
-| `CCBOT_DIR` / `--config-dir`                   | `~/.ccbot`     | Config and state directory                       |
-| `TMUX_SESSION_NAME` / `--tmux-session`         | `ccbot`        | tmux session name                                |
-| `CLAUDE_COMMAND` / `--claude-command`          | `claude`       | Command to launch Claude Code                    |
-| `CCBOT_GROUP_ID` / `--group-id`                | _(all groups)_ | Restrict to one Telegram group                   |
-| `CCBOT_INSTANCE_NAME` / `--instance-name`      | hostname       | Display label for this instance                  |
-| `CCBOT_LOG_LEVEL` / `--log-level`              | `INFO`         | Logging level (DEBUG, INFO, WARNING, ERROR)      |
-| `MONITOR_POLL_INTERVAL` / `--monitor-interval` | `2.0`          | Seconds between transcript polls                 |
-| `AUTOCLOSE_DONE_MINUTES` / `--autoclose-done`  | `30`           | Auto-close done topics after N minutes (0=off)   |
-| `AUTOCLOSE_DEAD_MINUTES` / `--autoclose-dead`  | `10`           | Auto-close dead sessions after N minutes (0=off) |
+| Variable / Flag                                 | Default           | Description                                          |
+| ----------------------------------------------- | ----------------- | ---------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`                            | _(required)_      | Bot token from @BotFather (env only)                 |
+| `ALLOWED_USERS` / `--allowed-users`             | _(required)_      | Comma-separated Telegram user IDs                    |
+| `CCBOT_DIR` / `--config-dir`                    | `~/.ccbot`        | Config and state directory                           |
+| `TMUX_SESSION_NAME` / `--tmux-session`          | `ccbot`           | tmux session name                                    |
+| `CLAUDE_COMMAND` / `--claude-command`           | `claude`          | Command to launch Claude Code                        |
+| `CCBOT_PROVIDER` / `--provider`                 | `claude`          | Default agent provider (`claude`, `codex`, `gemini`) |
+| `CCBOT_PROVIDER_COMMAND` / `--provider-command` | _(from provider)_ | Override launch command for the provider             |
+| `CCBOT_GROUP_ID` / `--group-id`                 | _(all groups)_    | Restrict to one Telegram group                       |
+| `CCBOT_INSTANCE_NAME` / `--instance-name`       | hostname          | Display label for this instance                      |
+| `CCBOT_LOG_LEVEL` / `--log-level`               | `INFO`            | Logging level (DEBUG, INFO, WARNING, ERROR)          |
+| `MONITOR_POLL_INTERVAL` / `--monitor-interval`  | `2.0`             | Seconds between transcript polls                     |
+| `AUTOCLOSE_DONE_MINUTES` / `--autoclose-done`   | `30`              | Auto-close done topics after N minutes (0=off)       |
+| `AUTOCLOSE_DEAD_MINUTES` / `--autoclose-dead`   | `10`              | Auto-close dead sessions after N minutes (0=off)     |
 
 ## Auto-Close Behavior
 
@@ -105,21 +107,57 @@ tmux attach -t ccbot
 # Create a new window for your project
 tmux new-window -n myproject -c ~/Code/myproject
 
-# Start Claude Code
-claude
+# Start any supported agent CLI
+claude     # or: codex, gemini
 ```
 
-The window must be in the ccbot tmux session (configurable via `TMUX_SESSION_NAME`). When Claude starts, the SessionStart hook registers it automatically and the bot creates a matching Telegram topic.
+The window must be in the ccbot tmux session (configurable via `TMUX_SESSION_NAME`). For Claude, the SessionStart hook registers it automatically. For Codex and Gemini, CCBot auto-detects the provider from the running process name. In both cases, the bot creates a matching Telegram topic.
 
 This works even on a fresh instance with no existing topic bindings (cold-start).
 
 ## Session Recovery
 
-When a Claude Code session exits or crashes, the bot detects the dead window and offers recovery options via inline buttons:
+When an agent session exits or crashes, the bot detects the dead window and offers recovery options via inline buttons:
 
 - **Fresh** — Kill the old window, create a new one in the same directory
-- **Continue** — Start a new Claude session using `--continue` to resume the last conversation
+- **Continue** — Resume the last conversation (all providers support this)
 - **Resume** — Browse and select a past session to resume from
+
+The buttons shown adapt to each provider's capabilities. All three providers (Claude, Codex, Gemini) support Fresh, Continue, and Resume.
+
+## Provider Support
+
+CCBot supports multiple agent CLI backends. Each Telegram topic can use a different provider — you choose when creating a session via the directory browser.
+
+### Supported Providers
+
+| Provider    | CLI Command | Session Hook        | Status Detection              |
+| ----------- | ----------- | ------------------- | ----------------------------- |
+| Claude Code | `claude`    | Yes (auto-tracking) | Spinner text parsing          |
+| Codex CLI   | `codex`     | No                  | Transcript activity heuristic |
+| Gemini CLI  | `gemini`    | No                  | Pane title + interactive UI   |
+
+### Choosing a Provider
+
+**From Telegram**: When you create a new topic and select a directory, a provider picker appears with Claude (default), Codex, and Gemini options.
+
+**From the terminal**: If you create a tmux window manually and start an agent CLI, CCBot auto-detects the provider from the running process name.
+
+**Default provider**: Set `CCBOT_PROVIDER=codex` (or `gemini`) to change the default. Claude is the default if unset.
+
+### Provider Differences
+
+**Claude Code** has the richest integration — the SessionStart hook enables automatic session tracking, and the bot parses Claude's spinner text for real-time status updates.
+
+**Codex CLI** and **Gemini CLI** lack a session hook, so session tracking relies on auto-detection from running processes. Codex has no terminal UI for permission prompts. Gemini sets pane titles (`Working: ✦`, `Action Required: ✋`, `Ready: ◇`) that CCBot reads for status, and its `@inquirer/select` permission prompts are detected as interactive UI.
+
+### Provider-Specific Commands
+
+Each provider exposes its own slash commands to the Telegram menu. Examples:
+
+- **Claude**: `/clear`, `/compact`, `/cost`, `/doctor`, `/permissions`...
+- **Codex**: `/model`, `/mode`, `/status`, `/diff`, `/compact`, `/mcp`...
+- **Gemini**: `/chat`, `/clear`, `/compress`, `/model`, `/memory`, `/vim`...
 
 ## Data Storage
 
@@ -131,7 +169,7 @@ All state files live in `$CCBOT_DIR` (`~/.ccbot/` by default):
 | `session_map.json`   | Hook-generated window → session mappings                    |
 | `monitor_state.json` | Byte offsets per session (prevents duplicate notifications) |
 
-Claude Code session transcripts are read from `~/.claude/projects/` (read-only). The bot never writes to Claude's data directory.
+Session transcripts are read from provider-specific locations (read-only): `~/.claude/projects/` (Claude), `~/.codex/sessions/` (Codex), `~/.gemini/tmp/` (Gemini). The bot never writes to agent data directories.
 
 ## Running as a Service
 
