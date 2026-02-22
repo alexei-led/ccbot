@@ -121,11 +121,11 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 
 ### Task 7: Verify acceptance criteria
 
-- [ ] Manual test: verify Claude Code spinner detection works with current CC version
-- [ ] Manual test: verify interactive UI detection (AskUserQuestion, ExitPlanMode) works via pyte path
-- [ ] Manual test: if Gemini CLI available, verify transcript monitoring detects new messages
-- [ ] Run `make check` (fmt + lint + typecheck + test)
-- [ ] Verify test coverage meets 80%+
+- [x] Manual test: verify Claude Code spinner detection works with current CC version
+- [x] Manual test: verify interactive UI detection (AskUserQuestion, ExitPlanMode) works via pyte path
+- [x] Manual test: if Gemini CLI available, verify transcript monitoring detects new messages
+- [x] Run `make check` (fmt + lint + typecheck + test)
+- [x] Verify test coverage meets 80%+
 
 ### Task 8: Update documentation
 
