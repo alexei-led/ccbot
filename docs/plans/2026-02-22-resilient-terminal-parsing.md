@@ -35,9 +35,9 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 - Modify: `pyproject.toml` (add `pyte>=0.8.2`)
 - Create: `src/ccbot/screen_buffer.py`
 
-- [ ] Add `pyte>=0.8.2` to `pyproject.toml` dependencies
-- [ ] Run `uv sync` to install
-- [ ] Create `src/ccbot/screen_buffer.py` with a `ScreenBuffer` class that wraps pyte:
+- [x] Add `pyte>=0.8.2` to `pyproject.toml` dependencies
+- [x] Run `uv sync` to install
+- [x] Create `src/ccbot/screen_buffer.py` with a `ScreenBuffer` class that wraps pyte:
   - `__init__(columns: int, rows: int)` — create pyte Screen + Stream
   - `feed(raw_text: str)` — feed captured pane text into pyte stream
   - `display` property — returns list of rendered lines (from `screen.display`)
@@ -46,8 +46,8 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
   - `bottom_lines(n: int)` — get last N lines efficiently
   - `find_separator_rows()` — scan for rows that are all `─` chars (separator detection)
   - `reset()` — clear screen state for reuse
-- [ ] Write tests for ScreenBuffer: feed ANSI text, verify clean rendered output, separator detection, cursor position
-- [ ] Run `make check` - must pass
+- [x] Write tests for ScreenBuffer: feed ANSI text, verify clean rendered output, separator detection, cursor position
+- [x] Run `make check` - must pass
 
 ### Task 2: Version-resilient spinner detection via Unicode categories
 
