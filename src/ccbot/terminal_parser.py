@@ -13,9 +13,15 @@ Key functions: is_interactive_ui(), extract_interactive_content(),
 parse_status_line(), strip_pane_chrome(), extract_bash_output().
 """
 
+from __future__ import annotations
+
 import re
 import unicodedata
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ccbot.screen_buffer import ScreenBuffer
 
 
 @dataclass
@@ -159,7 +165,7 @@ def _try_extract(lines: list[str], pattern: UIPattern) -> InteractiveUIContent |
 
 
 def extract_interactive_content(
-    pane_text: str,
+    pane_text: str | list[str],
     patterns: list[UIPattern] | None = None,
 ) -> InteractiveUIContent | None:
     """Extract content from an interactive UI in terminal output.
@@ -167,18 +173,67 @@ def extract_interactive_content(
     Tries each UI pattern in declaration order; first match wins.
     Returns None if no recognizable interactive UI is found.
 
+    ``pane_text`` can be a raw string (split on newlines) or a pre-split
+    list of lines (e.g. from ScreenBuffer.display).
+
     ``patterns`` defaults to ``UI_PATTERNS`` (Claude Code).  Providers with
     different terminal UIs pass their own pattern list.
     """
     if not pane_text:
         return None
 
-    lines = pane_text.strip().split("\n")
+    lines = pane_text if isinstance(pane_text, list) else pane_text.strip().split("\n")
     for pattern in patterns or UI_PATTERNS:
         result = _try_extract(lines, pattern)
         if result:
             return result
     return None
+
+
+def parse_from_screen(screen: ScreenBuffer) -> InteractiveUIContent | None:
+    """Detect interactive UI content using pyte-rendered screen lines.
+
+    Uses the ScreenBuffer's rendered lines (ANSI-stripped by pyte) and
+    cursor position. Falls back to the same regex patterns used by
+    extract_interactive_content().
+    """
+    lines = screen.display
+    cursor_row = screen.cursor_row
+
+    # Trim trailing empty lines, but don't go past the cursor row
+    end = max(cursor_row + 1, 1)
+    for i in range(len(lines) - 1, cursor_row, -1):
+        if lines[i].strip():
+            end = i + 1
+            break
+
+    active_lines = lines[:end]
+    if not active_lines:
+        return None
+
+    return extract_interactive_content(active_lines)
+
+
+def parse_status_from_screen(screen: ScreenBuffer) -> str | None:
+    """Extract status line using pyte-rendered screen lines and cursor position.
+
+    Uses the ScreenBuffer's clean rendered output for more robust status
+    detection — ANSI escapes are already stripped by pyte, so the spinner
+    character check is more reliable.
+    """
+    lines = screen.display
+
+    # Trim trailing empty lines
+    last_nonempty = len(lines) - 1
+    while last_nonempty >= 0 and not lines[last_nonempty].strip():
+        last_nonempty -= 1
+    if last_nonempty < 0:
+        return None
+
+    active_lines = lines[: last_nonempty + 1]
+
+    # Reuse the existing parse_status_line logic on the joined text
+    return parse_status_line("\n".join(active_lines), pane_rows=screen.rows)
 
 
 def is_interactive_ui(pane_text: str) -> bool:

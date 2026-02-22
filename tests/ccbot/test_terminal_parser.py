@@ -1,6 +1,13 @@
 """Tests for terminal_parser — regex-based detection of Claude Code UI elements."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from ccbot.screen_buffer import ScreenBuffer
 
 from ccbot.terminal_parser import (
     extract_bash_output,
@@ -476,3 +483,176 @@ class TestVariableTerminalSizes:
             "",
         ]
         assert strip_pane_chrome(lines) == ["output"]
+
+
+# ── extract_interactive_content with list[str] ───────────────────────
+
+
+class TestExtractInteractiveContentWithLines:
+    def test_accepts_list_of_lines(self):
+        lines = [
+            "  ☐ Option A",
+            "  ☐ Option B",
+            "  Enter to select",
+        ]
+        result = extract_interactive_content(lines)
+        assert result is not None
+        assert result.name == "AskUserQuestion"
+        assert "Enter to select" in result.content
+
+    def test_empty_list_returns_none(self):
+        assert extract_interactive_content([]) is None
+
+    def test_list_matches_string_result(self):
+        pane = "  ☐ Option A\n  ☐ Option B\n  Enter to select\n"
+        lines = ["  ☐ Option A", "  ☐ Option B", "  Enter to select"]
+        result_str = extract_interactive_content(pane)
+        result_list = extract_interactive_content(lines)
+        assert result_str is not None
+        assert result_list is not None
+        assert result_str.name == result_list.name
+        # String variant calls .strip() before splitting, so leading whitespace
+        # on the first line may differ — compare the detected pattern name only
+
+
+# ── pyte screen-based parsing ────────────────────────────────────────
+
+
+class TestParseFromScreen:
+    def _make_screen(
+        self, raw: str, columns: int = 80, rows: int = 24
+    ) -> "ScreenBuffer":
+        from ccbot.screen_buffer import ScreenBuffer
+
+        buf = ScreenBuffer(columns=columns, rows=rows)
+        buf.feed(raw)
+        return buf
+
+    def test_detects_ask_user_question(self):
+        raw = "  \x1b[1m☐ Option A\x1b[0m\r\n  ☐ Option B\r\n  Enter to select"
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_from_screen(screen)
+        assert result is not None
+        assert result.name == "AskUserQuestion"
+        assert "Enter to select" in result.content
+
+    def test_detects_exit_plan_mode(self):
+        raw = (
+            "  Would you like to proceed?\r\n"
+            "  \x1b[36m─────────────────────────────────\x1b[0m\r\n"
+            "  Yes     No\r\n"
+            "  ─────────────────────────────────\r\n"
+            "  ctrl-g to edit in vim"
+        )
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_from_screen(screen)
+        assert result is not None
+        assert result.name == "ExitPlanMode"
+
+    def test_detects_permission_prompt(self):
+        raw = (
+            "  Do you want to proceed?\r\n"
+            "  \x1b[33mSome permission details\x1b[0m\r\n"
+            "  Esc to cancel"
+        )
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_from_screen(screen)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+
+    def test_no_ui_returns_none(self):
+        raw = "$ echo hello\r\nhello\r\n$ "
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        assert parse_from_screen(screen) is None
+
+    def test_ansi_stripped_matches_plain_text(self):
+        plain = "  ☐ Option A\n  ☐ Option B\n  Enter to select\n"
+        ansi = (
+            "  \x1b[1;32m☐ Option A\x1b[0m\r\n"
+            "  \x1b[34m☐ Option B\x1b[0m\r\n"
+            "  Enter to select"
+        )
+        from ccbot.terminal_parser import parse_from_screen
+
+        plain_result = extract_interactive_content(plain)
+        screen = self._make_screen(ansi)
+        screen_result = parse_from_screen(screen)
+        assert plain_result is not None
+        assert screen_result is not None
+        assert plain_result.name == screen_result.name
+
+
+class TestParseStatusFromScreen:
+    def _make_screen(
+        self, raw: str, columns: int = 80, rows: int = 24
+    ) -> "ScreenBuffer":
+        from ccbot.screen_buffer import ScreenBuffer
+
+        buf = ScreenBuffer(columns=columns, rows=rows)
+        buf.feed(raw)
+        return buf
+
+    def test_detects_spinner_status(self):
+        sep = "─" * 30
+        raw = (
+            "some output\r\n"
+            "\x1b[36m✻ Reading file\x1b[0m\r\n"
+            f"{sep}\r\n"
+            "❯ \r\n"
+            f"{sep}\r\n"
+            "  \x1b[90m[Opus 4.6]\x1b[0m Context: 34%"
+        )
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_status_from_screen(screen)
+        assert result == "Reading file"
+
+    def test_braille_spinner_via_screen(self):
+        sep = "─" * 30
+        raw = f"output\r\n⠋ Loading modules\r\n{sep}\r\n❯ "
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_status_from_screen(screen)
+        assert result == "Loading modules"
+
+    def test_no_status_returns_none(self):
+        raw = "just normal text\r\nno spinners here"
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = self._make_screen(raw)
+        assert parse_status_from_screen(screen) is None
+
+    def test_empty_screen_returns_none(self):
+        from ccbot.screen_buffer import ScreenBuffer
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = ScreenBuffer(columns=80, rows=24)
+        assert parse_status_from_screen(screen) is None
+
+    def test_matches_regex_result(self):
+        sep = "─" * 30
+        plain = f"output\n✻ Working on task\n{sep}\n❯ \n{sep}\n  status"
+        ansi = (
+            "output\r\n"
+            "\x1b[36m✻ Working on task\x1b[0m\r\n"
+            f"{sep}\r\n"
+            "❯ \r\n"
+            f"{sep}\r\n"
+            "  \x1b[90mstatus\x1b[0m"
+        )
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        regex_result = parse_status_line(plain)
+        screen = self._make_screen(ansi)
+        screen_result = parse_status_from_screen(screen)
+        assert regex_result == screen_result == "Working on task"

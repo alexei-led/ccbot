@@ -82,14 +82,14 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 - Modify: `src/ccbot/terminal_parser.py`
 - Modify: `src/ccbot/screen_buffer.py`
 
-- [ ] Add `parse_from_screen(screen: ScreenBuffer) -> InteractiveUIContent | None` to `terminal_parser.py` that uses the ScreenBuffer to extract interactive UI content:
+- [x] Add `parse_from_screen(screen: ScreenBuffer) -> InteractiveUIContent | None` to `terminal_parser.py` that uses the ScreenBuffer to extract interactive UI content:
   - Uses rendered lines from `screen.display` (ANSI-stripped by pyte)
   - Uses cursor position to identify the input/prompt area
   - Falls back to existing `extract_interactive_content()` regex patterns on the rendered lines
-- [ ] Add `parse_status_from_screen(screen: ScreenBuffer) -> str | None` that uses rendered lines + cursor position for more robust status line detection
-- [ ] Update `extract_interactive_content()` to accept `list[str]` (lines) as an alternative to raw `pane_text` string — allows callers to pass pyte-rendered lines directly
-- [ ] Write tests: feed real Claude Code pane captures (with ANSI escapes) through pyte, verify UI detection matches regex-only results
-- [ ] Run `make check` - must pass
+- [x] Add `parse_status_from_screen(screen: ScreenBuffer) -> str | None` that uses rendered lines + cursor position for more robust status line detection
+- [x] Update `extract_interactive_content()` to accept `list[str]` (lines) as an alternative to raw `pane_text` string — allows callers to pass pyte-rendered lines directly
+- [x] Write tests: feed real Claude Code pane captures (with ANSI escapes) through pyte, verify UI detection matches regex-only results
+- [x] Run `make check` - must pass
 
 ### Task 5: Integrate pyte into status polling pipeline
 
