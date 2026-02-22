@@ -7,9 +7,60 @@ from ccbot.terminal_parser import (
     extract_interactive_content,
     format_status_display,
     is_interactive_ui,
+    is_likely_spinner,
     parse_status_line,
     strip_pane_chrome,
 )
+
+# ── is_likely_spinner ────────────────────────────────────────────────────
+
+
+class TestIsLikelySpinner:
+    @pytest.mark.parametrize(
+        "char",
+        ["·", "✻", "✽", "✶", "✳", "✢"],
+        ids=[
+            "middle_dot",
+            "heavy_asterisk",
+            "heavy_teardrop",
+            "six_star",
+            "eight_star",
+            "cross",
+        ],
+    )
+    def test_known_spinners(self, char: str):
+        assert is_likely_spinner(char) is True
+
+    @pytest.mark.parametrize(
+        "char",
+        ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+        ids=[f"braille_{i}" for i in range(10)],
+    )
+    def test_braille_spinners(self, char: str):
+        assert is_likely_spinner(char) is True
+
+    @pytest.mark.parametrize(
+        "char",
+        ["─", "│", "┌", "┐", ">", "|"],
+        ids=["h_line", "v_line", "corner_tl", "corner_tr", "gt", "pipe"],
+    )
+    def test_non_spinners_box_drawing(self, char: str):
+        assert is_likely_spinner(char) is False
+
+    @pytest.mark.parametrize(
+        "char",
+        ["A", "z", "0", " ", ""],
+        ids=["upper_a", "lower_z", "digit", "space", "empty"],
+    )
+    def test_non_spinners_common(self, char: str):
+        assert is_likely_spinner(char) is False
+
+    def test_math_symbol_detected(self):
+        assert is_likely_spinner("∑") is True
+
+    def test_other_symbol_detected(self):
+        assert is_likely_spinner("⚡") is True
+
 
 # ── parse_status_line ────────────────────────────────────────────────────
 
@@ -32,6 +83,18 @@ class TestParseStatusLine:
     def test_spinner_chars(self, spinner: str, rest: str, expected: str):
         pane = f"some output\n{spinner}{rest}\n{_SEPARATOR}\n"
         assert parse_status_line(pane) == expected
+
+    @pytest.mark.parametrize(
+        ("spinner", "text"),
+        [
+            ("⠋", "Loading modules"),
+            ("⠹", "Compiling assets"),
+            ("⠏", "Fetching data"),
+        ],
+    )
+    def test_braille_spinners_detected(self, spinner: str, text: str):
+        pane = f"some output\n{spinner} {text}\n{_SEPARATOR}\n"
+        assert parse_status_line(pane) == text
 
     @pytest.mark.parametrize(
         "pane",

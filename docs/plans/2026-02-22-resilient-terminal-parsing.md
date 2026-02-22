@@ -55,11 +55,11 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 
 - Modify: `src/ccbot/terminal_parser.py`
 
-- [ ] Add `is_likely_spinner(char: str) -> bool` function using `unicodedata.category()`: match Symbol Other (So), Symbol Math (Sm), Punctuation Other (Po), and Braille Patterns — but exclude known non-spinner chars (`─`, `│`, box-drawing range U+2500-U+257F, common text chars)
-- [ ] Keep `STATUS_SPINNERS` frozenset as a fast-path (check frozenset first, fall back to Unicode category)
-- [ ] Update `parse_status_line()` to use `is_likely_spinner()` instead of `candidate[0] in STATUS_SPINNERS`
-- [ ] Write tests: existing spinners still detected, new braille spinners (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) detected, non-spinners (`─`, `>`, letters) rejected
-- [ ] Run `make check` - must pass
+- [x] Add `is_likely_spinner(char: str) -> bool` function using `unicodedata.category()`: match Symbol Other (So), Symbol Math (Sm), Punctuation Other (Po), and Braille Patterns — but exclude known non-spinner chars (`─`, `│`, box-drawing range U+2500-U+257F, common text chars)
+- [x] Keep `STATUS_SPINNERS` frozenset as a fast-path (check frozenset first, fall back to Unicode category)
+- [x] Update `parse_status_line()` to use `is_likely_spinner()` instead of `candidate[0] in STATUS_SPINNERS`
+- [x] Write tests: existing spinners still detected, new braille spinners (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) detected, non-spinners (`─`, `>`, letters) rejected
+- [x] Run `make check` - must pass
 
 ### Task 3: Adaptive separator/chrome detection (no hardcoded line counts)
 

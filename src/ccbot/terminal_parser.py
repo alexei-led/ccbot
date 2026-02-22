@@ -14,6 +14,7 @@ parse_status_line(), strip_pane_chrome(), extract_bash_output().
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -183,8 +184,44 @@ def is_interactive_ui(pane_text: str) -> bool:
 
 # ── Status line parsing ─────────────────────────────────────────────────
 
-# Spinner characters Claude Code uses in its status line
+# Spinner characters Claude Code uses in its status line (fast-path lookup)
 STATUS_SPINNERS = frozenset(["·", "✻", "✽", "✶", "✳", "✢"])
+
+# Box-drawing range U+2500–U+257F and other known non-spinner symbols
+_BRAILLE_START = 0x2800
+_BRAILLE_END = 0x28FF
+_NON_SPINNER_RANGES = ((0x2500, 0x257F),)  # box-drawing characters
+_NON_SPINNER_CHARS = frozenset("─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬>|·")
+# Note: · (U+00B7 MIDDLE DOT) is in STATUS_SPINNERS so the fast-path catches it
+# before _NON_SPINNER_CHARS is checked.
+
+# Unicode categories that spinner characters typically belong to
+_SPINNER_CATEGORIES = frozenset({"So", "Sm", "Po"})
+
+
+def is_likely_spinner(char: str) -> bool:
+    """Check if a character is likely a spinner symbol.
+
+    Uses a two-tier approach:
+    1. Fast-path: check the known STATUS_SPINNERS frozenset
+    2. Fallback: use Unicode category matching (So, Sm, Po, Braille)
+       while excluding box-drawing and other non-spinner characters
+    """
+    if not char:
+        return False
+    if char in STATUS_SPINNERS:
+        return True
+    if char in _NON_SPINNER_CHARS:
+        return False
+    cp = ord(char)
+    for start, end in _NON_SPINNER_RANGES:
+        if start <= cp <= end:
+            return False
+    # Braille Patterns block U+2800–U+28FF
+    if _BRAILLE_START <= cp <= _BRAILLE_END:
+        return True
+    category = unicodedata.category(char)
+    return category in _SPINNER_CATEGORIES
 
 
 def parse_status_line(pane_text: str) -> str | None:
@@ -216,7 +253,7 @@ def parse_status_line(pane_text: str) -> str | None:
                 candidate = lines[j].strip()
                 if not candidate:
                     continue  # skip blank line
-                if candidate[0] in STATUS_SPINNERS:
+                if is_likely_spinner(candidate[0]):
                     return candidate[1:].strip()
                 break  # non-blank, non-spinner → stop looking above this separator
 
