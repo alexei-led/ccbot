@@ -129,6 +129,6 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 
 ### Task 8: Update documentation
 
-- [ ] Update CLAUDE.md if any internal patterns changed (screen_buffer module, provider capabilities)
-- [ ] Update `.claude/rules/architecture.md` to add ScreenBuffer to the system diagram
-- [ ] Move this plan to `docs/plans/completed/`
+- [x] Update CLAUDE.md if any internal patterns changed (screen_buffer module, provider capabilities)
+- [x] Update `.claude/rules/architecture.md` to add ScreenBuffer to the system diagram
+- [x] Move this plan to `docs/plans/completed/`

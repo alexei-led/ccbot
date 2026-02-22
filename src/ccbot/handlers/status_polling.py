@@ -91,9 +91,9 @@ _ACTIVITY_THRESHOLD = 10.0
 # Startup timeout: after this many seconds without any status or transcript
 # activity, transition from "starting up" to idle instead of staying green forever.
 _STARTUP_TIMEOUT = 30.0
-_startup_times: dict[str, float] = (
-    {}
-)  # window_id -> monotonic time first seen without status
+_startup_times: dict[
+    str, float
+] = {}  # window_id -> monotonic time first seen without status
 
 # Per-window pyte ScreenBuffer for ANSI-aware parsing
 _screen_buffers: dict[str, object] = {}  # window_id -> ScreenBuffer
