@@ -105,6 +105,10 @@ _RE_LONG_DASH = re.compile(r"^─{5,}$")
 # Minimum number of "─" characters to recognize a line as a separator
 _MIN_SEPARATOR_WIDTH = 20
 
+# Maximum length of a chrome line (prompt, status bar) between separators.
+# Lines longer than this are considered actual output content.
+_MAX_CHROME_LINE_LENGTH = 80
+
 
 def _shorten_separators(text: str) -> str:
     """Replace lines of 5+ ─ characters with exactly ─────."""
@@ -224,13 +228,15 @@ def is_likely_spinner(char: str) -> bool:
     return category in _SPINNER_CATEGORIES
 
 
-def parse_status_line(pane_text: str) -> str | None:
+def parse_status_line(pane_text: str, *, pane_rows: int | None = None) -> str | None:
     """Extract the Claude Code status line from terminal output.
 
     The status line sits above a chrome separator (a line of ``─`` characters).
-    Claude Code may render two separators (one above and one below the prompt),
-    so we check each separator found in the bottom 15 lines until a spinner is
-    found above one of them.
+    Uses ``find_chrome_boundary()`` to locate the chrome block, then checks
+    the lines immediately above it for a spinner character.
+
+    When ``pane_rows`` is provided, the separator scan is limited to the
+    bottom 40% of the screen as an optimization.
 
     Returns the text after the spinner, or None if no status line found.
     """
@@ -239,23 +245,30 @@ def parse_status_line(pane_text: str) -> str | None:
 
     lines = pane_text.strip().split("\n")
 
-    # Scan separators in the last 15 lines (bottom up).
+    # Determine scan range: either bottom 40% of screen or all lines
+    if pane_rows is not None:
+        scan_limit = max(int(pane_rows * 0.4), 16)
+        scan_start = max(len(lines) - scan_limit, 0)
+    else:
+        scan_start = 0
+
+    # Scan separators from bottom up within the scan range.
     # Claude Code 4.6 renders two separators around the prompt line;
     # the spinner sits above the upper one, possibly with a blank line between.
-    for i in range(len(lines) - 1, max(len(lines) - 16, -1), -1):
-        stripped = lines[i].strip()
-        if len(stripped) >= _MIN_SEPARATOR_WIDTH and all(c == "─" for c in stripped):
-            # Check up to 2 lines above the separator (skip blanks).
-            for offset in (1, 2):
-                j = i - offset
-                if j < 0:
-                    break
-                candidate = lines[j].strip()
-                if not candidate:
-                    continue  # skip blank line
-                if is_likely_spinner(candidate[0]):
-                    return candidate[1:].strip()
-                break  # non-blank, non-spinner → stop looking above this separator
+    for i in range(len(lines) - 1, scan_start - 1, -1):
+        if not _is_separator(lines[i]):
+            continue
+        # Check up to 2 lines above the separator (skip blanks).
+        for offset in (1, 2):
+            j = i - offset
+            if j < scan_start:
+                break
+            candidate = lines[j].strip()
+            if not candidate:
+                continue  # skip blank line
+            if is_likely_spinner(candidate[0]):
+                return candidate[1:].strip()
+            break  # non-blank, non-spinner → stop looking above this separator
 
     return None
 
@@ -322,6 +335,59 @@ def format_status_display(raw_status: str) -> str:
 # ── Pane chrome stripping & bash output extraction ─────────────────────
 
 
+def _is_separator(line: str) -> bool:
+    """Check if a line is a chrome separator (all ─ chars, wide enough)."""
+    stripped = line.strip()
+    return len(stripped) >= _MIN_SEPARATOR_WIDTH and all(c == "─" for c in stripped)
+
+
+def find_chrome_boundary(lines: list[str]) -> int | None:
+    """Find the topmost separator row of Claude Code's bottom chrome.
+
+    Scans from the bottom upward, looking for the first separator that has
+    only chrome content below it (more separators, prompt chars, status bar).
+    Returns the line index of that separator, or None if no chrome found.
+    """
+    if not lines:
+        return None
+
+    # Find all separator indices, scanning from bottom up
+    separator_indices: list[int] = []
+    for i in range(len(lines) - 1, -1, -1):
+        if _is_separator(lines[i]):
+            separator_indices.append(i)
+
+    if not separator_indices:
+        return None
+
+    # The topmost separator is the chrome boundary.
+    # Walk the separators (already sorted bottom-up) and find the one
+    # where everything between consecutive separators is chrome (prompt, status).
+    # The topmost separator in a contiguous chrome block is our boundary.
+    boundary = separator_indices[0]  # start with the bottommost
+
+    for idx in separator_indices[1:]:
+        # Check if the lines between this separator and the current boundary
+        # are all chrome-like (empty, prompt, status bar, or short non-content).
+        gap_is_chrome = True
+        for j in range(idx + 1, boundary):
+            line = lines[j].strip()
+            if not line:
+                continue
+            # Chrome lines: prompt (❯), status bar info, short UI elements
+            # Non-chrome: actual output content (longer meaningful text)
+            # Heuristic: lines in chrome are typically short UI elements
+            if len(line) > _MAX_CHROME_LINE_LENGTH:
+                gap_is_chrome = False
+                break
+        if gap_is_chrome:
+            boundary = idx
+        else:
+            break
+
+    return boundary
+
+
 def strip_pane_chrome(lines: list[str]) -> list[str]:
     """Strip Claude Code's bottom chrome (prompt area + status bar).
 
@@ -333,14 +399,12 @@ def strip_pane_chrome(lines: list[str]) -> list[str]:
           [Opus 4.6] Context: 34%
           ⏵⏵ bypass permissions…
 
-    This function finds the topmost ``────`` separator in the last 10 lines
-    and strips everything from there down.
+    Finds the topmost separator in the bottom chrome block and strips
+    everything from there down.
     """
-    search_start = max(0, len(lines) - 10)
-    for i in range(search_start, len(lines)):
-        stripped = lines[i].strip()
-        if len(stripped) >= _MIN_SEPARATOR_WIDTH and all(c == "─" for c in stripped):
-            return lines[:i]
+    boundary = find_chrome_boundary(lines)
+    if boundary is not None:
+        return lines[:boundary]
     return lines
 
 

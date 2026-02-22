@@ -5,6 +5,7 @@ import pytest
 from ccbot.terminal_parser import (
     extract_bash_output,
     extract_interactive_content,
+    find_chrome_boundary,
     format_status_display,
     is_interactive_ui,
     is_likely_spinner,
@@ -105,14 +106,14 @@ class TestParseStatusLine:
                 f"some output\n· bullet point\nmore text\n{_SEPARATOR}\n",
                 id="spinner_not_above_separator",
             ),
-            pytest.param(
-                f"✻ Doing work\n{_SEPARATOR}\n" + "trailing\n" * 16,
-                id="separator_beyond_15_line_window",
-            ),
         ],
     )
     def test_returns_none(self, pane: str):
         assert parse_status_line(pane) is None
+
+    def test_adaptive_scan_finds_distant_separator(self):
+        pane = f"✻ Doing work\n{_SEPARATOR}\n" + "trailing\n" * 16
+        assert parse_status_line(pane) == "Doing work"
 
     def test_ignores_bullet_points(self):
         pane = (
@@ -282,10 +283,16 @@ class TestStripPaneChrome:
         lines = ["output", "─" * 10, "more output"]
         assert strip_pane_chrome(lines) == lines
 
-    def test_only_searches_last_10_lines(self):
-        # Separator at line 0 with 15 lines total — outside the last-10 window
+    def test_adaptive_scan_finds_distant_separator(self):
+        # Separator at line 0 with 15 content lines — adaptive scan finds it
         lines = ["─" * 30] + [f"line {i}" for i in range(14)]
-        assert strip_pane_chrome(lines) == lines
+        assert strip_pane_chrome(lines) == []
+
+    def test_content_above_separator_preserved(self):
+        content = [f"line {i}" for i in range(20)]
+        chrome = ["─" * 30, "❯", "─" * 30, "  [Opus 4.6] Context: 34%"]
+        lines = content + chrome
+        assert strip_pane_chrome(lines) == content
 
 
 # ── extract_bash_output ─────────────────────────────────────────────────
@@ -387,3 +394,85 @@ class TestFormatStatusDisplay:
 
     def test_fallback_to_full_string(self) -> None:
         assert format_status_display("foo bar testing baz") == "…testing"
+
+
+# ── find_chrome_boundary ──────────────────────────────────────────────
+
+
+class TestFindChromeBoundary:
+    def test_empty_lines(self):
+        assert find_chrome_boundary([]) is None
+
+    def test_no_separator(self):
+        assert find_chrome_boundary(["line 1", "line 2"]) is None
+
+    def test_single_separator(self):
+        lines = ["output", "more output", "─" * 30, "❯"]
+        assert find_chrome_boundary(lines) == 2
+
+    def test_two_separators(self):
+        lines = [
+            "output",
+            "─" * 30,
+            "❯ ",
+            "─" * 30,
+            "  [Opus 4.6] Context: 34%",
+        ]
+        assert find_chrome_boundary(lines) == 1
+
+    def test_separator_far_from_bottom(self):
+        lines = ["output"] * 50 + ["─" * 30, "❯", "─" * 30, "  status"]
+        assert find_chrome_boundary(lines) == 50
+
+    def test_content_separator_not_chrome(self):
+        lines = [
+            "─" * 30,
+            "x" * 100,
+            "─" * 30,
+            "❯",
+        ]
+        # First separator has long content below it, so only second is chrome
+        assert find_chrome_boundary(lines) == 2
+
+
+# ── Adaptive terminal size tests ─────────────────────────────────────
+
+
+class TestVariableTerminalSizes:
+    def _build_pane(self, content_lines: int) -> str:
+        content = [f"line {i}" for i in range(content_lines)]
+        status = "✻ Working on task"
+        sep = "─" * 30
+        chrome = [sep, "❯ ", sep, "  ⎇ main  ✱ Opus 4.6"]
+        return "\n".join(content + [status] + chrome)
+
+    @pytest.mark.parametrize("rows", [24, 50, 100], ids=["24row", "50row", "100row"])
+    def test_status_detected_any_size(self, rows: int):
+        pane = self._build_pane(content_lines=rows - 5)
+        assert parse_status_line(pane) == "Working on task"
+
+    @pytest.mark.parametrize("rows", [24, 50, 100], ids=["24row", "50row", "100row"])
+    def test_chrome_stripped_any_size(self, rows: int):
+        content = [f"line {i}" for i in range(rows - 5)]
+        status = "✻ Working on task"
+        sep = "─" * 30
+        chrome = [sep, "❯ ", sep, "  ⎇ main  ✱ Opus 4.6"]
+        lines = content + [status] + chrome
+        result = strip_pane_chrome(lines)
+        assert result == content + [status]
+
+    def test_pane_rows_optimization(self):
+        pane = self._build_pane(content_lines=80)
+        assert parse_status_line(pane, pane_rows=100) == "Working on task"
+
+    def test_extra_padding_below_separator(self):
+        lines = [
+            "output",
+            "─" * 30,
+            "❯ ",
+            "─" * 30,
+            "  status bar",
+            "",
+            "",
+        ]
+        assert strip_pane_chrome(lines) == ["output"]

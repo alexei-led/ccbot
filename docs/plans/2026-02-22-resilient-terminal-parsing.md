@@ -68,12 +68,12 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 - Modify: `src/ccbot/terminal_parser.py`
 - Modify: `src/ccbot/screen_buffer.py`
 
-- [ ] Add `find_chrome_boundary(lines: list[str]) -> int | None` to `terminal_parser.py` that finds the topmost separator by scanning from the bottom upward (no fixed 10 or 15 line limit — scan all lines, stop at first non-chrome content above a separator)
-- [ ] Update `parse_status_line()` to use `find_chrome_boundary()` instead of the hardcoded `max(len(lines) - 16, -1)` range
-- [ ] Update `strip_pane_chrome()` to use `find_chrome_boundary()` instead of scanning only last 10 lines
-- [ ] Add an optional `pane_rows: int | None = None` parameter to `parse_status_line()` — when provided, use it to limit the separator scan to the bottom 40% of the screen (optimization, not correctness)
-- [ ] Write tests: status detection works with 24-row terminal, 50-row terminal, 100-row terminal; chrome stripping handles extra padding below separators
-- [ ] Run `make check` - must pass
+- [x] Add `find_chrome_boundary(lines: list[str]) -> int | None` to `terminal_parser.py` that finds the topmost separator by scanning from the bottom upward (no fixed 10 or 15 line limit — scan all lines, stop at first non-chrome content above a separator)
+- [x] Update `parse_status_line()` to use `find_chrome_boundary()` instead of the hardcoded `max(len(lines) - 16, -1)` range
+- [x] Update `strip_pane_chrome()` to use `find_chrome_boundary()` instead of scanning only last 10 lines
+- [x] Add an optional `pane_rows: int | None = None` parameter to `parse_status_line()` — when provided, use it to limit the separator scan to the bottom 40% of the screen (optimization, not correctness)
+- [x] Write tests: status detection works with 24-row terminal, 50-row terminal, 100-row terminal; chrome stripping handles extra padding below separators
+- [x] Run `make check` - must pass
 
 ### Task 4: pyte-based screen parsing for interactive UI detection
 
