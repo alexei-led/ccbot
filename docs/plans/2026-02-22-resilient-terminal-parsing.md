@@ -98,12 +98,12 @@ Replace fragile regex-based terminal screen scraping with pyte (VT100 terminal e
 - Modify: `src/ccbot/handlers/status_polling.py`
 - Modify: `src/ccbot/tmux_manager.py`
 
-- [ ] Add `capture_pane_raw(window_id: str) -> tuple[str, int, int]` to TmuxManager that returns `(raw_text_with_escapes, columns, rows)` using libtmux's `capture_pane` with escape sequences enabled and pane dimension query
-- [ ] In `status_polling.py`, maintain a `dict[str, ScreenBuffer]` keyed by window_id — one ScreenBuffer per tracked window
-- [ ] When polling, use `capture_pane_raw()` to get raw text, feed it into the per-window ScreenBuffer, then call `parse_status_from_screen()` and `parse_from_screen()`
-- [ ] Fall back to current regex-based parsing if pyte parsing returns None (defense in depth)
-- [ ] Write tests: mock TmuxManager to return raw capture with ANSI, verify ScreenBuffer correctly feeds to status/UI parsing
-- [ ] Run `make check` - must pass
+- [x] Add `capture_pane_raw(window_id: str) -> tuple[str, int, int]` to TmuxManager that returns `(raw_text_with_escapes, columns, rows)` using libtmux's `capture_pane` with escape sequences enabled and pane dimension query
+- [x] In `status_polling.py`, maintain a `dict[str, ScreenBuffer]` keyed by window_id — one ScreenBuffer per tracked window
+- [x] When polling, use `capture_pane_raw()` to get raw text, feed it into the per-window ScreenBuffer, then call `parse_status_from_screen()` and `parse_from_screen()`
+- [x] Fall back to current regex-based parsing if pyte parsing returns None (defense in depth)
+- [x] Write tests: mock TmuxManager to return raw capture with ANSI, verify ScreenBuffer correctly feeds to status/UI parsing
+- [x] Run `make check` - must pass
 
 ### Task 6: Fix Gemini single-JSON transcript parsing
 

@@ -354,3 +354,179 @@ class TestStartupTimeout:
         mock_typing.assert_called_once_with(bot, 1, 42)
         mock_emoji.assert_called_once_with(bot, -100, 42, "active", "project")
         assert "@0" not in _has_seen_status
+
+
+class TestParseWithPyte:
+    """Tests for pyte-based screen parsing integration."""
+
+    def setup_method(self) -> None:
+        from ccbot.handlers.status_polling import reset_screen_buffer_state
+
+        reset_screen_buffer_state()
+
+    def teardown_method(self) -> None:
+        from ccbot.handlers.status_polling import reset_screen_buffer_state
+
+        reset_screen_buffer_state()
+
+    def test_detects_spinner_status(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        sep = "─" * 30
+        pane_text = f"Some output\n✻ Reading file src/main.py\n{sep}\n"
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.raw_text == "Reading file src/main.py"
+        assert result.display_label == "…reading"
+        assert result.is_interactive is False
+
+    def test_detects_braille_spinner(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        sep = "─" * 30
+        pane_text = f"Output\n⠋ Thinking about things\n{sep}\n"
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.raw_text == "Thinking about things"
+        assert result.is_interactive is False
+
+    def test_detects_interactive_ui(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        pane_text = (
+            "  Would you like to proceed?\n"
+            "  ─────────────────────────────────\n"
+            "  Yes     No\n"
+            "  ─────────────────────────────────\n"
+            "  ctrl-g to edit in vim\n"
+        )
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.is_interactive is True
+        assert result.ui_type == "ExitPlanMode"
+
+    def test_returns_none_for_plain_text(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        pane_text = "$ echo hello\nhello\n$\n"
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is None
+
+    def test_screen_buffer_cached_per_window(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte, _screen_buffers
+
+        sep = "─" * 30
+        pane_text = f"Output\n✻ Working\n{sep}\n"
+        _parse_with_pyte("@0", pane_text)
+        assert "@0" in _screen_buffers
+
+        _parse_with_pyte("@1", pane_text)
+        assert "@1" in _screen_buffers
+        assert "@0" in _screen_buffers
+
+    def test_interactive_takes_precedence_over_status(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        sep = "─" * 30
+        pane_text = (
+            f"✻ Working on task\n{sep}\n"
+            "  Do you want to proceed?\n"
+            "  Allow write to /tmp/foo\n"
+            "  Esc to cancel\n"
+        )
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.is_interactive is True
+        assert result.ui_type == "PermissionPrompt"
+
+
+class TestPyteFallbackInUpdateStatus:
+    """Tests that update_status_message falls back to regex when pyte returns None."""
+
+    async def test_falls_back_to_provider_when_pyte_returns_none(self) -> None:
+        with (
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch("ccbot.handlers.status_polling.enqueue_status_update"),
+            patch(
+                "ccbot.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.get_provider_for_window",
+                return_value=make_mock_provider(has_status=True),
+            ) as mock_get_provider,
+            patch(
+                "ccbot.handlers.status_polling._parse_with_pyte",
+                return_value=None,
+            ),
+        ):
+            from ccbot.handlers.status_polling import update_status_message
+
+            mock_window = MagicMock()
+            mock_window.window_id = "@0"
+            mock_window.window_name = "project"
+            mock_window.pane_current_command = "node"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_notification_mode.return_value = "normal"
+
+            bot = AsyncMock()
+            await update_status_message(bot, 1, "@0", thread_id=42)
+
+            # Provider regex parsing was called as fallback
+            mock_get_provider.return_value.parse_terminal_status.assert_called_once()
+
+    async def test_uses_pyte_result_when_available(self) -> None:
+        from ccbot.providers.base import StatusUpdate
+
+        pyte_status = StatusUpdate(
+            raw_text="Reading file",
+            display_label="…reading",
+        )
+        with (
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+            patch(
+                "ccbot.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.get_provider_for_window",
+                return_value=make_mock_provider(has_status=True),
+            ) as mock_get_provider,
+            patch(
+                "ccbot.handlers.status_polling._parse_with_pyte",
+                return_value=pyte_status,
+            ),
+        ):
+            from ccbot.handlers.status_polling import update_status_message
+
+            mock_window = MagicMock()
+            mock_window.window_id = "@0"
+            mock_window.window_name = "project"
+            mock_window.pane_current_command = "node"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_notification_mode.return_value = "normal"
+
+            bot = AsyncMock()
+            await update_status_message(bot, 1, "@0", thread_id=42)
+
+            # Provider regex parsing was NOT called (pyte succeeded)
+            mock_get_provider.return_value.parse_terminal_status.assert_not_called()
+            # Status was enqueued using pyte result
+            mock_enqueue.assert_called_once()
+            call_args = mock_enqueue.call_args
+            assert call_args[0][3] == "…reading"

@@ -12,6 +12,7 @@ Key class: TmuxManager (singleton instantiated as `tmux_manager`).
 """
 
 import asyncio
+import contextlib
 import logging
 import subprocess
 from dataclasses import dataclass
@@ -182,6 +183,52 @@ class TmuxManager:
             return await self._capture_pane_ansi(window_id)
 
         return await self._capture_pane_plain(window_id)
+
+    async def capture_pane_raw(self, window_id: str) -> tuple[str, int, int] | None:
+        """Capture pane text with ANSI escapes and pane dimensions.
+
+        Returns (raw_text, columns, rows) or None on failure. The raw text
+        includes ANSI escape sequences suitable for feeding into pyte.
+        """
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            # Get dimensions and capture in one shell command
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "display-message",
+                "-p",
+                "-t",
+                window_id,
+                "#{pane_width}:#{pane_height}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            if proc.returncode != 0:
+                logger.warning(
+                    "Failed to get pane dimensions %s: %s",
+                    window_id,
+                    stderr.decode("utf-8", errors="replace"),
+                )
+                return None
+            dims = stdout.decode("utf-8", errors="replace").strip()
+            try:
+                cols_str, rows_str = dims.split(":")
+            except ValueError:
+                return None
+            columns, rows = int(cols_str), int(rows_str)
+
+            # Capture with ANSI escapes
+            text = await self._capture_pane_ansi(window_id)
+            if text is None:
+                return None
+            return (text, columns, rows)
+        except TimeoutError, ValueError, OSError:
+            if proc:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                    await proc.wait()
+            return None
 
     async def _capture_pane_ansi(self, window_id: str) -> str | None:
         """Capture pane with ANSI colors via tmux subprocess."""

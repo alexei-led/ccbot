@@ -36,6 +36,7 @@ from telegram.error import BadRequest, TelegramError
 
 from ..config import config
 from ..providers import get_provider_for_window
+from ..providers.base import StatusUpdate
 from ..session import session_manager
 from ..session_monitor import get_active_monitor
 from ..tmux_manager import tmux_manager
@@ -90,9 +91,40 @@ _ACTIVITY_THRESHOLD = 10.0
 # Startup timeout: after this many seconds without any status or transcript
 # activity, transition from "starting up" to idle instead of staying green forever.
 _STARTUP_TIMEOUT = 30.0
-_startup_times: dict[
-    str, float
-] = {}  # window_id -> monotonic time first seen without status
+_startup_times: dict[str, float] = (
+    {}
+)  # window_id -> monotonic time first seen without status
+
+# Per-window pyte ScreenBuffer for ANSI-aware parsing
+_screen_buffers: dict[str, object] = {}  # window_id -> ScreenBuffer
+
+
+def _get_screen_buffer(window_id: str, columns: int, rows: int) -> object:
+    """Get or create a ScreenBuffer for a window, resizing if needed."""
+    from ..screen_buffer import ScreenBuffer
+
+    buf = _screen_buffers.get(window_id)
+    if (
+        buf is None
+        or not isinstance(buf, ScreenBuffer)
+        or buf.columns != columns
+        or buf.rows != rows
+    ):
+        buf = ScreenBuffer(columns=columns, rows=rows)
+        _screen_buffers[window_id] = buf
+    else:
+        buf.reset()
+    return buf
+
+
+def clear_screen_buffer(window_id: str) -> None:
+    """Remove a window's ScreenBuffer (called on cleanup)."""
+    _screen_buffers.pop(window_id, None)
+
+
+def reset_screen_buffer_state() -> None:
+    """Reset all ScreenBuffers (for testing)."""
+    _screen_buffers.clear()
 
 
 def is_shell_prompt(pane_current_command: str) -> bool:
@@ -362,6 +394,49 @@ async def _handle_no_status(
         _clear_autoclose_if_active(user_id, thread_id)
 
 
+def _parse_with_pyte(window_id: str, pane_text: str) -> StatusUpdate | None:
+    """Try pyte-based screen parsing for status and interactive UI detection.
+
+    Feeds the plain pane text into a ScreenBuffer sized for a standard
+    terminal, then uses the screen-based parsers. Returns a StatusUpdate
+    or None if nothing detected.
+    """
+    from ..screen_buffer import ScreenBuffer
+    from ..terminal_parser import (
+        format_status_display,
+        parse_from_screen,
+        parse_status_from_screen,
+    )
+
+    # Use a standard terminal size; pyte needs dimensions to render
+    columns, rows = 200, 50
+    buf = _get_screen_buffer(window_id, columns, rows)
+    if not isinstance(buf, ScreenBuffer):
+        return None
+
+    buf.feed(pane_text)
+
+    # Check interactive UI first (takes precedence)
+    interactive = parse_from_screen(buf)
+    if interactive:
+        return StatusUpdate(
+            raw_text=interactive.content,
+            display_label=interactive.name,
+            is_interactive=True,
+            ui_type=interactive.name,
+        )
+
+    # Check status line
+    raw_status = parse_status_from_screen(buf)
+    if raw_status:
+        return StatusUpdate(
+            raw_text=raw_status,
+            display_label=format_status_display(raw_status),
+        )
+
+    return None
+
+
 async def update_status_message(
     bot: Bot,
     user_id: int,
@@ -401,12 +476,16 @@ async def update_status_message(
     interactive_window = get_interactive_window(user_id, thread_id)
     should_check_new_ui = True
 
-    # Parse terminal status once and reuse the result
-    provider = get_provider_for_window(window_id)
-    pane_title = ""
-    if provider.capabilities.uses_pane_title:
-        pane_title = await tmux_manager.get_pane_title(w.window_id)
-    status = provider.parse_terminal_status(pane_text, pane_title=pane_title)
+    # Parse terminal status: try pyte-based parsing first, fall back to regex
+    status = _parse_with_pyte(window_id, pane_text)
+
+    if status is None:
+        # pyte path returned nothing — fall back to provider regex parsing
+        provider = get_provider_for_window(window_id)
+        pane_title = ""
+        if provider.capabilities.uses_pane_title:
+            pane_title = await tmux_manager.get_pane_title(w.window_id)
+        status = provider.parse_terminal_status(pane_text, pane_title=pane_title)
 
     if interactive_window == window_id:
         # User is in interactive mode for THIS window
