@@ -191,3 +191,14 @@ class TestCheckProviderCommand:
         status, msg = _check_provider_command("codex")
         assert status == "fail"
         assert "codex" in msg
+
+    def test_per_provider_env_override(self, monkeypatch) -> None:
+        from ccbot.doctor_cmd import _check_provider_command
+
+        monkeypatch.setenv("CCBOT_CODEX_COMMAND", "my-codex-wrapper")
+        monkeypatch.setattr(
+            "ccbot.doctor_cmd.shutil.which", lambda _cmd: "/usr/bin/my-codex-wrapper"
+        )
+        status, msg = _check_provider_command("codex")
+        assert status == "pass"
+        assert "my-codex-wrapper" in msg

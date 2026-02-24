@@ -73,28 +73,48 @@
 Provider modules (providers/):
   base.py             ─ AgentProvider protocol, ProviderCapabilities, event types
   registry.py         ─ ProviderRegistry (name→factory map, singleton cache)
+  _jsonl.py           ─ Shared JSONL parsing base class for Codex + Gemini
   claude.py           ─ ClaudeProvider (hook, resume, continue, JSONL transcripts)
-  codex.py            ─ CodexProvider (resume, JSONL transcripts, no hook/continue)
-  gemini.py           ─ GeminiProvider (resume, whole-file JSON transcripts, no hook/continue)
+  codex.py            ─ CodexProvider (resume, continue, JSONL transcripts, no hook)
+  gemini.py           ─ GeminiProvider (resume, continue, whole-file JSON transcripts, no hook)
   __init__.py         ─ get_provider_for_window(), detect_provider_from_command(), get_provider() fallback
 
 Additional modules:
+  cli.py              ─ Click-based CLI entry point (run subcommand + all bot-config flags)
+  config.py           ─ Application configuration singleton (env vars, .env files, defaults)
+  doctor_cmd.py       ─ ccbot doctor [--fix] — validate setup without bot token
+  status_cmd.py       ─ ccbot status — show running state without bot token
   screen_buffer.py    ─ pyte VT100 screen buffer (ANSI→clean lines, separator detection)
   cc_commands.py      ─ CC command discovery (skills, custom commands) + menu registration
   screenshot.py       ─ Terminal text → PNG rendering (ANSI color, font fallback)
-  main.py             ─ CLI entry point
-  utils.py            ─ Shared utilities (ccbot_dir, atomic_write_json)
+  main.py             ─ Application entry point (Click dispatcher, run_bot bootstrap)
+  utils.py            ─ Shared utilities (ccbot_dir, tmux_session_name, atomic_write_json)
 
 Handler modules (handlers/):
+  text_handler.py        ─ Text message routing (UI guards → unbound → dead → forward)
   message_sender.py      ─ safe_reply/safe_edit/safe_send + rate_limit_send
   message_queue.py       ─ Per-user queue + worker (merge, status dedup)
-  status_polling.py      ─ Background status line polling (1s interval)
+  status_polling.py      ─ Background status line polling (1s interval, auto-close logic)
   response_builder.py    ─ Response pagination and formatting
-  interactive_ui.py      ─ AskUserQuestion / ExitPlanMode / Permission UI
+  interactive_ui.py      ─ AskUserQuestion / ExitPlanMode / Permission UI rendering
+  interactive_callbacks.py ─ Callbacks for interactive UI (arrow keys, enter, esc)
   directory_browser.py   ─ Directory selection UI for new topics
+  directory_callbacks.py ─ Callbacks for directory browser (navigate, confirm, provider pick)
+  window_callbacks.py    ─ Window picker callbacks (bind, new, cancel)
+  recovery_callbacks.py  ─ Dead window recovery callbacks (fresh, continue, resume)
+  screenshot_callbacks.py ─ Screenshot refresh, Esc, quick-key callbacks
+  history.py             ─ Message history display with pagination
+  history_callbacks.py   ─ History pagination callbacks (prev/next)
   sessions_dashboard.py  ─ /sessions command: active session overview + kill
-  cleanup.py             ─ Topic state cleanup on close/delete
-  callback_data.py       ─ Callback data constants
+  resume_command.py      ─ /resume command: scan past sessions, paginated picker
+  upgrade.py             ─ /upgrade command: uv tool upgrade + process restart
+  file_handler.py        ─ Photo/document handler (save to .ccbot-uploads/, notify agent)
+  command_history.py     ─ Per-user/per-topic in-memory command recall (max 20)
+  topic_emoji.py         ─ Topic name emoji updates (active/idle/done/dead), debounced
+  cleanup.py             ─ Centralized topic state cleanup on close/delete
+  callback_data.py       ─ CB_* callback data constants for inline keyboard routing
+  callback_helpers.py    ─ Shared helpers (user_owns_window, get_thread_id)
+  user_state.py          ─ context.user_data string key constants
 
 State files (~/.ccbot/ or $CCBOT_DIR/):
   state.json         ─ thread bindings + window states + display names + read offsets

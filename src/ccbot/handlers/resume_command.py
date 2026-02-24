@@ -26,7 +26,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..providers import get_provider, get_provider_for_window
+from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
@@ -244,9 +244,9 @@ async def _create_resume_window(
         get_provider_for_window(old_window_id) if old_window_id else get_provider()
     )
     launch_args = provider.make_launch_args(resume_id=session_id)
-    launch_command = provider.capabilities.launch_command
+    launch_command = resolve_launch_command(provider.capabilities.name)
     success, message, created_wname, created_wid = await tmux_manager.create_window(
-        cwd, claude_args=launch_args, launch_command=launch_command
+        cwd, agent_args=launch_args, launch_command=launch_command
     )
     if success:
         if provider.capabilities.supports_hook:

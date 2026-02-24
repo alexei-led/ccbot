@@ -51,13 +51,17 @@ def _check_tmux() -> tuple[str, str]:
         return _PASS, "tmux found (version unknown)"
 
 
-def _check_provider_command(launch_command: str) -> tuple[str, str]:
+def _check_provider_command(provider_name: str) -> tuple[str, str]:
     """Check provider CLI command availability."""
-    cmd = os.environ.get("CCBOT_PROVIDER_COMMAND", launch_command)
-    path = shutil.which(cmd)
+    from ccbot.providers import resolve_launch_command
+
+    cmd = resolve_launch_command(provider_name)
+    executable = cmd.split()[0]
+    path = shutil.which(executable)
     if path:
-        return _PASS, f"{cmd} found at {path}"
-    return _FAIL, f"'{cmd}' not found in PATH"
+        label = cmd if cmd != executable else executable
+        return _PASS, f"{label} found at {path}"
+    return _FAIL, f"'{executable}' not found in PATH"
 
 
 def _check_tmux_session() -> tuple[str, str]:
@@ -246,7 +250,7 @@ def doctor_main(fix: bool = False) -> None:
     _, _, failed = _run_check(_check_tmux)
     has_failures = has_failures or failed
 
-    _, _, failed = _run_check(lambda: _check_provider_command(caps.launch_command))
+    _, _, failed = _run_check(lambda: _check_provider_command(caps.name))
     has_failures = has_failures or failed
 
     _, _, failed = _run_check(_check_tmux_session)

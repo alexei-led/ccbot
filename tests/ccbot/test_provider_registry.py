@@ -70,7 +70,6 @@ class TestConfigProviderSettings:
 
             cfg = Config()
             assert cfg.provider_name == "claude"
-            assert cfg.provider_launch_command is None
 
     def test_override_provider_via_env(self) -> None:
         env = {
@@ -78,14 +77,62 @@ class TestConfigProviderSettings:
             "ALLOWED_USERS": "123",
             "HOME": "/tmp",
             "CCBOT_PROVIDER": "codex",
-            "CCBOT_PROVIDER_COMMAND": "/usr/local/bin/codex",
         }
         with patch.dict("os.environ", env, clear=True):
             from ccbot.config import Config
 
             cfg = Config()
             assert cfg.provider_name == "codex"
-            assert cfg.provider_launch_command == "/usr/local/bin/codex"
+
+
+# ── resolve_launch_command tests ──────────────────────────────────────────
+
+
+class TestResolveLaunchCommand:
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        from ccbot.providers import _reset_provider
+
+        _reset_provider()
+        yield
+        _reset_provider()
+
+    def test_default_returns_provider_command(self) -> None:
+        from ccbot.providers import resolve_launch_command
+
+        assert resolve_launch_command("claude") == "claude"
+        assert resolve_launch_command("codex") == "codex"
+        assert resolve_launch_command("gemini") == "gemini"
+
+    def test_per_provider_env_override(self, monkeypatch) -> None:
+        from ccbot.providers import resolve_launch_command
+
+        monkeypatch.setenv("CCBOT_CLAUDE_COMMAND", "ce --current")
+        assert resolve_launch_command("claude") == "ce --current"
+        assert resolve_launch_command("codex") == "codex"
+
+    def test_override_does_not_affect_other_providers(self, monkeypatch) -> None:
+        from ccbot.providers import resolve_launch_command
+
+        monkeypatch.setenv("CCBOT_CODEX_COMMAND", "my-codex")
+        assert resolve_launch_command("codex") == "my-codex"
+        assert resolve_launch_command("claude") == "claude"
+        assert resolve_launch_command("gemini") == "gemini"
+
+    def test_unknown_provider_falls_back_to_claude_default(self) -> None:
+        from ccbot.providers import resolve_launch_command
+
+        assert resolve_launch_command("nonexistent") == "claude"
+
+    def test_all_three_providers_independently(self, monkeypatch) -> None:
+        from ccbot.providers import resolve_launch_command
+
+        monkeypatch.setenv("CCBOT_CLAUDE_COMMAND", "ce --current")
+        monkeypatch.setenv("CCBOT_CODEX_COMMAND", "my-codex --flag")
+        monkeypatch.setenv("CCBOT_GEMINI_COMMAND", "/opt/gemini/run")
+        assert resolve_launch_command("claude") == "ce --current"
+        assert resolve_launch_command("codex") == "my-codex --flag"
+        assert resolve_launch_command("gemini") == "/opt/gemini/run"
 
 
 # ── Integration: registry wired together ─────────────────────────────────

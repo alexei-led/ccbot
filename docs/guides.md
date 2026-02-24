@@ -26,21 +26,20 @@ ccbot -v                     # Run with debug logging
 
 All settings accept both CLI flags and environment variables. CLI flags take precedence. `TELEGRAM_BOT_TOKEN` is env-only for security (flags are visible in `ps`).
 
-| Variable / Flag                                 | Default           | Description                                          |
-| ----------------------------------------------- | ----------------- | ---------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`                            | _(required)_      | Bot token from @BotFather (env only)                 |
-| `ALLOWED_USERS` / `--allowed-users`             | _(required)_      | Comma-separated Telegram user IDs                    |
-| `CCBOT_DIR` / `--config-dir`                    | `~/.ccbot`        | Config and state directory                           |
-| `TMUX_SESSION_NAME` / `--tmux-session`          | `ccbot`           | tmux session name                                    |
-| `CLAUDE_COMMAND` / `--claude-command`           | `claude`          | Command to launch Claude Code                        |
-| `CCBOT_PROVIDER` / `--provider`                 | `claude`          | Default agent provider (`claude`, `codex`, `gemini`) |
-| `CCBOT_PROVIDER_COMMAND` / `--provider-command` | _(from provider)_ | Override launch command for the provider             |
-| `CCBOT_GROUP_ID` / `--group-id`                 | _(all groups)_    | Restrict to one Telegram group                       |
-| `CCBOT_INSTANCE_NAME` / `--instance-name`       | hostname          | Display label for this instance                      |
-| `CCBOT_LOG_LEVEL` / `--log-level`               | `INFO`            | Logging level (DEBUG, INFO, WARNING, ERROR)          |
-| `MONITOR_POLL_INTERVAL` / `--monitor-interval`  | `2.0`             | Seconds between transcript polls                     |
-| `AUTOCLOSE_DONE_MINUTES` / `--autoclose-done`   | `30`              | Auto-close done topics after N minutes (0=off)       |
-| `AUTOCLOSE_DEAD_MINUTES` / `--autoclose-dead`   | `10`              | Auto-close dead sessions after N minutes (0=off)     |
+| Variable / Flag                                | Default           | Description                                          |
+| ---------------------------------------------- | ----------------- | ---------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`                           | _(required)_      | Bot token from @BotFather (env only)                 |
+| `ALLOWED_USERS` / `--allowed-users`            | _(required)_      | Comma-separated Telegram user IDs                    |
+| `CCBOT_DIR` / `--config-dir`                   | `~/.ccbot`        | Config and state directory                           |
+| `TMUX_SESSION_NAME` / `--tmux-session`         | `ccbot`           | tmux session name                                    |
+| `CCBOT_PROVIDER` / `--provider`                | `claude`          | Default agent provider (`claude`, `codex`, `gemini`) |
+| `CCBOT_<NAME>_COMMAND`                         | _(from provider)_ | Per-provider launch command (env only, see below)    |
+| `CCBOT_GROUP_ID` / `--group-id`                | _(all groups)_    | Restrict to one Telegram group                       |
+| `CCBOT_INSTANCE_NAME` / `--instance-name`      | hostname          | Display label for this instance                      |
+| `CCBOT_LOG_LEVEL` / `--log-level`              | `INFO`            | Logging level (DEBUG, INFO, WARNING, ERROR)          |
+| `MONITOR_POLL_INTERVAL` / `--monitor-interval` | `2.0`             | Seconds between transcript polls                     |
+| `AUTOCLOSE_DONE_MINUTES` / `--autoclose-done`  | `30`              | Auto-close done topics after N minutes (0=off)       |
+| `AUTOCLOSE_DEAD_MINUTES` / `--autoclose-dead`  | `10`              | Auto-close dead sessions after N minutes (0=off)     |
 
 ## Auto-Close Behavior
 
@@ -131,11 +130,11 @@ CCBot supports multiple agent CLI backends. Each Telegram topic can use a differ
 
 ### Supported Providers
 
-| Provider    | CLI Command | Session Hook        | Status Detection              |
-| ----------- | ----------- | ------------------- | ----------------------------- |
-| Claude Code | `claude`    | Yes (auto-tracking) | Spinner text parsing          |
-| Codex CLI   | `codex`     | No                  | Transcript activity heuristic |
-| Gemini CLI  | `gemini`    | No                  | Pane title + interactive UI   |
+| Provider    | CLI Command | Session Hook        | Status Detection                   |
+| ----------- | ----------- | ------------------- | ---------------------------------- |
+| Claude Code | `claude`    | Yes (auto-tracking) | pyte VT100 screen buffer + spinner |
+| Codex CLI   | `codex`     | No                  | Transcript activity heuristic      |
+| Gemini CLI  | `gemini`    | No                  | Pane title + interactive UI        |
 
 ### Choosing a Provider
 
@@ -147,9 +146,21 @@ CCBot supports multiple agent CLI backends. Each Telegram topic can use a differ
 
 ### Provider Differences
 
-**Claude Code** has the richest integration — the SessionStart hook enables automatic session tracking, and the bot parses Claude's spinner text for real-time status updates.
+**Claude Code** has the richest integration — the SessionStart hook enables automatic session tracking, and the bot uses a pyte VT100 screen buffer to parse Claude's terminal output for real-time status updates (spinner text, working indicators).
 
 **Codex CLI** and **Gemini CLI** lack a session hook, so session tracking relies on auto-detection from running processes. Codex has no terminal UI for permission prompts. Gemini sets pane titles (`Working: ✦`, `Action Required: ✋`, `Ready: ◇`) that CCBot reads for status, and its `@inquirer/select` permission prompts are detected as interactive UI.
+
+### Custom Launch Commands
+
+Override the CLI command used to launch each provider via `CCBOT_<NAME>_COMMAND` env vars:
+
+```ini
+CCBOT_CLAUDE_COMMAND=ce --current
+CCBOT_CODEX_COMMAND=my-codex-wrapper
+CCBOT_GEMINI_COMMAND=/opt/gemini/run
+```
+
+`<NAME>` is uppercase: `CLAUDE`, `CODEX`, `GEMINI`. Defaults to the provider's built-in command (`claude`, `codex`, `gemini`) when unset. New providers automatically support `CCBOT_<NAME>_COMMAND` without code changes.
 
 ### Provider-Specific Commands
 

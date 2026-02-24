@@ -461,7 +461,7 @@ class TestResumePickCallback:
 
         mock_tm.create_window.assert_called_once_with(
             "/tmp/proj",
-            claude_args="--resume a1b2c3d4-0000-0000-0000-000000000001",
+            agent_args="--resume a1b2c3d4-0000-0000-0000-000000000001",
             launch_command="claude",
         )
         mock_sm.bind_thread.assert_called_once_with(
@@ -630,7 +630,7 @@ class TestResumePickCallback:
 
         mock_tm.create_window.assert_called_once_with(
             "/tmp/proj",
-            claude_args="--resume a1b2c3d4-0000-0000-0000-000000000002",
+            agent_args="--resume a1b2c3d4-0000-0000-0000-000000000002",
             launch_command="claude",
         )
 

@@ -60,14 +60,12 @@ _FLAG_TO_ENV: list[tuple[str, str]] = [
     ("config_dir", "CCBOT_DIR"),
     ("allowed_users", "ALLOWED_USERS"),
     ("tmux_session", "TMUX_SESSION_NAME"),
-    ("claude_command", "CLAUDE_COMMAND"),
     ("monitor_interval", "MONITOR_POLL_INTERVAL"),
     ("group_id", "CCBOT_GROUP_ID"),
     ("instance_name", "CCBOT_INSTANCE_NAME"),
     ("autoclose_done", "AUTOCLOSE_DONE_MINUTES"),
     ("autoclose_dead", "AUTOCLOSE_DEAD_MINUTES"),
     ("provider", "CCBOT_PROVIDER"),
-    ("provider_command", "CCBOT_PROVIDER_COMMAND"),
 ]
 
 
@@ -123,12 +121,6 @@ def apply_args_to_env(**kwargs: object) -> None:
     help="Tmux session name (default: ccbot).",
 )
 @click.option(
-    "--claude-command",
-    default=None,
-    envvar="CLAUDE_COMMAND",
-    help="Claude command (default: claude).",
-)
-@click.option(
     "--monitor-interval",
     type=float,
     default=None,
@@ -170,12 +162,6 @@ def apply_args_to_env(**kwargs: object) -> None:
     default=None,
     envvar="CCBOT_PROVIDER",
     help="Agent provider name (default: claude).",
-)
-@click.option(
-    "--provider-command",
-    default=None,
-    envvar="CCBOT_PROVIDER_COMMAND",
-    help="Override launch command for the provider.",
 )
 def run_cmd(**kwargs: object) -> None:
     """Start the bot with optional overrides."""

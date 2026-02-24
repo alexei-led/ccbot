@@ -59,9 +59,6 @@ class Config:
         self.tmux_session_name = os.getenv("TMUX_SESSION_NAME", "ccbot")
         self.tmux_main_window_name = "__main__"
 
-        # Claude command to run in new windows
-        self.claude_command = os.getenv("CLAUDE_COMMAND", "claude")
-
         # All state files live under config_dir
         self.state_file = self.config_dir / "state.json"
         self.session_map_file = self.config_dir / "session_map.json"
@@ -87,7 +84,6 @@ class Config:
 
         # Provider selection
         self.provider_name: str = os.getenv("CCBOT_PROVIDER", "claude")
-        self.provider_launch_command: str | None = os.getenv("CCBOT_PROVIDER_COMMAND")
 
         # Auto-close stale topics (minutes; 0 = disabled)
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))

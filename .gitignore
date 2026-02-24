@@ -28,6 +28,9 @@ coverage.json
 .mypy_cache/
 .ruff_cache/
 
+# Go module cache (external)
+pkg/
+
 # IDE
 .idea/
 .vscode/

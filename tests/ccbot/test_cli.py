@@ -135,7 +135,6 @@ class TestApplyArgsToEnv:
             config_dir="/tmp/cc",
             allowed_users="1,2",
             tmux_session="s",
-            claude_command="c",
             monitor_interval=3.0,
             group_id=99,
             instance_name="n",
@@ -145,7 +144,6 @@ class TestApplyArgsToEnv:
 
         assert os.environ["ALLOWED_USERS"] == "1,2"
         assert os.environ["TMUX_SESSION_NAME"] == "s"
-        assert os.environ["CLAUDE_COMMAND"] == "c"
         assert os.environ["MONITOR_POLL_INTERVAL"] == "3.0"
         assert os.environ["CCBOT_GROUP_ID"] == "99"
         assert os.environ["CCBOT_INSTANCE_NAME"] == "n"

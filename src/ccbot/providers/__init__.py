@@ -115,6 +115,22 @@ def detect_provider_from_command(pane_current_command: str) -> str:
     return ""
 
 
+def resolve_launch_command(provider_name: str) -> str:
+    """Resolve the launch command for a provider, applying env var overrides.
+
+    Resolution: ``CCBOT_<NAME>_COMMAND`` (e.g. ``CCBOT_CLAUDE_COMMAND``) if set,
+    otherwise the provider's hardcoded default (``capabilities.launch_command``).
+    """
+    _ensure_registered()
+    override = os.environ.get(f"CCBOT_{provider_name.upper()}_COMMAND")
+    if override:
+        return override
+    try:
+        return registry.get(provider_name).capabilities.launch_command
+    except UnknownProviderError:
+        return registry.get("claude").capabilities.launch_command
+
+
 def resolve_capabilities(provider_name: str | None = None) -> ProviderCapabilities:
     """Resolve provider capabilities without requiring full Config.
 
@@ -151,4 +167,5 @@ __all__ = [
     "get_provider_for_window",
     "registry",
     "resolve_capabilities",
+    "resolve_launch_command",
 ]

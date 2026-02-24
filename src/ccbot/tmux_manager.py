@@ -432,8 +432,8 @@ class TmuxManager:
         self,
         work_dir: str,
         window_name: str | None = None,
-        start_claude: bool = True,
-        claude_args: str = "",
+        start_agent: bool = True,
+        agent_args: str = "",
         launch_command: str | None = None,
     ) -> tuple[bool, str, str, str]:
         """Create a new tmux window and optionally start an agent CLI.
@@ -441,10 +441,10 @@ class TmuxManager:
         Args:
             work_dir: Working directory for the new window
             window_name: Optional window name (defaults to directory name)
-            start_claude: Whether to start the agent CLI command
-            claude_args: Extra arguments appended to the launch command
-                         (e.g. "--continue", "--resume <id>")
-            launch_command: Override the CLI command to run (default: config.claude_command)
+            start_agent: Whether to start the agent CLI command
+            agent_args: Extra arguments appended to the launch command
+                        (e.g. "--continue", "--resume <id>")
+            launch_command: The CLI command to run (e.g. "claude", "codex", "gemini")
 
         Returns:
             Tuple of (success, message, window_name, window_id)
@@ -479,12 +479,12 @@ class TmuxManager:
                 new_window_id = window.window_id or ""
 
                 # Start agent CLI if requested
-                if start_claude:
+                if start_agent and launch_command:
                     pane = window.active_pane
                     if pane:
-                        cmd = launch_command or config.claude_command
-                        if claude_args:
-                            cmd = f"{cmd} {claude_args}"
+                        cmd = launch_command
+                        if agent_args:
+                            cmd = f"{cmd} {agent_args}"
                         pane.send_keys(cmd, enter=True)
 
                 logger.info(

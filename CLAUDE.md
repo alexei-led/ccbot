@@ -59,10 +59,12 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 
 ccbot supports multiple agent CLI backends via the provider abstraction (`src/ccbot/providers/`). Providers are resolved per-window — different topics can use different providers simultaneously.
 
-| Setting               | Env Var                  | Default         |
-| --------------------- | ------------------------ | --------------- |
-| Default provider      | `CCBOT_PROVIDER`         | `claude`        |
-| Custom launch command | `CCBOT_PROVIDER_COMMAND` | (from provider) |
+| Setting              | Env Var                | Default         |
+| -------------------- | ---------------------- | --------------- |
+| Default provider     | `CCBOT_PROVIDER`       | `claude`        |
+| Per-provider command | `CCBOT_<NAME>_COMMAND` | (from provider) |
+
+Launch command override: `CCBOT_<NAME>_COMMAND` (e.g. `CCBOT_CLAUDE_COMMAND=ce --current`), falls back to provider default. Resolved by `resolve_launch_command()` in `providers/__init__.py`.
 
 ### Per-Window Provider Model
 

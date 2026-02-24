@@ -406,9 +406,10 @@ async def _handle_provider_select(
     ):
         return
 
-    # Resolve launch command from provider
-    provider = provider_registry.get(provider_name)
-    launch_command = provider.capabilities.launch_command
+    # Resolve launch command (env override > provider default)
+    from ccbot.providers import resolve_launch_command
+
+    launch_command = resolve_launch_command(provider_name)
 
     success, message, created_wname, created_wid = await tmux_manager.create_window(
         selected_path, launch_command=launch_command
@@ -431,7 +432,7 @@ async def _handle_provider_select(
             user_id,
             pending_thread_id,
         )
-        if provider.capabilities.supports_hook:
+        if provider_registry.get(provider_name).capabilities.supports_hook:
             await session_manager.wait_for_session_map_entry(created_wid)
 
         if pending_thread_id is not None:

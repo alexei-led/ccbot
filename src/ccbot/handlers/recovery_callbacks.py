@@ -21,7 +21,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..providers import get_provider, get_provider_for_window
+from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import (
@@ -275,7 +275,7 @@ async def _create_and_bind_window(
     cwd: str,
     context: ContextTypes.DEFAULT_TYPE,
     *,
-    claude_args: str = "",
+    agent_args: str = "",
     success_label: str = "Session started.",
     old_window_id: str = "",
 ) -> bool:
@@ -293,10 +293,10 @@ async def _create_and_bind_window(
     provider = (
         get_provider_for_window(old_window_id) if old_window_id else get_provider()
     )
-    launch_command = provider.capabilities.launch_command
+    launch_command = resolve_launch_command(provider.capabilities.name)
 
     success, message, created_wname, created_wid = await tmux_manager.create_window(
-        cwd, claude_args=claude_args, launch_command=launch_command
+        cwd, agent_args=agent_args, launch_command=launch_command
     )
     if not success:
         await safe_edit(query, f"\u274c {message}")
@@ -431,7 +431,7 @@ async def _handle_continue(
         thread_id,
         cwd,
         context,
-        claude_args=launch_args,
+        agent_args=launch_args,
         success_label="Continuing previous session.",
         old_window_id=old_wid,
     )
@@ -537,7 +537,7 @@ async def _handle_resume_pick(
         thread_id,
         cwd,
         context,
-        claude_args=launch_args,
+        agent_args=launch_args,
         success_label=f"Resuming session: {picked['summary'][:40]}",
         old_window_id=old_wid,
     )
