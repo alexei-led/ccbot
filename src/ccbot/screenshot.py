@@ -19,6 +19,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+_RE_ANSI_SGR = re.compile(r"\x1b\[([0-9;]*)m")
+
 logger = logging.getLogger(__name__)
 
 _FONTS_DIR = Path(__file__).parent / "fonts"
@@ -121,14 +123,11 @@ def _font_tier(ch: str) -> int:
 
 def _parse_ansi_line(line: str) -> list[StyledSegment]:
     """Parse a line with ANSI escape codes into styled segments."""
-    # ANSI escape sequence pattern
-    ansi_pattern = re.compile(r"\x1b\[([0-9;]*)m")
-
     segments: list[StyledSegment] = []
     current_style = TextStyle()
     pos = 0
 
-    for match in ansi_pattern.finditer(line):
+    for match in _RE_ANSI_SGR.finditer(line):
         # Add text before this escape code
         text_before = line[pos : match.start()]
         if text_before:

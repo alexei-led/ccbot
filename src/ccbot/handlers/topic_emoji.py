@@ -118,14 +118,13 @@ async def update_topic_emoji(
             new_name,
         )
     except BadRequest as e:
-        err_msg = str(e)
-        if "Not enough rights" in err_msg:
+        if "Not enough rights" in e.message:
             _disabled_chats.add(chat_id)
             logger.info(
                 "Topic emoji disabled for chat %d: insufficient permissions",
                 chat_id,
             )
-        elif "TOPIC_NOT_MODIFIED" in err_msg or "Topic_id_invalid" in err_msg:
+        elif "TOPIC_NOT_MODIFIED" in e.message or "Topic_id_invalid" in e.message:
             # Expected no-ops: already correct name or invalid topic
             _topic_states[key] = state
         else:
@@ -183,13 +182,13 @@ async def rename_topic(
             new_name,
         )
     except BadRequest as e:
-        if "Not enough rights" in str(e):
+        if "Not enough rights" in e.message:
             _disabled_chats.add(chat_id)
             logger.info(
                 "Topic rename disabled for chat %d: insufficient permissions",
                 chat_id,
             )
-        elif "TOPIC_NOT_MODIFIED" not in str(e):
+        elif "TOPIC_NOT_MODIFIED" not in e.message:
             logger.debug("Failed to rename topic: %s", e)
     except TelegramError as e:
         logger.debug("Failed to rename topic: %s", e)

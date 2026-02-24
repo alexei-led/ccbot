@@ -663,7 +663,7 @@ async def status_poll_loop(bot: Bot) -> None:
                             message_thread_id=thread_id,
                         )
                     except BadRequest as e:
-                        if "Topic_id_invalid" in str(e):
+                        if "Topic_id_invalid" in e.message:
                             # Topic deleted — kill window, unbind, and clean up state
                             w = await tmux_manager.find_window_by_id(wid)
                             if w:

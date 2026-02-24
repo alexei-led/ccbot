@@ -8,6 +8,7 @@ Supports both full history and unread message range views.
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -19,6 +20,16 @@ from .callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
 from .message_sender import safe_edit, safe_reply, safe_send
 
 logger = logging.getLogger(__name__)
+
+
+def _format_timestamp(ts: str | None) -> str:
+    """Format an ISO timestamp string to HH:MM, or return empty string."""
+    if not ts:
+        return ""
+    try:
+        return datetime.fromisoformat(ts).strftime("%H:%M")
+    except ValueError, TypeError:
+        return ""
 
 
 def _build_history_keyboard(
@@ -128,17 +139,8 @@ async def send_history(
 
         lines = [header]
         for msg in messages:
-            # Format timestamp as HH:MM
             ts = msg.get("timestamp")
-            if ts:
-                try:
-                    # ISO format: 2024-01-15T14:32:00.000Z
-                    time_part = ts.split("T")[1] if "T" in ts else ts
-                    hh_mm = time_part[:5]  # "14:32"
-                except IndexError, TypeError:
-                    hh_mm = ""
-            else:
-                hh_mm = ""
+            hh_mm = _format_timestamp(ts)
 
             # Add separator with time
             if hh_mm:

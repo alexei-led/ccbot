@@ -2,7 +2,9 @@
 
 import io
 import json
+import subprocess
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -386,6 +388,51 @@ class TestUninstallHook:
 
         result = _uninstall_hook()
         assert result == 0
+
+
+class TestTabDelimitedParsing:
+    """Verify tab-delimited tmux format parsing handles colons in names."""
+
+    _VALID_PAYLOAD = {
+        "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        "cwd": "/tmp/proj",
+        "hook_event_name": "SessionStart",
+        "transcript_path": "/tmp/transcript.jsonl",
+    }
+
+    @pytest.mark.parametrize(
+        ("tmux_output", "expected_key", "expected_window_name"),
+        [
+            ("ccbot\t@0\tproject", "ccbot:@0", "project"),
+            ("prod:v2\t@3\tmy-win", "prod:v2:@3", "my-win"),
+            ("ccbot\t@1\tmy:project", "ccbot:@1", "my:project"),
+            ("my-sess\t@12\twin name", "my-sess:@12", "win name"),
+        ],
+        ids=["normal-names", "colon-in-session", "colon-in-window", "special-chars"],
+    )
+    def test_colon_in_names_parsed_correctly(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
+        tmux_output: str,
+        expected_key: str,
+        expected_window_name: str,
+    ) -> None:
+        monkeypatch.setenv("CCBOT_DIR", str(tmp_path))
+        monkeypatch.setenv("TMUX_PANE", "%0")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(self._VALID_PAYLOAD)))
+
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=tmux_output + "\n", stderr=""
+        )
+        with patch("ccbot.hook.subprocess.run", return_value=mock_result):
+            hook_main()
+
+        session_map = json.loads((tmp_path / "session_map.json").read_text())
+        assert expected_key in session_map
+        entry = session_map[expected_key]
+        assert entry["session_id"] == self._VALID_PAYLOAD["session_id"]
+        assert entry["window_name"] == expected_window_name
 
 
 class TestHookStatus:

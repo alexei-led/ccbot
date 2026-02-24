@@ -589,6 +589,25 @@ class TestScanProjects:
 
         assert len(result) == 0
 
+    def test_scan_projects_sync_skips_unindexed_jsonl_without_cwd(
+        self, tmp_path
+    ) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-my-project"
+        proj_dir.mkdir(parents=True)
+
+        jsonl = proj_dir / "orphan.jsonl"
+        jsonl.write_text('{"type":"summary"}\n')
+
+        monitor = SessionMonitor(
+            projects_path=projects_path,
+            state_file=tmp_path / "ms.json",
+        )
+        # active_cwds value is irrelevant — the skip happens before cwd matching
+        active_cwds = {"anything"}
+        result = monitor._scan_projects_sync(active_cwds)
+        assert result == []
+
     def test_scan_projects_sync_skips_missing_dir(self, tmp_path) -> None:
         monitor = SessionMonitor(
             projects_path=tmp_path / "nonexistent",

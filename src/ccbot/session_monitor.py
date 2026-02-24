@@ -197,9 +197,7 @@ class SessionMonitor:
                     if not file_project_path:
                         file_project_path = read_cwd_from_jsonl(jsonl_file)
                     if not file_project_path:
-                        dir_name = project_dir.name
-                        if dir_name.startswith("-"):
-                            file_project_path = dir_name.replace("-", "/")
+                        continue
 
                     try:
                         norm_fp = str(Path(file_project_path).resolve())
