@@ -221,6 +221,45 @@ class TestExtractInteractiveContent:
         assert result.name == "PermissionPrompt"
         assert "Do you want to proceed?" in result.content
 
+    def test_edit_permission_prompt_structural(self):
+        """Catch-all detects edit confirmation via ❯ + Esc, includes question context."""
+        pane = (
+            "  Do you want to make this edit to status_polling.py?\n"
+            "\n"
+            "  ❯ Yes    Yes All    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "❯" in result.content
+        # context_above pulls in the question text
+        assert "make this edit" in result.content
+
+    def test_unknown_selection_ui_structural(self):
+        """Catch-all detects any future selection prompt with ❯ + action hint."""
+        pane = (
+            "  Some brand new question nobody predicted?\n"
+            "\n"
+            "  ❯ Option A    Option B    Option C\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "❯" in result.content
+        assert "brand new question" in result.content
+
+    def test_structural_catchall_enter_to_confirm(self):
+        """Catch-all works with 'Enter to confirm' bottom hint too."""
+        pane = "  Pick a thing:\n  ❯ Alpha\n    Beta\n  Enter to confirm\n"
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "Pick a thing" in result.content
+
     def test_restore_checkpoint(self):
         pane = (
             "  Restore the code to a previous state?\n"

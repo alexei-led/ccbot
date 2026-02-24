@@ -174,6 +174,7 @@ class TestClaudeTerminalSignatures:
             "RestoreCheckpoint",
             "Settings",
             "SelectModel",
+            "SelectionUI",
         }
         assert names == expected
 

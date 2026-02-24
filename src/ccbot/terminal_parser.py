@@ -43,12 +43,18 @@ class UIPattern:
     ``top`` and ``bottom`` are tuples of compiled regexes — any single match
     is sufficient.  This accommodates wording changes across Claude Code
     versions (e.g. a reworded confirmation prompt).
+
+    When ``context_above`` > 0, the extracted block includes up to that many
+    non-blank lines above the top marker.  This lets structural patterns
+    (e.g. matching ``❯`` as top) still display the question/description that
+    precedes the selection area.
     """
 
     name: str  # Descriptive label (not used programmatically)
     top: tuple[re.Pattern[str], ...]
     bottom: tuple[re.Pattern[str], ...]
     min_gap: int = 2  # minimum lines between top and bottom (inclusive)
+    context_above: int = 0  # extra lines above top marker to include in content
 
 
 # ── UI pattern definitions (order matters — first match wins) ────────────
@@ -101,7 +107,27 @@ UI_PATTERNS: list[UIPattern] = [
         top=(re.compile(r"^\s*Select model"),),
         bottom=(re.compile(r"Enter to confirm"),),
     ),
+    # ── Structural catch-all (MUST be last — catches anything above) ─
+    # Ink's SelectInput renders ❯ (U+276F) as the selection cursor for
+    # the highlighted option.  Combined with a bottom action hint, this
+    # catches ANY selection UI regardless of the question wording above.
+    # context_above=10 pulls in the prompt/question text for display.
+    # min_gap=1 because compact prompts can have ❯ directly above Esc.
+    UIPattern(
+        name="SelectionUI",
+        top=(re.compile(r"^\s*❯\s"),),
+        bottom=(
+            re.compile(r"^\s*Esc to (cancel|exit)"),
+            re.compile(r"^\s*Enter to (select|confirm|continue)"),
+            re.compile(r"^\s*ctrl-g to edit"),
+        ),
+        min_gap=1,
+        context_above=10,
+    ),
 ]
+
+# Catch-all must be last — it would shadow more specific patterns above.
+assert UI_PATTERNS[-1].name == "SelectionUI", "catch-all pattern must be last"
 
 
 # ── Post-processing ──────────────────────────────────────────────────────
@@ -124,6 +150,16 @@ def _shorten_separators(text: str) -> str:
 
 
 # ── Core extraction ──────────────────────────────────────────────────────
+
+
+def _context_start(lines: list[str], top_idx: int, context_above: int) -> int:
+    """Find the first non-blank line within *context_above* lines above *top_idx*."""
+    if context_above <= 0:
+        return top_idx
+    for k in range(max(0, top_idx - context_above), top_idx):
+        if lines[k].strip():
+            return k
+    return top_idx
 
 
 def _try_extract(lines: list[str], pattern: UIPattern) -> InteractiveUIContent | None:
@@ -157,7 +193,8 @@ def _try_extract(lines: list[str], pattern: UIPattern) -> InteractiveUIContent |
     if bottom_idx is None or bottom_idx - top_idx < pattern.min_gap:
         return None
 
-    content = "\n".join(lines[top_idx : bottom_idx + 1]).rstrip()
+    display_start = _context_start(lines, top_idx, pattern.context_above)
+    content = "\n".join(lines[display_start : bottom_idx + 1]).rstrip()
     return InteractiveUIContent(content=_shorten_separators(content), name=pattern.name)
 
 
