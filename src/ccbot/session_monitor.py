@@ -329,12 +329,12 @@ class SessionMonitor:
         and parsing. Appends any new messages to the provided list.
         """
         tracked = self.state.get_session(session_id)
+        provider = get_provider_for_window(window_id)
 
         if tracked is None:
             # For new sessions, initialize offset to skip old messages.
             # Incremental providers (JSONL) use byte offset; whole-file
             # providers (Gemini JSON) use message count.
-            provider = get_provider_for_window(window_id)
             try:
                 st = file_path.stat()
                 file_size, current_mtime = st.st_size, st.st_mtime
@@ -371,7 +371,6 @@ class SessionMonitor:
             return
 
         last_mtime = self._file_mtimes.get(session_id, 0.0)
-        provider = get_provider_for_window(window_id)
         if provider.capabilities.supports_incremental_read:
             if current_mtime <= last_mtime and current_size <= tracked.last_byte_offset:
                 return
@@ -390,7 +389,6 @@ class SessionMonitor:
 
         # Parse new entries using the shared logic, carrying over pending tools
         carry = self._pending_tools.get(session_id, {})
-        provider = get_provider_for_window(window_id)
         agent_messages, remaining = provider.parse_transcript_entries(
             new_entries,
             pending_tools=carry,

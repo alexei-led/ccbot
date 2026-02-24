@@ -12,7 +12,6 @@ Key class: TmuxManager (singleton instantiated as `tmux_manager`).
 """
 
 import asyncio
-import contextlib
 import logging
 import subprocess
 from dataclasses import dataclass
@@ -214,20 +213,26 @@ class TmuxManager:
             dims = stdout.decode("utf-8", errors="replace").strip()
             try:
                 cols_str, rows_str = dims.split(":")
+                columns, rows = int(cols_str), int(rows_str)
             except ValueError:
                 return None
-            columns, rows = int(cols_str), int(rows_str)
 
             # Capture with ANSI escapes
             text = await self._capture_pane_ansi(window_id)
             if text is None:
                 return None
             return (text, columns, rows)
-        except TimeoutError, ValueError, OSError:
+        except TimeoutError:
+            logger.warning("Capture pane raw %s timed out", window_id)
             if proc:
-                with contextlib.suppress(ProcessLookupError):
+                try:
                     proc.kill()
                     await proc.wait()
+                except ProcessLookupError:
+                    pass
+            return None
+        except OSError:
+            logger.exception("Unexpected error capturing pane raw %s", window_id)
             return None
 
     async def _capture_pane_ansi(self, window_id: str) -> str | None:

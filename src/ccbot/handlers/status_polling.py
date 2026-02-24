@@ -24,13 +24,19 @@ Key components:
   - Auto-close: closes topics stuck in done/dead state
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from telegram import Bot
+
+if TYPE_CHECKING:
+    from ..screen_buffer import ScreenBuffer
 from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
@@ -105,10 +111,10 @@ _startup_times: dict[
 ] = {}  # window_id -> monotonic time first seen without status
 
 # Per-window pyte ScreenBuffer for ANSI-aware parsing
-_screen_buffers: dict[str, object] = {}  # window_id -> ScreenBuffer
+_screen_buffers: dict[str, ScreenBuffer] = {}
 
 
-def _get_screen_buffer(window_id: str, columns: int, rows: int) -> object:
+def _get_screen_buffer(window_id: str, columns: int, rows: int) -> ScreenBuffer:
     """Get or create a ScreenBuffer for a window, resizing if needed."""
     from ..screen_buffer import ScreenBuffer
 

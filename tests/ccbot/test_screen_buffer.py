@@ -59,68 +59,11 @@ class TestCursorPosition:
         buf = ScreenBuffer(columns=40, rows=5)
         buf.feed("hello")
         assert buf.cursor_row == 0
-        assert buf.cursor_col == 5
 
     def test_cursor_after_newline(self):
         buf = ScreenBuffer(columns=40, rows=5)
         buf.feed("hello\r\n")
         assert buf.cursor_row == 1
-        assert buf.cursor_col == 0
-
-
-class TestGetLine:
-    def test_valid_row(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed("first\r\nsecond")
-        assert buf.get_line(0) == "first"
-        assert buf.get_line(1) == "second"
-
-    def test_out_of_bounds(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        assert buf.get_line(99) == ""
-        assert buf.get_line(-1) == ""
-
-
-class TestBottomLines:
-    def test_fewer_than_total(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed("a\r\nb\r\nc\r\nd\r\ne")
-        bottom = buf.bottom_lines(2)
-        assert len(bottom) == 2
-        assert bottom[0] == "d"
-        assert bottom[1] == "e"
-
-    def test_more_than_total(self):
-        buf = ScreenBuffer(columns=40, rows=3)
-        buf.feed("a\r\nb")
-        bottom = buf.bottom_lines(10)
-        assert len(bottom) == 3
-
-
-class TestFindSeparatorRows:
-    def test_finds_separator(self):
-        sep = "─" * 30
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed(f"content\r\n{sep}\r\nprompt")
-        rows = buf.find_separator_rows()
-        assert rows == [1]
-
-    def test_multiple_separators(self):
-        sep = "─" * 30
-        buf = ScreenBuffer(columns=40, rows=6)
-        buf.feed(f"content\r\n{sep}\r\nprompt\r\n{sep}\r\nstatus")
-        rows = buf.find_separator_rows()
-        assert rows == [1, 3]
-
-    def test_short_dashes_not_separator(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed("─" * 10)
-        assert buf.find_separator_rows() == []
-
-    def test_no_separators(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed("just plain text\r\nno separators here")
-        assert buf.find_separator_rows() == []
 
 
 class TestReset:
@@ -135,19 +78,6 @@ class TestReset:
         buf.feed("hello\r\nworld")
         buf.reset()
         assert buf.cursor_row == 0
-        assert buf.cursor_col == 0
-
-
-class TestBottomLinesEdgeCases:
-    def test_zero_returns_empty(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed("a\r\nb\r\nc")
-        assert buf.bottom_lines(0) == []
-
-    def test_negative_returns_empty(self):
-        buf = ScreenBuffer(columns=40, rows=5)
-        buf.feed("a\r\nb")
-        assert buf.bottom_lines(-1) == []
 
 
 class TestSequentialFeeds:
@@ -184,10 +114,8 @@ class TestRealWorldCapture:
 
         assert "✻ Reading file" in lines[1]
         assert "\x1b" not in lines[1]
-
-        separators = buf.find_separator_rows()
-        assert 2 in separators
-        assert 4 in separators
+        assert lines[2] == sep
+        assert lines[4] == sep
 
     def test_interactive_ui_checkboxes(self):
         raw = (

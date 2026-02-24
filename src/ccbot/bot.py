@@ -329,6 +329,7 @@ async def forward_command_handler(
             from .handlers.message_queue import enqueue_status_update
             from .handlers.status_polling import (
                 clear_idle_clear_timer,
+                clear_screen_buffer,
                 clear_seen_status,
             )
 
@@ -338,6 +339,7 @@ async def forward_command_handler(
             if thread_id is not None:
                 clear_idle_clear_timer(user.id, thread_id)
             clear_seen_status(window_id)
+            clear_screen_buffer(window_id)
     else:
         await safe_reply(update.message, f"\u274c {message}")
 

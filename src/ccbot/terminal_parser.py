@@ -127,7 +127,9 @@ UI_PATTERNS: list[UIPattern] = [
 ]
 
 # Catch-all must be last — it would shadow more specific patterns above.
-assert UI_PATTERNS[-1].name == "SelectionUI", "catch-all pattern must be last"
+# (Not an assert — must survive python -O.)
+if UI_PATTERNS[-1].name != "SelectionUI":
+    raise RuntimeError("catch-all SelectionUI pattern must be last in UI_PATTERNS")
 
 
 # ── Post-processing ──────────────────────────────────────────────────────
@@ -302,7 +304,7 @@ def is_likely_spinner(char: str) -> bool:
 
     Uses a two-tier approach:
     1. Fast-path: check the known STATUS_SPINNERS frozenset
-    2. Fallback: use Unicode category matching (So, Sm, Po, Braille)
+    2. Fallback: use Unicode category matching (So, Sm, Braille)
        while excluding box-drawing and other non-spinner characters
     """
     if not char:
@@ -438,16 +440,21 @@ def _is_separator(line: str) -> bool:
 def find_chrome_boundary(lines: list[str]) -> int | None:
     """Find the topmost separator row of Claude Code's bottom chrome.
 
-    Scans from the bottom upward, looking for the first separator that has
-    only chrome content below it (more separators, prompt chars, status bar).
+    Scans from the bottom upward (limited to last 20 lines), looking for the
+    first separator that has only chrome content below it (more separators,
+    prompt chars, status bar).
     Returns the line index of that separator, or None if no chrome found.
     """
     if not lines:
         return None
 
+    # Limit separator scan to the bottom 20 lines to avoid false matches
+    # from content separators (e.g. markdown tables) higher up.
+    scan_start = max(len(lines) - 20, 0)
+
     # Find all separator indices, scanning from bottom up
     separator_indices: list[int] = []
-    for i in range(len(lines) - 1, -1, -1):
+    for i in range(len(lines) - 1, scan_start - 1, -1):
         if _is_separator(lines[i]):
             separator_indices.append(i)
 
