@@ -84,6 +84,15 @@ _has_seen_status: set[str] = set()
 _TYPING_INTERVAL = 4.0
 _last_typing_sent: dict[tuple[int, int], float] = {}
 
+# Idle status auto-clear: show "✓ Ready" briefly, then delete the message.
+_IDLE_CLEAR_DELAY = 10.0  # seconds to display idle status before clearing
+_idle_clear_timers: dict[tuple[int, int], tuple[str, float]] = {}
+# (user_id, thread_id) -> (window_id, monotonic_time_entered_idle)
+
+# Windows whose idle status has been cleared (prevents re-showing "✓ Ready"
+# on every poll cycle until the window becomes active again).
+_idle_status_cleared: set[str] = set()
+
 # Transcript activity heuristic: if transcript was written to within this many
 # seconds, treat the window as active even without a terminal status signal.
 _ACTIVITY_THRESHOLD = 10.0
@@ -183,17 +192,61 @@ def clear_seen_status(window_id: str) -> None:
     """Clear startup status tracking for a window (called on cleanup)."""
     _has_seen_status.discard(window_id)
     _startup_times.pop(window_id, None)
+    _idle_status_cleared.discard(window_id)
 
 
 def reset_seen_status_state() -> None:
     """Reset all startup status tracking (for testing)."""
     _has_seen_status.clear()
     _startup_times.clear()
+    _idle_status_cleared.clear()
 
 
 def reset_typing_state() -> None:
     """Reset all typing indicator tracking (for testing)."""
     _last_typing_sent.clear()
+
+
+def _start_idle_clear_timer(user_id: int, thread_id: int, window_id: str) -> None:
+    """Start a timer to auto-clear the idle status message after a delay.
+
+    Does not overwrite an existing timer — the countdown starts on the first
+    idle transition and is not reset by subsequent poll cycles.
+    """
+    key = (user_id, thread_id)
+    if key not in _idle_clear_timers:
+        _idle_clear_timers[key] = (window_id, time.monotonic())
+
+
+def _cancel_idle_clear_timer(user_id: int, thread_id: int) -> None:
+    """Cancel idle clear timer when the window becomes active again."""
+    _idle_clear_timers.pop((user_id, thread_id), None)
+
+
+def clear_idle_clear_timer(user_id: int, thread_id: int) -> None:
+    """Remove idle clear timer for a topic (called on cleanup)."""
+    _cancel_idle_clear_timer(user_id, thread_id)
+
+
+def reset_idle_clear_state() -> None:
+    """Reset all idle clear timers (for testing)."""
+    _idle_clear_timers.clear()
+    _idle_status_cleared.clear()
+
+
+async def _check_idle_clear_timers(bot: Bot) -> None:
+    """Clear idle status messages whose display time has expired."""
+    if not _idle_clear_timers:
+        return
+    now = time.monotonic()
+    expired: list[tuple[int, int, str]] = []
+    for (user_id, thread_id), (window_id, entered_at) in _idle_clear_timers.items():
+        if now - entered_at >= _IDLE_CLEAR_DELAY:
+            expired.append((user_id, thread_id, window_id))
+    for user_id, thread_id, window_id in expired:
+        _idle_clear_timers.pop((user_id, thread_id), None)
+        _idle_status_cleared.add(window_id)
+        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
 
 
 def _start_autoclose_timer(
@@ -310,6 +363,7 @@ def _check_transcript_activity(window_id: str, now: float) -> bool:
     if last_activity and (now - last_activity) < _ACTIVITY_THRESHOLD:
         _has_seen_status.add(window_id)
         _startup_times.pop(window_id, None)
+        _idle_status_cleared.discard(window_id)
         return True
     return False
 
@@ -328,12 +382,19 @@ async def _transition_to_idle(
     await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
     _clear_autoclose_if_active(user_id, thread_id)
     _last_typing_sent.pop((user_id, thread_id), None)
+    if window_id in _idle_status_cleared:
+        # Already cleared idle status — don't re-show until active again
+        return
     if notif_mode not in ("muted", "errors_only"):
         from .callback_data import IDLE_STATUS_TEXT
 
         await enqueue_status_update(
             bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
         )
+        _start_idle_clear_timer(user_id, thread_id, window_id)
+    else:
+        # Muted windows: clear any lingering status message
+        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
 
 
 async def _handle_no_status(
@@ -354,6 +415,7 @@ async def _handle_no_status(
     if is_active:
         await _send_typing_throttled(bot, user_id, thread_id)
         if thread_id is not None:
+            _cancel_idle_clear_timer(user_id, thread_id)
             chat_id = session_manager.resolve_chat_id(user_id, thread_id)
             display = session_manager.get_display_name(window_id)
             await update_topic_emoji(bot, chat_id, thread_id, "active", display)
@@ -371,6 +433,8 @@ async def _handle_no_status(
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)
         _start_autoclose_timer(user_id, thread_id, "done", now)
         _last_typing_sent.pop((user_id, thread_id), None)
+        _cancel_idle_clear_timer(user_id, thread_id)
+        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
     elif window_id in _has_seen_status:
         await _transition_to_idle(
             bot, user_id, window_id, thread_id, chat_id, display, notif_mode
@@ -516,7 +580,10 @@ async def update_status_message(
     if status_line:
         _has_seen_status.add(window_id)
         _startup_times.pop(window_id, None)
+        _idle_status_cleared.discard(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
+        if thread_id is not None:
+            _cancel_idle_clear_timer(user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
             await enqueue_status_update(
                 bot,
@@ -655,8 +722,9 @@ async def status_poll_loop(bot: Bot) -> None:
                         e,
                     )
 
-            # Check auto-close timers and unbound window TTL at end of each poll cycle
+            # Check timers at end of each poll cycle
             await _check_autoclose_timers(bot)
+            await _check_idle_clear_timers(bot)
             await _check_unbound_window_ttl()
 
         except _LoopError:

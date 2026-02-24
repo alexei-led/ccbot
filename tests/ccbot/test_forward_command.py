@@ -134,6 +134,38 @@ class TestForwardCommandResolution:
 
         self.mock_sm.clear_window_session.assert_called_once_with("@1")
 
+    async def test_clear_enqueues_status_clear_and_resets_idle(self) -> None:
+        from ccbot.handlers.status_polling import (
+            _has_seen_status,
+            _idle_status_cleared,
+            reset_idle_clear_state,
+            reset_seen_status_state,
+        )
+
+        _idle_status_cleared.add("@1")
+        _has_seen_status.add("@1")
+        try:
+            with (
+                patch("ccbot.bot.get_cc_name", return_value="clear"),
+                patch(
+                    "ccbot.handlers.message_queue.enqueue_status_update"
+                ) as mock_enqueue,
+            ):
+                update = _make_update(text="/clear")
+                await forward_command_handler(update, _make_context())
+
+            mock_enqueue.assert_called_once()
+            call_args = mock_enqueue.call_args
+            assert call_args[0][1] == 100  # user_id
+            assert call_args[0][2] == "@1"  # window_id
+            assert call_args[0][3] is None  # status_text (clear)
+            assert call_args[1]["thread_id"] == 42
+            assert "@1" not in _idle_status_cleared
+            assert "@1" not in _has_seen_status
+        finally:
+            reset_idle_clear_state()
+            reset_seen_status_state()
+
     async def test_no_session_bound(self) -> None:
         self.mock_sm.resolve_window_for_thread.return_value = None
 
