@@ -24,18 +24,25 @@ Key components:
   - Auto-close: closes topics stuck in done/dead state
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from telegram import Bot
+
+if TYPE_CHECKING:
+    from ..screen_buffer import ScreenBuffer
 from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
 from ..config import config
 from ..providers import get_provider_for_window
+from ..providers.base import StatusUpdate
 from ..session import session_manager
 from ..session_monitor import get_active_monitor
 from ..tmux_manager import tmux_manager
@@ -83,6 +90,15 @@ _has_seen_status: set[str] = set()
 _TYPING_INTERVAL = 4.0
 _last_typing_sent: dict[tuple[int, int], float] = {}
 
+# Idle status auto-clear: show "✓ Ready" briefly, then delete the message.
+_IDLE_CLEAR_DELAY = 10.0  # seconds to display idle status before clearing
+_idle_clear_timers: dict[tuple[int, int], tuple[str, float]] = {}
+# (user_id, thread_id) -> (window_id, monotonic_time_entered_idle)
+
+# Windows whose idle status has been cleared (prevents re-showing "✓ Ready"
+# on every poll cycle until the window becomes active again).
+_idle_status_cleared: set[str] = set()
+
 # Transcript activity heuristic: if transcript was written to within this many
 # seconds, treat the window as active even without a terminal status signal.
 _ACTIVITY_THRESHOLD = 10.0
@@ -93,6 +109,37 @@ _STARTUP_TIMEOUT = 30.0
 _startup_times: dict[
     str, float
 ] = {}  # window_id -> monotonic time first seen without status
+
+# Per-window pyte ScreenBuffer for ANSI-aware parsing
+_screen_buffers: dict[str, ScreenBuffer] = {}
+
+
+def _get_screen_buffer(window_id: str, columns: int, rows: int) -> ScreenBuffer:
+    """Get or create a ScreenBuffer for a window, resizing if needed."""
+    from ..screen_buffer import ScreenBuffer
+
+    buf = _screen_buffers.get(window_id)
+    if (
+        buf is None
+        or not isinstance(buf, ScreenBuffer)
+        or buf.columns != columns
+        or buf.rows != rows
+    ):
+        buf = ScreenBuffer(columns=columns, rows=rows)
+        _screen_buffers[window_id] = buf
+    else:
+        buf.reset()
+    return buf
+
+
+def clear_screen_buffer(window_id: str) -> None:
+    """Remove a window's ScreenBuffer (called on cleanup)."""
+    _screen_buffers.pop(window_id, None)
+
+
+def reset_screen_buffer_state() -> None:
+    """Reset all ScreenBuffers (for testing)."""
+    _screen_buffers.clear()
 
 
 def is_shell_prompt(pane_current_command: str) -> bool:
@@ -151,17 +198,61 @@ def clear_seen_status(window_id: str) -> None:
     """Clear startup status tracking for a window (called on cleanup)."""
     _has_seen_status.discard(window_id)
     _startup_times.pop(window_id, None)
+    _idle_status_cleared.discard(window_id)
 
 
 def reset_seen_status_state() -> None:
     """Reset all startup status tracking (for testing)."""
     _has_seen_status.clear()
     _startup_times.clear()
+    _idle_status_cleared.clear()
 
 
 def reset_typing_state() -> None:
     """Reset all typing indicator tracking (for testing)."""
     _last_typing_sent.clear()
+
+
+def _start_idle_clear_timer(user_id: int, thread_id: int, window_id: str) -> None:
+    """Start a timer to auto-clear the idle status message after a delay.
+
+    Does not overwrite an existing timer — the countdown starts on the first
+    idle transition and is not reset by subsequent poll cycles.
+    """
+    key = (user_id, thread_id)
+    if key not in _idle_clear_timers:
+        _idle_clear_timers[key] = (window_id, time.monotonic())
+
+
+def _cancel_idle_clear_timer(user_id: int, thread_id: int) -> None:
+    """Cancel idle clear timer when the window becomes active again."""
+    _idle_clear_timers.pop((user_id, thread_id), None)
+
+
+def clear_idle_clear_timer(user_id: int, thread_id: int) -> None:
+    """Remove idle clear timer for a topic (called on cleanup)."""
+    _cancel_idle_clear_timer(user_id, thread_id)
+
+
+def reset_idle_clear_state() -> None:
+    """Reset all idle clear timers (for testing)."""
+    _idle_clear_timers.clear()
+    _idle_status_cleared.clear()
+
+
+async def _check_idle_clear_timers(bot: Bot) -> None:
+    """Clear idle status messages whose display time has expired."""
+    if not _idle_clear_timers:
+        return
+    now = time.monotonic()
+    expired: list[tuple[int, int, str]] = []
+    for (user_id, thread_id), (window_id, entered_at) in _idle_clear_timers.items():
+        if now - entered_at >= _IDLE_CLEAR_DELAY:
+            expired.append((user_id, thread_id, window_id))
+    for user_id, thread_id, window_id in expired:
+        _idle_clear_timers.pop((user_id, thread_id), None)
+        _idle_status_cleared.add(window_id)
+        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
 
 
 def _start_autoclose_timer(
@@ -278,6 +369,7 @@ def _check_transcript_activity(window_id: str, now: float) -> bool:
     if last_activity and (now - last_activity) < _ACTIVITY_THRESHOLD:
         _has_seen_status.add(window_id)
         _startup_times.pop(window_id, None)
+        _idle_status_cleared.discard(window_id)
         return True
     return False
 
@@ -296,12 +388,19 @@ async def _transition_to_idle(
     await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
     _clear_autoclose_if_active(user_id, thread_id)
     _last_typing_sent.pop((user_id, thread_id), None)
+    if window_id in _idle_status_cleared:
+        # Already cleared idle status — don't re-show until active again
+        return
     if notif_mode not in ("muted", "errors_only"):
         from .callback_data import IDLE_STATUS_TEXT
 
         await enqueue_status_update(
             bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
         )
+        _start_idle_clear_timer(user_id, thread_id, window_id)
+    else:
+        # Muted windows: clear any lingering status message
+        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
 
 
 async def _handle_no_status(
@@ -322,6 +421,7 @@ async def _handle_no_status(
     if is_active:
         await _send_typing_throttled(bot, user_id, thread_id)
         if thread_id is not None:
+            _cancel_idle_clear_timer(user_id, thread_id)
             chat_id = session_manager.resolve_chat_id(user_id, thread_id)
             display = session_manager.get_display_name(window_id)
             await update_topic_emoji(bot, chat_id, thread_id, "active", display)
@@ -339,6 +439,8 @@ async def _handle_no_status(
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)
         _start_autoclose_timer(user_id, thread_id, "done", now)
         _last_typing_sent.pop((user_id, thread_id), None)
+        _cancel_idle_clear_timer(user_id, thread_id)
+        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
     elif window_id in _has_seen_status:
         await _transition_to_idle(
             bot, user_id, window_id, thread_id, chat_id, display, notif_mode
@@ -360,6 +462,49 @@ async def _handle_no_status(
         await _send_typing_throttled(bot, user_id, thread_id)
         await update_topic_emoji(bot, chat_id, thread_id, "active", display)
         _clear_autoclose_if_active(user_id, thread_id)
+
+
+def _parse_with_pyte(window_id: str, pane_text: str) -> StatusUpdate | None:
+    """Try pyte-based screen parsing for status and interactive UI detection.
+
+    Feeds the plain pane text into a ScreenBuffer sized for a standard
+    terminal, then uses the screen-based parsers. Returns a StatusUpdate
+    or None if nothing detected.
+    """
+    from ..screen_buffer import ScreenBuffer
+    from ..terminal_parser import (
+        format_status_display,
+        parse_from_screen,
+        parse_status_from_screen,
+    )
+
+    # Use a standard terminal size; pyte needs dimensions to render
+    columns, rows = 200, 50
+    buf = _get_screen_buffer(window_id, columns, rows)
+    if not isinstance(buf, ScreenBuffer):
+        return None
+
+    buf.feed(pane_text)
+
+    # Check interactive UI first (takes precedence)
+    interactive = parse_from_screen(buf)
+    if interactive:
+        return StatusUpdate(
+            raw_text=interactive.content,
+            display_label=interactive.name,
+            is_interactive=True,
+            ui_type=interactive.name,
+        )
+
+    # Check status line
+    raw_status = parse_status_from_screen(buf)
+    if raw_status:
+        return StatusUpdate(
+            raw_text=raw_status,
+            display_label=format_status_display(raw_status),
+        )
+
+    return None
 
 
 async def update_status_message(
@@ -401,12 +546,16 @@ async def update_status_message(
     interactive_window = get_interactive_window(user_id, thread_id)
     should_check_new_ui = True
 
-    # Parse terminal status once and reuse the result
-    provider = get_provider_for_window(window_id)
-    pane_title = ""
-    if provider.capabilities.uses_pane_title:
-        pane_title = await tmux_manager.get_pane_title(w.window_id)
-    status = provider.parse_terminal_status(pane_text, pane_title=pane_title)
+    # Parse terminal status: try pyte-based parsing first, fall back to regex
+    status = _parse_with_pyte(window_id, pane_text)
+
+    if status is None:
+        # pyte path returned nothing — fall back to provider regex parsing
+        provider = get_provider_for_window(window_id)
+        pane_title = ""
+        if provider.capabilities.uses_pane_title:
+            pane_title = await tmux_manager.get_pane_title(w.window_id)
+        status = provider.parse_terminal_status(pane_text, pane_title=pane_title)
 
     if interactive_window == window_id:
         # User is in interactive mode for THIS window
@@ -437,7 +586,10 @@ async def update_status_message(
     if status_line:
         _has_seen_status.add(window_id)
         _startup_times.pop(window_id, None)
+        _idle_status_cleared.discard(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
+        if thread_id is not None:
+            _cancel_idle_clear_timer(user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
             await enqueue_status_update(
                 bot,
@@ -517,7 +669,7 @@ async def status_poll_loop(bot: Bot) -> None:
                             message_thread_id=thread_id,
                         )
                     except BadRequest as e:
-                        if "Topic_id_invalid" in str(e):
+                        if "Topic_id_invalid" in e.message:
                             # Topic deleted — kill window, unbind, and clean up state
                             w = await tmux_manager.find_window_by_id(wid)
                             if w:
@@ -576,8 +728,9 @@ async def status_poll_loop(bot: Bot) -> None:
                         e,
                     )
 
-            # Check auto-close timers and unbound window TTL at end of each poll cycle
+            # Check timers at end of each poll cycle
             await _check_autoclose_timers(bot)
+            await _check_idle_clear_timers(bot)
             await _check_unbound_window_ttl()
 
         except _LoopError:

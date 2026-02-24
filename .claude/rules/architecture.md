@@ -19,9 +19,11 @@
 │  MD → MarkdownV2     │  split_message (4096 limit)                 │
 │  + expandable quotes │                                             │
 ├──────────────────────┴──────────────────────────────────────────────┤
-│  terminal_parser.py                                                 │
+│  terminal_parser.py + screen_buffer.py                              │
+│  - ScreenBuffer: pyte VT100 emulator for clean line rendering      │
 │  - Detect interactive UIs (AskUserQuestion, ExitPlanMode, etc.)    │
-│  - Parse status line (spinner + working text)                      │
+│  - Parse status line (Unicode-resilient spinner + working text)    │
+│  - Adaptive separator/chrome detection (no hardcoded line counts)  │
 └──────────┬──────────────────────────────────────────────────────────┘
            │                              │
            │ Notify (NewMessage callback) │ Send (tmux keys)
@@ -31,6 +33,7 @@
 │  (session_monitor.py)   │    │  - list/find/create/kill windows│
 │  - Poll JSONL every 2s  │    │  - send_keys to pane            │
 │  - Detect mtime changes │    │  - capture_pane for screenshot  │
+│                         │    │  - capture_pane_raw (with ANSI) │
 │  - Parse new lines      │    └──────────────┬─────────────────┘
 │  - Track pending tools  │                   │
 │    across poll cycles   │                   │
@@ -72,10 +75,11 @@ Provider modules (providers/):
   registry.py         ─ ProviderRegistry (name→factory map, singleton cache)
   claude.py           ─ ClaudeProvider (hook, resume, continue, JSONL transcripts)
   codex.py            ─ CodexProvider (resume, JSONL transcripts, no hook/continue)
-  gemini.py           ─ GeminiProvider (resume, JSONL transcripts, no hook/continue)
+  gemini.py           ─ GeminiProvider (resume, whole-file JSON transcripts, no hook/continue)
   __init__.py         ─ get_provider_for_window(), detect_provider_from_command(), get_provider() fallback
 
 Additional modules:
+  screen_buffer.py    ─ pyte VT100 screen buffer (ANSI→clean lines, separator detection)
   cc_commands.py      ─ CC command discovery (skills, custom commands) + menu registration
   screenshot.py       ─ Terminal text → PNG rendering (ANSI color, font fallback)
   main.py             ─ CLI entry point

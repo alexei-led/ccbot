@@ -197,9 +197,7 @@ class SessionMonitor:
                     if not file_project_path:
                         file_project_path = read_cwd_from_jsonl(jsonl_file)
                     if not file_project_path:
-                        dir_name = project_dir.name
-                        if dir_name.startswith("-"):
-                            file_project_path = dir_name.replace("-", "/")
+                        continue
 
                     try:
                         norm_fp = str(Path(file_project_path).resolve())
@@ -235,10 +233,19 @@ class SessionMonitor:
     ) -> list[dict]:
         """Read new lines from a session file using byte offset for efficiency.
 
+        For providers with ``supports_incremental_read=False`` (e.g. Gemini),
+        delegates to the provider's ``read_transcript_file()`` method which
+        reads the entire JSON file and tracks progress by message count.
+
         Detects file truncation (e.g. after /clear) and resets offset.
         """
         provider = get_provider_for_window(window_id)
-        new_entries = []
+
+        # Whole-file providers (Gemini): read entire JSON, track by message count
+        if not provider.capabilities.supports_incremental_read:
+            return await self._read_whole_file(session, file_path, provider)
+
+        new_entries: list[dict] = []
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 # Get file size to detect truncation
@@ -286,6 +293,29 @@ class SessionMonitor:
             logger.exception("Error reading session file %s", file_path)
         return new_entries
 
+    async def _read_whole_file(
+        self,
+        session: TrackedSession,
+        file_path: Path,
+        provider: Any,
+    ) -> list[dict]:
+        """Read a whole-file transcript (e.g. Gemini JSON) via the provider.
+
+        Uses ``last_byte_offset`` as a message count tracker (not a byte offset)
+        since the entire file is re-read each time.
+        """
+        try:
+            new_entries, new_offset = await asyncio.to_thread(
+                provider.read_transcript_file,
+                str(file_path),
+                session.last_byte_offset,
+            )
+            session.last_byte_offset = new_offset
+            return new_entries
+        except OSError:
+            logger.exception("Error reading transcript file %s", file_path)
+            return []
+
     async def _process_session_file(
         self,
         session_id: str,
@@ -299,20 +329,31 @@ class SessionMonitor:
         and parsing. Appends any new messages to the provided list.
         """
         tracked = self.state.get_session(session_id)
+        provider = get_provider_for_window(window_id)
 
         if tracked is None:
-            # For new sessions, initialize offset to end of file
-            # to avoid re-processing old messages
+            # For new sessions, initialize offset to skip old messages.
+            # Incremental providers (JSONL) use byte offset; whole-file
+            # providers (Gemini JSON) use message count.
             try:
                 st = file_path.stat()
                 file_size, current_mtime = st.st_size, st.st_mtime
             except OSError:
                 file_size = 0
                 current_mtime = 0.0
+
+            if provider.capabilities.supports_incremental_read:
+                initial_offset = file_size
+            else:
+                # Whole-file provider: count existing messages to skip them
+                _, initial_offset = await asyncio.to_thread(
+                    provider.read_transcript_file, str(file_path), 0
+                )
+
             tracked = TrackedSession(
                 session_id=session_id,
                 file_path=str(file_path),
-                last_byte_offset=file_size,
+                last_byte_offset=initial_offset,
             )
             self.state.update_session(tracked)
             self._file_mtimes[session_id] = current_mtime
@@ -321,6 +362,8 @@ class SessionMonitor:
 
         # Check mtime and size to see if file has changed.
         # Size check catches writes within the same second (mtime granularity).
+        # For whole-file providers (Gemini), last_byte_offset is a message count
+        # so only mtime is meaningful for change detection.
         try:
             st = file_path.stat()
             current_mtime, current_size = st.st_mtime, st.st_size
@@ -328,8 +371,13 @@ class SessionMonitor:
             return
 
         last_mtime = self._file_mtimes.get(session_id, 0.0)
-        if current_mtime <= last_mtime and current_size <= tracked.last_byte_offset:
-            return
+        if provider.capabilities.supports_incremental_read:
+            if current_mtime <= last_mtime and current_size <= tracked.last_byte_offset:
+                return
+        else:
+            # Whole-file provider: only mtime is a valid change signal
+            if current_mtime <= last_mtime:
+                return
 
         # File changed, read new content from last offset
         new_entries = await self._read_new_lines(tracked, file_path, window_id)
@@ -341,7 +389,6 @@ class SessionMonitor:
 
         # Parse new entries using the shared logic, carrying over pending tools
         carry = self._pending_tools.get(session_id, {})
-        provider = get_provider_for_window(window_id)
         agent_messages, remaining = provider.parse_transcript_entries(
             new_entries,
             pending_tools=carry,

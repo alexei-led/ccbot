@@ -11,15 +11,21 @@ from conftest import make_mock_provider
 
 from ccbot.handlers.status_polling import (
     _autoclose_timers,
+    _cancel_idle_clear_timer,
     _check_autoclose_timers,
+    _check_idle_clear_timers,
     _check_transcript_activity,
     _clear_autoclose_if_active,
     _has_seen_status,
+    _idle_clear_timers,
+    _idle_status_cleared,
     _start_autoclose_timer,
+    _start_idle_clear_timer,
     _startup_times,
     clear_autoclose_timer,
     is_shell_prompt,
     reset_autoclose_state,
+    reset_idle_clear_state,
     reset_seen_status_state,
 )
 
@@ -28,9 +34,11 @@ from ccbot.handlers.status_polling import (
 def _reset():
     reset_autoclose_state()
     reset_seen_status_state()
+    reset_idle_clear_state()
     yield
     reset_autoclose_state()
     reset_seen_status_state()
+    reset_idle_clear_state()
 
 
 class TestIsShellPrompt:
@@ -354,3 +362,423 @@ class TestStartupTimeout:
         mock_typing.assert_called_once_with(bot, 1, 42)
         mock_emoji.assert_called_once_with(bot, -100, 42, "active", "project")
         assert "@0" not in _has_seen_status
+
+
+class TestParseWithPyte:
+    """Tests for pyte-based screen parsing integration."""
+
+    def setup_method(self) -> None:
+        from ccbot.handlers.status_polling import reset_screen_buffer_state
+
+        reset_screen_buffer_state()
+
+    def teardown_method(self) -> None:
+        from ccbot.handlers.status_polling import reset_screen_buffer_state
+
+        reset_screen_buffer_state()
+
+    def test_detects_spinner_status(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        sep = "─" * 30
+        pane_text = f"Some output\n✻ Reading file src/main.py\n{sep}\n"
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.raw_text == "Reading file src/main.py"
+        assert result.display_label == "…reading"
+        assert result.is_interactive is False
+
+    def test_detects_braille_spinner(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        sep = "─" * 30
+        pane_text = f"Output\n⠋ Thinking about things\n{sep}\n"
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.raw_text == "Thinking about things"
+        assert result.is_interactive is False
+
+    def test_detects_interactive_ui(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        pane_text = (
+            "  Would you like to proceed?\n"
+            "  ─────────────────────────────────\n"
+            "  Yes     No\n"
+            "  ─────────────────────────────────\n"
+            "  ctrl-g to edit in vim\n"
+        )
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.is_interactive is True
+        assert result.ui_type == "ExitPlanMode"
+
+    def test_returns_none_for_plain_text(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        pane_text = "$ echo hello\nhello\n$\n"
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is None
+
+    def test_screen_buffer_cached_per_window(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte, _screen_buffers
+
+        sep = "─" * 30
+        pane_text = f"Output\n✻ Working\n{sep}\n"
+        _parse_with_pyte("@0", pane_text)
+        assert "@0" in _screen_buffers
+
+        _parse_with_pyte("@1", pane_text)
+        assert "@1" in _screen_buffers
+        assert "@0" in _screen_buffers
+
+    def test_interactive_takes_precedence_over_status(self) -> None:
+        from ccbot.handlers.status_polling import _parse_with_pyte
+
+        sep = "─" * 30
+        pane_text = (
+            f"✻ Working on task\n{sep}\n"
+            "  Do you want to proceed?\n"
+            "  Allow write to /tmp/foo\n"
+            "  Esc to cancel\n"
+        )
+        result = _parse_with_pyte("@0", pane_text)
+        assert result is not None
+        assert result.is_interactive is True
+        assert result.ui_type == "PermissionPrompt"
+
+
+class TestPyteFallbackInUpdateStatus:
+    """Tests that update_status_message falls back to regex when pyte returns None."""
+
+    async def test_falls_back_to_provider_when_pyte_returns_none(self) -> None:
+        with (
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch("ccbot.handlers.status_polling.enqueue_status_update"),
+            patch(
+                "ccbot.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.get_provider_for_window",
+                return_value=make_mock_provider(has_status=True),
+            ) as mock_get_provider,
+            patch(
+                "ccbot.handlers.status_polling._parse_with_pyte",
+                return_value=None,
+            ),
+        ):
+            from ccbot.handlers.status_polling import update_status_message
+
+            mock_window = MagicMock()
+            mock_window.window_id = "@0"
+            mock_window.window_name = "project"
+            mock_window.pane_current_command = "node"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_notification_mode.return_value = "normal"
+
+            bot = AsyncMock()
+            await update_status_message(bot, 1, "@0", thread_id=42)
+
+            # Provider regex parsing was called as fallback
+            mock_get_provider.return_value.parse_terminal_status.assert_called_once()
+
+    async def test_uses_pyte_result_when_available(self) -> None:
+        from ccbot.providers.base import StatusUpdate
+
+        pyte_status = StatusUpdate(
+            raw_text="Reading file",
+            display_label="…reading",
+        )
+        with (
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+            patch(
+                "ccbot.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.get_provider_for_window",
+                return_value=make_mock_provider(has_status=True),
+            ) as mock_get_provider,
+            patch(
+                "ccbot.handlers.status_polling._parse_with_pyte",
+                return_value=pyte_status,
+            ),
+        ):
+            from ccbot.handlers.status_polling import update_status_message
+
+            mock_window = MagicMock()
+            mock_window.window_id = "@0"
+            mock_window.window_name = "project"
+            mock_window.pane_current_command = "node"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_tm.get_pane_title = AsyncMock(return_value="")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_notification_mode.return_value = "normal"
+
+            bot = AsyncMock()
+            await update_status_message(bot, 1, "@0", thread_id=42)
+
+            # Provider regex parsing was NOT called (pyte succeeded)
+            mock_get_provider.return_value.parse_terminal_status.assert_not_called()
+            # Status was enqueued using pyte result
+            mock_enqueue.assert_called_once()
+            call_args = mock_enqueue.call_args
+            assert call_args[0][3] == "…reading"
+
+
+class TestIdleClearTimers:
+    def test_start_timer(self) -> None:
+        with patch("ccbot.handlers.status_polling.time") as mock_time:
+            mock_time.monotonic.return_value = 500.0
+            _start_idle_clear_timer(1, 42, "@0")
+        assert (1, 42) in _idle_clear_timers
+        assert _idle_clear_timers[(1, 42)] == ("@0", 500.0)
+
+    def test_start_timer_does_not_overwrite_existing(self) -> None:
+        with patch("ccbot.handlers.status_polling.time") as mock_time:
+            mock_time.monotonic.return_value = 500.0
+            _start_idle_clear_timer(1, 42, "@0")
+            mock_time.monotonic.return_value = 600.0
+            _start_idle_clear_timer(1, 42, "@0")
+        assert _idle_clear_timers[(1, 42)] == ("@0", 500.0)
+
+    def test_cancel_timer(self) -> None:
+        _idle_clear_timers[(1, 42)] = ("@0", 500.0)
+        _cancel_idle_clear_timer(1, 42)
+        assert (1, 42) not in _idle_clear_timers
+
+    def test_cancel_nonexistent_is_noop(self) -> None:
+        _cancel_idle_clear_timer(1, 42)
+
+    async def test_check_expired_enqueues_clear(self) -> None:
+        from ccbot.handlers.status_polling import _IDLE_CLEAR_DELAY
+
+        _idle_clear_timers[(1, 42)] = ("@0", 0.0)
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+        ):
+            mock_time.monotonic.return_value = _IDLE_CLEAR_DELAY + 1.0
+            await _check_idle_clear_timers(bot)
+        mock_enqueue.assert_called_once_with(bot, 1, "@0", None, thread_id=42)
+        assert (1, 42) not in _idle_clear_timers
+        assert "@0" in _idle_status_cleared
+
+    async def test_check_not_expired_yet(self) -> None:
+        from ccbot.handlers.status_polling import _IDLE_CLEAR_DELAY
+
+        _idle_clear_timers[(1, 42)] = ("@0", 0.0)
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+        ):
+            mock_time.monotonic.return_value = _IDLE_CLEAR_DELAY - 1.0
+            await _check_idle_clear_timers(bot)
+        mock_enqueue.assert_not_called()
+        assert (1, 42) in _idle_clear_timers
+
+    async def test_check_empty_is_noop(self) -> None:
+        bot = AsyncMock()
+        with patch(
+            "ccbot.handlers.status_polling.enqueue_status_update"
+        ) as mock_enqueue:
+            await _check_idle_clear_timers(bot)
+        mock_enqueue.assert_not_called()
+
+
+class TestClearSeenStatus:
+    def test_clears_idle_status_cleared(self) -> None:
+        from ccbot.handlers.status_polling import clear_seen_status
+
+        _idle_status_cleared.add("@0")
+        _has_seen_status.add("@0")
+        _startup_times["@0"] = 100.0
+        clear_seen_status("@0")
+        assert "@0" not in _idle_status_cleared
+        assert "@0" not in _has_seen_status
+        assert "@0" not in _startup_times
+
+
+class TestTransitionToIdle:
+    async def test_starts_idle_clear_timer_and_sends_idle_text(self) -> None:
+        from ccbot.handlers.callback_data import IDLE_STATUS_TEXT
+        from ccbot.handlers.status_polling import _transition_to_idle
+
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 100.0
+            await _transition_to_idle(bot, 1, "@0", 42, -100, "project", "normal")
+        mock_enqueue.assert_called_once()
+        assert mock_enqueue.call_args[0][3] == IDLE_STATUS_TEXT
+        assert mock_enqueue.call_args[1]["thread_id"] == 42
+        assert (1, 42) in _idle_clear_timers
+
+    async def test_skips_when_already_cleared(self) -> None:
+        from ccbot.handlers.status_polling import _transition_to_idle
+
+        _idle_status_cleared.add("@0")
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+        ):
+            await _transition_to_idle(bot, 1, "@0", 42, -100, "project", "normal")
+        mock_enqueue.assert_not_called()
+        assert (1, 42) not in _idle_clear_timers
+
+    @pytest.mark.parametrize("mode", ["muted", "errors_only"])
+    async def test_suppressed_mode_clears_status_no_timer(self, mode: str) -> None:
+        from ccbot.handlers.status_polling import _transition_to_idle
+
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+        ):
+            await _transition_to_idle(bot, 1, "@0", 42, -100, "project", mode)
+        mock_enqueue.assert_called_once_with(bot, 1, "@0", None, thread_id=42)
+        assert (1, 42) not in _idle_clear_timers
+
+
+class TestShellPromptClearsStatus:
+    async def test_shell_prompt_enqueues_status_clear(self) -> None:
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        _has_seen_status.add("@0")
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=False,
+            ),
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 1000.0
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            await _handle_no_status(bot, 1, "@0", 42, "bash", "normal")
+        mock_enqueue.assert_called_once_with(bot, 1, "@0", None, thread_id=42)
+
+    async def test_shell_prompt_cancels_idle_timer(self) -> None:
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        _has_seen_status.add("@0")
+        _idle_clear_timers[(1, 42)] = ("@0", 500.0)
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch("ccbot.handlers.status_polling.enqueue_status_update"),
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=False,
+            ),
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 1000.0
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            await _handle_no_status(bot, 1, "@0", 42, "fish", "normal")
+        assert (1, 42) not in _idle_clear_timers
+
+
+class TestActiveStatusCancelsIdleTimer:
+    async def test_status_line_cancels_idle_timer(self) -> None:
+        from ccbot.providers.base import StatusUpdate
+
+        from ccbot.handlers.status_polling import update_status_message
+
+        _idle_clear_timers[(1, 42)] = ("@0", 500.0)
+        _idle_status_cleared.add("@0")
+
+        pyte_status = StatusUpdate(
+            raw_text="Working on task",
+            display_label="…working",
+        )
+        with (
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch("ccbot.handlers.status_polling.enqueue_status_update"),
+            patch("ccbot.handlers.status_polling._send_typing_throttled"),
+            patch(
+                "ccbot.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccbot.handlers.status_polling.get_provider_for_window",
+                return_value=make_mock_provider(has_status=True),
+            ),
+            patch(
+                "ccbot.handlers.status_polling._parse_with_pyte",
+                return_value=pyte_status,
+            ),
+        ):
+            mock_window = MagicMock()
+            mock_window.window_id = "@0"
+            mock_window.window_name = "project"
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="output")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_notification_mode.return_value = "normal"
+
+            bot = AsyncMock()
+            await update_status_message(bot, 1, "@0", thread_id=42)
+
+        assert (1, 42) not in _idle_clear_timers
+        assert "@0" not in _idle_status_cleared
+
+    async def test_transcript_activity_cancels_idle_timer(self) -> None:
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        _idle_clear_timers[(1, 42)] = ("@0", 500.0)
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch("ccbot.handlers.status_polling._send_typing_throttled"),
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=True,
+            ),
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
+        assert (1, 42) not in _idle_clear_timers

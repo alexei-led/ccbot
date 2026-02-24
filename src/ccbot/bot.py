@@ -326,6 +326,20 @@ async def forward_command_handler(
         if cc_slash.strip().lower() == "/clear":
             logger.info("Clearing session for window %s after /clear", display)
             session_manager.clear_window_session(window_id)
+            from .handlers.message_queue import enqueue_status_update
+            from .handlers.status_polling import (
+                clear_idle_clear_timer,
+                clear_screen_buffer,
+                clear_seen_status,
+            )
+
+            await enqueue_status_update(
+                update.get_bot(), user.id, window_id, None, thread_id=thread_id
+            )
+            if thread_id is not None:
+                clear_idle_clear_timer(user.id, thread_id)
+            clear_seen_status(window_id)
+            clear_screen_buffer(window_id)
     else:
         await safe_reply(update.message, f"\u274c {message}")
 

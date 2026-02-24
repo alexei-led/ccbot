@@ -1,15 +1,94 @@
 """Tests for terminal_parser — regex-based detection of Claude Code UI elements."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from ccbot.screen_buffer import ScreenBuffer
 
 from ccbot.terminal_parser import (
     extract_bash_output,
     extract_interactive_content,
+    find_chrome_boundary,
     format_status_display,
     is_interactive_ui,
+    is_likely_spinner,
     parse_status_line,
     strip_pane_chrome,
 )
+
+# ── is_likely_spinner ────────────────────────────────────────────────────
+
+
+class TestIsLikelySpinner:
+    @pytest.mark.parametrize(
+        "char",
+        ["·", "✻", "✽", "✶", "✳", "✢"],
+        ids=[
+            "middle_dot",
+            "heavy_asterisk",
+            "heavy_teardrop",
+            "six_star",
+            "eight_star",
+            "cross",
+        ],
+    )
+    def test_known_spinners(self, char: str):
+        assert is_likely_spinner(char) is True
+
+    @pytest.mark.parametrize(
+        "char",
+        ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+        ids=[f"braille_{i}" for i in range(10)],
+    )
+    def test_braille_spinners(self, char: str):
+        assert is_likely_spinner(char) is True
+
+    @pytest.mark.parametrize(
+        "char",
+        ["─", "│", "┌", "┐", ">", "|"],
+        ids=["h_line", "v_line", "corner_tl", "corner_tr", "gt", "pipe"],
+    )
+    def test_non_spinners_box_drawing(self, char: str):
+        assert is_likely_spinner(char) is False
+
+    @pytest.mark.parametrize(
+        "char",
+        ["A", "z", "0", " ", ""],
+        ids=["upper_a", "lower_z", "digit", "space", "empty"],
+    )
+    def test_non_spinners_common(self, char: str):
+        assert is_likely_spinner(char) is False
+
+    def test_math_symbol_detected(self):
+        assert is_likely_spinner("∑") is True
+
+    def test_other_symbol_detected(self):
+        assert is_likely_spinner("⚡") is True
+
+    @pytest.mark.parametrize(
+        "char",
+        ["!", "#", "%", "@", "*", "/", "\\", "~", "?", ",", "."],
+        ids=[
+            "bang",
+            "hash",
+            "pct",
+            "at",
+            "star",
+            "slash",
+            "bslash",
+            "tilde",
+            "qmark",
+            "comma",
+            "dot",
+        ],
+    )
+    def test_ascii_punctuation_rejected(self, char: str):
+        assert is_likely_spinner(char) is False
+
 
 # ── parse_status_line ────────────────────────────────────────────────────
 
@@ -34,6 +113,18 @@ class TestParseStatusLine:
         assert parse_status_line(pane) == expected
 
     @pytest.mark.parametrize(
+        ("spinner", "text"),
+        [
+            ("⠋", "Loading modules"),
+            ("⠹", "Compiling assets"),
+            ("⠏", "Fetching data"),
+        ],
+    )
+    def test_braille_spinners_detected(self, spinner: str, text: str):
+        pane = f"some output\n{spinner} {text}\n{_SEPARATOR}\n"
+        assert parse_status_line(pane) == text
+
+    @pytest.mark.parametrize(
         "pane",
         [
             pytest.param("just normal text\nno spinners here\n", id="no_spinner"),
@@ -42,14 +133,14 @@ class TestParseStatusLine:
                 f"some output\n· bullet point\nmore text\n{_SEPARATOR}\n",
                 id="spinner_not_above_separator",
             ),
-            pytest.param(
-                f"✻ Doing work\n{_SEPARATOR}\n" + "trailing\n" * 16,
-                id="separator_beyond_15_line_window",
-            ),
         ],
     )
     def test_returns_none(self, pane: str):
         assert parse_status_line(pane) is None
+
+    def test_adaptive_scan_finds_distant_separator(self):
+        pane = f"✻ Doing work\n{_SEPARATOR}\n" + "trailing\n" * 16
+        assert parse_status_line(pane) == "Doing work"
 
     def test_ignores_bullet_points(self):
         pane = (
@@ -129,6 +220,45 @@ class TestExtractInteractiveContent:
         assert result is not None
         assert result.name == "PermissionPrompt"
         assert "Do you want to proceed?" in result.content
+
+    def test_edit_permission_prompt_structural(self):
+        """Catch-all detects edit confirmation via ❯ + Esc, includes question context."""
+        pane = (
+            "  Do you want to make this edit to status_polling.py?\n"
+            "\n"
+            "  ❯ Yes    Yes All    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "❯" in result.content
+        # context_above pulls in the question text
+        assert "make this edit" in result.content
+
+    def test_unknown_selection_ui_structural(self):
+        """Catch-all detects any future selection prompt with ❯ + action hint."""
+        pane = (
+            "  Some brand new question nobody predicted?\n"
+            "\n"
+            "  ❯ Option A    Option B    Option C\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "❯" in result.content
+        assert "brand new question" in result.content
+
+    def test_structural_catchall_enter_to_confirm(self):
+        """Catch-all works with 'Enter to confirm' bottom hint too."""
+        pane = "  Pick a thing:\n  ❯ Alpha\n    Beta\n  Enter to confirm\n"
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "Pick a thing" in result.content
 
     def test_restore_checkpoint(self):
         pane = (
@@ -219,10 +349,16 @@ class TestStripPaneChrome:
         lines = ["output", "─" * 10, "more output"]
         assert strip_pane_chrome(lines) == lines
 
-    def test_only_searches_last_10_lines(self):
-        # Separator at line 0 with 15 lines total — outside the last-10 window
+    def test_adaptive_scan_finds_distant_separator(self):
+        # Separator at line 0 with 15 content lines — adaptive scan finds it
         lines = ["─" * 30] + [f"line {i}" for i in range(14)]
-        assert strip_pane_chrome(lines) == lines
+        assert strip_pane_chrome(lines) == []
+
+    def test_content_above_separator_preserved(self):
+        content = [f"line {i}" for i in range(20)]
+        chrome = ["─" * 30, "❯", "─" * 30, "  [Opus 4.6] Context: 34%"]
+        lines = content + chrome
+        assert strip_pane_chrome(lines) == content
 
 
 # ── extract_bash_output ─────────────────────────────────────────────────
@@ -324,3 +460,266 @@ class TestFormatStatusDisplay:
 
     def test_fallback_to_full_string(self) -> None:
         assert format_status_display("foo bar testing baz") == "…testing"
+
+
+# ── find_chrome_boundary ──────────────────────────────────────────────
+
+
+class TestFindChromeBoundary:
+    def test_empty_lines(self):
+        assert find_chrome_boundary([]) is None
+
+    def test_no_separator(self):
+        assert find_chrome_boundary(["line 1", "line 2"]) is None
+
+    def test_single_separator(self):
+        lines = ["output", "more output", "─" * 30, "❯"]
+        assert find_chrome_boundary(lines) == 2
+
+    def test_two_separators(self):
+        lines = [
+            "output",
+            "─" * 30,
+            "❯ ",
+            "─" * 30,
+            "  [Opus 4.6] Context: 34%",
+        ]
+        assert find_chrome_boundary(lines) == 1
+
+    def test_separator_far_from_bottom(self):
+        lines = ["output"] * 50 + ["─" * 30, "❯", "─" * 30, "  status"]
+        assert find_chrome_boundary(lines) == 50
+
+    def test_content_separator_not_chrome(self):
+        lines = [
+            "─" * 30,
+            "x" * 100,
+            "─" * 30,
+            "❯",
+        ]
+        # First separator has long content below it, so only second is chrome
+        assert find_chrome_boundary(lines) == 2
+
+
+# ── Adaptive terminal size tests ─────────────────────────────────────
+
+
+class TestVariableTerminalSizes:
+    def _build_pane(self, content_lines: int) -> str:
+        content = [f"line {i}" for i in range(content_lines)]
+        status = "✻ Working on task"
+        sep = "─" * 30
+        chrome = [sep, "❯ ", sep, "  ⎇ main  ✱ Opus 4.6"]
+        return "\n".join(content + [status] + chrome)
+
+    @pytest.mark.parametrize("rows", [24, 50, 100], ids=["24row", "50row", "100row"])
+    def test_status_detected_any_size(self, rows: int):
+        pane = self._build_pane(content_lines=rows - 5)
+        assert parse_status_line(pane) == "Working on task"
+
+    @pytest.mark.parametrize("rows", [24, 50, 100], ids=["24row", "50row", "100row"])
+    def test_chrome_stripped_any_size(self, rows: int):
+        content = [f"line {i}" for i in range(rows - 5)]
+        status = "✻ Working on task"
+        sep = "─" * 30
+        chrome = [sep, "❯ ", sep, "  ⎇ main  ✱ Opus 4.6"]
+        lines = content + [status] + chrome
+        result = strip_pane_chrome(lines)
+        assert result == content + [status]
+
+    def test_pane_rows_optimization(self):
+        pane = self._build_pane(content_lines=80)
+        assert parse_status_line(pane, pane_rows=100) == "Working on task"
+
+    def test_extra_padding_below_separator(self):
+        lines = [
+            "output",
+            "─" * 30,
+            "❯ ",
+            "─" * 30,
+            "  status bar",
+            "",
+            "",
+        ]
+        assert strip_pane_chrome(lines) == ["output"]
+
+
+# ── extract_interactive_content with list[str] ───────────────────────
+
+
+class TestExtractInteractiveContentWithLines:
+    def test_accepts_list_of_lines(self):
+        lines = [
+            "  ☐ Option A",
+            "  ☐ Option B",
+            "  Enter to select",
+        ]
+        result = extract_interactive_content(lines)
+        assert result is not None
+        assert result.name == "AskUserQuestion"
+        assert "Enter to select" in result.content
+
+    def test_empty_list_returns_none(self):
+        assert extract_interactive_content([]) is None
+
+    def test_list_matches_string_result(self):
+        pane = "  ☐ Option A\n  ☐ Option B\n  Enter to select\n"
+        lines = ["  ☐ Option A", "  ☐ Option B", "  Enter to select"]
+        result_str = extract_interactive_content(pane)
+        result_list = extract_interactive_content(lines)
+        assert result_str is not None
+        assert result_list is not None
+        assert result_str.name == result_list.name
+        # String variant calls .strip() before splitting, so leading whitespace
+        # on the first line may differ — compare the detected pattern name only
+
+
+# ── pyte screen-based parsing ────────────────────────────────────────
+
+
+class TestParseFromScreen:
+    def _make_screen(
+        self, raw: str, columns: int = 80, rows: int = 24
+    ) -> "ScreenBuffer":
+        from ccbot.screen_buffer import ScreenBuffer
+
+        buf = ScreenBuffer(columns=columns, rows=rows)
+        buf.feed(raw)
+        return buf
+
+    def test_detects_ask_user_question(self):
+        raw = "  \x1b[1m☐ Option A\x1b[0m\r\n  ☐ Option B\r\n  Enter to select"
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_from_screen(screen)
+        assert result is not None
+        assert result.name == "AskUserQuestion"
+        assert "Enter to select" in result.content
+
+    def test_detects_exit_plan_mode(self):
+        raw = (
+            "  Would you like to proceed?\r\n"
+            "  \x1b[36m─────────────────────────────────\x1b[0m\r\n"
+            "  Yes     No\r\n"
+            "  ─────────────────────────────────\r\n"
+            "  ctrl-g to edit in vim"
+        )
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_from_screen(screen)
+        assert result is not None
+        assert result.name == "ExitPlanMode"
+
+    def test_detects_permission_prompt(self):
+        raw = (
+            "  Do you want to proceed?\r\n"
+            "  \x1b[33mSome permission details\x1b[0m\r\n"
+            "  Esc to cancel"
+        )
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_from_screen(screen)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+
+    def test_no_ui_returns_none(self):
+        raw = "$ echo hello\r\nhello\r\n$ "
+        from ccbot.terminal_parser import parse_from_screen
+
+        screen = self._make_screen(raw)
+        assert parse_from_screen(screen) is None
+
+    def test_cursor_at_row_zero(self):
+        from ccbot.screen_buffer import ScreenBuffer
+        from ccbot.terminal_parser import parse_from_screen
+
+        buf = ScreenBuffer(columns=80, rows=5)
+        # Cursor stays at row 0, col 0 — empty screen
+        assert parse_from_screen(buf) is None
+
+    def test_ansi_stripped_matches_plain_text(self):
+        plain = "  ☐ Option A\n  ☐ Option B\n  Enter to select\n"
+        ansi = (
+            "  \x1b[1;32m☐ Option A\x1b[0m\r\n"
+            "  \x1b[34m☐ Option B\x1b[0m\r\n"
+            "  Enter to select"
+        )
+        from ccbot.terminal_parser import parse_from_screen
+
+        plain_result = extract_interactive_content(plain)
+        screen = self._make_screen(ansi)
+        screen_result = parse_from_screen(screen)
+        assert plain_result is not None
+        assert screen_result is not None
+        assert plain_result.name == screen_result.name
+
+
+class TestParseStatusFromScreen:
+    def _make_screen(
+        self, raw: str, columns: int = 80, rows: int = 24
+    ) -> "ScreenBuffer":
+        from ccbot.screen_buffer import ScreenBuffer
+
+        buf = ScreenBuffer(columns=columns, rows=rows)
+        buf.feed(raw)
+        return buf
+
+    def test_detects_spinner_status(self):
+        sep = "─" * 30
+        raw = (
+            "some output\r\n"
+            "\x1b[36m✻ Reading file\x1b[0m\r\n"
+            f"{sep}\r\n"
+            "❯ \r\n"
+            f"{sep}\r\n"
+            "  \x1b[90m[Opus 4.6]\x1b[0m Context: 34%"
+        )
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_status_from_screen(screen)
+        assert result == "Reading file"
+
+    def test_braille_spinner_via_screen(self):
+        sep = "─" * 30
+        raw = f"output\r\n⠋ Loading modules\r\n{sep}\r\n❯ "
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = self._make_screen(raw)
+        result = parse_status_from_screen(screen)
+        assert result == "Loading modules"
+
+    def test_no_status_returns_none(self):
+        raw = "just normal text\r\nno spinners here"
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = self._make_screen(raw)
+        assert parse_status_from_screen(screen) is None
+
+    def test_empty_screen_returns_none(self):
+        from ccbot.screen_buffer import ScreenBuffer
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        screen = ScreenBuffer(columns=80, rows=24)
+        assert parse_status_from_screen(screen) is None
+
+    def test_matches_regex_result(self):
+        sep = "─" * 30
+        plain = f"output\n✻ Working on task\n{sep}\n❯ \n{sep}\n  status"
+        ansi = (
+            "output\r\n"
+            "\x1b[36m✻ Working on task\x1b[0m\r\n"
+            f"{sep}\r\n"
+            "❯ \r\n"
+            f"{sep}\r\n"
+            "  \x1b[90mstatus\x1b[0m"
+        )
+        from ccbot.terminal_parser import parse_status_from_screen
+
+        regex_result = parse_status_line(plain)
+        screen = self._make_screen(ansi)
+        screen_result = parse_status_from_screen(screen)
+        assert regex_result == screen_result == "Working on task"

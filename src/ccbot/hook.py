@@ -30,7 +30,7 @@ _CLAUDE_SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
 # Substring marker for detecting ccbot hook in command strings
 _HOOK_COMMAND_MARKER = "ccbot hook"
 
-# Expected number of parts when parsing "session_name:@id:window_name"
+# Expected number of parts when parsing "session_name\t@id\twindow_name"
 _TMUX_FORMAT_PARTS = 3
 
 
@@ -253,14 +253,14 @@ def _process_hook_stdin() -> None:
             "-t",
             pane_id,
             "-p",
-            "#{session_name}:#{window_id}:#{window_name}",
+            "#{session_name}\t#{window_id}\t#{window_name}",
         ],
         capture_output=True,
         text=True,
     )
     raw_output = result.stdout.strip()
-    # Expected format: "session_name:@id:window_name"
-    parts = raw_output.split(":", 2)
+    # Expected format: "session_name\t@id\twindow_name"
+    parts = raw_output.split("\t", 2)
     if len(parts) < _TMUX_FORMAT_PARTS:
         logger.warning(
             "Failed to parse session:window_id:window_name from tmux (pane=%s, output=%s)",

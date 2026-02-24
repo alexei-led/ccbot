@@ -175,6 +175,12 @@ class JsonlProvider:
     ) -> SessionStartEvent | None:
         return None
 
+    def read_transcript_file(
+        self, file_path: str, last_offset: int
+    ) -> tuple[list[dict[str, Any]], int]:
+        msg = f"{type(self).__name__} uses incremental JSONL reading, not whole-file"
+        raise NotImplementedError(msg)
+
     def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
         return parse_jsonl_line(line)
 

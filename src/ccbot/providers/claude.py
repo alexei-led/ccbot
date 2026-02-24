@@ -91,6 +91,13 @@ class ClaudeProvider:
             window_key=window_key,
         )
 
+    def read_transcript_file(
+        self, file_path: str, last_offset: int
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Claude uses incremental JSONL reading, not whole-file."""
+        msg = "ClaudeProvider uses incremental JSONL reading, not whole-file"
+        raise NotImplementedError(msg)
+
     def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
         """Delegate to TranscriptParser.parse_line."""
         return TranscriptParser.parse_line(line)

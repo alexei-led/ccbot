@@ -86,9 +86,10 @@ When creating a topic via the directory browser, users can choose the provider (
 | Hook             | Yes              | No                 | No                          |
 | Resume           | Yes (`--resume`) | Yes (`resume`)     | Yes (`--resume idx/latest`) |
 | Continue         | Yes              | Yes                | Yes                         |
-| Transcript       | JSONL            | JSONL              | JSON (single file)          |
+| Transcript       | JSONL            | JSONL              | JSON (whole-file read)      |
+| Incremental read | Yes              | Yes                | No (whole-file JSON)        |
 | Commands         | Yes              | Yes                | Yes                         |
-| Status detection | Spinner parsing  | Activity heuristic | Pane title + interactive UI |
+| Status detection | pyte + spinner   | Activity heuristic | Pane title + interactive UI |
 
 Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers. Codex and Gemini have no SessionStart hook — session tracking for these providers requires manual `session_map.json` entries or auto-detection from running processes.
 

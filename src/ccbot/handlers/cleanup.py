@@ -13,7 +13,11 @@ from typing import Any
 from telegram import Bot
 
 from .interactive_ui import clear_interactive_msg
-from .message_queue import clear_status_msg_info, clear_tool_msg_ids_for_topic
+from .message_queue import (
+    clear_status_msg_info,
+    clear_tool_msg_ids_for_topic,
+    enqueue_status_update,
+)
 from .topic_emoji import clear_topic_emoji_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
@@ -39,8 +43,13 @@ async def clear_topic_state(
       - _has_seen_status (startup status tracking, if window_id provided)
       - user_data pending state (PENDING_THREAD_ID, PENDING_THREAD_TEXT)
     """
-    # Clear status message tracking
-    clear_status_msg_info(user_id, thread_id)
+    # Clear status message from Telegram (if bot available) or just tracking
+    if bot is not None:
+        await enqueue_status_update(
+            bot, user_id, window_id or "", None, thread_id=thread_id
+        )
+    else:
+        clear_status_msg_info(user_id, thread_id)
 
     # Clear tool message ID tracking
     clear_tool_msg_ids_for_topic(user_id, thread_id)
@@ -49,6 +58,8 @@ async def clear_topic_state(
     from .status_polling import (
         clear_autoclose_timer,
         clear_dead_notification,
+        clear_idle_clear_timer,
+        clear_screen_buffer,
         clear_seen_status,
         clear_typing_state,
     )
@@ -56,8 +67,10 @@ async def clear_topic_state(
     clear_dead_notification(user_id, thread_id)
     clear_autoclose_timer(user_id, thread_id)
     clear_typing_state(user_id, thread_id)
+    clear_idle_clear_timer(user_id, thread_id)
     if window_id:
         clear_seen_status(window_id)
+        clear_screen_buffer(window_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)
