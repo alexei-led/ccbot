@@ -16,23 +16,6 @@ import structlog
 _restart_requested = False
 
 
-def _short_name_processor(
-    _logger: structlog.types.WrappedLogger,
-    _method_name: str,
-    event_dict: structlog.types.EventDict,
-) -> structlog.types.EventDict:
-    """Strip 'ccbot.' and 'handlers.' prefixes, cap at 20 chars."""
-    name = event_dict.get("_record", {}).get("name", "")
-    if not name:
-        name = event_dict.get("logger_name", "")
-    if name.startswith("ccbot.handlers."):
-        name = name[len("ccbot.handlers.") :]
-    elif name.startswith("ccbot."):
-        name = name[len("ccbot.") :]
-    event_dict["short_name"] = name[:20]
-    return event_dict
-
-
 def setup_logging(log_level: str) -> None:
     """Configure structured, colored logging for interactive CLI use."""
     numeric_level = getattr(logging, log_level, None)
@@ -43,12 +26,10 @@ def setup_logging(log_level: str) -> None:
         processors=[
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
             structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.TimeStamper(fmt="%H:%M:%S"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
-            _short_name_processor,
             structlog.dev.ConsoleRenderer(
                 colors=True,
                 pad_event=40,
