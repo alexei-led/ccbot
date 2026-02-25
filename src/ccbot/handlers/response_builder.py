@@ -55,8 +55,7 @@ def build_response_parts(
 
     # Format based on content type
     if content_type == "thinking":
-        # Thinking: prefix with "∴ Thinking…" and single newline
-        prefix = "∴ Thinking…"
+        prefix = "\U0001f9e0 Thinking\u2026"
         separator = "\n"
     else:
         # Plain text: no prefix

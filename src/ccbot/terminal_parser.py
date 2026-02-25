@@ -13,8 +13,6 @@ Key functions: is_interactive_ui(), extract_interactive_content(),
 parse_status_line(), strip_pane_chrome(), extract_bash_output().
 """
 
-from __future__ import annotations
-
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -374,48 +372,50 @@ def parse_status_line(pane_text: str, *, pane_rows: int | None = None) -> str | 
 # Keyword → short label mapping for status display in Telegram.
 # First match wins; checked against the first word, then full string as fallback.
 _STATUS_KEYWORDS: list[tuple[str, str]] = [
-    ("think", "…thinking"),
-    ("reason", "…thinking"),
-    ("test", "…testing"),
-    ("read", "…reading"),
-    ("edit", "…editing"),
-    ("writ", "…writing"),
-    ("search", "…searching"),
-    ("grep", "…searching"),
-    ("glob", "…searching"),
-    ("install", "…installing"),
-    ("runn", "…running"),
-    ("bash", "…running"),
-    ("execut", "…running"),
-    ("compil", "…building"),
-    ("build", "…building"),
-    ("lint", "…linting"),
-    ("format", "…formatting"),
-    ("deploy", "…deploying"),
-    ("fetch", "…fetching"),
-    ("download", "…downloading"),
-    ("upload", "…uploading"),
-    ("commit", "…committing"),
-    ("push", "…pushing"),
-    ("pull", "…pulling"),
-    ("clone", "…cloning"),
-    ("debug", "…debugging"),
-    ("delet", "…deleting"),
-    ("creat", "…creating"),
-    ("check", "…checking"),
-    ("updat", "…updating"),
-    ("analyz", "…analyzing"),
-    ("analys", "…analyzing"),
-    ("pars", "…parsing"),
-    ("verif", "…verifying"),
+    ("think", "\U0001f9e0 thinking\u2026"),
+    ("reason", "\U0001f9e0 thinking\u2026"),
+    ("test", "\U0001f9ea testing\u2026"),
+    ("read", "\U0001f4d6 reading\u2026"),
+    ("edit", "\u270f\ufe0f editing\u2026"),
+    ("writ", "\U0001f4dd writing\u2026"),
+    ("search", "\U0001f50d searching\u2026"),
+    ("grep", "\U0001f50d searching\u2026"),
+    ("glob", "\U0001f4c2 searching\u2026"),
+    ("install", "\U0001f4e6 installing\u2026"),
+    ("runn", "\u26a1 running\u2026"),
+    ("bash", "\u26a1 running\u2026"),
+    ("execut", "\u26a1 running\u2026"),
+    ("compil", "\U0001f3d7\ufe0f building\u2026"),
+    ("build", "\U0001f3d7\ufe0f building\u2026"),
+    ("lint", "\U0001f9f9 linting\u2026"),
+    ("format", "\U0001f9f9 formatting\u2026"),
+    ("deploy", "\U0001f680 deploying\u2026"),
+    ("fetch", "\U0001f310 fetching\u2026"),
+    ("download", "\u2b07\ufe0f downloading\u2026"),
+    ("upload", "\u2b06\ufe0f uploading\u2026"),
+    ("commit", "\U0001f4be committing\u2026"),
+    ("push", "\u2b06\ufe0f pushing\u2026"),
+    ("pull", "\u2b07\ufe0f pulling\u2026"),
+    ("clone", "\U0001f4cb cloning\u2026"),
+    ("debug", "\U0001f41b debugging\u2026"),
+    ("delet", "\U0001f5d1\ufe0f deleting\u2026"),
+    ("creat", "\u2728 creating\u2026"),
+    ("check", "\u2705 checking\u2026"),
+    ("updat", "\U0001f504 updating\u2026"),
+    ("analyz", "\U0001f52c analyzing\u2026"),
+    ("analys", "\U0001f52c analyzing\u2026"),
+    ("pars", "\U0001f50d parsing\u2026"),
+    ("verif", "\u2705 verifying\u2026"),
 ]
+
+_DEFAULT_STATUS = "\u2699\ufe0f working\u2026"
 
 
 def format_status_display(raw_status: str) -> str:
     """Convert raw Claude Code status text to a short display label.
 
-    Matches the first word first (so "Writing tests" → "…writing", not "…testing"),
-    then falls back to scanning the full string. Returns "…working" if nothing matches.
+    Matches the first word first (so "Writing tests" → "writing…", not "testing…"),
+    then falls back to scanning the full string. Returns "working…" if nothing matches.
     """
     lower = raw_status.lower()
     first_word = lower.split(maxsplit=1)[0] if lower else ""
@@ -425,7 +425,7 @@ def format_status_display(raw_status: str) -> str:
     for keyword, label in _STATUS_KEYWORDS:
         if keyword in lower:
             return label
-    return "…working"
+    return _DEFAULT_STATUS
 
 
 # ── Pane chrome stripping & bash output extraction ─────────────────────

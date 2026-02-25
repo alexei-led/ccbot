@@ -12,6 +12,7 @@ from ccbot.handlers.message_sender import (
     _last_send_time,
     _send_with_fallback,
     rate_limit_send,
+    strip_mdv2,
 )
 
 
@@ -104,3 +105,56 @@ class TestSendWithFallback:
 
         with pytest.raises(RetryAfter):
             await _send_with_fallback(bot, 123, "hello")
+
+    async def test_fallback_strips_mdv2_escapes(self) -> None:
+        bot = AsyncMock()
+        sent = AsyncMock(spec=Message)
+        bot.send_message.side_effect = [TelegramError("parse error"), sent]
+
+        await _send_with_fallback(bot, 123, r"Hello \*world\* from bot\.py")
+
+        assert bot.send_message.call_count == 2
+        fallback_text = bot.send_message.call_args_list[1].kwargs["text"]
+        assert "\\" not in fallback_text
+        assert fallback_text == "Hello *world* from bot.py"
+
+
+class TestStripMdv2:
+    @pytest.mark.parametrize(
+        ("input_text", "expected"),
+        [
+            pytest.param(r"\*bold\*", "*bold*", id="escaped-asterisks"),
+            pytest.param(r"\_italic\_", "_italic_", id="escaped-underscores"),
+            pytest.param(r"\~strike\~", "~strike~", id="escaped-tildes"),
+            pytest.param(r"\[link\]", "[link]", id="escaped-brackets"),
+            pytest.param(r"\(url\)", "(url)", id="escaped-parens"),
+            pytest.param(r"\#heading", "#heading", id="escaped-hash"),
+            pytest.param(r"\+plus", "+plus", id="escaped-plus"),
+            pytest.param(r"\-minus", "-minus", id="escaped-minus"),
+            pytest.param(r"\=equals", "=equals", id="escaped-equals"),
+            pytest.param(r"\|pipe", "|pipe", id="escaped-pipe"),
+            pytest.param(r"\{brace\}", "{brace}", id="escaped-braces"),
+            pytest.param(r"\!bang", "!bang", id="escaped-bang"),
+            pytest.param("\\\\backslash", "\\backslash", id="escaped-backslash"),
+            pytest.param(r"src/ccbot/bot\.py", "src/ccbot/bot.py", id="file-path-dot"),
+            pytest.param(
+                r"src/ccbot/message\_sender\.py",
+                "src/ccbot/message_sender.py",
+                id="file-path-underscore-dot",
+            ),
+            pytest.param(">line1\n>line2", "line1\nline2", id="blockquote-prefix"),
+            pytest.param(">content||", "content", id="expandable-quote-close"),
+            pytest.param(
+                ">first||\n>second||",
+                "first\nsecond",
+                id="expandable-quote-multi",
+            ),
+            pytest.param("plain text here", "plain text here", id="plain-passthrough"),
+            pytest.param(
+                "no special chars 123", "no special chars 123", id="no-changes"
+            ),
+            pytest.param("", "", id="empty-string"),
+        ],
+    )
+    def test_strip_mdv2(self, input_text: str, expected: str) -> None:
+        assert strip_mdv2(input_text) == expected

@@ -72,6 +72,27 @@ class TranscriptParser:
     _ERROR_SUMMARY_LIMIT = 100
     _MAX_SUMMARY_LENGTH = 200
 
+    # Tool name → emoji for visual category recognition in Telegram output
+    TOOL_EMOJI: dict[str, str] = {
+        "Read": "\U0001f4d6",
+        "Write": "\U0001f4dd",
+        "Edit": "\u270f\ufe0f",
+        "MultiEdit": "\u270f\ufe0f",
+        "NotebookEdit": "\u270f\ufe0f",
+        "Bash": "\u26a1",
+        "Grep": "\U0001f50d",
+        "Glob": "\U0001f4c2",
+        "Task": "\U0001f916",
+        "WebFetch": "\U0001f310",
+        "WebSearch": "\U0001f50e",
+        "TodoWrite": "\u2705",
+        "TodoRead": "\U0001f4cb",
+        "Skill": "\u2699\ufe0f",
+        "AskUserQuestion": "\u2753",
+        "ExitPlanMode": "\U0001f4cb",
+        "LS": "\U0001f4c2",
+    }
+
     @staticmethod
     def parse_line(line: str) -> dict | None:
         """Parse a single JSONL line.
@@ -169,7 +190,9 @@ class TranscriptParser:
             Formatted string like "**Read**(file.py)"
         """
         if not isinstance(input_data, dict):
-            return f"**{name}**"
+            emoji = cls.TOOL_EMOJI.get(name, "")
+            prefix = f"{emoji} " if emoji else ""
+            return f"{prefix}**{name}**"
 
         # Pick a meaningful short summary based on tool name
         summary = ""
@@ -214,11 +237,13 @@ class TranscriptParser:
                     summary = v
                     break
 
+        emoji = cls.TOOL_EMOJI.get(name, "")
+        prefix = f"{emoji} " if emoji else ""
         if summary:
             if len(summary) > cls._MAX_SUMMARY_LENGTH:
                 summary = summary[: cls._MAX_SUMMARY_LENGTH] + "…"
-            return f"**{name}**({summary})"
-        return f"**{name}**"
+            return f"{prefix}**{name}** `{summary}`"
+        return f"{prefix}**{name}**"
 
     @staticmethod
     def extract_tool_result_text(content: list | Any) -> str:
@@ -318,55 +343,44 @@ class TranscriptParser:
 
         line_count = text.count("\n") + 1 if text else 0
 
-        # Tool-specific statistics
         if tool_name == "Read":
-            # Read: show line count instead of full content
-            return f"  ⎿  Read {line_count} lines"
+            return f"  ⎿  {line_count} lines"
 
         elif tool_name == "Write":
-            # Write: show lines written
-            stats = f"  ⎿  Wrote {line_count} lines"
-            return stats
+            return f"  ⎿  {line_count} lines written"
 
         elif tool_name == "Bash":
-            # Bash: show output line count
             if line_count > 0:
-                stats = f"  ⎿  Output {line_count} lines"
+                stats = f"  ⎿  {line_count} lines"
                 return stats + "\n" + cls._format_expandable_quote(text)
             return cls._format_expandable_quote(text)
 
         elif tool_name == "Grep":
-            # Grep: show match count (count non-empty lines)
-            matches = len([line for line in text.split("\n") if line.strip()])
-            stats = f"  ⎿  Found {matches} matches"
+            matches = sum(1 for line in text.split("\n") if line.strip())
+            stats = f"  ⎿  {matches} matches"
             return stats + "\n" + cls._format_expandable_quote(text)
 
         elif tool_name == "Glob":
-            # Glob: show file count
-            files = len([line for line in text.split("\n") if line.strip()])
-            stats = f"  ⎿  Found {files} files"
+            files = sum(1 for line in text.split("\n") if line.strip())
+            stats = f"  ⎿  {files} files"
             return stats + "\n" + cls._format_expandable_quote(text)
 
         elif tool_name == "Task":
-            # Task: show output length
             if line_count > 0:
-                stats = f"  ⎿  Agent output {line_count} lines"
+                stats = f"  ⎿  {line_count} lines"
                 return stats + "\n" + cls._format_expandable_quote(text)
             return cls._format_expandable_quote(text)
 
         elif tool_name == "WebFetch":
-            # WebFetch: show content length
             char_count = len(text)
-            stats = f"  ⎿  Fetched {char_count} characters"
+            stats = f"  ⎿  {char_count} chars"
             return stats + "\n" + cls._format_expandable_quote(text)
 
         elif tool_name == "WebSearch":
-            # WebSearch: show results count (estimate by sections)
             results = text.count("\n\n") + 1 if text else 0
-            stats = f"  ⎿  {results} search results"
+            stats = f"  ⎿  {results} results"
             return stats + "\n" + cls._format_expandable_quote(text)
 
-        # Default: expandable quote without stats
         return cls._format_expandable_quote(text)
 
     @classmethod
@@ -584,24 +598,20 @@ class TranscriptParser:
                                 )
                             )
                         elif is_error:
-                            # Show error in stats line
                             entry_text = tool_summary or "**Error**"
-                            # Add error message in stats format
                             if result_text:
-                                # Take first line of error as summary
                                 error_summary = result_text.split("\n")[0]
                                 if len(error_summary) > cls._ERROR_SUMMARY_LIMIT:
                                     error_summary = (
                                         error_summary[: cls._ERROR_SUMMARY_LIMIT] + "…"
                                     )
-                                entry_text += f"\n  ⎿  Error: {error_summary}"
-                                # If multi-line error, add expandable quote
+                                entry_text += f"\n  ⎿  \u26a0\ufe0f {error_summary}"
                                 if "\n" in result_text:
                                     entry_text += "\n" + cls._format_expandable_quote(
                                         result_text
                                     )
                             else:
-                                entry_text += "\n  ⎿  Error"
+                                entry_text += "\n  ⎿  \u26a0\ufe0f Error"
                             result.append(
                                 ParsedEntry(
                                     role="assistant",
@@ -632,7 +642,7 @@ class TranscriptParser:
                                             if line.startswith("-")
                                             and not line.startswith("---")
                                         )
-                                        stats = f"  ⎿  Added {added} lines, removed {removed} lines"
+                                        stats = f"  ⎿  +{added} −{removed}"
                                         entry_text += (
                                             "\n"
                                             + stats

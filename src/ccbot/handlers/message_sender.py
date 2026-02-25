@@ -12,7 +12,8 @@ Functions:
 """
 
 import asyncio
-import logging
+import re
+import structlog
 import time
 from typing import Any
 
@@ -21,10 +22,29 @@ from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ..markdown_v2 import convert_markdown
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Disable link previews in all messages to reduce visual noise
 NO_LINK_PREVIEW = LinkPreviewOptions(is_disabled=True)
+
+# Regex to strip MarkdownV2 escape sequences from plain text fallback.
+# Matches a backslash followed by any MarkdownV2 special character.
+_MDV2_STRIP_RE = re.compile(r"\\([_*\[\]()~`>#+\-=|{}.!\\])")
+# Strip expandable blockquote syntax: leading ">" prefix and trailing "||"
+_BLOCKQUOTE_PREFIX_RE = re.compile(r"^>", re.MULTILINE)
+_BLOCKQUOTE_CLOSE_RE = re.compile(r"\|\|$", re.MULTILINE)
+
+
+def strip_mdv2(text: str) -> str:
+    """Strip MarkdownV2 formatting artifacts for clean plain text fallback.
+
+    Removes backslash escapes before special chars and blockquote syntax
+    so the fallback message is readable without formatting artifacts.
+    """
+    text = _MDV2_STRIP_RE.sub(r"\1", text)
+    text = _BLOCKQUOTE_CLOSE_RE.sub("", text)
+    return _BLOCKQUOTE_PREFIX_RE.sub("", text)
+
 
 # Rate limiting: last send time per chat to avoid Telegram flood control
 _last_send_time: dict[int, float] = {}
@@ -64,7 +84,9 @@ async def _send_with_fallback(
         raise
     except TelegramError:
         try:
-            return await bot.send_message(chat_id=chat_id, text=text, **kwargs)
+            return await bot.send_message(
+                chat_id=chat_id, text=strip_mdv2(text), **kwargs
+            )
         except RetryAfter:
             raise
         except TelegramError as e:
@@ -109,7 +131,7 @@ async def safe_reply(message: Message, text: str, **kwargs: Any) -> Message | No
     except RetryAfter:
         raise
     except TelegramError:
-        return await message.reply_text(text, **kwargs)
+        return await message.reply_text(strip_mdv2(text), **kwargs)
 
 
 async def safe_edit(target: Any, text: str, **kwargs: Any) -> None:
@@ -132,7 +154,7 @@ async def safe_edit(target: Any, text: str, **kwargs: Any) -> None:
         raise
     except TelegramError:
         try:
-            await edit_fn(text, **kwargs)
+            await edit_fn(strip_mdv2(text), **kwargs)
         except RetryAfter:
             raise
         except TelegramError as e:
@@ -161,7 +183,7 @@ async def safe_send(
         raise
     except TelegramError:
         try:
-            await bot.send_message(chat_id=chat_id, text=text, **kwargs)
+            await bot.send_message(chat_id=chat_id, text=strip_mdv2(text), **kwargs)
         except RetryAfter:
             raise
         except TelegramError as e:

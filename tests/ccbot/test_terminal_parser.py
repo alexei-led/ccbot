@@ -413,53 +413,58 @@ class TestFormatStatusDisplay:
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
-            ("Reading src/foo.py", "…reading"),
-            ("Thinking about the problem", "…thinking"),
-            ("Reasoning through options", "…thinking"),
-            ("Editing main.py line 42", "…editing"),
-            ("Writing to file", "…writing"),
-            ("Running bash command", "…running"),
-            ("Searching for pattern", "…searching"),
-            ("grep -r foo .", "…searching"),
-            ("glob **/*.py", "…searching"),
-            ("Building the project", "…building"),
-            ("compiling module", "…building"),
-            ("Installing dependencies", "…installing"),
-            ("Fetching remote refs", "…fetching"),
-            ("git push origin main", "…pushing"),
-            ("git pull --rebase", "…pulling"),
-            ("git clone https://repo", "…cloning"),
-            ("git commit -m msg", "…committing"),
-            ("Deploying to prod", "…deploying"),
-            ("Debugging crash", "…debugging"),
-            ("Formatting code", "…formatting"),
-            ("Linting files", "…linting"),
-            ("Downloading artifact", "…downloading"),
-            ("Uploading results", "…uploading"),
-            ("Testing connection", "…testing"),
-            ("Deleting old files", "…deleting"),
-            ("Creating new module", "…creating"),
-            ("Checking types", "…checking"),
-            ("Updating dependencies", "…updating"),
-            ("Analyzing output", "…analyzing"),
-            ("Parsing JSON", "…parsing"),
-            ("Verifying results", "…verifying"),
-            ("esc to interrupt · working", "…working"),
-            ("Something completely novel", "…working"),
-            ("", "…working"),
+            ("Reading src/foo.py", "\U0001f4d6 reading\u2026"),
+            ("Thinking about the problem", "\U0001f9e0 thinking\u2026"),
+            ("Reasoning through options", "\U0001f9e0 thinking\u2026"),
+            ("Editing main.py line 42", "\u270f\ufe0f editing\u2026"),
+            ("Writing to file", "\U0001f4dd writing\u2026"),
+            ("Running bash command", "\u26a1 running\u2026"),
+            ("Searching for pattern", "\U0001f50d searching\u2026"),
+            ("grep -r foo .", "\U0001f50d searching\u2026"),
+            ("glob **/*.py", "\U0001f4c2 searching\u2026"),
+            ("Building the project", "\U0001f3d7\ufe0f building\u2026"),
+            ("compiling module", "\U0001f3d7\ufe0f building\u2026"),
+            ("Installing dependencies", "\U0001f4e6 installing\u2026"),
+            ("Fetching remote refs", "\U0001f310 fetching\u2026"),
+            ("git push origin main", "\u2b06\ufe0f pushing\u2026"),
+            ("git pull --rebase", "\u2b07\ufe0f pulling\u2026"),
+            ("git clone https://repo", "\U0001f4cb cloning\u2026"),
+            ("git commit -m msg", "\U0001f4be committing\u2026"),
+            ("Deploying to prod", "\U0001f680 deploying\u2026"),
+            ("Debugging crash", "\U0001f41b debugging\u2026"),
+            ("Formatting code", "\U0001f9f9 formatting\u2026"),
+            ("Linting files", "\U0001f9f9 linting\u2026"),
+            ("Downloading artifact", "\u2b07\ufe0f downloading\u2026"),
+            ("Uploading results", "\u2b06\ufe0f uploading\u2026"),
+            ("Testing connection", "\U0001f9ea testing\u2026"),
+            ("Deleting old files", "\U0001f5d1\ufe0f deleting\u2026"),
+            ("Creating new module", "\u2728 creating\u2026"),
+            ("Checking types", "\u2705 checking\u2026"),
+            ("Updating dependencies", "\U0001f504 updating\u2026"),
+            ("Analyzing output", "\U0001f52c analyzing\u2026"),
+            ("Parsing JSON", "\U0001f50d parsing\u2026"),
+            ("Verifying results", "\u2705 verifying\u2026"),
+            ("esc to interrupt \u00b7 working", "\u2699\ufe0f working\u2026"),
+            ("Something completely novel", "\u2699\ufe0f working\u2026"),
+            ("", "\u2699\ufe0f working\u2026"),
         ],
     )
     def test_known_patterns(self, raw: str, expected: str) -> None:
         assert format_status_display(raw) == expected
 
     def test_case_insensitive(self) -> None:
-        assert format_status_display("READING file") == "…reading"
+        assert format_status_display("READING file") == "\U0001f4d6 reading\u2026"
 
     def test_first_word_priority(self) -> None:
-        assert format_status_display("Writing tests for module") == "…writing"
+        assert (
+            format_status_display("Writing tests for module")
+            == "\U0001f4dd writing\u2026"
+        )
 
     def test_fallback_to_full_string(self) -> None:
-        assert format_status_display("foo bar testing baz") == "…testing"
+        assert (
+            format_status_display("foo bar testing baz") == "\U0001f9ea testing\u2026"
+        )
 
 
 # ── find_chrome_boundary ──────────────────────────────────────────────

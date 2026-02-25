@@ -7,7 +7,7 @@ Provides history viewing functionality for Claude Code sessions:
 Supports both full history and unread message range views.
 """
 
-import logging
+import structlog
 from datetime import datetime
 from typing import Any
 
@@ -19,7 +19,7 @@ from ..telegram_sender import split_message
 from .callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
 from .message_sender import safe_edit, safe_reply, safe_send
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 def _format_timestamp(ts: str | None) -> str:
@@ -161,8 +161,7 @@ async def send_history(
                 # User message with emoji prefix (no newline)
                 lines.append(f"👤 {msg_text}")
             elif content_type == "thinking":
-                # Thinking prefix to match real-time format
-                lines.append(f"∴ Thinking…\n{msg_text}")
+                lines.append(f"\U0001f9e0 Thinking\u2026\n{msg_text}")
             else:
                 lines.append(msg_text)
         full_text = "\n\n".join(lines)

@@ -62,31 +62,47 @@ class TestFormatToolUseSummary:
     @pytest.mark.parametrize(
         "name, input_data, expected",
         [
-            ("Read", {"file_path": "src/main.py"}, "**Read**(src/main.py)"),
-            ("Write", {"file_path": "out.txt"}, "**Write**(out.txt)"),
-            ("Bash", {"command": "ls -la"}, "**Bash**(ls -la)"),
-            ("Grep", {"pattern": "TODO"}, "**Grep**(TODO)"),
-            ("Glob", {"pattern": "*.py"}, "**Glob**(*.py)"),
-            ("Task", {"description": "analyze code"}, "**Task**(analyze code)"),
+            ("Read", {"file_path": "src/main.py"}, "\U0001f4d6 **Read** `src/main.py`"),
+            ("Write", {"file_path": "out.txt"}, "\U0001f4dd **Write** `out.txt`"),
+            ("Bash", {"command": "ls -la"}, "\u26a1 **Bash** `ls -la`"),
+            ("Grep", {"pattern": "TODO"}, "\U0001f50d **Grep** `TODO`"),
+            ("Glob", {"pattern": "*.py"}, "\U0001f4c2 **Glob** `*.py`"),
+            (
+                "Task",
+                {"description": "analyze code"},
+                "\U0001f916 **Task** `analyze code`",
+            ),
             (
                 "WebFetch",
                 {"url": "https://example.com"},
-                "**WebFetch**(https://example.com)",
+                "\U0001f310 **WebFetch** `https://example.com`",
             ),
-            ("WebSearch", {"query": "python async"}, "**WebSearch**(python async)"),
-            ("TodoWrite", {"todos": [1, 2, 3]}, "**TodoWrite**(3 item(s))"),
-            ("TodoRead", {}, "**TodoRead**"),
+            (
+                "WebSearch",
+                {"query": "python async"},
+                "\U0001f50e **WebSearch** `python async`",
+            ),
+            (
+                "TodoWrite",
+                {"todos": [1, 2, 3]},
+                "\u2705 **TodoWrite** `3 item(s)`",
+            ),
+            ("TodoRead", {}, "\U0001f4cb **TodoRead**"),
             (
                 "AskUserQuestion",
                 {"questions": [{"question": "Continue?"}]},
-                "**AskUserQuestion**(Continue?)",
+                "\u2753 **AskUserQuestion** `Continue?`",
             ),
-            ("ExitPlanMode", {}, "**ExitPlanMode**"),
-            ("Skill", {"skill": "code-review"}, "**Skill**(code-review)"),
+            ("ExitPlanMode", {}, "\U0001f4cb **ExitPlanMode**"),
+            (
+                "Skill",
+                {"skill": "code-review"},
+                "\u2699\ufe0f **Skill** `code-review`",
+            ),
             (
                 "CustomTool",
                 {"first_key": "value1"},
-                "**CustomTool**(value1)",
+                "**CustomTool** `value1`",
             ),
         ],
         ids=[
@@ -111,7 +127,8 @@ class TestFormatToolUseSummary:
 
     def test_non_dict_input(self):
         assert (
-            TranscriptParser.format_tool_use_summary("Read", "not a dict") == "**Read**"
+            TranscriptParser.format_tool_use_summary("Read", "not a dict")
+            == "\U0001f4d6 **Read**"
         )
 
     def test_truncation_at_200_chars(self):
@@ -120,7 +137,7 @@ class TestFormatToolUseSummary:
             "Bash", {"command": long_value}
         )
         assert len(long_value) > 200
-        assert result == f"**Bash**({'x' * 200}…)"
+        assert result == f"\u26a1 **Bash** `{'x' * 200}\u2026`"
 
 
 # ── extract_tool_result_text ─────────────────────────────────────────────
@@ -259,18 +276,18 @@ class TestFormatToolResultText:
             (
                 "line1\nline2\nline3",
                 "Read",
-                lambda r: r == "  ⎿  Read 3 lines",
+                lambda r: r == "  \u23bf  3 lines",
             ),
             (
                 "line1\nline2",
                 "Write",
-                lambda r: r == "  ⎿  Wrote 2 lines",
+                lambda r: r == "  \u23bf  2 lines written",
             ),
             (
                 "output line",
                 "Bash",
                 lambda r: (
-                    r.startswith("  ⎿  Output 1 lines")
+                    r.startswith("  \u23bf  1 lines")
                     and EXPQUOTE_START in r
                     and EXPQUOTE_END in r
                 ),
@@ -278,24 +295,23 @@ class TestFormatToolResultText:
             (
                 "file1.py\nfile2.py\n",
                 "Grep",
-                lambda r: "Found 2 matches" in r and EXPQUOTE_START in r,
+                lambda r: "2 matches" in r and EXPQUOTE_START in r,
             ),
             (
                 "a.py\nb.py\nc.py",
                 "Glob",
-                lambda r: "Found 3 files" in r and EXPQUOTE_START in r,
+                lambda r: "3 files" in r and EXPQUOTE_START in r,
             ),
             (
                 "agent says hello",
                 "Task",
-                lambda r: "Agent output 1 lines" in r and EXPQUOTE_START in r,
+                lambda r: "1 lines" in r and EXPQUOTE_START in r,
             ),
             (
                 "page content here",
                 "WebFetch",
                 lambda r: (
-                    f"Fetched {len('page content here')} characters" in r
-                    and EXPQUOTE_START in r
+                    f"{len('page content here')} chars" in r and EXPQUOTE_START in r
                 ),
             ),
             (
@@ -352,7 +368,7 @@ class TestParseEntries:
         tool_result_entries = [e for e in result if e.content_type == "tool_result"]
         assert len(tool_use_entries) == 1
         assert tool_use_entries[0].tool_use_id == "t1"
-        assert "**Read**" in tool_use_entries[0].text
+        assert "\U0001f4d6 **Read**" in tool_use_entries[0].text
         assert len(tool_result_entries) == 1
         assert tool_result_entries[0].tool_use_id == "t1"
         assert not pending
@@ -417,8 +433,8 @@ class TestParseEntries:
         tool_result_entries = [e for e in result if e.content_type == "tool_result"]
         assert len(tool_result_entries) == 1
         tr = tool_result_entries[0]
-        assert "Added" in tr.text
-        assert "removed" in tr.text
+        assert "+1" in tr.text
+        assert "\u22121" in tr.text
         assert EXPQUOTE_START in tr.text
 
     def test_error_tool_result(
@@ -440,7 +456,7 @@ class TestParseEntries:
         result, pending = TranscriptParser.parse_entries(entries)
         tool_result_entries = [e for e in result if e.content_type == "tool_result"]
         assert len(tool_result_entries) == 1
-        assert "Error: Permission denied" in tool_result_entries[0].text
+        assert "\u26a0\ufe0f Permission denied" in tool_result_entries[0].text
 
     def test_interrupted_tool_result(
         self,

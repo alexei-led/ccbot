@@ -385,7 +385,7 @@ class TestParseWithPyte:
         result = _parse_with_pyte("@0", pane_text)
         assert result is not None
         assert result.raw_text == "Reading file src/main.py"
-        assert result.display_label == "…reading"
+        assert result.display_label == "\U0001f4d6 reading\u2026"
         assert result.is_interactive is False
 
     def test_detects_braille_spinner(self) -> None:
@@ -494,7 +494,7 @@ class TestPyteFallbackInUpdateStatus:
 
         pyte_status = StatusUpdate(
             raw_text="Reading file",
-            display_label="…reading",
+            display_label="\U0001f4d6 reading\u2026",
         )
         with (
             patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
@@ -537,7 +537,7 @@ class TestPyteFallbackInUpdateStatus:
             # Status was enqueued using pyte result
             mock_enqueue.assert_called_once()
             call_args = mock_enqueue.call_args
-            assert call_args[0][3] == "…reading"
+            assert call_args[0][3] == "\U0001f4d6 reading\u2026"
 
 
 class TestIdleClearTimers:
@@ -728,7 +728,7 @@ class TestActiveStatusCancelsIdleTimer:
 
         pyte_status = StatusUpdate(
             raw_text="Working on task",
-            display_label="…working",
+            display_label="\u2699\ufe0f working\u2026",
         )
         with (
             patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
