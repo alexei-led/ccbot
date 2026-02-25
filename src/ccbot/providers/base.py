@@ -97,6 +97,8 @@ class ProviderCapabilities:
     name: str  # e.g. "claude", "codex", "gemini"
     launch_command: str  # e.g. "claude", "codex"
     supports_hook: bool = False
+    supports_hook_events: bool = False
+    hook_event_types: tuple[str, ...] = ()
     supports_resume: bool = False
     supports_continue: bool = False
     supports_structured_transcript: bool = False

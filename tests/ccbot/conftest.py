@@ -4,12 +4,21 @@ Provides factories for building JSONL entries, content blocks,
 and sample pane text for terminal parser tests.
 """
 
+import os
 import time
 from unittest.mock import MagicMock
 
 import pytest
 
 from ccbot.providers.base import AgentProvider, StatusUpdate
+
+
+@pytest.fixture(autouse=True)
+def _clean_provider_env(monkeypatch):
+    """Remove CCBOT_*_COMMAND env vars so tests use provider defaults."""
+    for key in list(os.environ):
+        if key.startswith("CCBOT_") and key.endswith("_COMMAND"):
+            monkeypatch.delenv(key)
 
 
 def make_mock_provider(

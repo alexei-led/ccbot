@@ -106,6 +106,11 @@ class SessionMonitor:
         self._new_window_callback: (
             Callable[[NewWindowEvent], Awaitable[None]] | None
         ) = None
+        # Hook event callback and byte offset for events.jsonl
+        from .handlers.hook_events import HookEvent
+
+        self._hook_event_callback: Callable[[HookEvent], Awaitable[None]] | None = None
+        self._events_offset: int = 0
         # Per-session pending tool_use state carried across poll cycles
         self._pending_tools: dict[str, dict[str, Any]] = {}  # session_id -> pending
         # Track last known session_map for detecting changes
@@ -129,6 +134,69 @@ class SessionMonitor:
         self, callback: Callable[[NewWindowEvent], Awaitable[None]]
     ) -> None:
         self._new_window_callback = callback
+
+    def set_hook_event_callback(self, callback: Callable[..., Awaitable[None]]) -> None:
+        self._hook_event_callback = callback
+
+    def record_hook_activity(self, window_id: str) -> None:
+        """Record hook-based activity for a window (resets idle timers)."""
+        session_id = None
+        for sid, details in self._last_session_map.items():
+            if sid.endswith(f":{window_id}"):
+                session_id = details.get("session_id")
+                break
+        if session_id:
+            self._last_activity[session_id] = time.monotonic()
+
+    async def _read_hook_events(self) -> None:
+        """Read new lines from events.jsonl and dispatch via callback."""
+        if not self._hook_event_callback:
+            return
+
+        events_file = config.events_file
+        if not events_file.exists():
+            return
+
+        from .handlers.hook_events import HookEvent
+
+        try:
+            async with aiofiles.open(events_file, "r", encoding="utf-8") as f:
+                # Check file size for truncation detection
+                await f.seek(0, 2)
+                file_size = await f.tell()
+                if self._events_offset > file_size:
+                    self._events_offset = 0
+                await f.seek(self._events_offset)
+
+                async for line in f:
+                    line = line.strip()
+                    if not line:
+                        self._events_offset = await f.tell()
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.debug("Skipping malformed event line")
+                        self._events_offset = await f.tell()
+                        continue
+
+                    event = HookEvent(
+                        event_type=data.get("event", ""),
+                        window_key=data.get("window_key", ""),
+                        session_id=data.get("session_id", ""),
+                        data=data.get("data", {}),
+                        timestamp=data.get("ts", 0.0),
+                    )
+                    self._events_offset = await f.tell()
+
+                    try:
+                        await self._hook_event_callback(event)
+                    except _CallbackError:
+                        logger.exception(
+                            "Hook event callback error for %s", event.event_type
+                        )
+        except OSError:
+            logger.debug("Could not read events file %s", events_file)
 
     async def _get_active_cwds(self) -> set[str]:
         """Get normalized cwds of all active tmux windows."""
@@ -621,6 +689,9 @@ class SessionMonitor:
         error_streak = 0
         while self._running:
             try:
+                # Read hook events first (lower latency than transcript polls)
+                await self._read_hook_events()
+
                 # Load hook-based session map updates
                 await session_manager.load_session_map()
 

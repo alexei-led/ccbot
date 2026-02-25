@@ -63,6 +63,7 @@ class Config:
         self.state_file = self.config_dir / "state.json"
         self.session_map_file = self.config_dir / "session_map.json"
         self.monitor_state_file = self.config_dir / "monitor_state.json"
+        self.events_file = self.config_dir / "events.jsonl"
 
         # Claude Code session monitoring configuration
         self.claude_projects_path = Path.home() / ".claude" / "projects"

@@ -126,13 +126,13 @@ ALLOWED_USERS=your_telegram_user_id
 
 > Get your user ID from [@userinfobot](https://t.me/userinfobot) on Telegram.
 
-### Install the session hook (Claude Code only)
+### Install hooks (Claude Code only)
 
 ```bash
 ccbot hook --install
 ```
 
-This registers a Claude Code `SessionStart` hook so the bot can auto-track which session runs in each tmux window. Not needed for Codex or Gemini — those providers are auto-detected from running processes.
+This registers 5 Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop) for automatic session tracking, instant interactive UI detection, and real-time status updates. Not needed for Codex or Gemini — those providers are auto-detected from running processes.
 
 ### Run
 

@@ -16,7 +16,7 @@ make test                             # Run test suite
 ccbot status                          # Show running state (no token needed)
 ccbot doctor                          # Validate setup and diagnose issues
 ccbot doctor --fix                    # Auto-fix issues (install hook, kill orphans)
-ccbot hook --install                  # Auto-install Claude Code SessionStart hook
+ccbot hook --install                  # Auto-install Claude Code hooks (5 event types)
 ccbot hook --uninstall                # Remove hook from ~/.claude/settings.json
 ccbot hook --status                   # Check if hook is installed
 ccbot --version                       # Show version
@@ -33,7 +33,7 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 - **Topic-only** — no backward-compat for non-topic mode. No `active_sessions`, no `/list`, no General topic routing.
 - **No message truncation** at parse layer — splitting only at send layer (`split_message`, 4096 char limit).
 - **MarkdownV2 only** — use `safe_reply`/`safe_edit`/`safe_send` helpers (auto fallback to plain text). Internal queue/UI code calls bot API directly with its own fallback.
-- **Hook-based session tracking** — `SessionStart` hook writes `session_map.json`; monitor polls it to detect session changes.
+- **Hook-based session tracking** — Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop) write to `session_map.json` and `events.jsonl`; monitor polls both to detect session changes and deliver instant event notifications.
 - **Message queue per user** — FIFO ordering, message merging (3800 char limit), tool_use/tool_result pairing.
 - **Rate limiting** — 1.1s minimum interval between messages per user via `rate_limit_send()`.
 
@@ -52,7 +52,7 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 - `.env` loading priority: local `.env` > config dir `.env`.
 - All config values accept both CLI flags and env vars (see `ccbot --help`). `TELEGRAM_BOT_TOKEN` is env-only (security: flags visible in `ps`).
 - Multi-instance: `--group-id` / `CCBOT_GROUP_ID` restricts to one Telegram group. `--instance-name` / `CCBOT_INSTANCE_NAME` is a display label.
-- State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `monitor_state.json` (byte offsets).
+- State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `events.jsonl` (hook events), `monitor_state.json` (byte offsets).
 - Project structure: handlers in `src/ccbot/handlers/`, core modules in `src/ccbot/`, tests mirror source under `tests/ccbot/`.
 
 ## Provider Configuration
@@ -83,17 +83,17 @@ When creating a topic via the directory browser, users can choose the provider (
 
 ### Provider Capability Matrix
 
-| Capability       | Claude           | Codex              | Gemini                      |
-| ---------------- | ---------------- | ------------------ | --------------------------- |
-| Hook             | Yes              | No                 | No                          |
-| Resume           | Yes (`--resume`) | Yes (`resume`)     | Yes (`--resume idx/latest`) |
-| Continue         | Yes              | Yes                | Yes                         |
-| Transcript       | JSONL            | JSONL              | JSON (whole-file read)      |
-| Incremental read | Yes              | Yes                | No (whole-file JSON)        |
-| Commands         | Yes              | Yes                | Yes                         |
-| Status detection | pyte + spinner   | Activity heuristic | Pane title + interactive UI |
+| Capability       | Claude                       | Codex              | Gemini                      |
+| ---------------- | ---------------------------- | ------------------ | --------------------------- |
+| Hook events      | Yes (5 event types)          | No                 | No                          |
+| Resume           | Yes (`--resume`)             | Yes (`resume`)     | Yes (`--resume idx/latest`) |
+| Continue         | Yes                          | Yes                | Yes                         |
+| Transcript       | JSONL                        | JSONL              | JSON (whole-file read)      |
+| Incremental read | Yes                          | Yes                | No (whole-file JSON)        |
+| Commands         | Yes                          | Yes                | Yes                         |
+| Status detection | Hook events + pyte + spinner | Activity heuristic | Pane title + interactive UI |
 
-Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` skips hook checks for hookless providers. Codex and Gemini have no SessionStart hook — session tracking for these providers requires manual `session_map.json` entries or auto-detection from running processes.
+Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccbot doctor` checks all hook event types for Claude. Codex and Gemini have no hooks — session tracking for these providers relies on auto-detection from running processes.
 
 ### Migration Notes
 
@@ -101,21 +101,17 @@ Existing Claude deployments need no changes — `claude` is the default provider
 
 ## Hook Configuration
 
-Auto-install: `ccbot hook --install`
+Auto-install: `ccbot hook --install` — installs hooks for 5 Claude Code event types:
 
-Or manually in `~/.claude/settings.json`:
+| Event         | Purpose                               | Async |
+| ------------- | ------------------------------------- | ----- |
+| SessionStart  | Session tracking (`session_map.json`) | No    |
+| Notification  | Instant interactive UI detection      | No    |
+| Stop          | Instant done/idle detection           | No    |
+| SubagentStart | Track subagent activity in status     | Yes   |
+| SubagentStop  | Clear subagent status                 | Yes   |
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [{ "type": "command", "command": "ccbot hook", "timeout": 5 }]
-      }
-    ]
-  }
-}
-```
+All hooks write structured events to `events.jsonl`; SessionStart also writes `session_map.json`. The session monitor reads `events.jsonl` incrementally (byte-offset) and dispatches events to handlers. Terminal scraping remains as fallback when hook events are unavailable.
 
 ## Spec-Driven Development
 

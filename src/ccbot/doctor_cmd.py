@@ -80,20 +80,43 @@ def _check_tmux_session() -> tuple[str, str]:
         return _FAIL, "cannot connect to tmux server"
 
 
-def _check_hook() -> tuple[str, str, bool]:
-    """Check hook installation. Returns (status, message, is_installed)."""
-    from .hook import _CLAUDE_SETTINGS_FILE, _is_hook_installed
+def _check_hooks() -> tuple[str, str, dict[str, bool]]:
+    """Check hook installation for all event types.
+
+    Returns (status, message, event_status_dict).
+    """
+    from .hook import _CLAUDE_SETTINGS_FILE, get_installed_events
 
     if not _CLAUDE_SETTINGS_FILE.exists():
-        return _FAIL, "hook not installed (~/.claude/settings.json missing)", False
+        return _FAIL, "hooks not installed (~/.claude/settings.json missing)", {}
     try:
         settings = json.loads(_CLAUDE_SETTINGS_FILE.read_text())
     except json.JSONDecodeError, OSError:
-        return _FAIL, "hook not installed (settings.json unreadable)", False
+        return _FAIL, "hooks not installed (settings.json unreadable)", {}
 
-    if _is_hook_installed(settings):
-        return _PASS, "hook installed in ~/.claude/settings.json", True
-    return _FAIL, "hook not installed in ~/.claude/settings.json", False
+    event_status = get_installed_events(settings)
+    installed = [e for e, v in event_status.items() if v]
+    missing = [e for e, v in event_status.items() if not v]
+
+    if not missing:
+        return _PASS, f"all {len(installed)} hook events installed", event_status
+    if not installed:
+        return _FAIL, "no hook events installed", event_status
+    return (
+        _WARN,
+        f"{len(installed)} installed, {len(missing)} missing: {', '.join(missing)}",
+        event_status,
+    )
+
+
+def _check_hook() -> tuple[str, str, bool]:
+    """Check hook installation (backward compat wrapper).
+
+    Returns (status, message, is_installed).
+    """
+    status, message, event_status = _check_hooks()
+    any_installed = any(event_status.values()) if event_status else False
+    return status, message, any_installed
 
 
 def _check_config_dir() -> tuple[str, str]:
@@ -132,6 +155,20 @@ def _check_allowed_users() -> tuple[str, str]:
         return _PASS, f"ALLOWED_USERS: {len(users)} user(s)"
     except ValueError:
         return _FAIL, "ALLOWED_USERS contains non-numeric values"
+
+
+def _check_events_file() -> tuple[str, str]:
+    """Check events.jsonl is writable in config dir."""
+    config_dir = ccbot_dir()
+    events_file = config_dir / "events.jsonl"
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        # Test write access
+        with open(events_file, "a") as f:
+            f.write("")
+        return _PASS, f"events file {events_file} writable"
+    except OSError as e:
+        return _WARN, f"events file not writable: {e}"
 
 
 def _list_live_windows(session_name: str) -> dict[str, str]:
@@ -209,17 +246,27 @@ def _run_check(check_fn: Callable[[], tuple[str, str]]) -> tuple[str, str, bool]
     return status, msg, status == _FAIL
 
 
-def _fix_hook(hook_installed: bool, fix: bool) -> None:
-    """Attempt to fix missing hook if --fix is set."""
-    if not fix or hook_installed:
+def _fix_hooks(event_status: dict[str, bool], fix: bool) -> None:
+    """Attempt to install missing hooks if --fix is set."""
+    if not fix:
+        return
+    missing = [e for e, v in event_status.items() if not v]
+    if not missing:
         return
     from .hook import _install_hook
 
     result = _install_hook()
     if result == 0:
-        _print_check(_PASS, "hook installed (fixed)")
+        _print_check(_PASS, "hooks installed (fixed)")
     else:
-        _print_check(_FAIL, "failed to install hook")
+        _print_check(_FAIL, "failed to install hooks")
+
+
+def _fix_hook(hook_installed: bool, fix: bool) -> None:
+    """Attempt to fix missing hook if --fix is set (backward compat)."""
+    if not fix or hook_installed:
+        return
+    _fix_hooks({}, fix)
 
 
 def _fix_orphans(orphans: list[tuple[str, str]], fix: bool) -> None:
@@ -256,19 +303,23 @@ def doctor_main(fix: bool = False) -> None:
     _, _, failed = _run_check(_check_tmux_session)
     has_failures = has_failures or failed
 
-    # Hook check — only relevant for providers with hook support
+    # Hook checks — only relevant for providers with hook support
     if caps.supports_hook:
-        hook_status, hook_msg, hook_installed = _check_hook()
+        hook_status, hook_msg, event_status = _check_hooks()
         _print_check(hook_status, hook_msg)
         if hook_status == _FAIL:
             has_failures = True
-            _fix_hook(hook_installed, fix)
+        _fix_hooks(event_status, fix)
     else:
         _print_check(_PASS, f"hook check skipped ({caps.name} has no hook support)")
 
     for check_fn in (_check_config_dir, _check_bot_token, _check_allowed_users):
         _, _, failed = _run_check(check_fn)
         has_failures = has_failures or failed
+
+    # Events file check
+    _, _, failed = _run_check(_check_events_file)
+    has_failures = has_failures or failed
 
     # Orphaned windows
     orphans = _find_orphaned_windows()

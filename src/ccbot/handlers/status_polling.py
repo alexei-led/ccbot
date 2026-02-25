@@ -593,11 +593,18 @@ async def update_status_message(
         if thread_id is not None:
             _cancel_idle_clear_timer(user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
+            # Append subagent count if any are active
+            from .hook_events import get_subagent_count
+
+            subagent_count = get_subagent_count(window_id)
+            display_status = status_line
+            if subagent_count:
+                display_status = f"{status_line} ({subagent_count} subagent{'s' if subagent_count > 1 else ''})"
             await enqueue_status_update(
                 bot,
                 user_id,
                 window_id,
-                status_line,
+                display_status,
                 thread_id=thread_id,
             )
         # Update topic emoji to active (agent is working)

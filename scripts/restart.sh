@@ -7,15 +7,13 @@ TARGET="${TMUX_SESSION}:${TMUX_WINDOW}"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MAX_WAIT=10 # seconds to wait for process to exit
 
-# Check if tmux session and window exist
+# Ensure tmux session and window exist (create if missing)
 if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-	echo "Error: tmux session '$TMUX_SESSION' does not exist"
-	exit 1
-fi
-
-if ! tmux list-windows -t "$TMUX_SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$TMUX_WINDOW"; then
-	echo "Error: window '$TMUX_WINDOW' not found in session '$TMUX_SESSION'"
-	exit 1
+	echo "Creating tmux session '$TMUX_SESSION'..."
+	tmux new-session -d -s "$TMUX_SESSION" -n "$TMUX_WINDOW"
+elif ! tmux list-windows -t "$TMUX_SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$TMUX_WINDOW"; then
+	echo "Creating window '$TMUX_WINDOW' in session '$TMUX_SESSION'..."
+	tmux new-window -t "$TMUX_SESSION" -n "$TMUX_WINDOW"
 fi
 
 # Get the pane PID and check if uv run ccbot is running

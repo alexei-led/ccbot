@@ -38,6 +38,8 @@ class ClaudeProvider:
         name="claude",
         launch_command="claude",
         supports_hook=True,
+        supports_hook_events=True,
+        hook_event_types=("Notification", "Stop", "SubagentStart", "SubagentStop"),
         supports_resume=True,
         supports_continue=True,
         supports_structured_transcript=True,

@@ -17,6 +17,7 @@ src/ccbot/_version.py
 .env
 
 # Testing & Coverage
+.hypothesis/
 .pytest_cache/
 htmlcov/
 .coverage

@@ -71,6 +71,9 @@ async def clear_topic_state(
     if window_id:
         clear_seen_status(window_id)
         clear_screen_buffer(window_id)
+        from .hook_events import clear_subagents
+
+        clear_subagents(window_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)

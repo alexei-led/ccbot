@@ -839,6 +839,14 @@ async def post_init(application: Application) -> None:
         await _handle_new_window(event, application.bot)
 
     monitor.set_new_window_callback(new_window_callback)
+
+    # Wire hook event dispatcher for structured Claude Code events
+    from ccbot.handlers.hook_events import HookEvent, dispatch_hook_event
+
+    async def hook_event_callback(event: HookEvent) -> None:
+        await dispatch_hook_event(event, application.bot)
+
+    monitor.set_hook_event_callback(hook_event_callback)
     monitor.start()
     session_monitor = monitor
     logger.info("Session monitor started")

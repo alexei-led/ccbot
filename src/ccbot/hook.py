@@ -1,8 +1,9 @@
-"""Hook subcommand for Claude Code session tracking.
+"""Hook subcommand for Claude Code session and event tracking.
 
-Called by Claude Code's SessionStart hook to maintain a window↔session
-mapping in <CCBOT_DIR>/session_map.json. Also provides `--install` to
-auto-configure the hook in ~/.claude/settings.json.
+Called by Claude Code hooks (SessionStart, Notification, Stop, SubagentStart,
+SubagentStop) to maintain a window↔session mapping and an append-only event
+log.  Also provides `--install` to auto-configure hooks in
+~/.claude/settings.json.
 
 This module must NOT import config.py (which requires TELEGRAM_BOT_TOKEN),
 since hooks run inside tmux panes where bot env vars are not set.
@@ -19,7 +20,9 @@ import re
 import structlog
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
 logger = structlog.get_logger()
 
@@ -34,19 +37,25 @@ _HOOK_COMMAND_MARKER = "ccbot hook"
 # Expected number of parts when parsing "session_name\t@id\twindow_name"
 _TMUX_FORMAT_PARTS = 3
 
+# Hook event types ccbot handles (order matters for status display)
+_HOOK_EVENT_TYPES: tuple[str, ...] = (
+    "SessionStart",
+    "Notification",
+    "Stop",
+    "SubagentStart",
+    "SubagentStop",
+)
 
-def _is_hook_installed(settings: dict) -> bool:
-    """Check if ccbot hook is already installed in the settings.
+# Events that should not block the agent (async: true)
+_ASYNC_EVENTS: frozenset[str] = frozenset({"SubagentStart", "SubagentStop"})
 
-    Detects 'ccbot hook' anywhere in the command string, covering:
-    - Bare: 'ccbot hook'
-    - Full path: '/usr/bin/ccbot hook'
-    - With shell wrappers: 'ccbot hook 2>/dev/null || true'
-    """
+
+def _has_ccbot_hook(settings: dict, event_type: str) -> bool:
+    """Check if ccbot hook is installed for a specific event type."""
     hooks = settings.get("hooks", {})
-    session_start = hooks.get("SessionStart", [])
+    event_hooks = hooks.get(event_type, [])
 
-    for entry in session_start:
+    for entry in event_hooks:
         if not isinstance(entry, dict):
             continue
         inner_hooks = entry.get("hooks", [])
@@ -59,8 +68,18 @@ def _is_hook_installed(settings: dict) -> bool:
     return False
 
 
+def _is_hook_installed(settings: dict) -> bool:
+    """Check if ccbot hook is installed for SessionStart (backward compat)."""
+    return _has_ccbot_hook(settings, "SessionStart")
+
+
+def get_installed_events(settings: dict) -> dict[str, bool]:
+    """Return installation status for each expected hook event type."""
+    return {event: _has_ccbot_hook(settings, event) for event in _HOOK_EVENT_TYPES}
+
+
 def _install_hook() -> int:
-    """Install the ccbot hook into Claude's settings.json.
+    """Install ccbot hooks for all event types into Claude's settings.json.
 
     Returns 0 on success, 1 on error.
     """
@@ -77,34 +96,43 @@ def _install_hook() -> int:
             print(f"Error reading {settings_file}: {e}", file=sys.stderr)
             return 1
 
-    # Check if already installed
-    if _is_hook_installed(settings):
-        logger.info("Hook already installed in %s", settings_file)
-        print(f"Hook already installed in {settings_file}")
-        return 0
-
-    # Use PATH-relative command for portability across machines
-    hook_command = "ccbot hook"
-    hook_config = {"type": "command", "command": hook_command, "timeout": 5}
-    logger.info("Installing hook command: %s", hook_command)
-
-    # Install the hook into an existing matcher group if one exists,
-    # otherwise create a new SessionStart entry
     if "hooks" not in settings:
         settings["hooks"] = {}
-    if "SessionStart" not in settings["hooks"]:
-        settings["hooks"]["SessionStart"] = []
 
-    session_start = settings["hooks"]["SessionStart"]
-    if session_start:
-        # Add to the first matcher group's hooks array
-        first_entry = session_start[0]
-        if isinstance(first_entry, dict):
-            first_entry.setdefault("hooks", []).append(hook_config)
+    installed_count = 0
+    already_count = 0
+
+    for event_type in _HOOK_EVENT_TYPES:
+        if _has_ccbot_hook(settings, event_type):
+            already_count += 1
+            continue
+
+        hook_config: dict[str, Any] = {
+            "type": "command",
+            "command": "ccbot hook",
+            "timeout": 5,
+        }
+        if event_type in _ASYNC_EVENTS:
+            hook_config["async"] = True
+
+        if event_type not in settings["hooks"]:
+            settings["hooks"][event_type] = []
+
+        event_hooks = settings["hooks"][event_type]
+        if event_hooks:
+            first_entry = event_hooks[0]
+            if isinstance(first_entry, dict):
+                first_entry.setdefault("hooks", []).append(hook_config)
+            else:
+                event_hooks.append({"hooks": [hook_config]})
         else:
-            session_start.append({"hooks": [hook_config]})
-    else:
-        session_start.append({"hooks": [hook_config]})
+            event_hooks.append({"hooks": [hook_config]})
+
+        installed_count += 1
+
+    if installed_count == 0 and already_count == len(_HOOK_EVENT_TYPES):
+        print(f"All hooks already installed in {settings_file}")
+        return 0
 
     # Write back
     try:
@@ -116,13 +144,15 @@ def _install_hook() -> int:
         print(f"Error writing {settings_file}: {e}", file=sys.stderr)
         return 1
 
-    logger.info("Hook installed successfully in %s", settings_file)
-    print(f"Hook installed successfully in {settings_file}")
+    print(
+        f"Hooks installed in {settings_file}: "
+        f"{installed_count} new, {already_count} already present"
+    )
     return 0
 
 
 def _uninstall_hook() -> int:
-    """Remove the ccbot hook from Claude's settings.json.
+    """Remove ccbot hooks from all event types in Claude's settings.json.
 
     Returns 0 on success, 1 on error.
     """
@@ -137,29 +167,36 @@ def _uninstall_hook() -> int:
         print(f"Error reading {settings_file}: {e}", file=sys.stderr)
         return 1
 
-    if not _is_hook_installed(settings):
+    # Check if any ccbot hooks are installed
+    any_installed = any(_has_ccbot_hook(settings, event) for event in _HOOK_EVENT_TYPES)
+    if not any_installed:
         print("Hook not installed — nothing to uninstall.")
         return 0
 
-    # Remove ccbot hook entries from SessionStart
-    session_start = settings.get("hooks", {}).get("SessionStart", [])
-    new_session_start = []
-    for entry in session_start:
-        if not isinstance(entry, dict):
-            new_session_start.append(entry)
+    # Remove ccbot hook entries from all event types
+    hooks_section = settings.get("hooks", {})
+    for event_type in _HOOK_EVENT_TYPES:
+        event_hooks = hooks_section.get(event_type, [])
+        if not event_hooks:
             continue
-        inner_hooks = entry.get("hooks", [])
-        filtered = [
-            h
-            for h in inner_hooks
-            if not isinstance(h, dict)
-            or _HOOK_COMMAND_MARKER not in h.get("command", "")
-        ]
-        if filtered:
-            entry["hooks"] = filtered
-            new_session_start.append(entry)
 
-    settings["hooks"]["SessionStart"] = new_session_start
+        new_event_hooks = []
+        for entry in event_hooks:
+            if not isinstance(entry, dict):
+                new_event_hooks.append(entry)
+                continue
+            inner_hooks = entry.get("hooks", [])
+            filtered = [
+                h
+                for h in inner_hooks
+                if not isinstance(h, dict)
+                or _HOOK_COMMAND_MARKER not in h.get("command", "")
+            ]
+            if filtered:
+                entry["hooks"] = filtered
+                new_event_hooks.append(entry)
+
+        hooks_section[event_type] = new_event_hooks
 
     try:
         settings_file.write_text(
@@ -169,14 +206,14 @@ def _uninstall_hook() -> int:
         print(f"Error writing {settings_file}: {e}", file=sys.stderr)
         return 1
 
-    print(f"Hook uninstalled from {settings_file}")
+    print(f"Hooks uninstalled from {settings_file}")
     return 0
 
 
 def _hook_status() -> int:
-    """Show hook installation status.
+    """Show per-event hook installation status.
 
-    Returns 0 if installed, 1 if not.
+    Returns 0 if all installed, 1 if any missing.
     """
     settings_file = _CLAUDE_SETTINGS_FILE
     if not settings_file.exists():
@@ -189,23 +226,176 @@ def _hook_status() -> int:
         print(f"Error reading {settings_file}: {e}", file=sys.stderr)
         return 1
 
-    if _is_hook_installed(settings):
-        # Find the command path
-        for entry in settings.get("hooks", {}).get("SessionStart", []):
-            if not isinstance(entry, dict):
-                continue
-            for h in entry.get("hooks", []):
-                if not isinstance(h, dict):
-                    continue
-                cmd = h.get("command", "")
-                if _HOOK_COMMAND_MARKER in cmd:
-                    print(f"Installed: {cmd}")
-                    return 0
-        print("Installed")
+    event_status = get_installed_events(settings)
+    all_installed = all(event_status.values())
+
+    for event_type, installed in event_status.items():
+        status_str = "installed" if installed else "MISSING"
+        print(f"  {event_type}: {status_str}")
+
+    if all_installed:
+        print("All hooks installed")
         return 0
 
-    print("Not installed")
+    missing = [e for e, v in event_status.items() if not v]
+    print(f"Missing hooks: {', '.join(missing)}")
     return 1
+
+
+def _resolve_window_id(pane_id: str) -> tuple[str, str, str] | None:
+    """Resolve tmux pane ID to (session_window_key, window_id, window_name).
+
+    Returns None if resolution fails.
+    """
+    result = subprocess.run(
+        [
+            "tmux",
+            "display-message",
+            "-t",
+            pane_id,
+            "-p",
+            "#{session_name}\t#{window_id}\t#{window_name}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    raw_output = result.stdout.strip()
+    parts = raw_output.split("\t", 2)
+    if len(parts) < _TMUX_FORMAT_PARTS:
+        logger.warning(
+            "Failed to parse session:window_id:window_name from tmux "
+            "(pane=%s, output=%s)",
+            pane_id,
+            raw_output,
+        )
+        return None
+
+    tmux_session_name, window_id, window_name = parts
+    session_window_key = f"{tmux_session_name}:{window_id}"
+    return session_window_key, window_id, window_name
+
+
+def _write_event(
+    event_type: str,
+    session_id: str,
+    window_key: str,
+    data: dict[str, Any],
+) -> None:
+    """Append one JSONL event line to events.jsonl with file locking."""
+    from .utils import ccbot_dir
+
+    events_file = ccbot_dir() / "events.jsonl"
+    events_file.parent.mkdir(parents=True, exist_ok=True)
+
+    event_line = json.dumps(
+        {
+            "ts": time.time(),
+            "event": event_type,
+            "window_key": window_key,
+            "session_id": session_id,
+            "data": data,
+        },
+        separators=(",", ":"),
+    )
+
+    try:
+        with open(events_file, "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.write(event_line + "\n")
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+    except OSError:
+        logger.exception("Failed to write event to %s", events_file)
+
+
+def _extract_notification_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract data from a Notification hook payload."""
+    return {
+        "tool_name": payload.get("tool_name", ""),
+        "message": payload.get("message", ""),
+    }
+
+
+def _extract_stop_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract data from a Stop hook payload."""
+    return {
+        "stop_reason": payload.get("stop_reason", ""),
+        "num_turns": payload.get("num_turns", 0),
+    }
+
+
+def _extract_subagent_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract data from a SubagentStart/SubagentStop hook payload."""
+    return {
+        "subagent_id": payload.get("subagent_id", ""),
+        "description": payload.get("description", ""),
+        "name": payload.get("name", ""),
+    }
+
+
+# Map event types to their data extractor functions
+_EVENT_DATA_EXTRACTORS: dict[str, Any] = {
+    "Notification": _extract_notification_data,
+    "Stop": _extract_stop_data,
+    "SubagentStart": _extract_subagent_data,
+    "SubagentStop": _extract_subagent_data,
+}
+
+
+def _update_session_map(
+    session_window_key: str,
+    session_id: str,
+    cwd: str,
+    window_name: str,
+    transcript_path: str,
+    tmux_session_name: str,
+) -> None:
+    """Update session_map.json for a SessionStart event."""
+    from .utils import ccbot_dir, atomic_write_json
+
+    map_file = ccbot_dir() / "session_map.json"
+    map_file.parent.mkdir(parents=True, exist_ok=True)
+
+    lock_path = map_file.with_suffix(".lock")
+    try:
+        with open(lock_path, "w") as lock_f:
+            fcntl.flock(lock_f, fcntl.LOCK_EX)
+            try:
+                session_map: dict[str, dict[str, str]] = {}
+                if map_file.exists():
+                    try:
+                        session_map = json.loads(map_file.read_text())
+                    except json.JSONDecodeError, OSError:
+                        logger.warning(
+                            "Failed to read existing session_map, starting fresh"
+                        )
+
+                session_map[session_window_key] = {
+                    "session_id": session_id,
+                    "cwd": cwd,
+                    "window_name": window_name,
+                    "transcript_path": transcript_path,
+                    "provider_name": "claude",
+                }
+
+                # Clean up old-format key ("session:window_name") if it exists
+                old_key = f"{tmux_session_name}:{window_name}"
+                if old_key != session_window_key and old_key in session_map:
+                    del session_map[old_key]
+                    logger.info("Removed old-format session_map key: %s", old_key)
+
+                atomic_write_json(map_file, session_map)
+                logger.info(
+                    "Updated session_map: %s -> session_id=%s, cwd=%s",
+                    session_window_key,
+                    session_id,
+                    cwd,
+                )
+            finally:
+                fcntl.flock(lock_f, fcntl.LOCK_UN)
+    except OSError:
+        logger.exception("Failed to write session_map")
 
 
 def _process_hook_stdin() -> None:
@@ -236,8 +426,9 @@ def _process_hook_stdin() -> None:
         logger.warning("cwd is not absolute: %s", cwd)
         return
 
-    if event != "SessionStart":
-        logger.debug("Ignoring non-SessionStart event: %s", event)
+    # Only process events we handle
+    if event not in _HOOK_EVENT_TYPES:
+        logger.debug("Ignoring unhandled event: %s", event)
         return
 
     # Get tmux session:window key for the pane running this hook.
@@ -247,89 +438,46 @@ def _process_hook_stdin() -> None:
         logger.warning("TMUX_PANE not set, cannot determine window")
         return
 
-    result = subprocess.run(
-        [
-            "tmux",
-            "display-message",
-            "-t",
-            pane_id,
-            "-p",
-            "#{session_name}\t#{window_id}\t#{window_name}",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    raw_output = result.stdout.strip()
-    # Expected format: "session_name\t@id\twindow_name"
-    parts = raw_output.split("\t", 2)
-    if len(parts) < _TMUX_FORMAT_PARTS:
-        logger.warning(
-            "Failed to parse session:window_id:window_name from tmux (pane=%s, output=%s)",
-            pane_id,
-            raw_output,
-        )
+    resolved = _resolve_window_id(pane_id)
+    if not resolved:
         return
-    tmux_session_name, window_id, window_name = parts
-    # Key uses window_id for uniqueness
-    session_window_key = f"{tmux_session_name}:{window_id}"
+    session_window_key, window_id, window_name = resolved
 
     logger.debug(
-        "tmux key=%s, window_name=%s, session_id=%s, cwd=%s",
+        "tmux key=%s, window_name=%s, session_id=%s, event=%s",
         session_window_key,
         window_name,
         session_id,
-        cwd,
+        event,
     )
 
-    # Read-modify-write with file locking to prevent concurrent hook races
-    from .utils import ccbot_dir
+    # SessionStart: update session_map.json AND write event
+    if event == "SessionStart":
+        tmux_session_name = session_window_key.rsplit(":", 1)[0]
+        _update_session_map(
+            session_window_key,
+            session_id,
+            cwd,
+            window_name,
+            transcript_path,
+            tmux_session_name,
+        )
+        _write_event(
+            event,
+            session_id,
+            session_window_key,
+            {
+                "cwd": cwd,
+                "transcript_path": transcript_path,
+                "window_name": window_name,
+            },
+        )
+        return
 
-    map_file = ccbot_dir() / "session_map.json"
-    map_file.parent.mkdir(parents=True, exist_ok=True)
-
-    lock_path = map_file.with_suffix(".lock")
-    try:
-        with open(lock_path, "w") as lock_f:
-            fcntl.flock(lock_f, fcntl.LOCK_EX)
-            logger.debug("Acquired lock on %s", lock_path)
-            try:
-                session_map: dict[str, dict[str, str]] = {}
-                if map_file.exists():
-                    try:
-                        session_map = json.loads(map_file.read_text())
-                    except json.JSONDecodeError, OSError:
-                        logger.warning(
-                            "Failed to read existing session_map, starting fresh"
-                        )
-
-                session_map[session_window_key] = {
-                    "session_id": session_id,
-                    "cwd": cwd,
-                    "window_name": window_name,
-                    "transcript_path": transcript_path,
-                    "provider_name": "claude",
-                }
-
-                # Clean up old-format key ("session:window_name") if it exists.
-                # Previous versions keyed by window_name instead of window_id.
-                old_key = f"{tmux_session_name}:{window_name}"
-                if old_key != session_window_key and old_key in session_map:
-                    del session_map[old_key]
-                    logger.info("Removed old-format session_map key: %s", old_key)
-
-                from .utils import atomic_write_json
-
-                atomic_write_json(map_file, session_map)
-                logger.info(
-                    "Updated session_map: %s -> session_id=%s, cwd=%s",
-                    session_window_key,
-                    session_id,
-                    cwd,
-                )
-            finally:
-                fcntl.flock(lock_f, fcntl.LOCK_UN)
-    except OSError:
-        logger.exception("Failed to write session_map")
+    # Other events: write event only
+    extractor = _EVENT_DATA_EXTRACTORS.get(event)
+    data = extractor(payload) if extractor else {}
+    _write_event(event, session_id, session_window_key, data)
 
 
 def hook_main(

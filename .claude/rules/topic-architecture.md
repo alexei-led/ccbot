@@ -4,13 +4,18 @@ The bot operates exclusively in Telegram Forum (topics) mode. There is **no** `a
 
 ## 1 Topic = 1 Window = 1 Session
 
-```
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│  Topic ID   │ ───▶ │ Window ID   │ ───▶ │ Session ID  │
-│  (Telegram) │      │ (tmux @id)  │      │  (Claude)   │
-└─────────────┘      └─────────────┘      └─────────────┘
-     thread_bindings      session_map.json
-     (state.json)         (written by hook)
+```mermaid
+graph LR
+    Topic["Topic ID\n(Telegram)"]
+    Window["Window ID\n(tmux @id)"]
+    Session["Session ID\n(Claude)"]
+
+    Topic -- "thread_bindings\n(state.json)" --> Window
+    Window -- "session_map.json\n(written by hook)" --> Session
+
+    style Topic fill:#e8f4fd,stroke:#0088cc,stroke-width:2px,color:#333
+    style Window fill:#f0faf0,stroke:#2ea44f,stroke-width:2px,color:#333
+    style Session fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#333
 ```
 
 Window IDs (e.g. `@0`, `@12`) are guaranteed unique within a tmux server session. Window names are stored separately as display names (`window_display_names` map).
@@ -38,9 +43,9 @@ window_display_names: dict[str, str]        # window_id → window_name (for dis
 ```
 
 - Storage: `session_map.json`
-- Written when: Claude Code's `SessionStart` hook fires (always sets `provider_name: "claude"`; other providers have no hook)
+- Written when: Claude Code's `SessionStart` hook fires (always sets `provider_name: "claude"`; other providers have no hook). All 5 hook events also append to `events.jsonl` for instant dispatch.
 - Property: one window maps to one session; session_id changes after `/clear`
-- Purpose: SessionMonitor uses this mapping to decide which sessions to watch
+- Purpose: SessionMonitor reads session_map to decide which sessions to watch, and reads events.jsonl for instant event notifications (interactive UI, done detection, subagent status)
 
 ## Message Flows
 

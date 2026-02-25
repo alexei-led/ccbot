@@ -136,6 +136,79 @@ class TestInstallHook:
         assert "/" not in cmd
 
 
+class TestInstallMultipleEvents:
+    def test_installs_all_event_types(self, tmp_path, monkeypatch) -> None:
+        from ccbot.hook import _HOOK_EVENT_TYPES
+
+        settings_file = tmp_path / "settings.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _install_hook()
+        assert result == 0
+
+        settings = json.loads(settings_file.read_text())
+        for event_type in _HOOK_EVENT_TYPES:
+            assert event_type in settings["hooks"]
+            hooks_list = settings["hooks"][event_type][0]["hooks"]
+            assert any("ccbot hook" in h.get("command", "") for h in hooks_list)
+
+    def test_async_flag_on_subagent_events(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        _install_hook()
+
+        settings = json.loads(settings_file.read_text())
+        for event_type in ("SubagentStart", "SubagentStop"):
+            hook_config = settings["hooks"][event_type][0]["hooks"][0]
+            assert hook_config.get("async") is True
+
+        # SessionStart should NOT have async
+        session_hook = settings["hooks"]["SessionStart"][0]["hooks"][0]
+        assert "async" not in session_hook
+
+    def test_idempotent_install(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        _install_hook()
+        _install_hook()  # Second install
+
+        settings = json.loads(settings_file.read_text())
+        # Each event type should have exactly one ccbot hook entry
+        for event_type in settings["hooks"]:
+            entries = settings["hooks"][event_type]
+            ccbot_hooks = [
+                h
+                for entry in entries
+                for h in entry.get("hooks", [])
+                if "ccbot hook" in h.get("command", "")
+            ]
+            assert len(ccbot_hooks) == 1, (
+                f"{event_type} has {len(ccbot_hooks)} ccbot hooks"
+            )
+
+
+class TestUninstallMultipleEvents:
+    def test_removes_all_event_types(self, tmp_path, monkeypatch) -> None:
+        from ccbot.hook import _uninstall_hook, get_installed_events
+
+        settings_file = tmp_path / "settings.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        # Install first
+        _install_hook()
+        settings = json.loads(settings_file.read_text())
+        assert all(get_installed_events(settings).values())
+
+        # Uninstall
+        result = _uninstall_hook()
+        assert result == 0
+
+        settings = json.loads(settings_file.read_text())
+        assert not any(get_installed_events(settings).values())
+
+
 class TestUuidRegex:
     @pytest.mark.parametrize(
         "value",
@@ -275,7 +348,38 @@ class TestHookMainValidation:
         )
         assert not (tmp_path / "session_map.json").exists()
 
-    def test_non_session_start_event(
+    def test_stop_event_writes_event_not_session_map(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        monkeypatch.setenv("CCBOT_DIR", str(tmp_path))
+        monkeypatch.setenv("TMUX_PANE", "%0")
+
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ccbot\t@0\tproject\n", stderr=""
+        )
+        with patch("ccbot.hook.subprocess.run", return_value=mock_result):
+            self._run_hook_main(
+                monkeypatch,
+                {
+                    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "cwd": "/tmp",
+                    "hook_event_name": "Stop",
+                    "stop_reason": "end_turn",
+                },
+                tmux_pane="%0",
+            )
+
+        # Stop events should NOT write session_map
+        assert not (tmp_path / "session_map.json").exists()
+        # But SHOULD write to events.jsonl
+        events_file = tmp_path / "events.jsonl"
+        assert events_file.exists()
+        event = json.loads(events_file.read_text().strip())
+        assert event["event"] == "Stop"
+        assert event["window_key"] == "ccbot:@0"
+        assert event["data"]["stop_reason"] == "end_turn"
+
+    def test_unhandled_event_ignored(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         monkeypatch.setenv("CCBOT_DIR", str(tmp_path))
@@ -284,10 +388,11 @@ class TestHookMainValidation:
             {
                 "session_id": "550e8400-e29b-41d4-a716-446655440000",
                 "cwd": "/tmp",
-                "hook_event_name": "Stop",
+                "hook_event_name": "PreToolUse",
             },
         )
         assert not (tmp_path / "session_map.json").exists()
+        assert not (tmp_path / "events.jsonl").exists()
 
 
 class TestUninstallHook:
@@ -436,12 +541,32 @@ class TestTabDelimitedParsing:
 
 
 class TestHookStatus:
-    def test_installed(self, tmp_path, monkeypatch, capsys) -> None:
+    def _all_events_settings(self) -> dict:
+        """Build settings with ccbot hook installed for all event types."""
+        from ccbot.hook import _HOOK_EVENT_TYPES
+
+        hooks: dict = {}
+        for event_type in _HOOK_EVENT_TYPES:
+            hooks[event_type] = [
+                {"hooks": [{"type": "command", "command": "/usr/bin/ccbot hook"}]}
+            ]
+        return {"hooks": hooks}
+
+    def test_all_installed(self, tmp_path, monkeypatch, capsys) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(json.dumps(self._all_events_settings()))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        result = _hook_status()
+        assert result == 0
+        assert "All hooks installed" in capsys.readouterr().out
+
+    def test_partial_installed(self, tmp_path, monkeypatch, capsys) -> None:
         settings_file = tmp_path / "settings.json"
         settings = {
             "hooks": {
                 "SessionStart": [
-                    {"hooks": [{"type": "command", "command": "/usr/bin/ccbot hook"}]}
+                    {"hooks": [{"type": "command", "command": "ccbot hook"}]}
                 ]
             }
         }
@@ -449,8 +574,10 @@ class TestHookStatus:
         monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
 
         result = _hook_status()
-        assert result == 0
-        assert "Installed" in capsys.readouterr().out
+        assert result == 1
+        out = capsys.readouterr().out
+        assert "Missing hooks:" in out
+        assert "SessionStart: installed" in out
 
     def test_not_installed(self, tmp_path, monkeypatch, capsys) -> None:
         settings_file = tmp_path / "settings.json"
@@ -459,7 +586,7 @@ class TestHookStatus:
 
         result = _hook_status()
         assert result == 1
-        assert "Not installed" in capsys.readouterr().out
+        assert "Missing hooks:" in capsys.readouterr().out
 
     def test_no_settings_file(self, tmp_path, monkeypatch, capsys) -> None:
         settings_file = tmp_path / "nonexistent.json"

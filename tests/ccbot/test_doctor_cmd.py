@@ -7,10 +7,12 @@ import pytest
 from ccbot.doctor_cmd import (
     _check_allowed_users,
     _check_config_dir,
+    _check_hooks,
     _check_tmux,
     _find_orphaned_windows,
     doctor_main,
 )
+from ccbot.hook import _HOOK_EVENT_TYPES
 
 
 class TestCheckTmux:
@@ -87,6 +89,61 @@ class TestFindOrphanedWindows:
         assert result[0] == ("@10", "orphan-window")
 
 
+def _all_hooks_status() -> dict[str, bool]:
+    """Return event status dict with all events installed."""
+    return {event: True for event in _HOOK_EVENT_TYPES}
+
+
+class TestCheckHooks:
+    def test_all_installed(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        hooks: dict = {}
+        for event_type in _HOOK_EVENT_TYPES:
+            hooks[event_type] = [
+                {"hooks": [{"type": "command", "command": "ccbot hook"}]}
+            ]
+        settings_file.write_text(json.dumps({"hooks": hooks}))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        status, msg, event_status = _check_hooks()
+        assert status == "pass"
+        assert all(event_status.values())
+
+    def test_partial(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings = {
+            "hooks": {
+                "SessionStart": [
+                    {"hooks": [{"type": "command", "command": "ccbot hook"}]}
+                ]
+            }
+        }
+        settings_file.write_text(json.dumps(settings))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        status, msg, event_status = _check_hooks()
+        assert status == "warn"
+        assert event_status["SessionStart"] is True
+        assert event_status["Notification"] is False
+
+    def test_none_installed(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(json.dumps({"hooks": {}}))
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        status, msg, event_status = _check_hooks()
+        assert status == "fail"
+        assert not any(event_status.values())
+
+    def test_missing_settings_file(self, tmp_path, monkeypatch) -> None:
+        settings_file = tmp_path / "nonexistent.json"
+        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+
+        status, msg, event_status = _check_hooks()
+        assert status == "fail"
+        assert event_status == {}
+
+
 class TestDoctorMain:
     def test_runs_without_crash(self, tmp_path, monkeypatch, capsys) -> None:
         monkeypatch.setenv("CCBOT_DIR", str(tmp_path))
@@ -104,8 +161,8 @@ class TestDoctorMain:
             lambda: ("pass", 'tmux session "test" exists'),
         )
         monkeypatch.setattr(
-            "ccbot.doctor_cmd._check_hook",
-            lambda: ("pass", "hook installed", True),
+            "ccbot.doctor_cmd._check_hooks",
+            lambda: ("pass", "all 5 hook events installed", _all_hooks_status()),
         )
         monkeypatch.setattr(
             "ccbot.doctor_cmd._find_orphaned_windows",
@@ -135,8 +192,8 @@ class TestDoctorMain:
             lambda: ("pass", "ok"),
         )
         monkeypatch.setattr(
-            "ccbot.doctor_cmd._check_hook",
-            lambda: ("pass", "hook installed", True),
+            "ccbot.doctor_cmd._check_hooks",
+            lambda: ("pass", "all 5 hook events installed", _all_hooks_status()),
         )
         monkeypatch.setattr("ccbot.doctor_cmd._find_orphaned_windows", lambda: [])
 
