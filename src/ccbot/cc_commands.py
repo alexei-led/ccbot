@@ -123,7 +123,9 @@ def discover_cc_commands(claude_dir: Path | None = None) -> list[CCCommand]:
     Commands with empty sanitized names are skipped.
     """
     if claude_dir is None:
-        claude_dir = Path.home() / ".claude"
+        from ccbot.config import config
+
+        claude_dir = config.claude_config_dir
 
     commands: list[CCCommand] = []
 
@@ -211,7 +213,9 @@ def _refresh_cache(
     """
     global _name_map
     if provider is not None:
-        base_dir = str(claude_dir) if claude_dir else str(Path.home() / ".claude")
+        from ccbot.config import config as _cfg
+
+        base_dir = str(claude_dir) if claude_dir else str(_cfg.claude_config_dir)
         valid_sources = {"builtin", "skill", "command"}
         discovered = provider.discover_commands(base_dir)
         commands = [

@@ -242,6 +242,30 @@ class TestReadNewLines:
         assert tracked.last_byte_offset == len(good_line.encode())
 
 
+class TestCorruptedOffset:
+    async def test_corrupted_offset_recovers(self, tmp_path) -> None:
+        session_file = tmp_path / "test.jsonl"
+        line1 = '{"type":"assistant","message":{"content":[{"type":"text","text":"first"}]}}\n'
+        line2 = '{"type":"assistant","message":{"content":[{"type":"text","text":"second"}]}}\n'
+        session_file.write_text(line1 + line2)
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path,
+            state_file=tmp_path / "ms.json",
+        )
+        # Set offset to mid-line1 (corrupted)
+        tracked = TrackedSession(
+            session_id="t1",
+            file_path=str(session_file),
+            last_byte_offset=10,
+        )
+        entries = await monitor._read_new_lines(tracked, session_file)
+        # Should recover: skip rest of line1, read line2
+        assert len(entries) == 1
+        text = entries[0].get("message", {}).get("content", [{}])[0].get("text", "")
+        assert text == "second"
+
+
 class TestCheckForUpdates:
     async def test_new_session_initializes_to_eof_fallback(self, tmp_path) -> None:
         """Fallback path: entries without transcript_path use scan_projects."""

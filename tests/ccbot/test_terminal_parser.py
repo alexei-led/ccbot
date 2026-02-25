@@ -222,7 +222,7 @@ class TestExtractInteractiveContent:
         assert "Do you want to proceed?" in result.content
 
     def test_edit_permission_prompt_structural(self):
-        """Catch-all detects edit confirmation via ❯ + Esc, includes question context."""
+        """PermissionPrompt now matches 'Do you want to make this edit' directly."""
         pane = (
             "  Do you want to make this edit to status_polling.py?\n"
             "\n"
@@ -232,9 +232,7 @@ class TestExtractInteractiveContent:
         )
         result = extract_interactive_content(pane)
         assert result is not None
-        assert result.name == "SelectionUI"
-        assert "❯" in result.content
-        # context_above pulls in the question text
+        assert result.name == "PermissionPrompt"
         assert "make this edit" in result.content
 
     def test_unknown_selection_ui_structural(self):
@@ -296,6 +294,41 @@ class TestExtractInteractiveContent:
         assert result.name == "SelectModel"
         assert "Select model" in result.content
         assert "Enter to confirm" in result.content
+
+    def test_permission_prompt_edit_tool(self):
+        pane = (
+            "  Do you want to make this edit to config.py?\n"
+            "\n"
+            "  ❯ Yes    Yes All    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+        assert "make this edit" in result.content
+
+    def test_settings_esc_to_exit(self):
+        pane = "  Settings: press tab to cycle\n  ─────\n  Option 1\n  Esc to exit\n"
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "Settings"
+        assert "Settings:" in result.content
+
+    def test_select_model_esc_to_exit(self):
+        pane = (
+            " Select model\n"
+            " Switch between Claude models.\n"
+            "\n"
+            " ❯ 1. Default (recommended)\n"
+            "   2. Sonnet\n"
+            "\n"
+            " Esc to exit\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectModel"
+        assert "Select model" in result.content
 
     @pytest.mark.parametrize(
         "pane",

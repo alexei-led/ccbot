@@ -10,6 +10,7 @@ import pytest
 
 from ccbot.hook import (
     UUID_RE,
+    _claude_settings_file,
     _hook_status,
     _install_hook,
     _is_hook_installed,
@@ -22,7 +23,7 @@ class TestInstallHook:
     def test_install_into_empty_settings(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "settings.json"
         settings_file.parent.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _install_hook()
         assert result == 0
@@ -53,7 +54,7 @@ class TestInstallHook:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _install_hook()
         assert result == 0
@@ -85,7 +86,7 @@ class TestInstallHook:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _install_hook()
         assert result == 0
@@ -114,7 +115,7 @@ class TestInstallHook:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _install_hook()
         assert result == 0
@@ -126,7 +127,7 @@ class TestInstallHook:
     def test_install_uses_path_relative_command(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "settings.json"
         settings_file.parent.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         _install_hook()
 
@@ -141,7 +142,7 @@ class TestInstallMultipleEvents:
         from ccbot.hook import _HOOK_EVENT_TYPES
 
         settings_file = tmp_path / "settings.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _install_hook()
         assert result == 0
@@ -154,7 +155,7 @@ class TestInstallMultipleEvents:
 
     def test_async_flag_on_subagent_events(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "settings.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         _install_hook()
 
@@ -169,7 +170,7 @@ class TestInstallMultipleEvents:
 
     def test_idempotent_install(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "settings.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         _install_hook()
         _install_hook()  # Second install
@@ -194,7 +195,7 @@ class TestUninstallMultipleEvents:
         from ccbot.hook import _uninstall_hook, get_installed_events
 
         settings_file = tmp_path / "settings.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         # Install first
         _install_hook()
@@ -410,7 +411,7 @@ class TestUninstallHook:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _uninstall_hook()
         assert result == 0
@@ -420,7 +421,7 @@ class TestUninstallHook:
 
     def test_uninstall_no_settings_file(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "nonexistent.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _uninstall_hook()
         assert result == 0
@@ -447,7 +448,7 @@ class TestUninstallHook:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _uninstall_hook()
         assert result == 0
@@ -477,7 +478,7 @@ class TestUninstallHook:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _uninstall_hook()
         assert result == 0
@@ -489,7 +490,7 @@ class TestUninstallHook:
     def test_uninstall_not_installed(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "settings.json"
         settings_file.write_text(json.dumps({"hooks": {}}))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _uninstall_hook()
         assert result == 0
@@ -555,7 +556,7 @@ class TestHookStatus:
     def test_all_installed(self, tmp_path, monkeypatch, capsys) -> None:
         settings_file = tmp_path / "settings.json"
         settings_file.write_text(json.dumps(self._all_events_settings()))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _hook_status()
         assert result == 0
@@ -571,7 +572,7 @@ class TestHookStatus:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _hook_status()
         assert result == 1
@@ -582,7 +583,7 @@ class TestHookStatus:
     def test_not_installed(self, tmp_path, monkeypatch, capsys) -> None:
         settings_file = tmp_path / "settings.json"
         settings_file.write_text(json.dumps({"hooks": {}}))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _hook_status()
         assert result == 1
@@ -590,8 +591,21 @@ class TestHookStatus:
 
     def test_no_settings_file(self, tmp_path, monkeypatch, capsys) -> None:
         settings_file = tmp_path / "nonexistent.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         result = _hook_status()
         assert result == 1
         assert "Not installed" in capsys.readouterr().out
+
+
+class TestClaudeSettingsFile:
+    def test_default_path(self, monkeypatch) -> None:
+        from pathlib import Path
+
+        monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+        assert _claude_settings_file() == Path.home() / ".claude" / "settings.json"
+
+    def test_respects_env_var(self, monkeypatch, tmp_path) -> None:
+
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "custom"))
+        assert _claude_settings_file() == tmp_path / "custom" / "settings.json"

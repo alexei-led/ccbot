@@ -54,6 +54,43 @@ class TestExtractTextOnly:
     def test_extract_text_only(self, content: list | str | int, expected: str):
         assert TranscriptParser.extract_text_only(content) == expected
 
+    def test_ansi_stripped_from_extract_text_only(self):
+        content = [
+            {"type": "text", "text": "\x1b[32mgreen\x1b[0m and \x1b[1;31mred\x1b[0m"}
+        ]
+        assert TranscriptParser.extract_text_only(content) == "green and red"
+
+
+# ── ANSI stripping in parse_entries ──────────────────────────────────────
+
+
+class TestAnsiStripping:
+    def test_ansi_stripped_from_assistant_text_block(self):
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "\x1b[32mhello\x1b[0m world"}]
+                },
+            }
+        ]
+        result, _ = TranscriptParser.parse_entries(entries)
+        assert len(result) == 1
+        assert result[0].text == "hello world"
+
+    def test_ansi_stripped_from_user_text_block(self):
+        entries = [
+            {
+                "type": "user",
+                "message": {
+                    "content": [{"type": "text", "text": "\x1b[1;34muser input\x1b[0m"}]
+                },
+            }
+        ]
+        result, _ = TranscriptParser.parse_entries(entries)
+        assert len(result) == 1
+        assert result[0].text == "user input"
+
 
 # ── format_tool_use_summary ──────────────────────────────────────────────
 

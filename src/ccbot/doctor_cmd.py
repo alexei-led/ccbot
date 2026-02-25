@@ -85,12 +85,13 @@ def _check_hooks() -> tuple[str, str, dict[str, bool]]:
 
     Returns (status, message, event_status_dict).
     """
-    from .hook import _CLAUDE_SETTINGS_FILE, get_installed_events
+    from .hook import _claude_settings_file, get_installed_events
 
-    if not _CLAUDE_SETTINGS_FILE.exists():
-        return _FAIL, "hooks not installed (~/.claude/settings.json missing)", {}
+    settings_file = _claude_settings_file()
+    if not settings_file.exists():
+        return _FAIL, f"hooks not installed ({settings_file} missing)", {}
     try:
-        settings = json.loads(_CLAUDE_SETTINGS_FILE.read_text())
+        settings = json.loads(settings_file.read_text())
     except json.JSONDecodeError, OSError:
         return _FAIL, "hooks not installed (settings.json unreadable)", {}
 

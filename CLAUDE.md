@@ -52,6 +52,8 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 - `.env` loading priority: local `.env` > config dir `.env`.
 - All config values accept both CLI flags and env vars (see `ccbot --help`). `TELEGRAM_BOT_TOKEN` is env-only (security: flags visible in `ps`).
 - Multi-instance: `--group-id` / `CCBOT_GROUP_ID` restricts to one Telegram group. `--instance-name` / `CCBOT_INSTANCE_NAME` is a display label.
+- Claude config: `--claude-config-dir` / `CLAUDE_CONFIG_DIR` overrides `~/.claude` (for Claude wrappers like `ce`, `cc-mirror`, `zai`). Used by hook install, command discovery, and session monitoring.
+- Directory browser: `--show-hidden-dirs` / `CCBOT_SHOW_HIDDEN_DIRS` shows dot-directories in the browser.
 - State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `events.jsonl` (hook events), `monitor_state.json` (byte offsets).
 - Project structure: handlers in `src/ccbot/handlers/`, core modules in `src/ccbot/`, tests mirror source under `tests/ccbot/`.
 
@@ -111,7 +113,7 @@ Auto-install: `ccbot hook --install` — installs hooks for 5 Claude Code event 
 | SubagentStart | Track subagent activity in status     | Yes   |
 | SubagentStop  | Clear subagent status                 | Yes   |
 
-All hooks write structured events to `events.jsonl`; SessionStart also writes `session_map.json`. The session monitor reads `events.jsonl` incrementally (byte-offset) and dispatches events to handlers. Terminal scraping remains as fallback when hook events are unavailable.
+All hooks write structured events to `events.jsonl`; SessionStart also writes `session_map.json`. The session monitor reads `events.jsonl` incrementally (byte-offset) and dispatches events to handlers. Terminal scraping remains as fallback when hook events are unavailable. Hook install/status/uninstall respects `CLAUDE_CONFIG_DIR` for non-default Claude config locations.
 
 ## Spec-Driven Development
 

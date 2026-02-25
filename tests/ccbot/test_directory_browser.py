@@ -1,11 +1,11 @@
-"""Tests for directory browser favorites."""
+"""Tests for directory browser favorites and hidden dirs."""
 
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-from ccbot.handlers.directory_browser import get_favorites
+from ccbot.handlers.directory_browser import build_directory_browser, get_favorites
 from ccbot.session import SessionManager
 
 
@@ -93,3 +93,31 @@ class TestGetFavorites:
 
         favorites, _starred = get_favorites(100)
         assert favorites == []
+
+
+class TestHiddenDirs:
+    def test_hidden_dirs_excluded_by_default(
+        self, tmp_path: Path, mock_session_manager: Mock
+    ) -> None:
+        (tmp_path / "visible").mkdir()
+        (tmp_path / ".hidden").mkdir()
+
+        with patch("ccbot.handlers.directory_browser.config") as mock_cfg:
+            mock_cfg.show_hidden_dirs = False
+            _text, _kb, subdirs = build_directory_browser(str(tmp_path))
+
+        assert "visible" in subdirs
+        assert ".hidden" not in subdirs
+
+    def test_hidden_dirs_shown_when_enabled(
+        self, tmp_path: Path, mock_session_manager: Mock
+    ) -> None:
+        (tmp_path / "visible").mkdir()
+        (tmp_path / ".hidden").mkdir()
+
+        with patch("ccbot.handlers.directory_browser.config") as mock_cfg:
+            mock_cfg.show_hidden_dirs = True
+            _text, _kb, subdirs = build_directory_browser(str(tmp_path))
+
+        assert "visible" in subdirs
+        assert ".hidden" in subdirs

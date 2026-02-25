@@ -338,6 +338,23 @@ class SessionMonitor:
                 # Seek to last read position for incremental reading
                 await f.seek(session.last_byte_offset)
 
+                # Validate offset points to line start (guard against corruption)
+                if session.last_byte_offset > 0:
+                    first_byte = await f.read(1)
+                    if first_byte and first_byte != "{":
+                        logger.warning(
+                            "Corrupted offset for session %s (byte %d is %r, not '{'). "
+                            "Advancing to next line.",
+                            session.session_id,
+                            session.last_byte_offset,
+                            first_byte,
+                        )
+                        await f.readline()  # consume rest of current (broken) line
+                        session.last_byte_offset = await f.tell()
+                    else:
+                        # Re-seek to include the '{' we just consumed
+                        await f.seek(session.last_byte_offset)
+
                 # Read only new lines from the offset.
                 # Track safe_offset: only advance past lines that parsed
                 # successfully. A non-empty line that fails JSON parsing is

@@ -103,7 +103,7 @@ class TestCheckHooks:
                 {"hooks": [{"type": "command", "command": "ccbot hook"}]}
             ]
         settings_file.write_text(json.dumps({"hooks": hooks}))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         status, msg, event_status = _check_hooks()
         assert status == "pass"
@@ -119,7 +119,7 @@ class TestCheckHooks:
             }
         }
         settings_file.write_text(json.dumps(settings))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         status, msg, event_status = _check_hooks()
         assert status == "warn"
@@ -129,7 +129,7 @@ class TestCheckHooks:
     def test_none_installed(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "settings.json"
         settings_file.write_text(json.dumps({"hooks": {}}))
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         status, msg, event_status = _check_hooks()
         assert status == "fail"
@@ -137,7 +137,7 @@ class TestCheckHooks:
 
     def test_missing_settings_file(self, tmp_path, monkeypatch) -> None:
         settings_file = tmp_path / "nonexistent.json"
-        monkeypatch.setattr("ccbot.hook._CLAUDE_SETTINGS_FILE", settings_file)
+        monkeypatch.setattr("ccbot.hook._claude_settings_file", lambda: settings_file)
 
         status, msg, event_status = _check_hooks()
         assert status == "fail"

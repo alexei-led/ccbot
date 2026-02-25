@@ -3,11 +3,12 @@
 Called by Claude Code hooks (SessionStart, Notification, Stop, SubagentStart,
 SubagentStop) to maintain a window↔session mapping and an append-only event
 log.  Also provides `--install` to auto-configure hooks in
-~/.claude/settings.json.
+settings.json (respects CLAUDE_CONFIG_DIR for non-default locations).
 
 This module must NOT import config.py (which requires TELEGRAM_BOT_TOKEN),
 since hooks run inside tmux panes where bot env vars are not set.
 Config directory resolution uses utils.ccbot_dir() (shared with config.py).
+Claude settings path resolution uses CLAUDE_CONFIG_DIR env var (shared with config.py).
 
 Key functions: hook_main() (CLI entry), _install_hook().
 """
@@ -29,7 +30,14 @@ logger = structlog.get_logger()
 # Validate session_id looks like a UUID
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
-_CLAUDE_SETTINGS_FILE = Path.home() / ".claude" / "settings.json"
+
+def _claude_settings_file() -> Path:
+    """Resolve Claude settings.json path, respecting CLAUDE_CONFIG_DIR."""
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    if config_dir:
+        return Path(config_dir).expanduser() / "settings.json"
+    return Path.home() / ".claude" / "settings.json"
+
 
 # Substring marker for detecting ccbot hook in command strings
 _HOOK_COMMAND_MARKER = "ccbot hook"
@@ -83,7 +91,7 @@ def _install_hook() -> int:
 
     Returns 0 on success, 1 on error.
     """
-    settings_file = _CLAUDE_SETTINGS_FILE
+    settings_file = _claude_settings_file()
     settings_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Read existing settings
@@ -156,7 +164,7 @@ def _uninstall_hook() -> int:
 
     Returns 0 on success, 1 on error.
     """
-    settings_file = _CLAUDE_SETTINGS_FILE
+    settings_file = _claude_settings_file()
     if not settings_file.exists():
         print("No settings.json found — nothing to uninstall.")
         return 0
@@ -215,7 +223,7 @@ def _hook_status() -> int:
 
     Returns 0 if all installed, 1 if any missing.
     """
-    settings_file = _CLAUDE_SETTINGS_FILE
+    settings_file = _claude_settings_file()
     if not settings_file.exists():
         print(f"Not installed ({settings_file} does not exist)")
         return 1

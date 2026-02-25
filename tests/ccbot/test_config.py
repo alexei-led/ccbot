@@ -1,6 +1,7 @@
 """Unit tests for Config — env var loading, validation, and user access."""
 
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -79,3 +80,32 @@ class TestConfigMissingEnv:
         monkeypatch.setenv("CCBOT_GROUP_ID", "not-a-number")
         with pytest.raises(ValueError, match="CCBOT_GROUP_ID must be a valid integer"):
             Config()
+
+
+@pytest.mark.usefixtures("_base_env")
+class TestClaudeConfigDir:
+    def test_claude_config_dir_default(self, monkeypatch):
+        monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+        cfg = Config()
+        assert cfg.claude_config_dir == Path.home() / ".claude"
+        assert cfg.claude_projects_path == Path.home() / ".claude" / "projects"
+
+    def test_claude_config_dir_override(self, monkeypatch, tmp_path):
+        custom_dir = tmp_path / "custom-claude"
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(custom_dir))
+        cfg = Config()
+        assert cfg.claude_config_dir == custom_dir
+        assert cfg.claude_projects_path == custom_dir / "projects"
+
+
+@pytest.mark.usefixtures("_base_env")
+class TestShowHiddenDirs:
+    def test_show_hidden_dirs_default_false(self):
+        cfg = Config()
+        assert cfg.show_hidden_dirs is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "yes", "True", "YES"])
+    def test_show_hidden_dirs_enabled(self, monkeypatch, value):
+        monkeypatch.setenv("CCBOT_SHOW_HIDDEN_DIRS", value)
+        cfg = Config()
+        assert cfg.show_hidden_dirs is True

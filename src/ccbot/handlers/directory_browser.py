@@ -17,6 +17,7 @@ from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from ..config import config
 from ..session import session_manager
 from .callback_data import (
     CB_DIR_CANCEL,
@@ -176,6 +177,7 @@ def build_directory_browser(
 
     Returns: (text, keyboard, subdirs) where subdirs is the full list for caching.
     """
+
     path = Path(current_path).expanduser().resolve()
     if not path.exists() or not path.is_dir():
         path = Path.cwd()
@@ -185,7 +187,8 @@ def build_directory_browser(
             [
                 d.name
                 for d in path.iterdir()
-                if d.is_dir() and not d.name.startswith(".")
+                if d.is_dir()
+                and (config.show_hidden_dirs or not d.name.startswith("."))
             ]
         )
     except PermissionError, OSError:

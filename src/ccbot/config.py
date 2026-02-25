@@ -66,7 +66,13 @@ class Config:
         self.events_file = self.config_dir / "events.jsonl"
 
         # Claude Code session monitoring configuration
-        self.claude_projects_path = Path.home() / ".claude" / "projects"
+        _claude_config_dir = os.getenv("CLAUDE_CONFIG_DIR")
+        self.claude_config_dir: Path = (
+            Path(_claude_config_dir).expanduser()
+            if _claude_config_dir
+            else Path.home() / ".claude"
+        )
+        self.claude_projects_path = self.claude_config_dir / "projects"
         self.monitor_poll_interval = float(os.getenv("MONITOR_POLL_INTERVAL", "2.0"))
 
         # Multi-instance support
@@ -85,6 +91,11 @@ class Config:
 
         # Provider selection
         self.provider_name: str = os.getenv("CCBOT_PROVIDER", "claude")
+
+        # Directory browser: show hidden (dot) directories
+        self.show_hidden_dirs: bool = os.getenv(
+            "CCBOT_SHOW_HIDDEN_DIRS", ""
+        ).lower() in ("1", "true", "yes")
 
         # Auto-close stale topics (minutes; 0 = disabled)
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))

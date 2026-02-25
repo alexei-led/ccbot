@@ -84,7 +84,10 @@ UI_PATTERNS: list[UIPattern] = [
     ),
     UIPattern(
         name="PermissionPrompt",
-        top=(re.compile(r"^\s*Do you want to proceed\?"),),
+        top=(
+            re.compile(r"^\s*Do you want to proceed\?"),
+            re.compile(r"^\s*Do you want to make this edit"),
+        ),
         bottom=(re.compile(r"^\s*Esc to cancel"),),
     ),
     UIPattern(
@@ -96,14 +99,17 @@ UI_PATTERNS: list[UIPattern] = [
         name="Settings",
         top=(re.compile(r"^\s*Settings:"),),
         bottom=(
-            re.compile(r"Esc to cancel"),
+            re.compile(r"Esc to (cancel|exit)"),
             re.compile(r"^\s*Type to filter"),
         ),
     ),
     UIPattern(
         name="SelectModel",
         top=(re.compile(r"^\s*Select model"),),
-        bottom=(re.compile(r"Enter to confirm"),),
+        bottom=(
+            re.compile(r"Enter to confirm"),
+            re.compile(r"^\s*Esc to exit"),
+        ),
     ),
     # ── Structural catch-all (MUST be last — catches anything above) ─
     # Ink's SelectInput renders ❯ (U+276F) as the selection cursor for

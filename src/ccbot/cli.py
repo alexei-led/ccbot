@@ -66,6 +66,8 @@ _FLAG_TO_ENV: list[tuple[str, str]] = [
     ("autoclose_done", "AUTOCLOSE_DONE_MINUTES"),
     ("autoclose_dead", "AUTOCLOSE_DEAD_MINUTES"),
     ("provider", "CCBOT_PROVIDER"),
+    ("show_hidden_dirs", "CCBOT_SHOW_HIDDEN_DIRS"),
+    ("claude_config_dir", "CLAUDE_CONFIG_DIR"),
 ]
 
 
@@ -162,6 +164,20 @@ def apply_args_to_env(**kwargs: object) -> None:
     default=None,
     envvar="CCBOT_PROVIDER",
     help="Agent provider name (default: claude).",
+)
+@click.option(
+    "--show-hidden-dirs",
+    is_flag=True,
+    default=None,
+    envvar="CCBOT_SHOW_HIDDEN_DIRS",
+    help="Show hidden (dot) directories in directory browser.",
+)
+@click.option(
+    "--claude-config-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    envvar="CLAUDE_CONFIG_DIR",
+    help="Claude config directory (default: ~/.claude).",
 )
 def run_cmd(**kwargs: object) -> None:
     """Start the bot with optional overrides."""

@@ -151,9 +151,11 @@ class TranscriptParser:
             elif isinstance(item, dict) and item.get("type") == "text":
                 text = item.get("text", "")
                 if text:
-                    texts.append(text)
+                    texts.append(TranscriptParser._RE_ANSI.sub("", text))
 
         return "\n".join(texts)
+
+    _RE_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
     _RE_COMMAND_NAME = re.compile(r"<command-name>(.*?)</command-name>")
     _RE_LOCAL_STDOUT = re.compile(
@@ -465,7 +467,7 @@ class TranscriptParser:
                     btype = block.get("type", "")
 
                     if btype == "text":
-                        t = block.get("text", "").strip()
+                        t = cls._RE_ANSI.sub("", block.get("text", "")).strip()
                         if t and t != cls._NO_CONTENT_PLACEHOLDER:
                             result.append(
                                 ParsedEntry(
@@ -680,7 +682,7 @@ class TranscriptParser:
                             )
 
                     elif btype == "text":
-                        t = block.get("text", "").strip()
+                        t = cls._RE_ANSI.sub("", block.get("text", "")).strip()
                         if t and not cls._RE_SYSTEM_TAGS.search(t):
                             user_text_parts.append(t)
 
