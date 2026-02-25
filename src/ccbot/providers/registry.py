@@ -5,11 +5,11 @@ registered lazily via ``_ensure_registered()`` in ``ccbot.providers.__init__``
 before first use. ``get()`` caches one instance per provider name.
 """
 
-import logging
+import structlog
 
 from ccbot.providers.base import AgentProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class UnknownProviderError(LookupError):

@@ -12,7 +12,7 @@ Key functions:
 """
 
 import json
-import logging
+import structlog
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,7 +34,7 @@ from .callback_helpers import get_thread_id
 from .message_sender import safe_edit, safe_reply
 from .user_state import RESUME_SESSIONS
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _SESSIONS_PER_PAGE = 6
 

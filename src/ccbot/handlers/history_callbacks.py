@@ -7,7 +7,7 @@ history results.
 Key function: handle_history_callback (uniform callback handler signature).
 """
 
-import logging
+import structlog
 
 from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes
@@ -17,7 +17,7 @@ from .callback_data import CB_HISTORY_PREV
 from .history import send_history
 from .message_sender import safe_edit
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Minimum parts in history callback data: page:window_id:start:end
 _HISTORY_CB_PARTS_MIN = 4

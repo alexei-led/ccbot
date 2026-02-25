@@ -8,7 +8,7 @@ Key function: upgrade_command().
 """
 
 import asyncio
-import logging
+import structlog
 import re
 
 from telegram import Update
@@ -17,7 +17,7 @@ from telegram.ext import ContextTypes
 from ..config import config
 from .message_sender import safe_edit, safe_reply
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _UPGRADE_TIMEOUT = 90
 
@@ -57,9 +57,8 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     try:
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=_UPGRADE_TIMEOUT
-        )
+        async with asyncio.timeout(_UPGRADE_TIMEOUT):
+            stdout, stderr = await proc.communicate()
     except TimeoutError:
         proc.kill()
         await safe_edit(msg, "\u274c Upgrade timed out after 60s.")

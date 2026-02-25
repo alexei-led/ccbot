@@ -101,7 +101,7 @@ class TestUserFavoritesPersistence:
         mgr.user_dir_favorites = {}
         mgr.update_user_mru(100, "/tmp/proj1")
         mgr.toggle_user_star(100, "/tmp/proj2")
-        mgr._do_save_state()
+        mgr.flush_state()
 
         mgr2 = SessionManager()
         mgr2._load_state()

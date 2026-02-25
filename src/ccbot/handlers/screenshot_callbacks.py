@@ -12,7 +12,7 @@ Key function: handle_screenshot_callback (uniform callback handler signature).
 import asyncio
 import contextlib
 import io
-import logging
+import structlog
 
 from telegram import (
     CallbackQuery,
@@ -37,7 +37,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id, user_owns_window
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # key_id -> (tmux_key, enter, literal)
 KEYS_SEND_MAP: dict[str, tuple[str, bool, bool]] = {

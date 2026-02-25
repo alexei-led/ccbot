@@ -5,14 +5,19 @@ Provides:
   - tmux_session_name(): resolve tmux session name from env.
   - atomic_write_json(): crash-safe JSON file writes via temp+rename.
   - read_cwd_from_jsonl(): extract the cwd field from the first JSONL entry.
+  - task_done_callback(): log unhandled exceptions from background asyncio tasks.
 """
 
+import asyncio
 import json
+import structlog
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 import contextlib
+
+logger = structlog.get_logger()
 
 CCBOT_DIR_ENV = "CCBOT_DIR"
 
@@ -75,3 +80,16 @@ def read_cwd_from_jsonl(file_path: str | Path) -> str:
     except OSError:
         pass
     return ""
+
+
+def task_done_callback(task: asyncio.Task[None]) -> None:
+    """Log unhandled exceptions from background asyncio tasks.
+
+    Attach to any fire-and-forget task via ``task.add_done_callback(task_done_callback)``.
+    Suppresses CancelledError (normal shutdown).
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("Background task %s failed", task.get_name(), exc_info=exc)

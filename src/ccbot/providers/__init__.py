@@ -7,7 +7,7 @@ and ``resolve_capabilities()`` for lightweight CLI commands that don't
 require Config (doctor, status).
 """
 
-import logging
+import structlog
 import os
 
 from ccbot.providers.base import (
@@ -22,7 +22,7 @@ from ccbot.providers.base import (
 )
 from ccbot.providers.registry import ProviderRegistry, UnknownProviderError, registry
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Singleton cache
 _active: AgentProvider | None = None

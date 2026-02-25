@@ -8,7 +8,7 @@ The module-level `config` instance is imported by nearly every other module.
 Key class: Config (singleton instantiated as `config`).
 """
 
-import logging
+import structlog
 import os
 import socket
 from pathlib import Path
@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 from .utils import ccbot_dir
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class Config:

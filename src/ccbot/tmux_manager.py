@@ -12,22 +12,20 @@ Key class: TmuxManager (singleton instantiated as `tmux_manager`).
 """
 
 import asyncio
-import logging
+import structlog
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import libtmux
-from libtmux._internal.query_list import ObjectDoesNotExist
 from libtmux.exc import LibTmuxException
 
 from .config import config
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _TmuxError = (
     LibTmuxException,
-    ObjectDoesNotExist,
     OSError,
     subprocess.CalledProcessError,
 )
@@ -69,7 +67,9 @@ class TmuxManager:
     def get_session(self) -> libtmux.Session | None:
         """Get the tmux session if it exists."""
         try:
-            return self.server.sessions.get(session_name=self.session_name)
+            return self.server.sessions.get(
+                session_name=self.session_name, default=None
+            )
         except _TmuxError:
             self._reset_server()
             return None
@@ -202,7 +202,8 @@ class TmuxManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            async with asyncio.timeout(5.0):
+                stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 logger.warning(
                     "Failed to get pane dimensions %s: %s",
@@ -249,7 +250,8 @@ class TmuxManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            async with asyncio.timeout(5.0):
+                stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 logger.warning(
                     "Failed to capture pane %s: %s",
@@ -290,7 +292,8 @@ class TmuxManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+            async with asyncio.timeout(5.0):
+                stdout, _ = await proc.communicate()
             if proc.returncode != 0:
                 return ""
             return stdout.decode("utf-8", errors="replace").strip()
@@ -313,7 +316,7 @@ class TmuxManager:
             if not session:
                 return None
             try:
-                window = session.windows.get(window_id=window_id)
+                window = session.windows.get(window_id=window_id, default=None)
                 if not window:
                     return None
                 pane = window.active_pane
@@ -339,7 +342,7 @@ class TmuxManager:
             logger.warning("No tmux session found")
             return False
         try:
-            window = session.windows.get(window_id=window_id)
+            window = session.windows.get(window_id=window_id, default=None)
             if not window:
                 logger.warning("Window %s not found", window_id)
                 return False
@@ -416,7 +419,7 @@ class TmuxManager:
             if not session:
                 return False
             try:
-                window = session.windows.get(window_id=window_id)
+                window = session.windows.get(window_id=window_id, default=None)
                 if not window:
                     return False
                 window.kill()

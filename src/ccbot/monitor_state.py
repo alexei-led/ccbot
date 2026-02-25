@@ -8,12 +8,12 @@ Key classes: MonitorState, TrackedSession.
 """
 
 import json
-import logging
+import structlog
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 @dataclass

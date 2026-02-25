@@ -24,11 +24,9 @@ Key components:
   - Auto-close: closes topics stuck in done/dead state
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
-import logging
+import structlog
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -60,7 +58,11 @@ from .topic_emoji import rename_topic, update_topic_emoji
 # Top-level loop resilience: catch any error to keep polling alive
 _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 
-logger = logging.getLogger(__name__)
+# Exponential backoff bounds for loop errors (seconds)
+_BACKOFF_MIN = 2.0
+_BACKOFF_MAX = 30.0
+
+logger = structlog.get_logger()
 
 # Status polling interval
 STATUS_POLL_INTERVAL = 1.0  # seconds - faster response (rate limiting at send layer)
@@ -654,6 +656,7 @@ async def status_poll_loop(bot: Bot) -> None:
     """Background task to poll terminal status for all thread-bound windows."""
     logger.info("Status polling started (interval: %ss)", STATUS_POLL_INTERVAL)
     last_topic_check = 0.0
+    _error_streak = 0
     while True:
         try:
             # Periodic topic existence probe
@@ -699,6 +702,8 @@ async def status_poll_loop(bot: Bot) -> None:
                         )
 
             for user_id, thread_id, wid in list(session_manager.iter_thread_bindings()):
+                structlog.contextvars.clear_contextvars()
+                structlog.contextvars.bind_contextvars(window_id=wid)
                 try:
                     # Already notified about this dead window — skip tmux check
                     if (user_id, thread_id, wid) in _dead_notified:
@@ -735,5 +740,10 @@ async def status_poll_loop(bot: Bot) -> None:
 
         except _LoopError:
             logger.exception("Status poll loop error")
+            backoff_delay = min(_BACKOFF_MAX, _BACKOFF_MIN * (2**_error_streak))
+            _error_streak += 1
+            await asyncio.sleep(backoff_delay)
+            continue
 
+        _error_streak = 0
         await asyncio.sleep(STATUS_POLL_INTERVAL)

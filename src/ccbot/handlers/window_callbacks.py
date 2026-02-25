@@ -8,7 +8,7 @@ Handles inline keyboard callbacks for the window picker UI:
 Key function: handle_window_callback (uniform callback handler signature).
 """
 
-import logging
+import structlog
 from pathlib import Path
 
 from telegram import CallbackQuery, Update
@@ -32,7 +32,7 @@ from .directory_browser import (
 from .message_sender import safe_edit, safe_send
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 async def handle_window_callback(

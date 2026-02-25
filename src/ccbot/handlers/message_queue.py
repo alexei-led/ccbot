@@ -17,7 +17,7 @@ Key components:
 """
 
 import asyncio
-import logging
+import structlog
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -28,6 +28,7 @@ from ..markdown_v2 import convert_markdown
 from ..session import session_manager
 from ..providers import get_provider_for_window
 from ..tmux_manager import tmux_manager
+from ..utils import task_done_callback
 from .callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -40,7 +41,7 @@ import contextlib
 # Top-level loop resilience: catch any error to keep the worker alive
 _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Merge limit for content messages
 MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
@@ -127,9 +128,9 @@ def get_or_create_queue(bot: Bot, user_id: int) -> asyncio.Queue[MessageTask]:
         _message_queues[user_id] = asyncio.Queue()
         _queue_locks[user_id] = asyncio.Lock()
         # Start worker task for this user
-        _queue_workers[user_id] = asyncio.create_task(
-            _message_queue_worker(bot, user_id)
-        )
+        task = asyncio.create_task(_message_queue_worker(bot, user_id))
+        task.add_done_callback(task_done_callback)
+        _queue_workers[user_id] = task
     return _message_queues[user_id]
 
 

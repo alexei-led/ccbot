@@ -23,7 +23,7 @@ Key methods for thread binding access:
 
 import asyncio
 import json
-import logging
+import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Iterator
@@ -34,10 +34,12 @@ import aiofiles
 from .config import config
 from .handlers.callback_data import NOTIFICATION_MODES
 from .providers import get_provider_for_window
+from .state_persistence import StatePersistence
 from .tmux_manager import tmux_manager
 from .utils import atomic_write_json
+from .window_resolver import is_window_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, str]]:
@@ -148,11 +150,11 @@ class SessionManager:
         default_factory=dict, repr=False
     )
 
-    # Debounced save state (not serialized)
-    _save_timer: asyncio.TimerHandle | None = field(default=None, repr=False)
-    _dirty: bool = field(default=False, repr=False)
+    # Delegated persistence (not serialized)
+    _persistence: StatePersistence = field(default=None, repr=False, init=False)  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
+        self._persistence = StatePersistence(config.state_file, self._serialize_state)
         self._load_state()
         self._rebuild_reverse_index()
 
@@ -163,281 +165,130 @@ class SessionManager:
             for tid, wid in bindings.items():
                 self._window_to_thread[(uid, wid)] = tid
 
+    def _serialize_state(self) -> dict[str, Any]:
+        """Serialize all state to a dict for persistence."""
+        return {
+            "window_states": {k: v.to_dict() for k, v in self.window_states.items()},
+            "user_window_offsets": {
+                str(uid): offsets for uid, offsets in self.user_window_offsets.items()
+            },
+            "thread_bindings": {
+                str(uid): {str(tid): wid for tid, wid in bindings.items()}
+                for uid, bindings in self.thread_bindings.items()
+            },
+            "group_chat_ids": self.group_chat_ids,
+            "window_display_names": self.window_display_names,
+            "user_dir_favorites": {
+                str(uid): favs for uid, favs in self.user_dir_favorites.items()
+            },
+        }
+
     def _save_state(self) -> None:
         """Schedule debounced save (0.5s delay, resets on each call)."""
-        self._dirty = True
-        if self._save_timer is not None:
-            self._save_timer.cancel()
-        try:
-            loop = asyncio.get_running_loop()
-            self._save_timer = loop.call_later(0.5, self._do_save_state)
-        except RuntimeError:
-            self._do_save_state()  # No event loop (tests) → immediate
-
-    def _do_save_state(self) -> None:
-        """Actual write via atomic_write_json.
-
-        Called directly or via call_later; exceptions are logged so the timer
-        path never silently swallows save failures.
-        """
-        self._save_timer = None
-        try:
-            state: dict[str, Any] = {
-                "window_states": {
-                    k: v.to_dict() for k, v in self.window_states.items()
-                },
-                "user_window_offsets": {
-                    str(uid): offsets
-                    for uid, offsets in self.user_window_offsets.items()
-                },
-                "thread_bindings": {
-                    str(uid): {str(tid): wid for tid, wid in bindings.items()}
-                    for uid, bindings in self.thread_bindings.items()
-                },
-                "group_chat_ids": self.group_chat_ids,
-                "window_display_names": self.window_display_names,
-                "user_dir_favorites": {
-                    str(uid): favs for uid, favs in self.user_dir_favorites.items()
-                },
-            }
-            atomic_write_json(config.state_file, state)
-            self._dirty = False
-        except OSError, TypeError, ValueError:
-            logger.exception("Failed to save state")
+        self._persistence.schedule_save()
 
     def flush_state(self) -> None:
         """Force immediate save. Call on shutdown."""
-        if self._save_timer is not None:
-            self._save_timer.cancel()
-            self._save_timer = None
-        if self._dirty:
-            self._do_save_state()
+        self._persistence.flush()
 
     def _is_window_id(self, key: str) -> bool:
         """Check if a key looks like a tmux window ID (e.g. '@0', '@12')."""
-        return key.startswith("@") and len(key) > 1 and key[1:].isdigit()
+        return is_window_id(key)
 
     def _load_state(self) -> None:
-        """Load state synchronously during initialization.
+        """Load state during initialization.
 
         Detects old-format state (window_name keys without '@' prefix) and
         marks for migration on next startup re-resolution.
         """
-        if config.state_file.exists():
-            try:
-                state = json.loads(config.state_file.read_text())
-                self.window_states = {
-                    k: WindowState.from_dict(v)
-                    for k, v in state.get("window_states", {}).items()
-                }
-                self.user_window_offsets = {
-                    int(uid): offsets
-                    for uid, offsets in state.get("user_window_offsets", {}).items()
-                }
-                self.thread_bindings = {
-                    int(uid): {int(tid): wid for tid, wid in bindings.items()}
-                    for uid, bindings in state.get("thread_bindings", {}).items()
-                }
-                self.group_chat_ids = state.get("group_chat_ids", {})
-                self.window_display_names = state.get("window_display_names", {})
-                self.user_dir_favorites = {
-                    int(uid): favs
-                    for uid, favs in state.get("user_dir_favorites", {}).items()
-                }
+        state = self._persistence.load()
+        if not state:
+            self._needs_migration = False
+            return
 
-                # Deduplicate thread bindings: enforce 1 window = 1 thread.
-                # If multiple threads point to the same window, keep only the
-                # highest thread_id (most recently created topic).
-                for _uid, bindings in self.thread_bindings.items():
-                    window_threads: dict[str, list[int]] = {}
-                    for tid, wid in bindings.items():
-                        window_threads.setdefault(wid, []).append(tid)
-                    for wid, tids in window_threads.items():
-                        if len(tids) > 1:
-                            keep = max(tids)
-                            for tid in tids:
-                                if tid != keep:
-                                    del bindings[tid]
-                                    logger.warning(
-                                        "Startup: removed duplicate binding "
-                                        "thread %d -> window %s (keeping %d)",
-                                        tid,
-                                        wid,
-                                        keep,
-                                    )
+        self.window_states = {
+            k: WindowState.from_dict(v)
+            for k, v in state.get("window_states", {}).items()
+        }
+        self.user_window_offsets = {
+            int(uid): offsets
+            for uid, offsets in state.get("user_window_offsets", {}).items()
+        }
+        self.thread_bindings = {
+            int(uid): {int(tid): wid for tid, wid in bindings.items()}
+            for uid, bindings in state.get("thread_bindings", {}).items()
+        }
+        self.group_chat_ids = state.get("group_chat_ids", {})
+        self.window_display_names = state.get("window_display_names", {})
+        self.user_dir_favorites = {
+            int(uid): favs for uid, favs in state.get("user_dir_favorites", {}).items()
+        }
 
-                # Detect old format: keys that don't look like window IDs
-                needs_migration = False
-                for k in self.window_states:
-                    if not self._is_window_id(k):
+        # Deduplicate thread bindings: enforce 1 window = 1 thread.
+        # If multiple threads point to the same window, keep only the
+        # highest thread_id (most recently created topic).
+        for _uid, bindings in self.thread_bindings.items():
+            window_threads: dict[str, list[int]] = {}
+            for tid, wid in bindings.items():
+                window_threads.setdefault(wid, []).append(tid)
+            for wid, tids in window_threads.items():
+                if len(tids) > 1:
+                    keep = max(tids)
+                    for tid in tids:
+                        if tid != keep:
+                            del bindings[tid]
+                            logger.warning(
+                                "Startup: removed duplicate binding "
+                                "thread %d -> window %s (keeping %d)",
+                                tid,
+                                wid,
+                                keep,
+                            )
+
+        # Detect old format: keys that don't look like window IDs
+        needs_migration = False
+        for k in self.window_states:
+            if not self._is_window_id(k):
+                needs_migration = True
+                break
+        if not needs_migration:
+            for bindings in self.thread_bindings.values():
+                for wid in bindings.values():
+                    if not self._is_window_id(wid):
                         needs_migration = True
                         break
-                if not needs_migration:
-                    for bindings in self.thread_bindings.values():
-                        for wid in bindings.values():
-                            if not self._is_window_id(wid):
-                                needs_migration = True
-                                break
-                        if needs_migration:
-                            break
-
                 if needs_migration:
-                    logger.info(
-                        "Detected old-format state (window_name keys), "
-                        "will re-resolve on startup"
-                    )
-                    self._needs_migration = True
-                else:
-                    self._needs_migration = False
+                    break
 
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.warning("Failed to load state: %s", e)
-                self.window_states = {}
-                self.user_window_offsets = {}
-                self.thread_bindings = {}
-                self.group_chat_ids = {}
-                self.window_display_names = {}
-                self._needs_migration = False
+        if needs_migration:
+            logger.info(
+                "Detected old-format state (window_name keys), "
+                "will re-resolve on startup"
+            )
+            self._needs_migration = True
         else:
             self._needs_migration = False
 
     async def resolve_stale_ids(self) -> None:
         """Re-resolve persisted window IDs against live tmux windows.
 
-        Called on startup. Handles two cases:
-        1. Old-format migration: window_name keys → window_id keys
-        2. Stale IDs: window_id no longer exists but display name matches a live window
-
-        Builds {window_name: window_id} from live windows, then remaps or drops entries.
+        Called on startup. Delegates to window_resolver for the heavy lifting.
         """
+        from .window_resolver import LiveWindow, resolve_stale_ids as _resolve
+
         windows = await tmux_manager.list_windows()
-        live_by_name: dict[str, str] = {}  # window_name -> window_id
-        live_ids: set[str] = set()
-        for w in windows:
-            live_by_name[w.window_name] = w.window_id
-            live_ids.add(w.window_id)
+        live = [
+            LiveWindow(window_id=w.window_id, window_name=w.window_name)
+            for w in windows
+        ]
 
-        changed = False
-
-        # --- Migrate window_states ---
-        new_window_states: dict[str, WindowState] = {}
-        for key, window_state in self.window_states.items():
-            if self._is_window_id(key):
-                if key in live_ids:
-                    new_window_states[key] = window_state
-                else:
-                    # Stale ID — try re-resolve by display name
-                    display = self.window_display_names.get(
-                        key, window_state.window_name or key
-                    )
-                    new_id = live_by_name.get(display)
-                    if new_id:
-                        logger.debug(
-                            "Re-resolved stale window_id %s -> %s (name=%s)",
-                            key,
-                            new_id,
-                            display,
-                        )
-                        new_window_states[new_id] = window_state
-                        window_state.window_name = display
-                        self.window_display_names[new_id] = display
-                        self.window_display_names.pop(key, None)
-                        changed = True
-                    else:
-                        logger.debug(
-                            "Dropping stale window_state: %s (name=%s)", key, display
-                        )
-                        changed = True
-            else:
-                # Old format: key is window_name
-                new_id = live_by_name.get(key)
-                if new_id:
-                    logger.debug("Migrating window_state key %s -> %s", key, new_id)
-                    window_state.window_name = key
-                    new_window_states[new_id] = window_state
-                    self.window_display_names[new_id] = key
-                    changed = True
-                else:
-                    logger.debug(
-                        "Dropping old-format window_state: %s (no live window)", key
-                    )
-                    changed = True
-        self.window_states = new_window_states
-
-        # --- Migrate thread_bindings ---
-        for uid, bindings in self.thread_bindings.items():
-            new_bindings: dict[int, str] = {}
-            for tid, val in bindings.items():
-                if self._is_window_id(val):
-                    if val in live_ids:
-                        new_bindings[tid] = val
-                    else:
-                        display = self.window_display_names.get(val, val)
-                        new_id = live_by_name.get(display)
-                        if new_id:
-                            logger.debug(
-                                "Re-resolved thread binding %s -> %s (name=%s)",
-                                val,
-                                new_id,
-                                display,
-                            )
-                            new_bindings[tid] = new_id
-                            self.window_display_names[new_id] = display
-                            changed = True
-                        else:
-                            logger.debug(
-                                "Dropping stale thread binding: user=%d, thread=%d, wid=%s",
-                                uid,
-                                tid,
-                                val,
-                            )
-                            changed = True
-                else:
-                    # Old format: val is window_name
-                    new_id = live_by_name.get(val)
-                    if new_id:
-                        logger.debug("Migrating thread binding %s -> %s", val, new_id)
-                        new_bindings[tid] = new_id
-                        self.window_display_names[new_id] = val
-                        changed = True
-                    else:
-                        logger.debug(
-                            "Dropping old-format thread binding: user=%d, thread=%d, name=%s",
-                            uid,
-                            tid,
-                            val,
-                        )
-                        changed = True
-            self.thread_bindings[uid] = new_bindings
-
-        # Remove empty user entries
-        empty_users = [uid for uid, b in self.thread_bindings.items() if not b]
-        for uid in empty_users:
-            del self.thread_bindings[uid]
-
-        # --- Migrate user_window_offsets ---
-        for uid, offsets in self.user_window_offsets.items():
-            new_offsets: dict[str, int] = {}
-            for key, offset in offsets.items():
-                if self._is_window_id(key):
-                    if key in live_ids:
-                        new_offsets[key] = offset
-                    else:
-                        display = self.window_display_names.get(key, key)
-                        new_id = live_by_name.get(display)
-                        if new_id:
-                            new_offsets[new_id] = offset
-                            changed = True
-                        else:
-                            changed = True
-                else:
-                    new_id = live_by_name.get(key)
-                    if new_id:
-                        new_offsets[new_id] = offset
-                        changed = True
-                    else:
-                        changed = True
-            self.user_window_offsets[uid] = new_offsets
+        changed = _resolve(
+            live,
+            self.window_states,
+            self.thread_bindings,
+            self.user_window_offsets,
+            self.window_display_names,
+        )
 
         if changed:
             self._rebuild_reverse_index()
@@ -447,6 +298,7 @@ class SessionManager:
         self._needs_migration = False
 
         # Prune session_map.json entries for dead windows
+        live_ids = {w.window_id for w in live}
         self.prune_session_map(live_ids)
 
     # --- Display name management ---

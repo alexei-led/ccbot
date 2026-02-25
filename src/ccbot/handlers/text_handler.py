@@ -9,7 +9,7 @@ The orchestrator (handle_text_message) calls steps in sequence.
 
 import asyncio
 import contextlib
-import logging
+import structlog
 from pathlib import Path
 from telegram import Bot, Message, Update
 from telegram.constants import ChatAction
@@ -43,8 +43,9 @@ from ..markdown_v2 import convert_markdown
 from ..session import session_manager
 from ..providers import get_provider_for_window
 from ..tmux_manager import tmux_manager
+from ..utils import task_done_callback
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Maximum characters for bash output before truncation (fits Telegram 4096-char limit)
 _BASH_OUTPUT_LIMIT = 3800
@@ -351,6 +352,7 @@ async def _forward_message(
         task = asyncio.create_task(
             _capture_bash_output(bot, user_id, thread_id, window_id, bash_cmd)
         )
+        task.add_done_callback(task_done_callback)
         _bash_capture_tasks[(user_id, thread_id)] = task
 
     # If in interactive mode, refresh the UI after sending text

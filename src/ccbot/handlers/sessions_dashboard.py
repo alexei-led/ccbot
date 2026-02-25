@@ -12,7 +12,7 @@ Key functions:
   - handle_sessions_kill_confirm(): second tap — kill and unbind
 """
 
-import logging
+import structlog
 
 from telegram import (
     Bot,
@@ -37,7 +37,7 @@ from .callback_data import (
 from .cleanup import clear_topic_state
 from .message_sender import safe_edit, safe_reply
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _REFRESH_BTN = InlineKeyboardButton(
     "\U0001f504 Refresh", callback_data=CB_SESSIONS_REFRESH

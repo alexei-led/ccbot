@@ -15,7 +15,7 @@ State dicts are keyed by (user_id, thread_id_or_0) for Telegram topic support.
 """
 
 import contextlib
-import logging
+import structlog
 import time
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -37,7 +37,7 @@ from .callback_data import (
 )
 from .message_sender import NO_LINK_PREVIEW, rate_limit_send
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Tool names that trigger interactive UI via JSONL (terminal capture + inline keyboard)
 INTERACTIVE_TOOL_NAMES = frozenset({"AskUserQuestion", "ExitPlanMode"})

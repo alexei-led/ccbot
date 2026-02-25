@@ -15,13 +15,13 @@ Key functions:
   - clear_topic_emoji_state: Clean up tracking for a topic
 """
 
-import logging
+import structlog
 import time
 
 from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Emoji prefixes for session states
 EMOJI_ACTIVE = "\U0001f7e2"  # Green circle

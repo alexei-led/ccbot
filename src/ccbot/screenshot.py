@@ -12,7 +12,7 @@ Key function: text_to_image(text, font_size, with_ansi) → PNG bytes.
 
 import asyncio
 import io
-import logging
+import structlog
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 _RE_ANSI_SGR = re.compile(r"\x1b\[([0-9;]*)m")
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _FONTS_DIR = Path(__file__).parent / "fonts"
 

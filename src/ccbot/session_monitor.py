@@ -13,7 +13,7 @@ Key classes: SessionMonitor, NewMessage, SessionInfo.
 
 import asyncio
 import json
-import logging
+import structlog
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,13 +28,17 @@ from .monitor_state import MonitorState, TrackedSession
 from .providers import get_provider_for_window
 from .session import parse_session_map
 from .tmux_manager import tmux_manager
-from .utils import read_cwd_from_jsonl
+from .utils import read_cwd_from_jsonl, task_done_callback
 
 _CallbackError = (OSError, RuntimeError, TelegramError)
 # Top-level loop resilience: catch any error to keep monitoring alive
 _LoopError = (OSError, RuntimeError, json.JSONDecodeError, ValueError, TelegramError)
 
-logger = logging.getLogger(__name__)
+# Exponential backoff bounds for loop errors (seconds)
+_BACKOFF_MIN = 2.0
+_BACKOFF_MAX = 30.0
+
+logger = structlog.get_logger()
 
 _PathResolveError = (OSError, ValueError)
 _SessionMapError = (json.JSONDecodeError, OSError)
@@ -614,6 +618,7 @@ class SessionMonitor:
         # Initialize last known session_map
         self._last_session_map = await self._load_current_session_map()
 
+        error_streak = 0
         while self._running:
             try:
                 # Load hook-based session map updates
@@ -653,6 +658,8 @@ class SessionMonitor:
                 new_messages = await self.check_for_updates(current_map)
 
                 for msg in new_messages:
+                    structlog.contextvars.clear_contextvars()
+                    structlog.contextvars.bind_contextvars(session_id=msg.session_id)
                     status = "complete" if msg.is_complete else "streaming"
                     preview = msg.text[:_MSG_PREVIEW_LENGTH] + (
                         "..." if len(msg.text) > _MSG_PREVIEW_LENGTH else ""
@@ -669,7 +676,12 @@ class SessionMonitor:
 
             except _LoopError:
                 logger.exception("Monitor loop error")
+                backoff_delay = min(_BACKOFF_MAX, _BACKOFF_MIN * (2**error_streak))
+                error_streak += 1
+                await asyncio.sleep(backoff_delay)
+                continue
 
+            error_streak = 0
             await asyncio.sleep(self.poll_interval)
 
         logger.info("Session monitor stopped")
@@ -680,6 +692,7 @@ class SessionMonitor:
             return
         self._running = True
         self._task = asyncio.create_task(self._monitor_loop())
+        self._task.add_done_callback(task_done_callback)
 
     def stop(self) -> None:
         self._running = False

@@ -9,7 +9,7 @@ Key handlers:
   - handle_document_message: handles filters.Document.ALL
 """
 
-import logging
+import structlog
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +24,7 @@ from ..session import session_manager
 from .callback_helpers import get_thread_id
 from .message_sender import safe_reply
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Upload directory name inside project cwd
 _UPLOAD_DIR = ".ccbot-uploads"

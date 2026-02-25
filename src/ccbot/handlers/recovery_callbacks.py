@@ -12,7 +12,7 @@ Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
 import json
-import logging
+import structlog
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,7 +41,7 @@ from .user_state import (
     RECOVERY_WINDOW_ID,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _MAX_RESUME_SESSIONS = 6
 

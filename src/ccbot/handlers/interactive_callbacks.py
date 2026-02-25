@@ -8,7 +8,7 @@ Key function: handle_interactive_callback (uniform callback handler signature).
 """
 
 import asyncio
-import logging
+import structlog
 
 from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes
@@ -27,7 +27,7 @@ from .callback_data import (
 )
 from .interactive_ui import clear_interactive_msg, handle_interactive_ui
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # cb_prefix -> (tmux_key, refresh_ui_after)
 INTERACTIVE_KEY_MAP: dict[str, tuple[str, bool]] = {

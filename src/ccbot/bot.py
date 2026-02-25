@@ -19,7 +19,7 @@ Key functions: create_bot(), handle_new_message().
 
 import asyncio
 import contextlib
-import logging
+import structlog
 import os
 import re
 import signal
@@ -126,8 +126,9 @@ from .handlers.text_handler import handle_text_message
 from .session import session_manager
 from .session_monitor import NewMessage, NewWindowEvent, SessionMonitor
 from .tmux_manager import tmux_manager
+from .utils import task_done_callback
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _CommandRefreshError = (TelegramError, OSError)
 
@@ -575,6 +576,10 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:
         return
 
     for user_id, window_id, thread_id in active_users:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            window_id=window_id, session_id=msg.session_id
+        )
         # Check notification mode — skip suppressed messages.
         # All tool_use/tool_result MUST pass through regardless of mode: the message
         # queue edits tool_use messages in-place when tool_result arrives, so filtering
@@ -840,6 +845,7 @@ async def post_init(application: Application) -> None:
 
     # Start status polling task (routed through PTB error handler)
     _status_poll_task = asyncio.create_task(status_poll_loop(application.bot))
+    _status_poll_task.add_done_callback(task_done_callback)
     logger.info("Status polling task started")
 
 

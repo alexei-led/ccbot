@@ -12,7 +12,7 @@ Core components:
   - get_cc_name(): reverse lookup from sanitized telegram name to CC name
 """
 
-import logging
+import structlog
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -20,7 +20,7 @@ from typing import Literal, cast
 from ccbot.providers.base import AgentProvider
 from telegram import Bot, BotCommand
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Built-in Claude Code commands (always registered)
 CC_BUILTINS: dict[str, str] = {
