@@ -124,7 +124,9 @@ async def update_topic_emoji(
                 "Topic emoji disabled for chat %d: insufficient permissions",
                 chat_id,
             )
-        elif "TOPIC_NOT_MODIFIED" in e.message or "Topic_id_invalid" in e.message:
+        elif (
+            "topic_not_modified" in e.message.lower() or "Topic_id_invalid" in e.message
+        ):
             # Expected no-ops: already correct name or invalid topic
             _topic_states[key] = state
         else:
