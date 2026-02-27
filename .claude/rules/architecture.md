@@ -15,7 +15,7 @@ graph TB
     end
 
     subgraph tmux["TmuxManager — tmux_manager.py"]
-        Tmux["list/find/create/kill windows\nsend_keys · capture_pane"]
+        Tmux["list/find/create/kill windows\nsend_keys · capture_pane\nlist_panes · send_keys_to_pane"]
     end
 
     subgraph parsing["TranscriptParser — transcript_parser.py"]
@@ -43,7 +43,7 @@ graph TB
     bot -- "Send\n(tmux keys)" --> tmux
     monitor --> parsing
     tmux --> windows
-    windows -- "Claude Code hooks\n(5 event types)" --> hook
+    windows -- "Claude Code hooks\n(7 event types)" --> hook
     hook -- "session_map.json\n+ events.jsonl" --> session
     session -- "reads JSONL" --> Sessions
     monitor -- "reads" --> MonState
@@ -93,7 +93,7 @@ graph TB
 | `text_handler.py`          | Text message routing (UI guards → unbound → dead → forward)        |
 | `message_sender.py`        | safe_reply/safe_edit/safe_send + rate_limit_send                   |
 | `message_queue.py`         | Per-user queue + worker (merge, status dedup)                      |
-| `status_polling.py`        | Background status line polling (1s interval, auto-close logic)     |
+| `status_polling.py`        | Background status polling (1s), auto-close, multi-pane scanning    |
 | `response_builder.py`      | Response pagination and formatting                                 |
 | `interactive_ui.py`        | AskUserQuestion / ExitPlanMode / Permission UI rendering           |
 | `interactive_callbacks.py` | Callbacks for interactive UI (arrow keys, enter, esc)              |
@@ -101,7 +101,7 @@ graph TB
 | `directory_callbacks.py`   | Callbacks for directory browser (navigate, confirm, provider pick) |
 | `window_callbacks.py`      | Window picker callbacks (bind, new, cancel)                        |
 | `recovery_callbacks.py`    | Dead window recovery callbacks (fresh, continue, resume)           |
-| `screenshot_callbacks.py`  | Screenshot refresh, Esc, quick-key callbacks                       |
+| `screenshot_callbacks.py`  | Screenshot refresh, Esc, quick-key, pane screenshot callbacks      |
 | `history.py`               | Message history display with pagination                            |
 | `history_callbacks.py`     | History pagination callbacks (prev/next)                           |
 | `sessions_dashboard.py`    | /sessions command: active session overview + kill                  |
@@ -110,7 +110,7 @@ graph TB
 | `file_handler.py`          | Photo/document handler (save to .ccbot-uploads/, notify agent)     |
 | `command_history.py`       | Per-user/per-topic in-memory command recall (max 20)               |
 | `topic_emoji.py`           | Topic name emoji updates (active/idle/done/dead), debounced        |
-| `hook_events.py`           | Hook event dispatcher (Notification, Stop, SubagentStart/Stop)     |
+| `hook_events.py`           | Hook event dispatcher (Notification, Stop, Subagent*, Team*)       |
 | `cleanup.py`               | Centralized topic state cleanup on close/delete                    |
 | `callback_data.py`         | CB\_\* callback data constants for inline keyboard routing         |
 | `callback_helpers.py`      | Shared helpers (user_owns_window, get_thread_id)                   |
@@ -122,14 +122,15 @@ graph TB
 | -------------------- | -------------------------------------------------------------- |
 | `state.json`         | Thread bindings + window states + display names + read offsets |
 | `session_map.json`   | Hook-generated window_id→session mapping                       |
-| `events.jsonl`       | Append-only hook event log (all 5 event types)                 |
+| `events.jsonl`       | Append-only hook event log (all 7 event types)                 |
 | `monitor_state.json` | Poll progress (byte offset) per JSONL file                     |
 
 ## Key Design Decisions
 
 - **Topic-centric** — Each Telegram topic binds to one tmux window. No centralized session list; topics _are_ the session list.
 - **Window ID-centric** — All internal state keyed by tmux window ID (e.g. `@0`, `@12`), not window names. Window IDs are guaranteed unique within a tmux server session. Window names are kept as display names via `window_display_names` map. Same directory can have multiple windows.
-- **Hook-based event system** — Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop) write to `session_map.json` and `events.jsonl`. SessionMonitor reads both: session_map for session tracking, events.jsonl for instant event dispatch (interactive UI, done detection, subagent status). Terminal scraping remains as fallback.
+- **Hook-based event system** — Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) write to `session_map.json` and `events.jsonl`. SessionMonitor reads both: session_map for session tracking, events.jsonl for instant event dispatch (interactive UI, done detection, subagent status, team notifications). Terminal scraping remains as fallback. Missing hooks are detected at startup with an actionable warning.
+- **Multi-pane awareness** — Windows with multiple panes (e.g. Claude Code agent teams) are scanned for interactive prompts in non-active panes. Blocked panes are auto-surfaced as inline keyboard alerts. `/panes` command lists all panes with status and per-pane screenshot buttons. Callback data format extended to include pane_id: `"aq:enter:@12:%5"`.
 - **Tool use ↔ tool result pairing** — `tool_use_id` tracked across poll cycles; tool result edits the original tool_use Telegram message in-place.
 - **MarkdownV2 with fallback** — All messages go through `safe_reply`/`safe_edit`/`safe_send` which convert via `telegramify-markdown` and fall back to plain text on parse failure.
 - **No truncation at parse layer** — Full content preserved; splitting at send layer respects Telegram's 4096 char limit with expandable quote atomicity.

@@ -63,7 +63,8 @@ Each Telegram Forum topic binds to one tmux window running an agent CLI. Message
 
 - Send messages and `/commands` directly to your agent (`/clear`, `/compact`, `/cost`, etc.)
 - Interactive prompts (AskUserQuestion, ExitPlanMode, Permission) rendered as inline keyboards
-- Terminal screenshots — capture the current pane as a PNG image
+- Multi-pane support — auto-detects blocked panes, surfaces prompts, `/panes` command for overview
+- Terminal screenshots — capture the current pane (or any specific pane) as a PNG image
 - Sessions dashboard (`/sessions`) — overview of all sessions with status and kill buttons
 
 **Real-time monitoring**
@@ -132,7 +133,9 @@ ALLOWED_USERS=your_telegram_user_id
 ccbot hook --install
 ```
 
-This registers 5 Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop) for automatic session tracking, instant interactive UI detection, and real-time status updates. Not needed for Codex or Gemini — those providers are auto-detected from running processes.
+This registers 7 Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) for automatic session tracking, instant interactive UI detection, real-time status updates, and agent team notifications. Not needed for Codex or Gemini — those providers are auto-detected from running processes.
+
+> If hooks are missing, ccbot warns at startup with the fix command. Hooks are optional — terminal scraping works as fallback.
 
 ### Run
 

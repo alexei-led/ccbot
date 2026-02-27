@@ -87,60 +87,52 @@ def get_interactive_msg_id(user_id: int, thread_id: int | None = None) -> int | 
 def _build_interactive_keyboard(
     window_id: str,
     ui_name: str = "",
+    pane_id: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Build keyboard for interactive UI navigation.
 
     ``ui_name`` controls the layout: ``RestoreCheckpoint`` omits ←/→ keys
     since only vertical selection is needed.
+
+    When ``pane_id`` is set, it is appended to each callback data so
+    responses route to a specific pane instead of the window's active pane.
     """
     vertical_only = ui_name == "RestoreCheckpoint"
+    # Target suffix: "@12" or "@12:%5" when pane-targeted
+    target = f"{window_id}:{pane_id}" if pane_id else window_id
 
     rows: list[list[InlineKeyboardButton]] = []
     # Row 1: directional keys
     rows.append(
         [
             InlineKeyboardButton(
-                "␣ Space", callback_data=f"{CB_ASK_SPACE}{window_id}"[:64]
+                "␣ Space", callback_data=f"{CB_ASK_SPACE}{target}"[:64]
             ),
-            InlineKeyboardButton("↑", callback_data=f"{CB_ASK_UP}{window_id}"[:64]),
-            InlineKeyboardButton(
-                "⇥ Tab", callback_data=f"{CB_ASK_TAB}{window_id}"[:64]
-            ),
+            InlineKeyboardButton("↑", callback_data=f"{CB_ASK_UP}{target}"[:64]),
+            InlineKeyboardButton("⇥ Tab", callback_data=f"{CB_ASK_TAB}{target}"[:64]),
         ]
     )
     if vertical_only:
         rows.append(
             [
-                InlineKeyboardButton(
-                    "↓", callback_data=f"{CB_ASK_DOWN}{window_id}"[:64]
-                ),
+                InlineKeyboardButton("↓", callback_data=f"{CB_ASK_DOWN}{target}"[:64]),
             ]
         )
     else:
         rows.append(
             [
-                InlineKeyboardButton(
-                    "←", callback_data=f"{CB_ASK_LEFT}{window_id}"[:64]
-                ),
-                InlineKeyboardButton(
-                    "↓", callback_data=f"{CB_ASK_DOWN}{window_id}"[:64]
-                ),
-                InlineKeyboardButton(
-                    "→", callback_data=f"{CB_ASK_RIGHT}{window_id}"[:64]
-                ),
+                InlineKeyboardButton("←", callback_data=f"{CB_ASK_LEFT}{target}"[:64]),
+                InlineKeyboardButton("↓", callback_data=f"{CB_ASK_DOWN}{target}"[:64]),
+                InlineKeyboardButton("→", callback_data=f"{CB_ASK_RIGHT}{target}"[:64]),
             ]
         )
     # Row 2: action keys
     rows.append(
         [
+            InlineKeyboardButton("⎋ Esc", callback_data=f"{CB_ASK_ESC}{target}"[:64]),
+            InlineKeyboardButton("🔄", callback_data=f"{CB_ASK_REFRESH}{target}"[:64]),
             InlineKeyboardButton(
-                "⎋ Esc", callback_data=f"{CB_ASK_ESC}{window_id}"[:64]
-            ),
-            InlineKeyboardButton(
-                "🔄", callback_data=f"{CB_ASK_REFRESH}{window_id}"[:64]
-            ),
-            InlineKeyboardButton(
-                "⏎ Enter", callback_data=f"{CB_ASK_ENTER}{window_id}"[:64]
+                "⏎ Enter", callback_data=f"{CB_ASK_ENTER}{target}"[:64]
             ),
         ]
     )
@@ -184,35 +176,49 @@ async def _edit_interactive_msg(
 
 async def _capture_interactive_content(
     window_id: str,
+    pane_id: str | None = None,
 ) -> tuple[str, str] | None:
     """Capture pane and extract interactive UI content.
 
+    When *pane_id* is given, captures that specific pane (by stable ``%N`` ID)
+    instead of the window's active pane.
+
     Returns (ui_name, text) if an interactive UI is detected, None otherwise.
     """
-    w = await tmux_manager.find_window_by_id(window_id)
-    if not w:
-        return None
+    if pane_id:
+        pane_text = await tmux_manager.capture_pane_by_id(pane_id, window_id=window_id)
+    else:
+        w = await tmux_manager.find_window_by_id(window_id)
+        if not w:
+            return None
+        pane_text = await tmux_manager.capture_pane(w.window_id)
 
-    pane_text = await tmux_manager.capture_pane(w.window_id)
     if not pane_text:
-        logger.debug("No pane text captured for window_id %s", window_id)
+        logger.debug(
+            "No pane text captured for window_id %s pane_id %s", window_id, pane_id
+        )
         return None
 
     provider = get_provider_for_window(window_id)
     pane_title = ""
-    if provider.capabilities.uses_pane_title:
+    if provider.capabilities.uses_pane_title and not pane_id:
         pane_title = await tmux_manager.get_pane_title(window_id)
     status = provider.parse_terminal_status(pane_text, pane_title=pane_title)
     if status is None or not status.is_interactive:
         logger.debug(
-            "No interactive UI detected in window_id %s (last 3 lines: %s)",
+            "No interactive UI detected in window_id %s pane %s (last 3 lines: %s)",
             window_id,
+            pane_id,
             pane_text.strip().split("\n")[-3:],
         )
         return None
 
     if not status.ui_type:
-        logger.warning("Interactive status with no ui_type in window_id %s", window_id)
+        logger.warning(
+            "Interactive status with no ui_type in window_id %s pane %s",
+            window_id,
+            pane_id,
+        )
         return None
 
     return status.ui_type, status.raw_text
@@ -223,21 +229,29 @@ async def handle_interactive_ui(
     user_id: int,
     window_id: str,
     thread_id: int | None = None,
+    pane_id: str | None = None,
 ) -> bool:
     """Capture terminal and send interactive UI content to user.
 
     Handles AskUserQuestion, ExitPlanMode, Permission Prompt, and
     RestoreCheckpoint UIs. Returns True if UI was detected and sent,
     False otherwise.
+
+    When *pane_id* is given, captures and targets a specific pane (for
+    multi-pane windows such as agent teams).  The pane context is shown
+    in the message and the keyboard routes responses to that pane.
     """
-    captured = await _capture_interactive_content(window_id)
+    captured = await _capture_interactive_content(window_id, pane_id=pane_id)
     if not captured:
         return False
 
     ui_name, text = captured
+    # Prepend pane context for non-active pane alerts
+    if pane_id:
+        text = f"\U0001f500 Pane ({pane_id}):\n{text}"
     ikey = (user_id, thread_id or 0)
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    keyboard = _build_interactive_keyboard(window_id, ui_name=ui_name)
+    keyboard = _build_interactive_keyboard(window_id, ui_name=ui_name, pane_id=pane_id)
 
     # Try editing existing interactive message first
     existing_msg_id = _interactive_msgs.get(ikey)

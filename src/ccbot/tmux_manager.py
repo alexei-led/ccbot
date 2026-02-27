@@ -5,6 +5,7 @@ Wraps libtmux to provide async-friendly operations on a single tmux session:
   - capture_pane: read terminal content (plain or with ANSI colors).
   - send_keys: forward user input or control keys to a window.
   - create_window / kill_window: lifecycle management.
+  - list_panes / capture_pane_by_id / send_keys_to_pane: pane-level ops.
 
 All blocking libtmux calls are wrapped in asyncio.to_thread().
 
@@ -29,6 +30,19 @@ _TmuxError = (
     OSError,
     subprocess.CalledProcessError,
 )
+
+
+@dataclass
+class PaneInfo:
+    """Information about a single tmux pane within a window."""
+
+    pane_id: str  # Stable global ID, e.g. "%3"
+    index: int  # 0-based position in window
+    active: bool
+    command: str  # Foreground process, e.g. "claude", "bash"
+    path: str  # Working directory
+    width: int
+    height: int
 
 
 @dataclass
@@ -430,6 +444,142 @@ class TmuxManager:
                 return False
 
         return await asyncio.to_thread(_sync_kill)
+
+    # ── Pane-level operations ──────────────────────────────────────────
+
+    async def list_panes(self, window_id: str) -> list[PaneInfo]:
+        """List all panes in a window.
+
+        Returns an empty list if the window is not found or on error.
+        """
+
+        def _sync_list_panes() -> list[PaneInfo]:
+            session = self.get_session()
+            if not session:
+                return []
+            try:
+                window = session.windows.get(window_id=window_id, default=None)
+                if not window:
+                    return []
+                result: list[PaneInfo] = []
+                for pane in window.panes:
+                    result.append(
+                        PaneInfo(
+                            pane_id=pane.pane_id or "",
+                            index=int(pane.pane_index or 0),
+                            active=pane.pane_active == "1",
+                            command=pane.pane_current_command or "",
+                            path=pane.pane_current_path or "",
+                            width=int(pane.pane_width or 0),
+                            height=int(pane.pane_height or 0),
+                        )
+                    )
+                return result
+            except _TmuxError as exc:
+                logger.warning("Failed to list panes for %s: %s", window_id, exc)
+                self._reset_server()
+                return []
+
+        return await asyncio.to_thread(_sync_list_panes)
+
+    async def capture_pane_by_id(
+        self,
+        pane_id: str,
+        *,
+        with_ansi: bool = False,
+        window_id: str | None = None,
+    ) -> str | None:
+        """Capture visible text of a specific pane (by stable pane ID like '%3').
+
+        Unlike capture_pane() which targets the active pane of a window,
+        this targets a specific pane regardless of whether it is active.
+
+        When window_id is given, the pane must belong to that window (prevents
+        cross-window access via crafted pane IDs).
+        """
+        if with_ansi:
+            if window_id:
+                # Validate pane belongs to the specified window before capture
+                panes = await self.list_panes(window_id)
+                if not any(p.pane_id == pane_id for p in panes):
+                    logger.warning("Pane %s not found in window %s", pane_id, window_id)
+                    return None
+            return await self._capture_pane_ansi(pane_id)
+
+        def _sync_capture() -> str | None:
+            session = self.get_session()
+            if not session:
+                return None
+            try:
+                pane = self._find_pane(pane_id, session, window_id=window_id)
+                if not pane:
+                    return None
+                lines = pane.capture_pane()
+                text = "\n".join(lines) if isinstance(lines, list) else str(lines)
+                text = text.rstrip()
+                return text if text else None
+            except _TmuxError as exc:
+                logger.warning("Failed to capture pane %s: %s", pane_id, exc)
+                self._reset_server()
+                return None
+
+        return await asyncio.to_thread(_sync_capture)
+
+    async def send_keys_to_pane(
+        self,
+        pane_id: str,
+        text: str,
+        *,
+        enter: bool = True,
+        literal: bool = True,
+        window_id: str | None = None,
+    ) -> bool:
+        """Send keys to a specific pane (by stable pane ID like '%3').
+
+        Unlike send_keys() which targets the active pane of a window,
+        this targets a specific pane regardless of whether it is active.
+
+        When window_id is given, the pane must belong to that window (prevents
+        cross-window access via crafted pane IDs).
+        """
+
+        def _sync_send() -> bool:
+            session = self.get_session()
+            if not session:
+                return False
+            try:
+                pane = self._find_pane(pane_id, session, window_id=window_id)
+                if not pane:
+                    logger.warning("Pane %s not found", pane_id)
+                    return False
+                pane.send_keys(text, enter=enter, literal=literal)
+                return True
+            except _TmuxError:
+                logger.exception("Failed to send keys to pane %s", pane_id)
+                return False
+
+        return await asyncio.to_thread(_sync_send)
+
+    @staticmethod
+    def _find_pane(
+        pane_id: str,
+        session: libtmux.Session,
+        *,
+        window_id: str | None = None,
+    ) -> libtmux.Pane | None:
+        """Find a pane by its stable ID (e.g. '%3').
+
+        When window_id is given, only searches that window's panes (prevents
+        cross-window access). Otherwise searches all windows in the session.
+        """
+        windows = session.windows
+        if window_id:
+            windows = [w for w in windows if w.window_id == window_id]
+        for window in windows:
+            for pane in window.panes:
+                if pane.pane_id == pane_id:
+                    return pane
+        return None
 
     async def create_window(
         self,

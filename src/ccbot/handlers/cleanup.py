@@ -74,6 +74,9 @@ async def clear_topic_state(
         from .hook_events import clear_subagents
 
         clear_subagents(window_id)
+        from .status_polling import clear_pane_alerts
+
+        clear_pane_alerts(window_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)

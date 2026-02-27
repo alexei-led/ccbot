@@ -1,9 +1,9 @@
 """Hook subcommand for Claude Code session and event tracking.
 
 Called by Claude Code hooks (SessionStart, Notification, Stop, SubagentStart,
-SubagentStop) to maintain a window↔session mapping and an append-only event
-log.  Also provides `--install` to auto-configure hooks in
-settings.json (respects CLAUDE_CONFIG_DIR for non-default locations).
+SubagentStop, TeammateIdle, TaskCompleted) to maintain a window↔session
+mapping and an append-only event log.  Also provides `--install` to
+auto-configure hooks in settings.json (respects CLAUDE_CONFIG_DIR).
 
 This module must NOT import config.py (which requires TELEGRAM_BOT_TOKEN),
 since hooks run inside tmux panes where bot env vars are not set.
@@ -52,10 +52,19 @@ _HOOK_EVENT_TYPES: tuple[str, ...] = (
     "Stop",
     "SubagentStart",
     "SubagentStop",
+    "TeammateIdle",
+    "TaskCompleted",
 )
 
 # Events that should not block the agent (async: true)
-_ASYNC_EVENTS: frozenset[str] = frozenset({"SubagentStart", "SubagentStop"})
+_ASYNC_EVENTS: frozenset[str] = frozenset(
+    {
+        "SubagentStart",
+        "SubagentStop",
+        "TeammateIdle",
+        "TaskCompleted",
+    }
+)
 
 
 def _has_ccbot_hook(settings: dict, event_type: str) -> bool:
@@ -342,12 +351,33 @@ def _extract_subagent_data(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_teammate_idle_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract data from a TeammateIdle hook payload."""
+    return {
+        "teammate_name": payload.get("teammate_name", ""),
+        "team_name": payload.get("team_name", ""),
+    }
+
+
+def _extract_task_completed_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract data from a TaskCompleted hook payload."""
+    return {
+        "task_id": payload.get("task_id", ""),
+        "task_subject": payload.get("task_subject", ""),
+        "task_description": payload.get("task_description", ""),
+        "teammate_name": payload.get("teammate_name", ""),
+        "team_name": payload.get("team_name", ""),
+    }
+
+
 # Map event types to their data extractor functions
 _EVENT_DATA_EXTRACTORS: dict[str, Any] = {
     "Notification": _extract_notification_data,
     "Stop": _extract_stop_data,
     "SubagentStart": _extract_subagent_data,
     "SubagentStop": _extract_subagent_data,
+    "TeammateIdle": _extract_teammate_idle_data,
+    "TaskCompleted": _extract_task_completed_data,
 }
 
 

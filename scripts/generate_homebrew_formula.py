@@ -41,6 +41,17 @@ class Ccbot < Formula
     virtualenv_install_with_resources
   end
 
+  def caveats
+    <<~EOS
+      To enable Claude Code hook notifications (done detection, interactive
+      prompts, subagent tracking), run:
+        ccbot hook --install
+
+      Verify setup with:
+        ccbot doctor
+    EOS
+  end
+
   test do
     assert_match version.to_s, shell_output("#{{bin}}/ccbot --version")
   end

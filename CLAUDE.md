@@ -16,7 +16,7 @@ make test                             # Run test suite
 ccbot status                          # Show running state (no token needed)
 ccbot doctor                          # Validate setup and diagnose issues
 ccbot doctor --fix                    # Auto-fix issues (install hook, kill orphans)
-ccbot hook --install                  # Auto-install Claude Code hooks (5 event types)
+ccbot hook --install                  # Auto-install Claude Code hooks (7 event types)
 ccbot hook --uninstall                # Remove hook from ~/.claude/settings.json
 ccbot hook --status                   # Check if hook is installed
 ccbot --version                       # Show version
@@ -33,7 +33,7 @@ ccbot --autoclose-dead 0              # Disable auto-close for dead sessions
 - **Topic-only** — no backward-compat for non-topic mode. No `active_sessions`, no `/list`, no General topic routing.
 - **No message truncation** at parse layer — splitting only at send layer (`split_message`, 4096 char limit).
 - **MarkdownV2 only** — use `safe_reply`/`safe_edit`/`safe_send` helpers (auto fallback to plain text). Internal queue/UI code calls bot API directly with its own fallback.
-- **Hook-based session tracking** — Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop) write to `session_map.json` and `events.jsonl`; monitor polls both to detect session changes and deliver instant event notifications.
+- **Hook-based session tracking** — Claude Code hooks (SessionStart, Notification, Stop, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) write to `session_map.json` and `events.jsonl`; monitor polls both to detect session changes and deliver instant event notifications. Missing hooks are detected at startup with an actionable warning.
 - **Message queue per user** — FIFO ordering, message merging (3800 char limit), tool_use/tool_result pairing.
 - **Rate limiting** — 1.1s minimum interval between messages per user via `rate_limit_send()`.
 
@@ -87,7 +87,7 @@ When creating a topic via the directory browser, users can choose the provider (
 
 | Capability       | Claude                       | Codex              | Gemini                      |
 | ---------------- | ---------------------------- | ------------------ | --------------------------- |
-| Hook events      | Yes (5 event types)          | No                 | No                          |
+| Hook events      | Yes (7 event types)          | No                 | No                          |
 | Resume           | Yes (`--resume`)             | Yes (`resume`)     | Yes (`--resume idx/latest`) |
 | Continue         | Yes                          | Yes                | Yes                         |
 | Transcript       | JSONL                        | JSONL              | JSON (whole-file read)      |
@@ -103,7 +103,7 @@ Existing Claude deployments need no changes — `claude` is the default provider
 
 ## Hook Configuration
 
-Auto-install: `ccbot hook --install` — installs hooks for 5 Claude Code event types:
+Auto-install: `ccbot hook --install` — installs hooks for 7 Claude Code event types:
 
 | Event         | Purpose                               | Async |
 | ------------- | ------------------------------------- | ----- |
@@ -112,8 +112,12 @@ Auto-install: `ccbot hook --install` — installs hooks for 5 Claude Code event 
 | Stop          | Instant done/idle detection           | No    |
 | SubagentStart | Track subagent activity in status     | Yes   |
 | SubagentStop  | Clear subagent status                 | Yes   |
+| TeammateIdle  | Notify when a teammate goes idle      | Yes   |
+| TaskCompleted | Notify when a team task completes     | Yes   |
 
 All hooks write structured events to `events.jsonl`; SessionStart also writes `session_map.json`. The session monitor reads `events.jsonl` incrementally (byte-offset) and dispatches events to handlers. Terminal scraping remains as fallback when hook events are unavailable. Hook install/status/uninstall respects `CLAUDE_CONFIG_DIR` for non-default Claude config locations.
+
+At startup, ccbot checks whether hooks are installed (Claude provider only) and logs a warning with the fix command if any are missing. This is non-blocking — terminal scraping works as fallback.
 
 ## Spec-Driven Development
 

@@ -5,7 +5,7 @@ Each Telegram topic maps 1:1 to a tmux window (Claude session).
 
 Core responsibilities:
   - Command handlers: /new (+ /start alias), /history, /sessions, /resume,
-    /screenshot, plus forwarding unknown /commands to Claude Code via tmux.
+    /screenshot, /panes, plus forwarding unknown /commands to Claude Code via tmux.
   - Callback query handler: thin dispatcher routing to dedicated handler modules.
   - Topic-based routing: each named topic binds to one tmux window.
     Unbound topics trigger the directory browser to create a new session.
@@ -61,6 +61,7 @@ from .handlers.callback_data import (
     CB_HISTORY_NEXT,
     CB_HISTORY_PREV,
     CB_KEYS_PREFIX,
+    CB_PANE_SCREENSHOT,
     CB_RECOVERY_BACK,
     CB_RECOVERY_CANCEL,
     CB_RECOVERY_CONTINUE,
@@ -398,6 +399,62 @@ async def screenshot_command(
         await safe_reply(update.message, "\u274c Failed to send screenshot.")
 
 
+async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List all panes in the current topic's window."""
+    user = update.effective_user
+    if not user or not is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    if thread_id is None:
+        await safe_reply(update.message, "\u274c Use this command inside a topic.")
+        return
+
+    window_id = session_manager.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(
+            update.message, "\u274c This topic is not bound to any session."
+        )
+        return
+
+    panes = await tmux_manager.list_panes(window_id)
+    if len(panes) <= 1:
+        await safe_reply(
+            update.message,
+            "\U0001f4d0 Single pane \u2014 no multi-pane layout detected.",
+        )
+        return
+
+    from .handlers.status_polling import has_pane_alert
+
+    lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]
+    buttons: list[InlineKeyboardButton] = []
+    for pane in panes:
+        prefix = "\U0001f4cd" if pane.active else "  "
+        label = f"Pane {pane.index} ({pane.command})"
+        suffix_parts: list[str] = []
+        if pane.active:
+            suffix_parts.append("active")
+        if has_pane_alert(pane.pane_id):
+            prefix = "\u26a0\ufe0f"
+            suffix_parts.append("blocked")
+        elif not pane.active:
+            suffix_parts.append("running")
+        suffix = f" \u2014 {', '.join(suffix_parts)}" if suffix_parts else ""
+        lines.append(f"{prefix} {label}{suffix}")
+        buttons.append(
+            InlineKeyboardButton(
+                f"\U0001f4f7 {pane.index}",
+                callback_data=f"{CB_PANE_SCREENSHOT}{window_id}:{pane.pane_id}"[:64],
+            )
+        )
+
+    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+    await safe_reply(update.message, "\n".join(lines), reply_markup=keyboard)
+
+
 async def recall_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show recent command history for the current topic."""
     user = update.effective_user
@@ -511,6 +568,7 @@ _CB_SCREENSHOT = (
     CB_STATUS_NOTIFY,
     CB_STATUS_SCREENSHOT,
     CB_KEYS_PREFIX,
+    CB_PANE_SCREENSHOT,
 )
 _CB_RECOVERY = (
     CB_RECOVERY_BACK,
@@ -877,6 +935,37 @@ async def post_init(application: Application) -> None:
     # Re-resolve stale window IDs from persisted state against live tmux windows
     await session_manager.resolve_stale_ids()
 
+    # Warn if Claude Code hooks are not installed (provider-aware, non-blocking)
+    provider = get_provider()
+    if provider.capabilities.supports_hook:
+        from .hook import _claude_settings_file, get_installed_events
+
+        settings_file = _claude_settings_file()
+        import json
+
+        if settings_file.exists():
+            try:
+                settings = json.loads(settings_file.read_text())
+                events = get_installed_events(settings)
+                missing = [e for e, ok in events.items() if not ok]
+                if missing:
+                    logger.warning(
+                        "Claude Code hooks incomplete — %d missing: %s. "
+                        "Run: ccbot hook --install",
+                        len(missing),
+                        ", ".join(missing),
+                    )
+            except json.JSONDecodeError, OSError:
+                logger.warning(
+                    "Claude Code hooks not installed. Run: ccbot hook --install"
+                )
+        else:
+            logger.warning(
+                "Claude Code hooks not installed (%s missing). "
+                "Run: ccbot hook --install",
+                settings_file,
+            )
+
     monitor = SessionMonitor()
     # Expose to other modules (status_polling activity heuristic)
     from ccbot.session_monitor import set_active_monitor
@@ -982,6 +1071,9 @@ def create_bot() -> Application:
     )
     application.add_handler(
         CommandHandler("screenshot", screenshot_command, filters=_group_filter)
+    )
+    application.add_handler(
+        CommandHandler("panes", panes_command, filters=_group_filter)
     )
     application.add_handler(CallbackQueryHandler(callback_handler))
     # Topic closed event — unbind window (kept alive for rebinding)

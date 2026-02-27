@@ -29,6 +29,7 @@ from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from .callback_data import (
     CB_KEYS_PREFIX,
+    CB_PANE_SCREENSHOT,
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -66,13 +67,20 @@ KEY_LABELS: dict[str, str] = {
 }
 
 
-def build_screenshot_keyboard(window_id: str) -> InlineKeyboardMarkup:
-    """Build inline keyboard for screenshot: control keys + refresh."""
+def build_screenshot_keyboard(
+    window_id: str, pane_id: str | None = None
+) -> InlineKeyboardMarkup:
+    """Build inline keyboard for screenshot: control keys + refresh.
+
+    When *pane_id* is given, keys and refresh target that specific pane
+    instead of the window's active pane.
+    """
+    target = f"{window_id}:{pane_id}" if pane_id else window_id
 
     def btn(label: str, key_id: str) -> InlineKeyboardButton:
         return InlineKeyboardButton(
             label,
-            callback_data=f"{CB_KEYS_PREFIX}{key_id}:{window_id}"[:64],
+            callback_data=f"{CB_KEYS_PREFIX}{key_id}:{target}"[:64],
         )
 
     return InlineKeyboardMarkup(
@@ -83,11 +91,56 @@ def build_screenshot_keyboard(window_id: str) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     "\U0001f504 Refresh",
-                    callback_data=f"{CB_SCREENSHOT_REFRESH}{window_id}"[:64],
+                    callback_data=f"{CB_SCREENSHOT_REFRESH}{target}"[:64],
                 )
             ],
         ]
     )
+
+
+async def _handle_pane_screenshot(
+    query: CallbackQuery, user_id: int, data: str, update: Update
+) -> None:
+    """Handle CB_PANE_SCREENSHOT: screenshot a specific pane."""
+    rest = data[len(CB_PANE_SCREENSHOT) :]
+    # Format: <window_id>:<pane_id> e.g. "@0:%3"
+    colon_idx = rest.find(":")
+    if colon_idx < 0:
+        await query.answer("Invalid data")
+        return
+    window_id = rest[:colon_idx]
+    pane_id = rest[colon_idx + 1 :]
+
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+
+    text = await tmux_manager.capture_pane_by_id(
+        pane_id, with_ansi=True, window_id=window_id
+    )
+    if not text:
+        await query.answer("Failed to capture pane", show_alert=True)
+        return
+
+    png_bytes = await text_to_image(text, with_ansi=True)
+    keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        await query.answer("Use in a topic", show_alert=True)
+        return
+    chat_id = session_manager.resolve_chat_id(user_id, thread_id)
+    try:
+        await query.get_bot().send_document(
+            chat_id=chat_id,
+            document=io.BytesIO(png_bytes),
+            filename=f"pane_{pane_id}.png",
+            reply_markup=keyboard,
+            message_thread_id=thread_id,
+        )
+        await query.answer(f"\U0001f4f8 Pane {pane_id}")
+    except TelegramError as e:
+        logger.error("Failed to send pane screenshot: %s", e)
+        await query.answer("Failed to send screenshot", show_alert=True)
 
 
 async def handle_screenshot_callback(
@@ -106,13 +159,16 @@ async def handle_screenshot_callback(
         await _handle_status_screenshot(query, user_id, data, update)
     elif data.startswith(CB_STATUS_NOTIFY):
         await _handle_notify_toggle(query, user_id, data)
+    elif data.startswith(CB_PANE_SCREENSHOT):
+        await _handle_pane_screenshot(query, user_id, data, update)
     elif data.startswith(CB_KEYS_PREFIX):
         await _handle_keys(query, user_id, data)
 
 
 async def _handle_refresh(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_SCREENSHOT_REFRESH: refresh an existing screenshot."""
-    window_id = data[len(CB_SCREENSHOT_REFRESH) :]
+    target = data[len(CB_SCREENSHOT_REFRESH) :]
+    window_id, pane_id = _parse_target(target)
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return
@@ -121,13 +177,18 @@ async def _handle_refresh(query: CallbackQuery, user_id: int, data: str) -> None
         await query.answer("Window no longer exists", show_alert=True)
         return
 
-    text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+    if pane_id:
+        text = await tmux_manager.capture_pane_by_id(
+            pane_id, with_ansi=True, window_id=window_id
+        )
+    else:
+        text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
     if not text:
         await query.answer("Failed to capture pane", show_alert=True)
         return
 
     png_bytes = await text_to_image(text, with_ansi=True)
-    keyboard = build_screenshot_keyboard(window_id)
+    keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
     try:
         await query.edit_message_media(
             media=InputMediaDocument(
@@ -210,6 +271,17 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
     await query.answer(label)
 
 
+def _parse_target(target: str) -> tuple[str, str | None]:
+    """Parse window_id and optional pane_id from target string.
+
+    Target format: ``@0`` (window only) or ``@0:%3`` (window + pane).
+    """
+    if ":%" in target:
+        idx = target.index(":%")
+        return target[:idx], target[idx + 1 :]
+    return target, None
+
+
 async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_KEYS_PREFIX: send a quick key from screenshot keyboard."""
     rest = data[len(CB_KEYS_PREFIX) :]
@@ -218,7 +290,8 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
         await query.answer("Invalid data")
         return
     key_id = rest[:colon_idx]
-    window_id = rest[colon_idx + 1 :]
+    target = rest[colon_idx + 1 :]
+    window_id, pane_id = _parse_target(target)
 
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
@@ -235,15 +308,27 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
         await query.answer("Window not found", show_alert=True)
         return
 
-    await tmux_manager.send_keys(w.window_id, tmux_key, enter=enter, literal=literal)
+    if pane_id:
+        await tmux_manager.send_keys_to_pane(
+            pane_id, tmux_key, enter=enter, literal=literal, window_id=window_id
+        )
+    else:
+        await tmux_manager.send_keys(
+            w.window_id, tmux_key, enter=enter, literal=literal
+        )
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
     # Refresh screenshot after key press
     await asyncio.sleep(0.5)
-    text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+    if pane_id:
+        text = await tmux_manager.capture_pane_by_id(
+            pane_id, with_ansi=True, window_id=window_id
+        )
+    else:
+        text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
     if text:
         png_bytes = await text_to_image(text, with_ansi=True)
-        keyboard = build_screenshot_keyboard(window_id)
+        keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
         with contextlib.suppress(TelegramError):
             await query.edit_message_media(
                 media=InputMediaDocument(

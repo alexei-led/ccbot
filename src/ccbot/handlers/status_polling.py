@@ -135,13 +135,16 @@ def _get_screen_buffer(window_id: str, columns: int, rows: int) -> ScreenBuffer:
 
 
 def clear_screen_buffer(window_id: str) -> None:
-    """Remove a window's ScreenBuffer (called on cleanup)."""
+    """Remove a window's ScreenBuffer and pane count cache (called on cleanup)."""
     _screen_buffers.pop(window_id, None)
+    _pane_count_cache.pop(window_id, None)
 
 
 def reset_screen_buffer_state() -> None:
-    """Reset all ScreenBuffers (for testing)."""
+    """Reset all ScreenBuffers and caches (for testing)."""
     _screen_buffers.clear()
+    _pane_count_cache.clear()
+    _pane_alert_hashes.clear()
 
 
 def is_shell_prompt(pane_current_command: str) -> bool:
@@ -509,6 +512,106 @@ def _parse_with_pyte(window_id: str, pane_text: str) -> StatusUpdate | None:
     return None
 
 
+# ── Multi-pane scanning (agent teams) ─────────────────────────────────
+# When a window has >1 pane (e.g. Claude Code agent teams in split-pane
+# mode), non-active panes are scanned for interactive prompts and alerts
+# are surfaced in the Telegram topic.
+
+
+# pane_id -> (prompt_text, last_seen_monotonic, window_id)
+_pane_alert_hashes: dict[str, tuple[str, float, str]] = {}
+
+
+def has_pane_alert(pane_id: str) -> bool:
+    """Check whether a pane currently has an active alert."""
+    return pane_id in _pane_alert_hashes
+
+
+def clear_pane_alerts(window_id: str) -> None:
+    """Remove pane alert state for a specific window only."""
+    stale = [pid for pid, v in _pane_alert_hashes.items() if v[2] == window_id]
+    for pid in stale:
+        _pane_alert_hashes.pop(pid, None)
+
+
+# Cache pane counts to avoid subprocess per poll cycle for single-pane windows.
+# window_id -> (pane_count, expires_at_monotonic)
+_pane_count_cache: dict[str, tuple[int, float]] = {}
+_PANE_COUNT_TTL = 5.0  # seconds
+
+
+async def _scan_window_panes(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int,
+) -> None:
+    """Scan non-active panes for interactive prompts and surface alerts.
+
+    Fast path: uses cached pane count to skip single-pane windows without
+    a subprocess call. Cache refreshes every 5 seconds.
+    """
+    now = time.monotonic()
+    cached = _pane_count_cache.get(window_id)
+    if cached and cached[1] > now and cached[0] <= 1:
+        return  # Cached single-pane — no subprocess needed
+
+    panes = await tmux_manager.list_panes(window_id)
+    _pane_count_cache[window_id] = (len(panes), now + _PANE_COUNT_TTL)
+    live_pane_ids = {p.pane_id for p in panes}
+
+    # Clean up alerts for panes of THIS window that no longer exist
+    # (must run before the early return so alerts clear when dropping to single-pane)
+    stale = [
+        pid
+        for pid, v in _pane_alert_hashes.items()
+        if v[2] == window_id and pid not in live_pane_ids
+    ]
+    for pid in stale:
+        _pane_alert_hashes.pop(pid, None)
+
+    if len(panes) <= 1:
+        return
+
+    now = time.monotonic()
+
+    for pane in panes:
+        if pane.active:
+            continue  # Active pane handled by the normal status_polling path
+
+        pane_text = await tmux_manager.capture_pane_by_id(
+            pane.pane_id, window_id=window_id
+        )
+        if not pane_text:
+            continue
+
+        # Use provider-level parsing (same as active pane detection)
+        provider = get_provider_for_window(window_id)
+        status = provider.parse_terminal_status(pane_text, pane_title="")
+        if status is None or not status.is_interactive:
+            # No interactive UI — clear stale alert if any
+            _pane_alert_hashes.pop(pane.pane_id, None)
+            continue
+
+        # Interactive UI detected — check if it's new or changed
+        prompt_text = status.raw_text or ""
+
+        existing = _pane_alert_hashes.get(pane.pane_id)
+        if existing and existing[0] == prompt_text:
+            # Same prompt, already notified — skip
+            continue
+
+        _pane_alert_hashes[pane.pane_id] = (prompt_text, now, window_id)
+        logger.info(
+            "Pane %s in window %s has interactive UI, surfacing alert",
+            pane.pane_id,
+            window_id,
+        )
+        await handle_interactive_ui(
+            bot, user_id, window_id, thread_id, pane_id=pane.pane_id
+        )
+
+
 async def update_status_message(
     bot: Bot,
     user_id: int,
@@ -732,6 +835,8 @@ async def status_poll_loop(bot: Bot) -> None:
                         wid,
                         thread_id=thread_id,
                     )
+                    # Scan non-active panes for interactive prompts (agent teams)
+                    await _scan_window_panes(bot, user_id, wid, thread_id)
                 except (TelegramError, OSError) as e:
                     logger.debug(
                         "Status update error for user %s thread %s: %s",

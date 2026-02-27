@@ -133,13 +133,13 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
         await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
 
 
-# Track active subagents per window: window_id -> list of subagent descriptions
-_active_subagents: dict[str, list[dict[str, str]]] = {}
+# Track active subagents per window: window_id -> set of subagent_ids
+_active_subagents: dict[str, set[str]] = {}
 
 
 def get_subagent_count(window_id: str) -> int:
     """Return the number of active subagents for a window."""
-    return len(_active_subagents.get(window_id, []))
+    return len(_active_subagents.get(window_id, set()))
 
 
 def clear_subagents(window_id: str) -> None:
@@ -154,22 +154,16 @@ async def _handle_subagent_start(event: HookEvent, bot: Bot) -> None:  # noqa: A
         return
 
     window_id = users[0][2]  # all users share the same window_id
-    subagent_info = {
-        "subagent_id": event.data.get("subagent_id", ""),
-        "description": event.data.get("description", ""),
-        "name": event.data.get("name", ""),
-    }
+    subagent_id = event.data.get("subagent_id", "")
 
-    if window_id not in _active_subagents:
-        _active_subagents[window_id] = []
-    _active_subagents[window_id].append(subagent_info)
+    _active_subagents.setdefault(window_id, set()).add(subagent_id)
 
     count = len(_active_subagents[window_id])
     logger.info(
         "Subagent started: window=%s, count=%d, name=%s",
         window_id,
         count,
-        subagent_info.get("name", ""),
+        event.data.get("name", ""),
     )
 
 
@@ -182,11 +176,11 @@ async def _handle_subagent_stop(event: HookEvent, bot: Bot) -> None:  # noqa: AR
     window_id = users[0][2]
     subagent_id = event.data.get("subagent_id", "")
 
-    agents = _active_subagents.get(window_id, [])
-    _active_subagents[window_id] = [
-        a for a in agents if a.get("subagent_id") != subagent_id
-    ]
-    if not _active_subagents[window_id]:
+    ids = _active_subagents.get(window_id)
+    if not ids:
+        return
+    ids.discard(subagent_id)
+    if not ids:
         _active_subagents.pop(window_id, None)
 
     count = get_subagent_count(window_id)
@@ -196,6 +190,50 @@ async def _handle_subagent_stop(event: HookEvent, bot: Bot) -> None:  # noqa: AR
         count,
         subagent_id,
     )
+
+
+async def _handle_teammate_idle(event: HookEvent, bot: Bot) -> None:
+    """Handle TeammateIdle — notify topic that a teammate went idle."""
+    from .message_queue import enqueue_status_update
+
+    users = _resolve_users_for_window_key(event.window_key)
+    if not users:
+        return
+
+    teammate_name = event.data.get("teammate_name", "unknown")
+    logger.info(
+        "Teammate idle: window_key=%s, teammate=%s",
+        event.window_key,
+        teammate_name,
+    )
+
+    for user_id, thread_id, window_id in users:
+        text = f"\U0001f4a4 Teammate '{teammate_name}' went idle"
+        await enqueue_status_update(bot, user_id, window_id, text, thread_id=thread_id)
+
+
+async def _handle_task_completed(event: HookEvent, bot: Bot) -> None:
+    """Handle TaskCompleted — notify topic that a task was completed."""
+    from .message_queue import enqueue_status_update
+
+    users = _resolve_users_for_window_key(event.window_key)
+    if not users:
+        return
+
+    task_subject = event.data.get("task_subject", "")
+    teammate_name = event.data.get("teammate_name", "")
+    logger.info(
+        "Task completed: window_key=%s, task=%s, by=%s",
+        event.window_key,
+        task_subject,
+        teammate_name,
+    )
+
+    for user_id, thread_id, window_id in users:
+        text = f"\u2705 Task completed: {task_subject}"
+        if teammate_name:
+            text += f" (by '{teammate_name}')"
+        await enqueue_status_update(bot, user_id, window_id, text, thread_id=thread_id)
 
 
 async def dispatch_hook_event(event: HookEvent, bot: Bot) -> None:
@@ -209,5 +247,9 @@ async def dispatch_hook_event(event: HookEvent, bot: Bot) -> None:
             await _handle_subagent_start(event, bot)
         case "SubagentStop":
             await _handle_subagent_stop(event, bot)
+        case "TeammateIdle":
+            await _handle_teammate_idle(event, bot)
+        case "TaskCompleted":
+            await _handle_task_completed(event, bot)
         case _:
             logger.debug("Ignoring unknown hook event type: %s", event.event_type)

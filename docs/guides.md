@@ -15,7 +15,7 @@ ccbot                        # Start the bot
 ccbot status                 # Show running state (no token needed)
 ccbot doctor                 # Validate setup and diagnose issues
 ccbot doctor --fix           # Auto-fix issues (install hook, kill orphans)
-ccbot hook --install         # Install Claude Code hooks (5 event types)
+ccbot hook --install         # Install Claude Code hooks (7 event types)
 ccbot hook --uninstall       # Remove all hooks
 ccbot hook --status          # Check per-event hook installation status
 ccbot --version              # Show version
@@ -132,7 +132,7 @@ CCBot supports multiple agent CLI backends. Each Telegram topic can use a differ
 
 | Provider    | CLI Command | Hook Events         | Status Detection                   |
 | ----------- | ----------- | ------------------- | ---------------------------------- |
-| Claude Code | `claude`    | Yes (5 event types) | Hook events + pyte VT100 + spinner |
+| Claude Code | `claude`    | Yes (7 event types) | Hook events + pyte VT100 + spinner |
 | Codex CLI   | `codex`     | No                  | Transcript activity heuristic      |
 | Gemini CLI  | `gemini`    | No                  | Pane title + interactive UI        |
 
@@ -146,7 +146,7 @@ CCBot supports multiple agent CLI backends. Each Telegram topic can use a differ
 
 ### Provider Differences
 
-**Claude Code** has the richest integration — 5 hook event types (SessionStart, Notification, Stop, SubagentStart, SubagentStop) provide instant session tracking, interactive UI detection, done/idle detection, and subagent activity monitoring. The bot also uses a pyte VT100 screen buffer as fallback for terminal status parsing.
+**Claude Code** has the richest integration — 7 hook event types (SessionStart, Notification, Stop, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) provide instant session tracking, interactive UI detection, done/idle detection, subagent activity monitoring, and agent team notifications. The bot also uses a pyte VT100 screen buffer as fallback for terminal status parsing. Multi-pane windows (e.g. from agent teams) are automatically scanned for blocked panes and surfaced as inline keyboard alerts.
 
 **Codex CLI** and **Gemini CLI** lack a session hook, so session tracking relies on auto-detection from running processes. Codex has no terminal UI for permission prompts. Gemini sets pane titles (`Working: ✦`, `Action Required: ✋`, `Ready: ◇`) that CCBot reads for status, and its `@inquirer/select` permission prompts are detected as interactive UI.
 
