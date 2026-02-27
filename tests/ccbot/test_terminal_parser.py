@@ -308,6 +308,77 @@ class TestExtractInteractiveContent:
         assert result.name == "PermissionPrompt"
         assert "make this edit" in result.content
 
+    def test_network_request_outside_sandbox(self):
+        pane = (
+            "  Network request outside of sandbox\n"
+            "\n"
+            "  WebFetch wants to access: https://example.com\n"
+            "\n"
+            "  ❯ Yes    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+        assert "Network request outside of sandbox" in result.content
+
+    def test_network_request_no_cursor(self):
+        """Network sandbox prompt detected even without ❯ cursor."""
+        pane = (
+            "  Network request outside of sandbox\n"
+            "\n"
+            "  WebFetch wants to access: https://example.com\n"
+            "\n"
+            "  Yes    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+
+    def test_allow_permission_prompt(self):
+        pane = (
+            "  Allow mcp__server__tool to access /tmp?\n"
+            "\n"
+            "  ❯ Yes    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+
+    def test_bash_command_requires_approval(self):
+        pane = (
+            "  Bash command\n"
+            "  make test\n"
+            "  This command requires approval\n"
+            "\n"
+            "  ❯ Yes    Yes All    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+        assert "requires approval" in result.content
+
+    def test_bash_command_requires_approval_no_cursor(self):
+        pane = (
+            "  Bash command\n"
+            "  make test\n"
+            "  This command requires approval\n"
+            "\n"
+            "  Yes    Yes All    No\n"
+            "\n"
+            "  Esc to cancel\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "PermissionPrompt"
+
     def test_settings_esc_to_exit(self):
         pane = "  Settings: press tab to cycle\n  ─────\n  Option 1\n  Esc to exit\n"
         result = extract_interactive_content(pane)

@@ -87,6 +87,9 @@ UI_PATTERNS: list[UIPattern] = [
         top=(
             re.compile(r"^\s*Do you want to proceed\?"),
             re.compile(r"^\s*Do you want to make this edit"),
+            re.compile(r"^\s*Network request outside of sandbox"),
+            re.compile(r"^\s*This command requires approval"),
+            re.compile(r"^\s*Allow .+ to"),
         ),
         bottom=(re.compile(r"^\s*Esc to cancel"),),
     ),

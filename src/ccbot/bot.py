@@ -5,7 +5,7 @@ Each Telegram topic maps 1:1 to a tmux window (Claude session).
 
 Core responsibilities:
   - Command handlers: /new (+ /start alias), /history, /sessions, /resume,
-    plus forwarding unknown /commands to Claude Code via tmux.
+    /screenshot, plus forwarding unknown /commands to Claude Code via tmux.
   - Callback query handler: thin dispatcher routing to dedicated handler modules.
   - Topic-based routing: each named topic binds to one tmux window.
     Unbound topics trigger the directory browser to create a new session.
@@ -343,6 +343,59 @@ async def forward_command_handler(
             clear_screen_buffer(window_id)
     else:
         await safe_reply(update.message, f"\u274c {message}")
+
+
+async def screenshot_command(
+    update: Update, _context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Capture and send a terminal screenshot for the current topic."""
+    user = update.effective_user
+    if not user or not is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    if thread_id is None:
+        await safe_reply(update.message, "\u274c Use this command inside a topic.")
+        return
+
+    window_id = session_manager.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(
+            update.message, "\u274c This topic is not bound to any session."
+        )
+        return
+
+    w = await tmux_manager.find_window_by_id(window_id)
+    if not w:
+        await safe_reply(update.message, "\u274c Window no longer exists.")
+        return
+
+    pane_text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+    if not pane_text:
+        await safe_reply(update.message, "\u274c Failed to capture terminal.")
+        return
+
+    import io
+
+    from .handlers.screenshot_callbacks import build_screenshot_keyboard
+    from .screenshot import text_to_image
+
+    png_bytes = await text_to_image(pane_text, with_ansi=True)
+    keyboard = build_screenshot_keyboard(window_id)
+    chat_id = session_manager.resolve_chat_id(user.id, thread_id)
+    try:
+        await update.message.get_bot().send_document(
+            chat_id=chat_id,
+            document=io.BytesIO(png_bytes),
+            filename="screenshot.png",
+            reply_markup=keyboard,
+            message_thread_id=thread_id,
+        )
+    except TelegramError as e:
+        logger.error("Failed to send screenshot: %s", e)
+        await safe_reply(update.message, "\u274c Failed to send screenshot.")
 
 
 async def recall_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -926,6 +979,9 @@ def create_bot() -> Application:
     )
     application.add_handler(
         CommandHandler("recall", recall_command, filters=_group_filter)
+    )
+    application.add_handler(
+        CommandHandler("screenshot", screenshot_command, filters=_group_filter)
     )
     application.add_handler(CallbackQueryHandler(callback_handler))
     # Topic closed event — unbind window (kept alive for rebinding)

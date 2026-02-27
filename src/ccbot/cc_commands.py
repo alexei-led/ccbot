@@ -38,6 +38,7 @@ _BOT_COMMANDS: list[tuple[str, str]] = [
     ("history", "Message history for this topic"),
     ("sessions", "Sessions dashboard"),
     ("resume", "Browse and resume past sessions"),
+    ("screenshot", "Capture terminal screenshot"),
     ("upgrade", "Upgrade ccbot and restart"),
 ]
 
