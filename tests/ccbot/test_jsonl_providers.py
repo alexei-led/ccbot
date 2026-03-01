@@ -5,6 +5,7 @@ builtin command sets, capability flags, and shared JSONL parsing edge cases.
 """
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -539,6 +540,53 @@ class TestGeminiReadTranscriptFile:
         entries, offset = gemini.read_transcript_file(str(f), 0)
         assert entries == []
         assert offset == 0
+
+
+class TestGeminiMtimeCache:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from ccbot.providers.gemini import _transcript_cache
+
+        _transcript_cache.clear()
+        yield
+        _transcript_cache.clear()
+
+    def test_cache_hit_skips_reparse(self, tmp_path) -> None:
+        f = tmp_path / "transcript.json"
+        f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
+        gemini = GeminiProvider()
+
+        # First read populates cache
+        entries1, _ = gemini.read_transcript_file(str(f), 0)
+        assert len(entries1) == 4
+
+        # Patch json.load to prove second read uses cache, not file
+        with patch(
+            "ccbot.providers.gemini.json.load",
+            side_effect=AssertionError("should not be called"),
+        ):
+            entries2, offset2 = gemini.read_transcript_file(str(f), 0)
+        assert len(entries2) == 4
+        assert offset2 == 4
+
+    def test_cache_invalidated_on_file_change(self, tmp_path) -> None:
+        f = tmp_path / "transcript.json"
+        data = dict(_SAMPLE_GEMINI_TRANSCRIPT)
+        data["messages"] = list(data["messages"][:2])
+        f.write_text(json.dumps(data))
+        gemini = GeminiProvider()
+
+        entries1, offset1 = gemini.read_transcript_file(str(f), 0)
+        assert len(entries1) == 2
+        assert offset1 == 2
+
+        # Overwrite with more messages — size and mtime both change
+        data["messages"] = list(_SAMPLE_GEMINI_TRANSCRIPT["messages"])
+        f.write_text(json.dumps(data))
+
+        entries2, offset2 = gemini.read_transcript_file(str(f), 2)
+        assert len(entries2) == 2
+        assert offset2 == 4
 
 
 class TestGeminiCapabilityFlag:

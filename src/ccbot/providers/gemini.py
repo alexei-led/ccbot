@@ -16,7 +16,9 @@ Messages use ``type`` field with values ``"user"`` / ``"gemini"`` (not
 """
 
 import json
+import os
 import re
+import threading
 from typing import Any, cast
 
 from ccbot.providers._jsonl import JsonlProvider
@@ -92,6 +94,14 @@ GEMINI_UI_PATTERNS: list[UIPattern] = [
 ]
 
 
+# Cache: file_path -> (mtime_ns, size, parsed_messages)
+# Bounded to prevent unbounded growth; oldest entries evicted when full.
+# Lock required: read_transcript_file runs in asyncio.to_thread() workers.
+_TRANSCRIPT_CACHE_MAX = 64
+_transcript_cache: dict[str, tuple[int, int, list[dict[str, Any]]]] = {}
+_transcript_cache_lock = threading.Lock()
+
+
 class GeminiProvider(JsonlProvider):
     """AgentProvider implementation for Google Gemini CLI."""
 
@@ -141,19 +151,44 @@ class GeminiProvider(JsonlProvider):
         Gemini transcripts are a single JSON object with a ``messages`` array,
         not JSONL. ``last_offset`` tracks the number of messages already seen.
         Returns (new_message_entries, updated_offset).
+
+        Uses an mtime+size cache to skip re-parsing when the file is unchanged.
         """
+
         try:
-            with open(file_path, encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError, OSError:
+            st = os.stat(file_path)
+        except OSError:
             return [], last_offset
 
-        if not isinstance(data, dict):
-            return [], last_offset
+        with _transcript_cache_lock:
+            cached = _transcript_cache.get(file_path)
+        if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+            messages = list(cached[2])
+        else:
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    data = json.load(f)
+            except json.JSONDecodeError, OSError:
+                return [], last_offset
 
-        messages = data.get("messages", [])
-        if not isinstance(messages, list):
-            return [], last_offset
+            if not isinstance(data, dict):
+                return [], last_offset
+
+            messages = data.get("messages", [])
+            if not isinstance(messages, list):
+                return [], last_offset
+
+            # Store a copy to prevent mutation of cached data
+            messages = list(messages)
+            with _transcript_cache_lock:
+                if len(_transcript_cache) >= _TRANSCRIPT_CACHE_MAX:
+                    # Evict first-inserted entry
+                    _transcript_cache.pop(next(iter(_transcript_cache)))
+                _transcript_cache[file_path] = (
+                    st.st_mtime_ns,
+                    st.st_size,
+                    messages,
+                )
 
         new_entries = messages[last_offset:]
         new_offset = len(messages)

@@ -613,7 +613,13 @@ class SessionManager:
     async def _get_session_direct(
         self, session_id: str, cwd: str, window_id: str = ""
     ) -> ClaudeSession | None:
-        """Get a ClaudeSession directly from session_id and cwd (no scanning)."""
+        """Get a ClaudeSession directly from session_id and cwd (no scanning).
+
+        Falls back to glob search when the direct path doesn't exist. If found
+        via glob, attempts to recover the real cwd from the encoded directory
+        name (only when ``window_id`` is provided and the decoded path is an
+        existing absolute directory).
+        """
         file_path = self._build_session_file_path(session_id, cwd)
 
         # Fallback: glob search if direct path doesn't exist
@@ -623,6 +629,28 @@ class SessionManager:
             if matches:
                 file_path = matches[0]
                 logger.debug("Found session via glob: %s", file_path)
+                # Try to recover real cwd so subsequent calls use direct path.
+                # Encoding: /data/code/ccbot → -data-code-ccbot (replace "/" → "-")
+                # Decoding is ambiguous: -home-user-my-app could be
+                # /home/user/my-app or /home/user/my/app. We accept the
+                # decoded path only if it's an existing absolute directory.
+                encoded_dir = file_path.parent.name
+                decoded_cwd = encoded_dir.replace("-", "/")
+                if (
+                    window_id
+                    and decoded_cwd.startswith("/")
+                    and Path(decoded_cwd).is_dir()
+                ):
+                    state = self.window_states.get(window_id)
+                    if state and state.cwd != decoded_cwd:
+                        logger.info(
+                            "Glob fallback: updating cwd for window %s: %r -> %r",
+                            window_id,
+                            state.cwd,
+                            decoded_cwd,
+                        )
+                        state.cwd = decoded_cwd
+                        self._save_state()
             else:
                 return None
 
