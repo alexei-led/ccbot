@@ -12,6 +12,7 @@ from typing import Any
 
 from telegram import Bot
 
+from ..utils import log_throttle_reset
 from .interactive_ui import clear_interactive_msg
 from .message_queue import (
     clear_status_msg_info,
@@ -71,6 +72,8 @@ async def clear_topic_state(
     if window_id:
         clear_seen_status(window_id)
         clear_screen_buffer(window_id)
+        log_throttle_reset(f"topic-probe:{window_id}")
+        log_throttle_reset(f"status-update:{user_id}:{thread_id}")
         from .hook_events import clear_subagents
 
         clear_subagents(window_id)

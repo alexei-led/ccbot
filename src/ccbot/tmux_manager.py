@@ -162,7 +162,6 @@ class TmuxManager:
         for window in windows:
             if window.window_name == window_name:
                 return window
-        logger.debug("Window not found by name: %s", window_name)
         return None
 
     async def find_window_by_id(self, window_id: str) -> TmuxWindow | None:
@@ -178,7 +177,6 @@ class TmuxManager:
         for window in windows:
             if window.window_id == window_id:
                 return window
-        logger.debug("Window not found by id: %s", window_id)
         return None
 
     async def capture_pane(self, window_id: str, with_ansi: bool = False) -> str | None:

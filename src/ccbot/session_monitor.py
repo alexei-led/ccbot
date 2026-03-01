@@ -28,7 +28,7 @@ from .monitor_state import MonitorState, TrackedSession
 from .providers import get_provider_for_window
 from .session import parse_session_map
 from .tmux_manager import tmux_manager
-from .utils import read_cwd_from_jsonl, task_done_callback
+from .utils import log_throttled, read_cwd_from_jsonl, task_done_callback
 
 _CallbackError = (OSError, RuntimeError, TelegramError)
 # Top-level loop resilience: catch any error to keep monitoring alive
@@ -370,7 +370,9 @@ class SessionMonitor:
                         safe_offset = await f.tell()
                     elif line.strip():
                         # Partial JSONL line — don't advance offset past it
-                        logger.debug(
+                        log_throttled(
+                            logger,
+                            f"partial-jsonl:{session.session_id}",
                             "Partial JSONL line in session %s, will retry next cycle",
                             session.session_id,
                         )

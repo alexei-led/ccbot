@@ -7,6 +7,7 @@ Provides:
   - read_cwd_from_jsonl(): extract the cwd field from the first JSONL entry.
   - read_session_metadata_from_jsonl(): single-pass extraction of (cwd, summary).
   - task_done_callback(): log unhandled exceptions from background asyncio tasks.
+  - log_throttled(): suppress repeated identical debug messages per key.
 """
 
 import asyncio
@@ -14,12 +15,49 @@ import contextlib
 import json
 import os
 import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import structlog
 
 logger = structlog.get_logger()
+
+# --- Log throttling -----------------------------------------------------------
+
+_throttle_state: dict[str, tuple[float, str]] = {}
+
+
+def log_throttled(
+    log: Any,
+    key: str,
+    msg: str,
+    *args: object,
+    cooldown: float = 300.0,
+    _clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Log at debug level, suppressing repeated identical messages per key.
+
+    First occurrence always logs. Subsequent calls with the same *key* and
+    identical formatted message are suppressed until *cooldown* seconds elapse.
+    A changed message resets the timer and logs immediately.
+    """
+    formatted = msg % args if args else msg
+    now = _clock()
+    prev = _throttle_state.get(key)
+    if prev and prev[1] == formatted and (now - prev[0]) < cooldown:
+        return
+    _throttle_state[key] = (now, formatted)
+    log.debug(msg, *args)
+
+
+def log_throttle_reset(prefix: str) -> None:
+    """Clear throttle state for keys starting with *prefix*."""
+    to_remove = [k for k in _throttle_state if k.startswith(prefix)]
+    for k in to_remove:
+        del _throttle_state[k]
+
 
 CCBOT_DIR_ENV = "CCBOT_DIR"
 

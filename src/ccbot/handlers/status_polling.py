@@ -43,6 +43,7 @@ from ..providers.base import StatusUpdate
 from ..session import session_manager
 from ..session_monitor import get_active_monitor
 from ..tmux_manager import tmux_manager
+from ..utils import log_throttled
 from .interactive_ui import (
     clear_interactive_msg,
     get_interactive_window,
@@ -784,13 +785,17 @@ async def status_poll_loop(bot: Bot) -> None:
                                 user_id,
                             )
                         else:
-                            logger.debug(
+                            log_throttled(
+                                logger,
+                                f"topic-probe:{wid}",
                                 "Topic probe error for %s: %s",
                                 wid,
                                 e,
                             )
                     except TelegramError as e:
-                        logger.debug(
+                        log_throttled(
+                            logger,
+                            f"topic-probe:{wid}",
                             "Topic probe error for %s: %s",
                             wid,
                             e,
@@ -823,7 +828,9 @@ async def status_poll_loop(bot: Bot) -> None:
                     # Scan non-active panes for interactive prompts (agent teams)
                     await _scan_window_panes(bot, user_id, wid, thread_id)
                 except (TelegramError, OSError) as e:
-                    logger.debug(
+                    log_throttled(
+                        logger,
+                        f"status-update:{user_id}:{thread_id}",
                         "Status update error for user %s thread %s: %s",
                         user_id,
                         thread_id,
