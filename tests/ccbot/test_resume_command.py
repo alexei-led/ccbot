@@ -268,6 +268,97 @@ class TestScanAllSessions:
 
         assert result == []
 
+    def test_bare_jsonl_without_index(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        jsonl = proj_dir / "abc-123.jsonl"
+        jsonl.write_text(
+            '{"type":"user","cwd":"/tmp/myproj","message":{"content":[{"type":"text","text":"Fix the bug"}]}}\n'
+        )
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert len(result) == 1
+        assert result[0].session_id == "abc-123"
+        assert result[0].cwd == "/tmp/myproj"
+        assert result[0].summary == "Fix the bug"
+
+    def test_bare_jsonl_skips_no_cwd(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        jsonl = proj_dir / "no-cwd.jsonl"
+        jsonl.write_text('{"type":"file-history-snapshot"}\n')
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert result == []
+
+    def test_bare_jsonl_deduplicates_with_index(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        session_file = proj_dir / "sess-1.jsonl"
+        session_file.write_text(
+            '{"type":"user","cwd":"/tmp/myproj","message":{"content":"hi"}}\n'
+        )
+
+        index = {
+            "originalPath": "/tmp/myproj",
+            "entries": [
+                {
+                    "sessionId": "sess-1",
+                    "fullPath": str(session_file),
+                    "projectPath": "/tmp/myproj",
+                    "summary": "From index",
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert len(result) == 1
+        assert result[0].summary == "From index"
+
+    def test_uses_first_prompt_as_summary_fallback(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        session_file = proj_dir / "sess-fp.jsonl"
+        session_file.write_text('{"type":"summary"}\n')
+
+        index = {
+            "originalPath": "/tmp/myproj",
+            "entries": [
+                {
+                    "sessionId": "sess-fp",
+                    "fullPath": str(session_file),
+                    "projectPath": "/tmp/myproj",
+                    "firstPrompt": "Implement auth",
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert len(result) == 1
+        assert result[0].summary == "Implement auth"
+
 
 class TestBuildResumeKeyboard:
     def _sessions(self, count: int = 3) -> list[dict[str, str]]:

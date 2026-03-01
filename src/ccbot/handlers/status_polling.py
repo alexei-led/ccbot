@@ -6,7 +6,6 @@ Provides background polling of terminal status lines for all active users:
   - Updates status messages in Telegram
   - Polls thread_bindings (each topic = one window)
   - Detects Claude process exit (pane command reverts to shell)
-  - Syncs tmux window renames to Telegram topic titles
   - Auto-closes stale topics after configurable timeout
   - Auto-kills unbound windows (topic closed, window kept alive) after TTL
   - Periodically probes topic existence via unpin_all_forum_topic_messages
@@ -53,7 +52,7 @@ from .cleanup import clear_topic_state
 from .message_queue import enqueue_status_update, get_message_queue
 from .message_sender import rate_limit_send_message
 from .recovery_callbacks import build_recovery_keyboard
-from .topic_emoji import rename_topic, update_topic_emoji
+from .topic_emoji import update_topic_emoji
 
 # Top-level loop resilience: catch any error to keep polling alive
 _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
@@ -628,20 +627,6 @@ async def update_status_message(
         # Window gone, enqueue clear
         await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
         return
-
-    # Detect window rename → sync to Telegram topic title
-    if thread_id is not None:
-        stored_name = session_manager.get_display_name(window_id)
-        if stored_name and w.window_name != stored_name:
-            session_manager.set_display_name(window_id, w.window_name)
-            chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-            await rename_topic(bot, chat_id, thread_id, w.window_name)
-            logger.info(
-                "Window renamed: %s -> %s (window_id=%s)",
-                stored_name,
-                w.window_name,
-                window_id,
-            )
 
     pane_text = await tmux_manager.capture_pane(w.window_id)
     if not pane_text:

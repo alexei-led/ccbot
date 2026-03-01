@@ -15,9 +15,9 @@ Key functions:
   - clear_topic_emoji_state: Clean up tracking for a topic
 """
 
-import structlog
 import time
 
+import structlog
 from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 
@@ -40,8 +40,26 @@ _topic_states: dict[tuple[int, int], str] = {}
 # Pending transitions: (chat_id, thread_id) -> (desired_state, first_seen_monotonic)
 _pending_transitions: dict[tuple[int, int], tuple[str, float]] = {}
 
+# Topic display names: (chat_id, thread_id) -> clean name (without emoji prefix).
+# Set once on first emoji update; reused on subsequent updates to avoid overwriting
+# the topic name with the tmux window name (which may differ due to deduplication).
+_topic_names: dict[tuple[int, int], str] = {}
+
 # Chats where editForumTopic is disabled due to permission errors
 _disabled_chats: set[int] = set()
+
+
+def _resolve_topic_name(key: tuple[int, int], display_name: str) -> str:
+    """Return the clean topic name, storing it on first call per topic.
+
+    Uses the stored name on subsequent calls to avoid overwriting the Telegram
+    topic name with the tmux window name (which may differ due to deduplication).
+    """
+    if key in _topic_names:
+        return _topic_names[key]
+    clean = strip_emoji_prefix(display_name)
+    _topic_names[key] = clean
+    return clean
 
 
 async def update_topic_emoji(
@@ -99,8 +117,7 @@ async def update_topic_emoji(
     # Debounce passed — execute the transition
     _pending_transitions.pop(key, None)
 
-    # Strip any existing emoji prefix from display name
-    clean_name = strip_emoji_prefix(display_name)
+    clean_name = _resolve_topic_name(key, display_name)
     new_name = f"{emoji} {clean_name}"
 
     try:
@@ -144,63 +161,12 @@ def strip_emoji_prefix(name: str) -> str:
     return name
 
 
-async def rename_topic(
-    bot: Bot,
-    chat_id: int,
-    thread_id: int,
-    new_display_name: str,
-) -> None:
-    """Rename a topic immediately, preserving its current emoji prefix.
-
-    Called when a tmux window rename is detected. Bypasses the debounce used
-    for emoji state transitions since the name must update promptly.
-    """
-    if chat_id in _disabled_chats:
-        return
-
-    key = (chat_id, thread_id)
-    current_state = _topic_states.get(key)
-
-    emoji = {
-        "active": EMOJI_ACTIVE,
-        "idle": EMOJI_IDLE,
-        "done": EMOJI_DONE,
-        "dead": EMOJI_DEAD,
-    }.get(current_state or "", "")
-
-    clean_name = strip_emoji_prefix(new_display_name)
-    new_name = f"{emoji} {clean_name}" if emoji else clean_name
-
-    try:
-        await bot.edit_forum_topic(
-            chat_id=chat_id,
-            message_thread_id=thread_id,
-            name=new_name,
-        )
-        logger.debug(
-            "Renamed topic: chat=%d thread=%d name='%s'",
-            chat_id,
-            thread_id,
-            new_name,
-        )
-    except BadRequest as e:
-        if "Not enough rights" in e.message:
-            _disabled_chats.add(chat_id)
-            logger.info(
-                "Topic rename disabled for chat %d: insufficient permissions",
-                chat_id,
-            )
-        elif "TOPIC_NOT_MODIFIED" not in e.message:
-            logger.debug("Failed to rename topic: %s", e)
-    except TelegramError as e:
-        logger.debug("Failed to rename topic: %s", e)
-
-
 def clear_topic_emoji_state(chat_id: int, thread_id: int) -> None:
     """Clear emoji tracking for a topic (called on topic cleanup)."""
     key = (chat_id, thread_id)
     _topic_states.pop(key, None)
     _pending_transitions.pop(key, None)
+    _topic_names.pop(key, None)
 
 
 def reset_all_state() -> None:
@@ -208,3 +174,4 @@ def reset_all_state() -> None:
     _topic_states.clear()
     _pending_transitions.clear()
     _disabled_chats.clear()
+    _topic_names.clear()

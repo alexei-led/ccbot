@@ -12,10 +12,10 @@ Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
 import json
-import structlog
 from dataclasses import dataclass
 from pathlib import Path
 
+import structlog
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
@@ -24,6 +24,7 @@ from ..config import config
 from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
+from ..utils import read_session_metadata_from_jsonl
 from .callback_data import (
     CB_RECOVERY_BACK,
     CB_RECOVERY_CANCEL,
@@ -48,7 +49,7 @@ _MAX_RESUME_SESSIONS = 6
 
 @dataclass
 class _SessionEntry:
-    """A resumable session discovered from sessions-index."""
+    """A resumable session discovered from project directories."""
 
     session_id: str
     summary: str
@@ -119,7 +120,10 @@ def _build_resume_picker_keyboard(
 
 
 def scan_sessions_for_cwd(cwd: str) -> list[_SessionEntry]:
-    """Scan sessions-index files for sessions matching a working directory.
+    """Scan project directories for sessions matching a working directory.
+
+    Supports both legacy sessions-index.json and bare JSONL files
+    (Claude Code >= Feb 2026 no longer writes index files).
 
     Returns up to _MAX_RESUME_SESSIONS entries, most-recent file first.
     """
@@ -132,52 +136,106 @@ def scan_sessions_for_cwd(cwd: str) -> list[_SessionEntry]:
         return []
 
     candidates: list[tuple[float, _SessionEntry]] = []
+    seen_ids: set[str] = set()
 
     for project_dir in config.claude_projects_path.iterdir():
         if not project_dir.is_dir():
             continue
+
+        # Try legacy sessions-index.json first
         index_file = project_dir / "sessions-index.json"
-        if not index_file.exists():
-            continue
-        try:
-            index_data = json.loads(index_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        except OSError:
-            continue
+        if index_file.exists():
+            _scan_index_for_cwd(index_file, resolved_cwd, seen_ids, candidates)
 
-        original_path = index_data.get("originalPath", "")
-        for entry in index_data.get("entries", []):
-            session_id = entry.get("sessionId", "")
-            full_path = entry.get("fullPath", "")
-            project_path = entry.get("projectPath", original_path)
-            if not session_id or not full_path:
-                continue
+        # Pick up bare JSONL files (no index required)
+        _scan_bare_jsonl_for_cwd(project_dir, resolved_cwd, seen_ids, candidates)
 
-            try:
-                norm_pp = str(Path(project_path).resolve())
-            except OSError:
-                norm_pp = project_path
-
-            if norm_pp != resolved_cwd:
-                continue
-
-            file_path = Path(full_path)
-            if not file_path.exists():
-                continue
-
-            # Use file mtime as recency proxy
-            try:
-                mtime = file_path.stat().st_mtime
-            except OSError:
-                mtime = 0.0
-
-            summary = entry.get("summary", "") or session_id[:12]
-            candidates.append((mtime, _SessionEntry(session_id, summary)))
-
-    # Sort by mtime descending (most recent first)
     candidates.sort(key=lambda c: c[0], reverse=True)
     return [entry for _, entry in candidates[:_MAX_RESUME_SESSIONS]]
+
+
+def _scan_index_for_cwd(
+    index_file: Path,
+    resolved_cwd: str,
+    seen_ids: set[str],
+    candidates: list[tuple[float, _SessionEntry]],
+) -> None:
+    """Scan a sessions-index.json for sessions matching a cwd."""
+    try:
+        index_data = json.loads(index_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError, OSError:
+        return
+
+    original_path = index_data.get("originalPath", "")
+    for entry in index_data.get("entries", []):
+        session_id = entry.get("sessionId", "")
+        full_path = entry.get("fullPath", "")
+        project_path = entry.get("projectPath", original_path)
+        if not session_id or not full_path or session_id in seen_ids:
+            continue
+
+        try:
+            norm_pp = str(Path(project_path).resolve())
+        except OSError:
+            norm_pp = project_path
+
+        if norm_pp != resolved_cwd:
+            continue
+
+        file_path = Path(full_path)
+        if not file_path.exists():
+            continue
+
+        try:
+            mtime = file_path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+
+        summary = (
+            entry.get("summary", "") or entry.get("firstPrompt", "") or session_id[:12]
+        )
+        seen_ids.add(session_id)
+        candidates.append((mtime, _SessionEntry(session_id, summary)))
+
+
+def _scan_bare_jsonl_for_cwd(
+    project_dir: Path,
+    resolved_cwd: str,
+    seen_ids: set[str],
+    candidates: list[tuple[float, _SessionEntry]],
+) -> None:
+    """Scan bare JSONL files for sessions matching a cwd."""
+    try:
+        jsonl_iter = project_dir.glob("*.jsonl")
+    except OSError:
+        return
+
+    for jsonl_file in jsonl_iter:
+        session_id = jsonl_file.stem
+        if session_id in seen_ids:
+            continue
+
+        file_cwd, summary = read_session_metadata_from_jsonl(jsonl_file)
+        if not file_cwd:
+            continue
+
+        try:
+            norm_cwd = str(Path(file_cwd).resolve())
+        except OSError:
+            norm_cwd = file_cwd
+
+        if norm_cwd != resolved_cwd:
+            continue
+
+        try:
+            mtime = jsonl_file.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+
+        seen_ids.add(session_id)
+        candidates.append(
+            (mtime, _SessionEntry(session_id, summary or session_id[:12]))
+        )
 
 
 async def handle_recovery_callback(

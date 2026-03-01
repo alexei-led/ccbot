@@ -43,11 +43,13 @@ class MonitorState:
     """Persistent state for the session monitor.
 
     Stores tracking information for all monitored sessions
-    to prevent duplicate notifications after restarts.
+    and the events.jsonl byte offset to prevent replaying
+    historical hook events after restarts.
     """
 
     state_file: Path
     tracked_sessions: dict[str, TrackedSession] = field(default_factory=dict)
+    events_offset: int = 0
     _dirty: bool = field(default=False, repr=False)
 
     def load(self) -> None:
@@ -62,6 +64,7 @@ class MonitorState:
             self.tracked_sessions = {
                 k: TrackedSession.from_dict(v) for k, v in sessions.items()
             }
+            self.events_offset = data.get("events_offset", 0)
             logger.info(
                 "Loaded %d tracked sessions from state", len(self.tracked_sessions)
             )
@@ -76,7 +79,8 @@ class MonitorState:
         data = {
             "tracked_sessions": {
                 k: v.to_dict() for k, v in self.tracked_sessions.items()
-            }
+            },
+            "events_offset": self.events_offset,
         }
 
         try:
