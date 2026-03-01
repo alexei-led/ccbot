@@ -92,6 +92,10 @@ GEMINI_UI_PATTERNS: list[UIPattern] = [
 ]
 
 
+# Cache: file_path -> (mtime_ns, size, parsed_messages)
+_transcript_cache: dict[str, tuple[int, int, list[dict[str, Any]]]] = {}
+
+
 class GeminiProvider(JsonlProvider):
     """AgentProvider implementation for Google Gemini CLI."""
 
@@ -141,19 +145,35 @@ class GeminiProvider(JsonlProvider):
         Gemini transcripts are a single JSON object with a ``messages`` array,
         not JSONL. ``last_offset`` tracks the number of messages already seen.
         Returns (new_message_entries, updated_offset).
+
+        Uses an mtime+size cache to skip re-parsing when the file is unchanged.
         """
+        import os
+
         try:
-            with open(file_path, encoding="utf-8") as f:
-                data = json.load(f)
-        except json.JSONDecodeError, OSError:
+            st = os.stat(file_path)
+        except OSError:
             return [], last_offset
 
-        if not isinstance(data, dict):
-            return [], last_offset
+        cache_key = file_path
+        cached = _transcript_cache.get(cache_key)
+        if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+            messages = cached[2]
+        else:
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    data = json.load(f)
+            except json.JSONDecodeError, OSError:
+                return [], last_offset
 
-        messages = data.get("messages", [])
-        if not isinstance(messages, list):
-            return [], last_offset
+            if not isinstance(data, dict):
+                return [], last_offset
+
+            messages = data.get("messages", [])
+            if not isinstance(messages, list):
+                return [], last_offset
+
+            _transcript_cache[cache_key] = (st.st_mtime_ns, st.st_size, messages)
 
         new_entries = messages[last_offset:]
         new_offset = len(messages)

@@ -623,6 +623,23 @@ class SessionManager:
             if matches:
                 file_path = matches[0]
                 logger.debug("Found session via glob: %s", file_path)
+                # Try to recover real cwd so subsequent calls use direct path.
+                # Encoding: /data/code/ccbot → -data-code-ccbot (replace "/" → "-")
+                # Decoding is lossy for paths with hyphens, so only update
+                # state.cwd if the decoded path is an existing directory.
+                encoded_dir = file_path.parent.name
+                decoded_cwd = encoded_dir.replace("-", "/")
+                if window_id and decoded_cwd and Path(decoded_cwd).is_dir():
+                    state = self.get_window_state(window_id)
+                    if state.cwd != decoded_cwd:
+                        logger.info(
+                            "Glob fallback: updating cwd for window %s: %r -> %r",
+                            window_id,
+                            state.cwd,
+                            decoded_cwd,
+                        )
+                        state.cwd = decoded_cwd
+                        self._save_state()
             else:
                 return None
 

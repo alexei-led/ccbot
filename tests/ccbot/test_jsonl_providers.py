@@ -541,6 +541,42 @@ class TestGeminiReadTranscriptFile:
         assert offset == 0
 
 
+class TestGeminiMtimeCache:
+    def test_cache_hit_skips_reparse(self, tmp_path) -> None:
+        f = tmp_path / "transcript.json"
+        f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
+        gemini = GeminiProvider()
+
+        # First read populates cache
+        entries1, _ = gemini.read_transcript_file(str(f), 0)
+        assert len(entries1) == 4
+
+        # Overwrite file content with garbage but keep same mtime/size
+        # by reading twice without modifying — cache should return same result
+        entries2, offset2 = gemini.read_transcript_file(str(f), 0)
+        assert len(entries2) == 4
+        assert offset2 == 4
+
+    def test_cache_invalidated_on_file_change(self, tmp_path) -> None:
+        f = tmp_path / "transcript.json"
+        data = dict(_SAMPLE_GEMINI_TRANSCRIPT)
+        data["messages"] = list(data["messages"][:2])
+        f.write_text(json.dumps(data))
+        gemini = GeminiProvider()
+
+        entries1, offset1 = gemini.read_transcript_file(str(f), 0)
+        assert len(entries1) == 2
+        assert offset1 == 2
+
+        # Append messages — file size and mtime change
+        data["messages"] = list(_SAMPLE_GEMINI_TRANSCRIPT["messages"])
+        f.write_text(json.dumps(data))
+
+        entries2, offset2 = gemini.read_transcript_file(str(f), 2)
+        assert len(entries2) == 2
+        assert offset2 == 4
+
+
 class TestGeminiCapabilityFlag:
     def test_gemini_does_not_support_incremental_read(self) -> None:
         gemini = GeminiProvider()

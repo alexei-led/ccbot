@@ -398,6 +398,102 @@ class TestWindowStateProviderName:
         assert restored.session_id == "s1"
 
 
+class TestGlobFallbackCwdUpdate:
+    async def test_glob_fallback_updates_cwd_when_dir_exists(
+        self, mgr: SessionManager, tmp_path, monkeypatch
+    ) -> None:
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from ccbot.session import WindowState
+
+        # Simulate: encoded dir "-data-code-proj" → decoded "/data/code/proj"
+        projects_path = tmp_path / "projects"
+        encoded_dir = projects_path / "-data-code-proj"
+        encoded_dir.mkdir(parents=True)
+        session_file = encoded_dir / "session-abc.jsonl"
+        session_file.write_text('{"type":"summary","summary":"test"}\n')
+
+        monkeypatch.setattr("ccbot.session.config.claude_projects_path", projects_path)
+        monkeypatch.setattr(
+            "ccbot.session.get_provider_for_window",
+            lambda wid: __import__(
+                "ccbot.providers.claude", fromlist=["ClaudeProvider"]
+            ).ClaudeProvider(),
+        )
+
+        mgr.window_states["@1"] = WindowState(
+            session_id="session-abc", cwd="/wrong/path"
+        )
+
+        # Mock Path.is_dir to return True for the decoded cwd
+        _orig_is_dir = Path.is_dir
+
+        def _mock_is_dir(self):
+            if str(self) == "/data/code/proj":
+                return True
+            return _orig_is_dir(self)
+
+        with patch.object(Path, "is_dir", _mock_is_dir):
+            session = await mgr._get_session_direct("session-abc", "/wrong/path", "@1")
+
+        assert session is not None
+        assert mgr.window_states["@1"].cwd == "/data/code/proj"
+
+    async def test_glob_fallback_skips_update_for_nonexistent_decoded_path(
+        self, mgr: SessionManager, tmp_path, monkeypatch
+    ) -> None:
+        from ccbot.session import WindowState
+
+        # Use a path with hyphens — decoded cwd won't be a real directory
+        # e.g., -tmp-my-project decodes to /tmp/my/project (doesn't exist)
+        projects_path = tmp_path / "projects"
+        encoded_dir = projects_path / "-tmp-my-project"
+        encoded_dir.mkdir(parents=True)
+        session_file = encoded_dir / "sid-456.jsonl"
+        session_file.write_text('{"type":"summary","summary":"test"}\n')
+
+        monkeypatch.setattr("ccbot.session.config.claude_projects_path", projects_path)
+        monkeypatch.setattr(
+            "ccbot.session.get_provider_for_window",
+            lambda wid: __import__(
+                "ccbot.providers.claude", fromlist=["ClaudeProvider"]
+            ).ClaudeProvider(),
+        )
+
+        mgr.window_states["@2"] = WindowState(session_id="sid-456", cwd="/wrong/path")
+
+        session = await mgr._get_session_direct("sid-456", "/wrong/path", "@2")
+
+        assert session is not None
+        # cwd NOT updated because decoded path doesn't exist as directory
+        assert mgr.window_states["@2"].cwd == "/wrong/path"
+
+    async def test_glob_fallback_no_update_without_window_id(
+        self, mgr: SessionManager, tmp_path, monkeypatch
+    ) -> None:
+        projects_path = tmp_path / "projects"
+        encoded_dir = projects_path / "-tmp-myproj"
+        encoded_dir.mkdir(parents=True)
+        session_file = encoded_dir / "sid-123.jsonl"
+        session_file.write_text('{"type":"summary","summary":"test"}\n')
+
+        monkeypatch.setattr("ccbot.session.config.claude_projects_path", projects_path)
+        monkeypatch.setattr(
+            "ccbot.session.get_provider_for_window",
+            lambda wid: __import__(
+                "ccbot.providers.claude", fromlist=["ClaudeProvider"]
+            ).ClaudeProvider(),
+        )
+
+        # No window state before the call
+        session = await mgr._get_session_direct("sid-123", "/wrong/path")
+
+        assert session is not None
+        # No window state created without window_id
+        assert "@1" not in mgr.window_states
+
+
 class TestSetWindowProvider:
     def test_set_and_get(self, mgr: SessionManager) -> None:
         mgr.set_window_provider("@1", "codex")

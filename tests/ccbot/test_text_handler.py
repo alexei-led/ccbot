@@ -382,3 +382,85 @@ class TestForwardMessage:
         await _forward_message("@0", 100, 42, "hello", bot, message)
 
         mock_handle_ui.assert_called_once_with(bot, 100, "@0", 42)
+
+
+class TestBashCaptureCleanup:
+    async def test_cleanup_on_completion(self) -> None:
+        from ccbot.handlers.text_handler import (
+            _bash_capture_tasks,
+            _capture_bash_output,
+        )
+
+        key = (999, 888)
+
+        with (
+            patch(f"{_TH}.tmux_manager") as mock_tm,
+            patch(f"{_TH}.session_manager") as mock_sm,
+        ):
+            mock_sm.resolve_chat_id.return_value = 999
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+
+            task = asyncio.create_task(
+                _capture_bash_output(AsyncMock(), 999, 888, "@0", "ls")
+            )
+            _bash_capture_tasks[key] = task
+            await task
+
+        assert key not in _bash_capture_tasks
+
+    async def test_cleanup_on_cancel(self) -> None:
+        from ccbot.handlers.text_handler import (
+            _bash_capture_tasks,
+            _capture_bash_output,
+        )
+
+        key = (777, 666)
+
+        with patch(f"{_TH}.session_manager"):
+            task = asyncio.create_task(
+                _capture_bash_output(AsyncMock(), 777, 666, "@0", "ls")
+            )
+            _bash_capture_tasks[key] = task
+            await asyncio.sleep(0.05)
+            task.cancel()
+            # CancelledError is caught inside _capture_bash_output
+            await task
+
+        assert key not in _bash_capture_tasks
+
+    async def test_identity_check_preserves_replacement_task(self) -> None:
+        """Verify that Task A's finally block does not evict Task B.
+
+        Race scenario: Task A is cancelled, Task B replaces it in the dict
+        before A's finally runs. A's identity check must NOT pop B.
+        """
+        from ccbot.handlers.text_handler import (
+            _bash_capture_tasks,
+            _capture_bash_output,
+        )
+
+        key = (555, 444)
+        sentinel = AsyncMock(spec=asyncio.Task)
+
+        with (
+            patch(f"{_TH}.tmux_manager") as mock_tm,
+            patch(f"{_TH}.session_manager") as mock_sm,
+        ):
+            mock_sm.resolve_chat_id.return_value = 555
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+
+            task_a = asyncio.create_task(
+                _capture_bash_output(AsyncMock(), 555, 444, "@0", "ls")
+            )
+            _bash_capture_tasks[key] = task_a
+            await asyncio.sleep(0.05)
+
+            # Simulate _forward_message replacing Task A with Task B
+            task_a.cancel()
+            _bash_capture_tasks[key] = sentinel  # Task B
+
+            await task_a  # A's finally runs
+
+        # Task B must NOT have been evicted
+        assert _bash_capture_tasks.get(key) is sentinel
+        _bash_capture_tasks.pop(key, None)  # cleanup
