@@ -13,10 +13,10 @@ Key functions:
 """
 
 import json
-import structlog
 from dataclasses import dataclass
 from pathlib import Path
 
+import structlog
 from telegram import (
     CallbackQuery,
     InlineKeyboardButton,

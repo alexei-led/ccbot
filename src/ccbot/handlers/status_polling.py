@@ -6,7 +6,6 @@ Provides background polling of terminal status lines for all active users:
   - Updates status messages in Telegram
   - Polls thread_bindings (each topic = one window)
   - Detects Claude process exit (pane command reverts to shell)
-  - Syncs tmux window renames to Telegram topic titles
   - Auto-closes stale topics after configurable timeout
   - Auto-kills unbound windows (topic closed, window kept alive) after TTL
   - Periodically probes topic existence via unpin_all_forum_topic_messages

@@ -15,9 +15,9 @@ Key functions:
   - clear_topic_emoji_state: Clean up tracking for a topic
 """
 
-import structlog
 import time
 
+import structlog
 from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 

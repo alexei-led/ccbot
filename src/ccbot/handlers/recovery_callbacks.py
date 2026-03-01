@@ -12,10 +12,10 @@ Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
 import json
-import structlog
 from dataclasses import dataclass
 from pathlib import Path
 
+import structlog
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
