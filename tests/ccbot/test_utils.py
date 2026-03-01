@@ -1,4 +1,4 @@
-"""Tests for ccbot.utils: ccbot_dir, atomic_write_json, read_cwd_from_jsonl, read_summary_from_jsonl."""
+"""Tests for ccbot.utils: ccbot_dir, atomic_write_json, read_cwd_from_jsonl, read_summary_from_jsonl, read_session_metadata_from_jsonl."""
 
 import json
 from pathlib import Path
@@ -6,9 +6,13 @@ from pathlib import Path
 import pytest
 
 from ccbot.utils import (
+    _CWD_SCAN_LINES,
+    _METADATA_SCAN_LINES,
+    _SUMMARY_SCAN_LINES,
     atomic_write_json,
     ccbot_dir,
     read_cwd_from_jsonl,
+    read_session_metadata_from_jsonl,
     read_summary_from_jsonl,
 )
 
@@ -76,6 +80,22 @@ class TestReadCwdFromJsonl:
     def test_missing_file_returns_empty(self, tmp_path: Path):
         assert read_cwd_from_jsonl(tmp_path / "nonexistent.jsonl") == ""
 
+    def test_scan_limit_stops_reading(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        filler = [json.dumps({"type": "init"}) for _ in range(_CWD_SCAN_LINES)]
+        filler.append(json.dumps({"cwd": "/too/late"}))
+        f.write_text("\n".join(filler) + "\n")
+        assert read_cwd_from_jsonl(f) == ""
+
+    def test_malformed_json_lines_skipped(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            "not valid json{{{",
+            json.dumps({"cwd": "/found/after/garbage"}),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        assert read_cwd_from_jsonl(f) == "/found/after/garbage"
+
 
 class TestReadSummaryFromJsonl:
     def test_extracts_text_from_content_blocks(self, tmp_path: Path):
@@ -122,3 +142,128 @@ class TestReadSummaryFromJsonl:
 
     def test_returns_empty_for_missing_file(self, tmp_path: Path):
         assert read_summary_from_jsonl(tmp_path / "nonexistent.jsonl") == ""
+
+    def test_scan_limit_stops_reading(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        filler = [json.dumps({"type": "init"}) for _ in range(_SUMMARY_SCAN_LINES)]
+        filler.append(
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"content": "Too late"},
+                }
+            )
+        )
+        f.write_text("\n".join(filler) + "\n")
+        assert read_summary_from_jsonl(f) == ""
+
+    def test_malformed_json_lines_skipped(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            "not valid json{{{",
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"content": "Found after garbage"},
+                }
+            ),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        assert read_summary_from_jsonl(f) == "Found after garbage"
+
+
+class TestReadSessionMetadataFromJsonl:
+    def test_extracts_cwd_and_summary(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            json.dumps(
+                {
+                    "type": "user",
+                    "cwd": "/my/project",
+                    "message": {"content": "Fix the bug"},
+                }
+            ),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == "/my/project"
+        assert summary == "Fix the bug"
+
+    def test_cwd_and_summary_on_different_lines(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            json.dumps({"cwd": "/my/project"}),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"content": "Hello"},
+                }
+            ),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == "/my/project"
+        assert summary == "Hello"
+
+    def test_cwd_only(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        f.write_text(json.dumps({"cwd": "/my/project"}) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == "/my/project"
+        assert summary == ""
+
+    def test_summary_only(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        entry = {"type": "user", "message": {"content": "Hello"}}
+        f.write_text(json.dumps(entry) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == ""
+        assert summary == "Hello"
+
+    def test_missing_file_returns_empty(self, tmp_path: Path):
+        cwd, summary = read_session_metadata_from_jsonl(tmp_path / "gone.jsonl")
+        assert cwd == ""
+        assert summary == ""
+
+    def test_scan_limit_stops_reading(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        filler = [json.dumps({"type": "init"}) for _ in range(_METADATA_SCAN_LINES)]
+        filler.append(json.dumps({"cwd": "/too/late"}))
+        f.write_text("\n".join(filler) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == ""
+        assert summary == ""
+
+    def test_malformed_json_lines_skipped(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            "not valid json{{{",
+            json.dumps(
+                {
+                    "type": "user",
+                    "cwd": "/my/project",
+                    "message": {"content": "After garbage"},
+                }
+            ),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == "/my/project"
+        assert summary == "After garbage"
+
+    def test_stops_early_when_both_found(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            json.dumps(
+                {
+                    "type": "user",
+                    "cwd": "/proj",
+                    "message": {"content": "Go"},
+                }
+            ),
+            json.dumps({"cwd": "/should/not/reach"}),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == "/proj"
+        assert summary == "Go"

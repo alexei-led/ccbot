@@ -1115,6 +1115,38 @@ class TestScanSessionsForCwd:
         assert len(result) == 1
         assert result[0].summary == "From index"
 
+    def test_uses_first_prompt_as_summary_fallback(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        work_dir = tmp_path / "myproj"
+        work_dir.mkdir()
+        resolved = str(work_dir.resolve())
+
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        session_file = proj_dir / "sess-fp.jsonl"
+        session_file.write_text('{"type":"summary"}\n')
+
+        index = {
+            "originalPath": resolved,
+            "entries": [
+                {
+                    "sessionId": "sess-fp",
+                    "fullPath": str(session_file),
+                    "projectPath": resolved,
+                    "firstPrompt": "Implement auth",
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_sessions_for_cwd(str(work_dir))
+
+        assert len(result) == 1
+        assert result[0].summary == "Implement auth"
+
 
 class TestRecoveryPerWindowProvider:
     @patch(f"{_RC}.get_provider_for_window")
