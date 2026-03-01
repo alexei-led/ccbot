@@ -181,6 +181,40 @@ class TestUpdateTopicEmoji:
         bot.edit_forum_topic.assert_not_called()
 
 
+class TestTopicNamePreservation:
+    async def test_stores_name_on_first_update(self) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "active", "myproject")
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_ACTIVE} myproject",
+        )
+
+    async def test_reuses_stored_name_ignoring_new_display_name(self) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "active", "myproject")
+        bot.edit_forum_topic.reset_mock()
+        await _debounced_update(bot, -100, 42, "idle", "myproject-2")
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_IDLE} myproject",
+        )
+
+    async def test_clear_resets_stored_name(self) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "active", "myproject")
+        clear_topic_emoji_state(-100, 42)
+        bot.edit_forum_topic.reset_mock()
+        await _debounced_update(bot, -100, 42, "active", "renamed")
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_ACTIVE} renamed",
+        )
+
+
 class TestClearTopicEmojiState:
     async def test_clear_allows_re_update(self) -> None:
         bot = AsyncMock()

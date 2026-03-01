@@ -5,6 +5,7 @@ Provides:
   - tmux_session_name(): resolve tmux session name from env.
   - atomic_write_json(): crash-safe JSON file writes via temp+rename.
   - read_cwd_from_jsonl(): extract the cwd field from the first JSONL entry.
+  - read_summary_from_jsonl(): extract a display summary from the first user message.
   - task_done_callback(): log unhandled exceptions from background asyncio tasks.
 """
 
@@ -77,6 +78,54 @@ def read_cwd_from_jsonl(file_path: str | Path) -> str:
                         return cwd
                 except json.JSONDecodeError:
                     continue
+    except OSError:
+        pass
+    return ""
+
+
+_SUMMARY_SCAN_LINES = 20
+_SUMMARY_MAX_CHARS = 80
+
+
+def _extract_user_text(msg: dict[str, object]) -> str:
+    """Extract display text from a user message's content field."""
+    content = msg.get("content", "")
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if isinstance(text, str) and text:
+                    return text[:_SUMMARY_MAX_CHARS]
+    elif isinstance(content, str) and content:
+        return content[:_SUMMARY_MAX_CHARS]
+    return ""
+
+
+def read_summary_from_jsonl(file_path: str | Path) -> str:
+    """Extract a display summary from the first user message in a JSONL transcript.
+
+    Reads up to _SUMMARY_SCAN_LINES lines looking for a user-type entry.
+    Returns the first 80 chars of the text, or empty string if nothing found.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for i, line in enumerate(f):
+                if i >= _SUMMARY_SCAN_LINES:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if data.get("type") != "user":
+                    continue
+                msg = data.get("message", {})
+                if isinstance(msg, dict):
+                    text = _extract_user_text(msg)
+                    if text:
+                        return text
     except OSError:
         pass
     return ""

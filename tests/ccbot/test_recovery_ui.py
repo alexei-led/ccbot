@@ -1038,6 +1038,83 @@ class TestScanSessionsForCwd:
         assert len(result) == 1
         assert result[0].summary == "a1b2c3d4-000"
 
+    def test_bare_jsonl_without_index(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        work_dir = tmp_path / "myproj"
+        work_dir.mkdir()
+        resolved = str(work_dir.resolve())
+
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        jsonl = proj_dir / "abc-123.jsonl"
+        jsonl.write_text(
+            f'{{"type":"user","cwd":"{resolved}","message":{{"content":[{{"type":"text","text":"Fix bug"}}]}}}}\n'
+        )
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_sessions_for_cwd(str(work_dir))
+
+        assert len(result) == 1
+        assert result[0].session_id == "abc-123"
+        assert result[0].summary == "Fix bug"
+
+    def test_bare_jsonl_filters_by_cwd(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        work_dir = tmp_path / "myproj"
+        work_dir.mkdir()
+        other_dir = tmp_path / "other"
+        other_dir.mkdir()
+
+        proj_dir = projects_path / "-tmp-other"
+        proj_dir.mkdir(parents=True)
+
+        jsonl = proj_dir / "abc-123.jsonl"
+        jsonl.write_text(
+            f'{{"type":"user","cwd":"{other_dir.resolve()}","message":{{"content":"hi"}}}}\n'
+        )
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_sessions_for_cwd(str(work_dir))
+
+        assert result == []
+
+    def test_bare_jsonl_deduplicates_with_index(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        work_dir = tmp_path / "myproj"
+        work_dir.mkdir()
+        resolved = str(work_dir.resolve())
+
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        session_file = proj_dir / "sess-1.jsonl"
+        session_file.write_text(
+            f'{{"type":"user","cwd":"{resolved}","message":{{"content":"hi"}}}}\n'
+        )
+
+        index = {
+            "originalPath": resolved,
+            "entries": [
+                {
+                    "sessionId": "sess-1",
+                    "fullPath": str(session_file),
+                    "projectPath": resolved,
+                    "summary": "From index",
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_sessions_for_cwd(str(work_dir))
+
+        assert len(result) == 1
+        assert result[0].summary == "From index"
+
 
 class TestRecoveryPerWindowProvider:
     @patch(f"{_RC}.get_provider_for_window")

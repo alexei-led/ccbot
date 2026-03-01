@@ -1,11 +1,16 @@
-"""Tests for ccbot.utils: ccbot_dir, atomic_write_json, read_cwd_from_jsonl."""
+"""Tests for ccbot.utils: ccbot_dir, atomic_write_json, read_cwd_from_jsonl, read_summary_from_jsonl."""
 
 import json
 from pathlib import Path
 
 import pytest
 
-from ccbot.utils import atomic_write_json, ccbot_dir, read_cwd_from_jsonl
+from ccbot.utils import (
+    atomic_write_json,
+    ccbot_dir,
+    read_cwd_from_jsonl,
+    read_summary_from_jsonl,
+)
 
 
 class TestCcbotDir:
@@ -70,3 +75,50 @@ class TestReadCwdFromJsonl:
 
     def test_missing_file_returns_empty(self, tmp_path: Path):
         assert read_cwd_from_jsonl(tmp_path / "nonexistent.jsonl") == ""
+
+
+class TestReadSummaryFromJsonl:
+    def test_extracts_text_from_content_blocks(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        entry = {
+            "type": "user",
+            "message": {"content": [{"type": "text", "text": "Fix the bug"}]},
+        }
+        f.write_text(json.dumps(entry) + "\n")
+        assert read_summary_from_jsonl(f) == "Fix the bug"
+
+    def test_extracts_string_content(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        entry = {"type": "user", "message": {"content": "Hello world"}}
+        f.write_text(json.dumps(entry) + "\n")
+        assert read_summary_from_jsonl(f) == "Hello world"
+
+    def test_skips_non_user_entries(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            json.dumps({"type": "file-history-snapshot"}),
+            json.dumps({"type": "assistant", "message": {"content": "I will help"}}),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"content": [{"type": "text", "text": "Second msg"}]},
+                }
+            ),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        assert read_summary_from_jsonl(f) == "Second msg"
+
+    def test_truncates_long_text(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        long_text = "x" * 200
+        entry = {"type": "user", "message": {"content": long_text}}
+        f.write_text(json.dumps(entry) + "\n")
+        assert len(read_summary_from_jsonl(f)) == 80
+
+    def test_returns_empty_for_no_user_messages(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        f.write_text(json.dumps({"type": "assistant"}) + "\n")
+        assert read_summary_from_jsonl(f) == ""
+
+    def test_returns_empty_for_missing_file(self, tmp_path: Path):
+        assert read_summary_from_jsonl(tmp_path / "nonexistent.jsonl") == ""

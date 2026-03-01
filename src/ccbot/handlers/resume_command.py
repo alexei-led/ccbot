@@ -1,7 +1,8 @@
 """Resume command — browse and resume past Claude Code sessions.
 
-Implements /resume: scans all sessions-index files under ~/.claude/projects/,
-groups them by project directory, and shows a paginated inline keyboard.
+Implements /resume: scans session data under ~/.claude/projects/, supporting
+both legacy sessions-index.json and bare JSONL files (Claude Code >= Feb 2026).
+Groups sessions by project directory and shows a paginated inline keyboard.
 On selection, creates a tmux window with `claude --resume <id>` and binds
 the current topic.
 
@@ -29,6 +30,7 @@ from ..config import config
 from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
+from ..utils import read_cwd_from_jsonl, read_summary_from_jsonl
 from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
 from .callback_helpers import get_thread_id
 from .message_sender import safe_edit, safe_reply
@@ -43,7 +45,7 @@ _IndexParseError = (json.JSONDecodeError, OSError)
 
 @dataclass
 class ResumeEntry:
-    """A resumable session discovered from sessions-index."""
+    """A resumable session discovered from project directories."""
 
     session_id: str
     summary: str
@@ -51,7 +53,10 @@ class ResumeEntry:
 
 
 def scan_all_sessions() -> list[ResumeEntry]:
-    """Scan all sessions-index files for resumable sessions.
+    """Scan project directories for resumable sessions.
+
+    Supports both legacy sessions-index.json and bare JSONL files
+    (Claude Code >= Feb 2026 no longer writes index files).
 
     Returns entries sorted by file mtime (most recent first),
     deduplicated by session_id.
@@ -65,37 +70,82 @@ def scan_all_sessions() -> list[ResumeEntry]:
     for project_dir in config.claude_projects_path.iterdir():
         if not project_dir.is_dir():
             continue
+
+        # Try legacy sessions-index.json first
         index_file = project_dir / "sessions-index.json"
-        if not index_file.exists():
-            continue
-        try:
-            index_data = json.loads(index_file.read_text(encoding="utf-8"))
-        except _IndexParseError:
-            continue
+        if index_file.exists():
+            _scan_index_file(index_file, seen_ids, candidates)
 
-        original_path = index_data.get("originalPath", "")
-        for entry in index_data.get("entries", []):
-            session_id = entry.get("sessionId", "")
-            full_path = entry.get("fullPath", "")
-            if not session_id or not full_path or session_id in seen_ids:
-                continue
-
-            file_path = Path(full_path)
-            if not file_path.exists():
-                continue
-
-            try:
-                mtime = file_path.stat().st_mtime
-            except OSError:
-                mtime = 0.0
-
-            cwd = entry.get("projectPath", original_path)
-            summary = entry.get("summary", "") or session_id[:12]
-            seen_ids.add(session_id)
-            candidates.append((mtime, ResumeEntry(session_id, summary, cwd)))
+        # Pick up bare JSONL files (no index required)
+        _scan_bare_jsonl(project_dir, seen_ids, candidates)
 
     candidates.sort(key=lambda c: c[0], reverse=True)
     return [entry for _, entry in candidates]
+
+
+def _scan_index_file(
+    index_file: Path,
+    seen_ids: set[str],
+    candidates: list[tuple[float, ResumeEntry]],
+) -> None:
+    """Scan a sessions-index.json for resumable sessions."""
+    try:
+        index_data = json.loads(index_file.read_text(encoding="utf-8"))
+    except _IndexParseError:
+        return
+
+    original_path = index_data.get("originalPath", "")
+    for entry in index_data.get("entries", []):
+        session_id = entry.get("sessionId", "")
+        full_path = entry.get("fullPath", "")
+        if not session_id or not full_path or session_id in seen_ids:
+            continue
+
+        file_path = Path(full_path)
+        if not file_path.exists():
+            continue
+
+        try:
+            mtime = file_path.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+
+        cwd = entry.get("projectPath", original_path)
+        summary = (
+            entry.get("summary", "") or entry.get("firstPrompt", "") or session_id[:12]
+        )
+        seen_ids.add(session_id)
+        candidates.append((mtime, ResumeEntry(session_id, summary, cwd)))
+
+
+def _scan_bare_jsonl(
+    project_dir: Path,
+    seen_ids: set[str],
+    candidates: list[tuple[float, ResumeEntry]],
+) -> None:
+    """Scan bare JSONL files not covered by a sessions-index."""
+    try:
+        jsonl_files = list(project_dir.glob("*.jsonl"))
+    except OSError:
+        return
+
+    for jsonl_file in jsonl_files:
+        session_id = jsonl_file.stem
+        if session_id in seen_ids:
+            continue
+
+        cwd = read_cwd_from_jsonl(jsonl_file)
+        if not cwd:
+            continue
+
+        try:
+            mtime = jsonl_file.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+
+        summary = read_summary_from_jsonl(jsonl_file) or session_id[:12]
+        seen_ids.add(session_id)
+        candidates.append((mtime, ResumeEntry(session_id, summary, cwd)))
 
 
 def _build_resume_keyboard(

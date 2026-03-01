@@ -40,8 +40,26 @@ _topic_states: dict[tuple[int, int], str] = {}
 # Pending transitions: (chat_id, thread_id) -> (desired_state, first_seen_monotonic)
 _pending_transitions: dict[tuple[int, int], tuple[str, float]] = {}
 
+# Topic display names: (chat_id, thread_id) -> clean name (without emoji prefix).
+# Set once on first emoji update; reused on subsequent updates to avoid overwriting
+# the topic name with the tmux window name (which may differ due to deduplication).
+_topic_names: dict[tuple[int, int], str] = {}
+
 # Chats where editForumTopic is disabled due to permission errors
 _disabled_chats: set[int] = set()
+
+
+def _resolve_topic_name(key: tuple[int, int], display_name: str) -> str:
+    """Return the clean topic name, storing it on first call per topic.
+
+    Uses the stored name on subsequent calls to avoid overwriting the Telegram
+    topic name with the tmux window name (which may differ due to deduplication).
+    """
+    if key in _topic_names:
+        return _topic_names[key]
+    clean = strip_emoji_prefix(display_name)
+    _topic_names[key] = clean
+    return clean
 
 
 async def update_topic_emoji(
@@ -99,8 +117,7 @@ async def update_topic_emoji(
     # Debounce passed — execute the transition
     _pending_transitions.pop(key, None)
 
-    # Strip any existing emoji prefix from display name
-    clean_name = strip_emoji_prefix(display_name)
+    clean_name = _resolve_topic_name(key, display_name)
     new_name = f"{emoji} {clean_name}"
 
     try:
@@ -177,6 +194,7 @@ async def rename_topic(
             message_thread_id=thread_id,
             name=new_name,
         )
+        _topic_names[key] = clean_name
         logger.debug(
             "Renamed topic: chat=%d thread=%d name='%s'",
             chat_id,
@@ -201,6 +219,7 @@ def clear_topic_emoji_state(chat_id: int, thread_id: int) -> None:
     key = (chat_id, thread_id)
     _topic_states.pop(key, None)
     _pending_transitions.pop(key, None)
+    _topic_names.pop(key, None)
 
 
 def reset_all_state() -> None:
@@ -208,3 +227,4 @@ def reset_all_state() -> None:
     _topic_states.clear()
     _pending_transitions.clear()
     _disabled_chats.clear()
+    _topic_names.clear()
