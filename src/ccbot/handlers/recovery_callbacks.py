@@ -24,7 +24,7 @@ from ..config import config
 from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
-from ..utils import read_cwd_from_jsonl, read_summary_from_jsonl
+from ..utils import read_session_metadata_from_jsonl
 from .callback_data import (
     CB_RECOVERY_BACK,
     CB_RECOVERY_CANCEL,
@@ -49,7 +49,7 @@ _MAX_RESUME_SESSIONS = 6
 
 @dataclass
 class _SessionEntry:
-    """A resumable session discovered from sessions-index."""
+    """A resumable session discovered from project directories."""
 
     session_id: str
     summary: str
@@ -206,16 +206,16 @@ def _scan_bare_jsonl_for_cwd(
 ) -> None:
     """Scan bare JSONL files for sessions matching a cwd."""
     try:
-        jsonl_files = list(project_dir.glob("*.jsonl"))
+        jsonl_iter = project_dir.glob("*.jsonl")
     except OSError:
         return
 
-    for jsonl_file in jsonl_files:
+    for jsonl_file in jsonl_iter:
         session_id = jsonl_file.stem
         if session_id in seen_ids:
             continue
 
-        file_cwd = read_cwd_from_jsonl(jsonl_file)
+        file_cwd, summary = read_session_metadata_from_jsonl(jsonl_file)
         if not file_cwd:
             continue
 
@@ -232,9 +232,10 @@ def _scan_bare_jsonl_for_cwd(
         except OSError:
             mtime = 0.0
 
-        summary = read_summary_from_jsonl(jsonl_file) or session_id[:12]
         seen_ids.add(session_id)
-        candidates.append((mtime, _SessionEntry(session_id, summary)))
+        candidates.append(
+            (mtime, _SessionEntry(session_id, summary or session_id[:12]))
+        )
 
 
 async def handle_recovery_callback(

@@ -30,7 +30,7 @@ from ..config import config
 from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..tmux_manager import tmux_manager
-from ..utils import read_cwd_from_jsonl, read_summary_from_jsonl
+from ..utils import read_session_metadata_from_jsonl
 from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
 from .callback_helpers import get_thread_id
 from .message_sender import safe_edit, safe_reply
@@ -125,16 +125,16 @@ def _scan_bare_jsonl(
 ) -> None:
     """Scan bare JSONL files not covered by a sessions-index."""
     try:
-        jsonl_files = list(project_dir.glob("*.jsonl"))
+        jsonl_iter = project_dir.glob("*.jsonl")
     except OSError:
         return
 
-    for jsonl_file in jsonl_files:
+    for jsonl_file in jsonl_iter:
         session_id = jsonl_file.stem
         if session_id in seen_ids:
             continue
 
-        cwd = read_cwd_from_jsonl(jsonl_file)
+        cwd, summary = read_session_metadata_from_jsonl(jsonl_file)
         if not cwd:
             continue
 
@@ -143,9 +143,10 @@ def _scan_bare_jsonl(
         except OSError:
             mtime = 0.0
 
-        summary = read_summary_from_jsonl(jsonl_file) or session_id[:12]
         seen_ids.add(session_id)
-        candidates.append((mtime, ResumeEntry(session_id, summary, cwd)))
+        candidates.append(
+            (mtime, ResumeEntry(session_id, summary or session_id[:12], cwd))
+        )
 
 
 def _build_resume_keyboard(

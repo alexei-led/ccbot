@@ -6,6 +6,7 @@ Provides:
   - atomic_write_json(): crash-safe JSON file writes via temp+rename.
   - read_cwd_from_jsonl(): extract the cwd field from the first JSONL entry.
   - read_summary_from_jsonl(): extract a display summary from the first user message.
+  - read_session_metadata_from_jsonl(): single-pass extraction of (cwd, summary).
   - task_done_callback(): log unhandled exceptions from background asyncio tasks.
 """
 
@@ -60,14 +61,19 @@ def atomic_write_json(path: Path, data: Any, indent: int = 2) -> None:
         raise
 
 
+_CWD_SCAN_LINES = 20
+
+
 def read_cwd_from_jsonl(file_path: str | Path) -> str:
     """Read the cwd field from the first JSONL entry that has one.
 
-    Shared by session.py and session_monitor.py.
+    Scans up to _CWD_SCAN_LINES lines. Shared by session.py and session_monitor.py.
     """
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            for line in f:
+            for i, line in enumerate(f):
+                if i >= _CWD_SCAN_LINES:
+                    break
                 line = line.strip()
                 if not line:
                     continue
@@ -129,6 +135,50 @@ def read_summary_from_jsonl(file_path: str | Path) -> str:
     except OSError:
         pass
     return ""
+
+
+_METADATA_SCAN_LINES = 20
+
+
+def _extract_metadata_from_entry(data: dict, cwd: str, summary: str) -> tuple[str, str]:
+    """Extract cwd and summary fields from a single parsed JSONL entry."""
+    if not cwd:
+        found_cwd = data.get("cwd")
+        if found_cwd and isinstance(found_cwd, str):
+            cwd = found_cwd
+    if not summary and data.get("type") == "user":
+        msg = data.get("message", {})
+        if isinstance(msg, dict):
+            summary = _extract_user_text(msg)
+    return cwd, summary
+
+
+def read_session_metadata_from_jsonl(file_path: str | Path) -> tuple[str, str]:
+    """Extract cwd and summary from a JSONL transcript in a single file read.
+
+    Scans up to _METADATA_SCAN_LINES lines. Returns (cwd, summary) where either
+    may be empty if not found.
+    """
+    cwd = ""
+    summary = ""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for i, line in enumerate(f):
+                if i >= _METADATA_SCAN_LINES:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                cwd, summary = _extract_metadata_from_entry(data, cwd, summary)
+                if cwd and summary:
+                    break
+    except OSError:
+        pass
+    return cwd, summary
 
 
 def task_done_callback(task: asyncio.Task[None]) -> None:
