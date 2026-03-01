@@ -28,7 +28,12 @@ from .monitor_state import MonitorState, TrackedSession
 from .providers import get_provider_for_window
 from .session import parse_session_map
 from .tmux_manager import tmux_manager
-from .utils import log_throttled, read_cwd_from_jsonl, task_done_callback
+from .utils import (
+    log_throttle_reset,
+    log_throttled,
+    read_cwd_from_jsonl,
+    task_done_callback,
+)
 
 _CallbackError = (OSError, RuntimeError, TelegramError)
 # Top-level loop resilience: catch any error to keep monitoring alive
@@ -619,6 +624,7 @@ class SessionMonitor:
                 self._file_mtimes.pop(session_id, None)
                 self._pending_tools.pop(session_id, None)
                 self._last_activity.pop(session_id, None)
+                log_throttle_reset(f"partial-jsonl:{session_id}")
             self.state.save_if_dirty()
 
     async def _detect_and_cleanup_changes(self) -> dict[str, dict[str, str]]:
@@ -663,6 +669,7 @@ class SessionMonitor:
                 self._file_mtimes.pop(session_id, None)
                 self._pending_tools.pop(session_id, None)
                 self._last_activity.pop(session_id, None)
+                log_throttle_reset(f"partial-jsonl:{session_id}")
             self.state.save_if_dirty()
 
         # Detect new windows: set provider from session_map if available, then fire callback
