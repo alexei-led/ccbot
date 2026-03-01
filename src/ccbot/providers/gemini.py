@@ -18,6 +18,7 @@ Messages use ``type`` field with values ``"user"`` / ``"gemini"`` (not
 import json
 import os
 import re
+import threading
 from typing import Any, cast
 
 from ccbot.providers._jsonl import JsonlProvider
@@ -95,8 +96,10 @@ GEMINI_UI_PATTERNS: list[UIPattern] = [
 
 # Cache: file_path -> (mtime_ns, size, parsed_messages)
 # Bounded to prevent unbounded growth; oldest entries evicted when full.
+# Lock required: read_transcript_file runs in asyncio.to_thread() workers.
 _TRANSCRIPT_CACHE_MAX = 64
 _transcript_cache: dict[str, tuple[int, int, list[dict[str, Any]]]] = {}
+_transcript_cache_lock = threading.Lock()
 
 
 class GeminiProvider(JsonlProvider):
@@ -157,7 +160,8 @@ class GeminiProvider(JsonlProvider):
         except OSError:
             return [], last_offset
 
-        cached = _transcript_cache.get(file_path)
+        with _transcript_cache_lock:
+            cached = _transcript_cache.get(file_path)
         if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
             messages = list(cached[2])
         else:
@@ -176,10 +180,15 @@ class GeminiProvider(JsonlProvider):
 
             # Store a copy to prevent mutation of cached data
             messages = list(messages)
-            if len(_transcript_cache) >= _TRANSCRIPT_CACHE_MAX:
-                # Evict oldest entry (first inserted)
-                _transcript_cache.pop(next(iter(_transcript_cache)))
-            _transcript_cache[file_path] = (st.st_mtime_ns, st.st_size, messages)
+            with _transcript_cache_lock:
+                if len(_transcript_cache) >= _TRANSCRIPT_CACHE_MAX:
+                    # Evict first-inserted entry
+                    _transcript_cache.pop(next(iter(_transcript_cache)))
+                _transcript_cache[file_path] = (
+                    st.st_mtime_ns,
+                    st.st_size,
+                    messages,
+                )
 
         new_entries = messages[last_offset:]
         new_offset = len(messages)
