@@ -1,4 +1,4 @@
-.PHONY: fmt lint test typecheck check install dev build clean
+.PHONY: fmt lint test test-integration test-all typecheck check install dev build clean
 
 fmt:
 	uv run ruff format src/ tests/
@@ -10,9 +10,15 @@ typecheck:
 	uv run pyright src/ccbot/
 
 test:
-	uv run pytest tests/
+	uv run pytest tests/ -m "not integration"
 
-check: fmt lint typecheck test
+test-integration:
+	uv run pytest tests/integration/ -v
+
+test-all:
+	uv run pytest tests/ -v
+
+check: fmt lint typecheck test test-integration
 
 install:
 	uv sync
