@@ -5,7 +5,6 @@ Provides:
   - tmux_session_name(): resolve tmux session name from env.
   - atomic_write_json(): crash-safe JSON file writes via temp+rename.
   - read_cwd_from_jsonl(): extract the cwd field from the first JSONL entry.
-  - read_summary_from_jsonl(): extract a display summary from the first user message.
   - read_session_metadata_from_jsonl(): single-pass extraction of (cwd, summary).
   - task_done_callback(): log unhandled exceptions from background asyncio tasks.
 """
@@ -22,6 +21,11 @@ import contextlib
 logger = structlog.get_logger()
 
 CCBOT_DIR_ENV = "CCBOT_DIR"
+
+# Maximum number of JSONL lines to scan when extracting session metadata.
+_SCAN_LINES = 20
+
+_SUMMARY_MAX_CHARS = 80
 
 
 def ccbot_dir() -> Path:
@@ -61,36 +65,13 @@ def atomic_write_json(path: Path, data: Any, indent: int = 2) -> None:
         raise
 
 
-_CWD_SCAN_LINES = 20
-
-
 def read_cwd_from_jsonl(file_path: str | Path) -> str:
     """Read the cwd field from the first JSONL entry that has one.
 
-    Scans up to _CWD_SCAN_LINES lines. Shared by session.py and session_monitor.py.
+    Scans up to _SCAN_LINES lines. Shared by session.py and session_monitor.py.
     """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            for i, line in enumerate(f):
-                if i >= _CWD_SCAN_LINES:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    cwd = data.get("cwd")
-                    if cwd:
-                        return cwd
-                except json.JSONDecodeError:
-                    continue
-    except OSError:
-        pass
-    return ""
-
-
-_SUMMARY_SCAN_LINES = 20
-_SUMMARY_MAX_CHARS = 80
+    cwd, _ = read_session_metadata_from_jsonl(file_path)
+    return cwd
 
 
 def _extract_user_text(msg: dict[str, object]) -> str:
@@ -105,39 +86,6 @@ def _extract_user_text(msg: dict[str, object]) -> str:
     elif isinstance(content, str) and content:
         return content[:_SUMMARY_MAX_CHARS]
     return ""
-
-
-def read_summary_from_jsonl(file_path: str | Path) -> str:
-    """Extract a display summary from the first user message in a JSONL transcript.
-
-    Reads up to _SUMMARY_SCAN_LINES lines looking for a user-type entry.
-    Returns the first 80 chars of the text, or empty string if nothing found.
-    """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            for i, line in enumerate(f):
-                if i >= _SUMMARY_SCAN_LINES:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if data.get("type") != "user":
-                    continue
-                msg = data.get("message", {})
-                if isinstance(msg, dict):
-                    text = _extract_user_text(msg)
-                    if text:
-                        return text
-    except OSError:
-        pass
-    return ""
-
-
-_METADATA_SCAN_LINES = 20
 
 
 def _extract_metadata_from_entry(data: dict, cwd: str, summary: str) -> tuple[str, str]:
@@ -156,7 +104,7 @@ def _extract_metadata_from_entry(data: dict, cwd: str, summary: str) -> tuple[st
 def read_session_metadata_from_jsonl(file_path: str | Path) -> tuple[str, str]:
     """Extract cwd and summary from a JSONL transcript in a single file read.
 
-    Scans up to _METADATA_SCAN_LINES lines. Returns (cwd, summary) where either
+    Scans up to _SCAN_LINES lines. Returns (cwd, summary) where either
     may be empty if not found.
     """
     cwd = ""
@@ -164,7 +112,7 @@ def read_session_metadata_from_jsonl(file_path: str | Path) -> tuple[str, str]:
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             for i, line in enumerate(f):
-                if i >= _METADATA_SCAN_LINES:
+                if i >= _SCAN_LINES:
                     break
                 line = line.strip()
                 if not line:
@@ -172,6 +120,8 @@ def read_session_metadata_from_jsonl(file_path: str | Path) -> tuple[str, str]:
                 try:
                     data = json.loads(line)
                 except json.JSONDecodeError:
+                    continue
+                if not isinstance(data, dict):
                     continue
                 cwd, summary = _extract_metadata_from_entry(data, cwd, summary)
                 if cwd and summary:

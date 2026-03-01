@@ -1,4 +1,4 @@
-"""Tests for ccbot.utils: ccbot_dir, atomic_write_json, read_cwd_from_jsonl, read_summary_from_jsonl, read_session_metadata_from_jsonl."""
+"""Tests for ccbot.utils: ccbot_dir, atomic_write_json, read_cwd_from_jsonl, read_session_metadata_from_jsonl."""
 
 import json
 from pathlib import Path
@@ -6,14 +6,11 @@ from pathlib import Path
 import pytest
 
 from ccbot.utils import (
-    _CWD_SCAN_LINES,
-    _METADATA_SCAN_LINES,
-    _SUMMARY_SCAN_LINES,
+    _SCAN_LINES,
     atomic_write_json,
     ccbot_dir,
     read_cwd_from_jsonl,
     read_session_metadata_from_jsonl,
-    read_summary_from_jsonl,
 )
 
 
@@ -82,7 +79,7 @@ class TestReadCwdFromJsonl:
 
     def test_scan_limit_stops_reading(self, tmp_path: Path):
         f = tmp_path / "session.jsonl"
-        filler = [json.dumps({"type": "init"}) for _ in range(_CWD_SCAN_LINES)]
+        filler = [json.dumps({"type": "init"}) for _ in range(_SCAN_LINES)]
         filler.append(json.dumps({"cwd": "/too/late"}))
         f.write_text("\n".join(filler) + "\n")
         assert read_cwd_from_jsonl(f) == ""
@@ -96,80 +93,14 @@ class TestReadCwdFromJsonl:
         f.write_text("\n".join(lines) + "\n")
         assert read_cwd_from_jsonl(f) == "/found/after/garbage"
 
-
-class TestReadSummaryFromJsonl:
-    def test_extracts_text_from_content_blocks(self, tmp_path: Path):
-        f = tmp_path / "session.jsonl"
-        entry = {
-            "type": "user",
-            "message": {"content": [{"type": "text", "text": "Fix the bug"}]},
-        }
-        f.write_text(json.dumps(entry) + "\n")
-        assert read_summary_from_jsonl(f) == "Fix the bug"
-
-    def test_extracts_string_content(self, tmp_path: Path):
-        f = tmp_path / "session.jsonl"
-        entry = {"type": "user", "message": {"content": "Hello world"}}
-        f.write_text(json.dumps(entry) + "\n")
-        assert read_summary_from_jsonl(f) == "Hello world"
-
-    def test_skips_non_user_entries(self, tmp_path: Path):
+    def test_non_string_cwd_ignored(self, tmp_path: Path):
         f = tmp_path / "session.jsonl"
         lines = [
-            json.dumps({"type": "file-history-snapshot"}),
-            json.dumps({"type": "assistant", "message": {"content": "I will help"}}),
-            json.dumps(
-                {
-                    "type": "user",
-                    "message": {"content": [{"type": "text", "text": "Second msg"}]},
-                }
-            ),
+            json.dumps({"cwd": 123}),
+            json.dumps({"cwd": "/real/path"}),
         ]
         f.write_text("\n".join(lines) + "\n")
-        assert read_summary_from_jsonl(f) == "Second msg"
-
-    def test_truncates_long_text(self, tmp_path: Path):
-        f = tmp_path / "session.jsonl"
-        long_text = "x" * 200
-        entry = {"type": "user", "message": {"content": long_text}}
-        f.write_text(json.dumps(entry) + "\n")
-        assert len(read_summary_from_jsonl(f)) == 80
-
-    def test_returns_empty_for_no_user_messages(self, tmp_path: Path):
-        f = tmp_path / "session.jsonl"
-        f.write_text(json.dumps({"type": "assistant"}) + "\n")
-        assert read_summary_from_jsonl(f) == ""
-
-    def test_returns_empty_for_missing_file(self, tmp_path: Path):
-        assert read_summary_from_jsonl(tmp_path / "nonexistent.jsonl") == ""
-
-    def test_scan_limit_stops_reading(self, tmp_path: Path):
-        f = tmp_path / "session.jsonl"
-        filler = [json.dumps({"type": "init"}) for _ in range(_SUMMARY_SCAN_LINES)]
-        filler.append(
-            json.dumps(
-                {
-                    "type": "user",
-                    "message": {"content": "Too late"},
-                }
-            )
-        )
-        f.write_text("\n".join(filler) + "\n")
-        assert read_summary_from_jsonl(f) == ""
-
-    def test_malformed_json_lines_skipped(self, tmp_path: Path):
-        f = tmp_path / "session.jsonl"
-        lines = [
-            "not valid json{{{",
-            json.dumps(
-                {
-                    "type": "user",
-                    "message": {"content": "Found after garbage"},
-                }
-            ),
-        ]
-        f.write_text("\n".join(lines) + "\n")
-        assert read_summary_from_jsonl(f) == "Found after garbage"
+        assert read_cwd_from_jsonl(f) == "/real/path"
 
 
 class TestReadSessionMetadataFromJsonl:
@@ -227,7 +158,7 @@ class TestReadSessionMetadataFromJsonl:
 
     def test_scan_limit_stops_reading(self, tmp_path: Path):
         f = tmp_path / "session.jsonl"
-        filler = [json.dumps({"type": "init"}) for _ in range(_METADATA_SCAN_LINES)]
+        filler = [json.dumps({"type": "init"}) for _ in range(_SCAN_LINES)]
         filler.append(json.dumps({"cwd": "/too/late"}))
         f.write_text("\n".join(filler) + "\n")
         cwd, summary = read_session_metadata_from_jsonl(f)
@@ -267,3 +198,49 @@ class TestReadSessionMetadataFromJsonl:
         cwd, summary = read_session_metadata_from_jsonl(f)
         assert cwd == "/proj"
         assert summary == "Go"
+
+    def test_non_dict_jsonl_lines_skipped(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            "[1, 2, 3]",
+            '"bare string"',
+            json.dumps({"cwd": "/my/project"}),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        cwd, summary = read_session_metadata_from_jsonl(f)
+        assert cwd == "/my/project"
+        assert summary == ""
+
+    def test_extracts_text_from_content_blocks(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        entry = {
+            "type": "user",
+            "message": {"content": [{"type": "text", "text": "Fix the bug"}]},
+        }
+        f.write_text(json.dumps(entry) + "\n")
+        _, summary = read_session_metadata_from_jsonl(f)
+        assert summary == "Fix the bug"
+
+    def test_truncates_long_summary(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        long_text = "x" * 200
+        entry = {"type": "user", "message": {"content": long_text}}
+        f.write_text(json.dumps(entry) + "\n")
+        _, summary = read_session_metadata_from_jsonl(f)
+        assert len(summary) == 80
+
+    def test_skips_non_user_entries_for_summary(self, tmp_path: Path):
+        f = tmp_path / "session.jsonl"
+        lines = [
+            json.dumps({"type": "file-history-snapshot"}),
+            json.dumps({"type": "assistant", "message": {"content": "I will help"}}),
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {"content": [{"type": "text", "text": "Second msg"}]},
+                }
+            ),
+        ]
+        f.write_text("\n".join(lines) + "\n")
+        _, summary = read_session_metadata_from_jsonl(f)
+        assert summary == "Second msg"
