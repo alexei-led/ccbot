@@ -69,7 +69,7 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
         return
 
     tool_name = event.data.get("tool_name", "")
-    logger.info(
+    logger.debug(
         "Hook notification: tool_name=%s, window_key=%s",
         tool_name,
         event.window_key,
@@ -118,7 +118,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
 
     now = time.monotonic()
     stop_reason = event.data.get("stop_reason", "")
-    logger.info(
+    logger.debug(
         "Hook stop: window_key=%s, stop_reason=%s",
         event.window_key,
         stop_reason,
@@ -159,7 +159,7 @@ async def _handle_subagent_start(event: HookEvent, bot: Bot) -> None:  # noqa: A
     _active_subagents.setdefault(window_id, set()).add(subagent_id)
 
     count = len(_active_subagents[window_id])
-    logger.info(
+    logger.debug(
         "Subagent started: window=%s, count=%d, name=%s",
         window_id,
         count,
@@ -184,7 +184,7 @@ async def _handle_subagent_stop(event: HookEvent, bot: Bot) -> None:  # noqa: AR
         _active_subagents.pop(window_id, None)
 
     count = get_subagent_count(window_id)
-    logger.info(
+    logger.debug(
         "Subagent stopped: window=%s, remaining=%d, id=%s",
         window_id,
         count,
@@ -251,5 +251,19 @@ async def dispatch_hook_event(event: HookEvent, bot: Bot) -> None:
             await _handle_teammate_idle(event, bot)
         case "TaskCompleted":
             await _handle_task_completed(event, bot)
+        case (
+            "SessionStart"
+            | "SessionEnd"
+            | "UserPromptSubmit"
+            | "PreToolUse"
+            | "PostToolUse"
+            | "PostToolUseFailure"
+            | "PermissionRequest"
+            | "ConfigChange"
+            | "WorktreeCreate"
+            | "WorktreeRemove"
+            | "PreCompact"
+        ):
+            pass  # Not actionable for the bot — SessionStart handled via session_map.json
         case _:
             logger.debug("Ignoring unknown hook event type: %s", event.event_type)
