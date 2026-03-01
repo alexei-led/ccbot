@@ -16,6 +16,7 @@ Messages use ``type`` field with values ``"user"`` / ``"gemini"`` (not
 """
 
 import json
+import os
 import re
 from typing import Any, cast
 
@@ -93,6 +94,8 @@ GEMINI_UI_PATTERNS: list[UIPattern] = [
 
 
 # Cache: file_path -> (mtime_ns, size, parsed_messages)
+# Bounded to prevent unbounded growth; oldest entries evicted when full.
+_TRANSCRIPT_CACHE_MAX = 64
 _transcript_cache: dict[str, tuple[int, int, list[dict[str, Any]]]] = {}
 
 
@@ -148,17 +151,15 @@ class GeminiProvider(JsonlProvider):
 
         Uses an mtime+size cache to skip re-parsing when the file is unchanged.
         """
-        import os
 
         try:
             st = os.stat(file_path)
         except OSError:
             return [], last_offset
 
-        cache_key = file_path
-        cached = _transcript_cache.get(cache_key)
+        cached = _transcript_cache.get(file_path)
         if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
-            messages = cached[2]
+            messages = list(cached[2])
         else:
             try:
                 with open(file_path, encoding="utf-8") as f:
@@ -173,7 +174,12 @@ class GeminiProvider(JsonlProvider):
             if not isinstance(messages, list):
                 return [], last_offset
 
-            _transcript_cache[cache_key] = (st.st_mtime_ns, st.st_size, messages)
+            # Store a copy to prevent mutation of cached data
+            messages = list(messages)
+            if len(_transcript_cache) >= _TRANSCRIPT_CACHE_MAX:
+                # Evict oldest entry (first inserted)
+                _transcript_cache.pop(next(iter(_transcript_cache)))
+            _transcript_cache[file_path] = (st.st_mtime_ns, st.st_size, messages)
 
         new_entries = messages[last_offset:]
         new_offset = len(messages)

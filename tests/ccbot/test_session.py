@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from ccbot.session import SessionManager
+from ccbot.session import SessionManager, WindowState
 
 
 @pytest.fixture
@@ -122,7 +122,6 @@ class TestIsWindowId:
 class TestFindUsersForSession:
     @staticmethod
     def _ws(session_id: str):
-        from ccbot.session import WindowState
 
         return WindowState(session_id=session_id, cwd="/tmp")
 
@@ -155,7 +154,6 @@ class TestLoadSessionMapDisplayName:
     async def test_preserves_existing_display_name_on_stale_session_map(
         self, mgr: SessionManager, tmp_path, monkeypatch
     ) -> None:
-        from ccbot.session import WindowState
 
         session_map_file = tmp_path / "session_map.json"
         session_map_file.write_text(
@@ -263,7 +261,6 @@ class TestPruneSessionMap:
     def test_removes_dead_windows(
         self, mgr: SessionManager, tmp_path, monkeypatch
     ) -> None:
-        from ccbot.session import WindowState
 
         session_map_file = tmp_path / "session_map.json"
         session_map_file.write_text(
@@ -351,27 +348,23 @@ class TestPruneSessionMap:
 
 class TestWindowStateProviderName:
     def test_default_provider_name_is_empty(self) -> None:
-        from ccbot.session import WindowState
 
         ws = WindowState()
         assert ws.provider_name == ""
 
     def test_to_dict_omits_empty_provider(self) -> None:
-        from ccbot.session import WindowState
 
         ws = WindowState(session_id="s1", cwd="/tmp")
         d = ws.to_dict()
         assert "provider_name" not in d
 
     def test_to_dict_includes_provider_when_set(self) -> None:
-        from ccbot.session import WindowState
 
         ws = WindowState(session_id="s1", cwd="/tmp", provider_name="codex")
         d = ws.to_dict()
         assert d["provider_name"] == "codex"
 
     def test_from_dict_reads_provider(self) -> None:
-        from ccbot.session import WindowState
 
         ws = WindowState.from_dict(
             {"session_id": "s1", "cwd": "/tmp", "provider_name": "gemini"}
@@ -379,13 +372,11 @@ class TestWindowStateProviderName:
         assert ws.provider_name == "gemini"
 
     def test_from_dict_defaults_to_empty(self) -> None:
-        from ccbot.session import WindowState
 
         ws = WindowState.from_dict({"session_id": "s1", "cwd": "/tmp"})
         assert ws.provider_name == ""
 
     def test_round_trip_serialization(self) -> None:
-        from ccbot.session import WindowState
 
         original = WindowState(
             session_id="s1",
@@ -399,13 +390,20 @@ class TestWindowStateProviderName:
 
 
 class TestGlobFallbackCwdUpdate:
+    @pytest.fixture(autouse=True)
+    def _mock_provider(self, monkeypatch):
+        from ccbot.providers.claude import ClaudeProvider
+
+        monkeypatch.setattr(
+            "ccbot.session.get_provider_for_window",
+            lambda _wid: ClaudeProvider(),
+        )
+
     async def test_glob_fallback_updates_cwd_when_dir_exists(
         self, mgr: SessionManager, tmp_path, monkeypatch
     ) -> None:
         from pathlib import Path
         from unittest.mock import patch
-
-        from ccbot.session import WindowState
 
         # Simulate: encoded dir "-data-code-proj" → decoded "/data/code/proj"
         projects_path = tmp_path / "projects"
@@ -415,12 +413,6 @@ class TestGlobFallbackCwdUpdate:
         session_file.write_text('{"type":"summary","summary":"test"}\n')
 
         monkeypatch.setattr("ccbot.session.config.claude_projects_path", projects_path)
-        monkeypatch.setattr(
-            "ccbot.session.get_provider_for_window",
-            lambda wid: __import__(
-                "ccbot.providers.claude", fromlist=["ClaudeProvider"]
-            ).ClaudeProvider(),
-        )
 
         mgr.window_states["@1"] = WindowState(
             session_id="session-abc", cwd="/wrong/path"
@@ -443,8 +435,6 @@ class TestGlobFallbackCwdUpdate:
     async def test_glob_fallback_skips_update_for_nonexistent_decoded_path(
         self, mgr: SessionManager, tmp_path, monkeypatch
     ) -> None:
-        from ccbot.session import WindowState
-
         # Use a path with hyphens — decoded cwd won't be a real directory
         # e.g., -tmp-my-project decodes to /tmp/my/project (doesn't exist)
         projects_path = tmp_path / "projects"
@@ -454,12 +444,6 @@ class TestGlobFallbackCwdUpdate:
         session_file.write_text('{"type":"summary","summary":"test"}\n')
 
         monkeypatch.setattr("ccbot.session.config.claude_projects_path", projects_path)
-        monkeypatch.setattr(
-            "ccbot.session.get_provider_for_window",
-            lambda wid: __import__(
-                "ccbot.providers.claude", fromlist=["ClaudeProvider"]
-            ).ClaudeProvider(),
-        )
 
         mgr.window_states["@2"] = WindowState(session_id="sid-456", cwd="/wrong/path")
 
@@ -479,19 +463,13 @@ class TestGlobFallbackCwdUpdate:
         session_file.write_text('{"type":"summary","summary":"test"}\n')
 
         monkeypatch.setattr("ccbot.session.config.claude_projects_path", projects_path)
-        monkeypatch.setattr(
-            "ccbot.session.get_provider_for_window",
-            lambda wid: __import__(
-                "ccbot.providers.claude", fromlist=["ClaudeProvider"]
-            ).ClaudeProvider(),
-        )
 
         # No window state before the call
         session = await mgr._get_session_direct("sid-123", "/wrong/path")
 
         assert session is not None
         # No window state created without window_id
-        assert "@1" not in mgr.window_states
+        assert not mgr.window_states
 
 
 class TestSetWindowProvider:

@@ -385,7 +385,15 @@ class TestForwardMessage:
 
 
 class TestBashCaptureCleanup:
-    async def test_cleanup_on_completion(self) -> None:
+    @pytest.fixture(autouse=True)
+    def _clear_bash_tasks(self):
+        from ccbot.handlers.text_handler import _bash_capture_tasks
+
+        _bash_capture_tasks.clear()
+        yield
+        _bash_capture_tasks.clear()
+
+    async def test_cleanup_on_early_return(self) -> None:
         from ccbot.handlers.text_handler import (
             _bash_capture_tasks,
             _capture_bash_output,
@@ -398,6 +406,7 @@ class TestBashCaptureCleanup:
             patch(f"{_TH}.session_manager") as mock_sm,
         ):
             mock_sm.resolve_chat_id.return_value = 999
+            # capture_pane returns None → early return in first iteration
             mock_tm.capture_pane = AsyncMock(return_value=None)
 
             task = asyncio.create_task(
@@ -416,12 +425,18 @@ class TestBashCaptureCleanup:
 
         key = (777, 666)
 
-        with patch(f"{_TH}.session_manager"):
+        with (
+            patch(f"{_TH}.tmux_manager") as mock_tm,
+            patch(f"{_TH}.session_manager") as mock_sm,
+        ):
+            mock_sm.resolve_chat_id.return_value = 777
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+
             task = asyncio.create_task(
                 _capture_bash_output(AsyncMock(), 777, 666, "@0", "ls")
             )
             _bash_capture_tasks[key] = task
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0)
             task.cancel()
             # CancelledError is caught inside _capture_bash_output
             await task
@@ -453,7 +468,7 @@ class TestBashCaptureCleanup:
                 _capture_bash_output(AsyncMock(), 555, 444, "@0", "ls")
             )
             _bash_capture_tasks[key] = task_a
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0)
 
             # Simulate _forward_message replacing Task A with Task B
             task_a.cancel()
@@ -463,4 +478,3 @@ class TestBashCaptureCleanup:
 
         # Task B must NOT have been evicted
         assert _bash_capture_tasks.get(key) is sentinel
-        _bash_capture_tasks.pop(key, None)  # cleanup

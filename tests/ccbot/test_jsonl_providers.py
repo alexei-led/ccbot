@@ -5,6 +5,7 @@ builtin command sets, capability flags, and shared JSONL parsing edge cases.
 """
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -542,6 +543,14 @@ class TestGeminiReadTranscriptFile:
 
 
 class TestGeminiMtimeCache:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from ccbot.providers.gemini import _transcript_cache
+
+        _transcript_cache.clear()
+        yield
+        _transcript_cache.clear()
+
     def test_cache_hit_skips_reparse(self, tmp_path) -> None:
         f = tmp_path / "transcript.json"
         f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
@@ -551,9 +560,12 @@ class TestGeminiMtimeCache:
         entries1, _ = gemini.read_transcript_file(str(f), 0)
         assert len(entries1) == 4
 
-        # Overwrite file content with garbage but keep same mtime/size
-        # by reading twice without modifying — cache should return same result
-        entries2, offset2 = gemini.read_transcript_file(str(f), 0)
+        # Patch json.load to prove second read uses cache, not file
+        with patch(
+            "ccbot.providers.gemini.json.load",
+            side_effect=AssertionError("should not be called"),
+        ):
+            entries2, offset2 = gemini.read_transcript_file(str(f), 0)
         assert len(entries2) == 4
         assert offset2 == 4
 
@@ -568,7 +580,7 @@ class TestGeminiMtimeCache:
         assert len(entries1) == 2
         assert offset1 == 2
 
-        # Append messages — file size and mtime change
+        # Overwrite with more messages — size and mtime both change
         data["messages"] = list(_SAMPLE_GEMINI_TRANSCRIPT["messages"])
         f.write_text(json.dumps(data))
 
