@@ -10,7 +10,8 @@ Provides background polling of terminal status lines for all active users:
   - Auto-kills unbound windows (topic closed, window kept alive) after TTL
   - Periodically probes topic existence via unpin_all_forum_topic_messages
     (silent no-op when no pins); cleans up deleted topics (kills tmux window
-    + unbinds thread)
+    + unbinds thread). Consecutive probe failures are tracked per window;
+    after _MAX_PROBE_FAILURES timeouts, probing is suspended until user activity
 
 Key components:
   - STATUS_POLL_INTERVAL: Polling frequency (1 second)
@@ -86,6 +87,11 @@ _unbound_window_timers: dict[str, float] = {}
 # Until a spinner is seen, the window is treated as "active" (starting up),
 # not "idle", to avoid showing 💤 during Claude Code startup.
 _has_seen_status: set[str] = set()
+
+# Consecutive topic probe failures per window_id. After _MAX_PROBE_FAILURES
+# consecutive timeouts, probing is suspended to stop log spam and useless API calls.
+_MAX_PROBE_FAILURES = 3
+_probe_failures: dict[str, int] = {}
 
 # Typing indicator throttle: (user_id, thread_id) -> monotonic time last sent.
 # Telegram typing action expires after ~5s; we re-send every 4s.
@@ -192,6 +198,16 @@ def clear_dead_notification(user_id: int, thread_id: int) -> None:
 def reset_dead_notification_state() -> None:
     """Reset all dead notification tracking (for testing)."""
     _dead_notified.clear()
+
+
+def clear_probe_failures(window_id: str) -> None:
+    """Reset probe failure counter for a window (e.g. on user activity)."""
+    _probe_failures.pop(window_id, None)
+
+
+def reset_probe_failures_state() -> None:
+    """Reset all probe failure tracking (for testing)."""
+    _probe_failures.clear()
 
 
 def clear_typing_state(user_id: int, thread_id: int) -> None:
@@ -748,6 +764,58 @@ async def _handle_dead_window_notification(
         _dead_notified.add(dead_key)
 
 
+def _record_probe_failure(window_id: str) -> int:
+    """Increment probe failure counter; log once when threshold is reached."""
+    count = _probe_failures.get(window_id, 0) + 1
+    _probe_failures[window_id] = count
+    if count == _MAX_PROBE_FAILURES:
+        logger.info(
+            "Suspending topic probe for %s after %d consecutive failures",
+            window_id,
+            count,
+        )
+    return count
+
+
+async def _probe_topic_existence(bot: Bot) -> None:
+    """Probe all bound topics via Telegram API; detect deleted topics."""
+    for user_id, thread_id, wid in list(session_manager.iter_thread_bindings()):
+        if _probe_failures.get(wid, 0) >= _MAX_PROBE_FAILURES:
+            continue
+        try:
+            await bot.unpin_all_forum_topic_messages(
+                chat_id=session_manager.resolve_chat_id(user_id, thread_id),
+                message_thread_id=thread_id,
+            )
+            _probe_failures.pop(wid, None)
+        except TelegramError as e:
+            if isinstance(e, BadRequest) and "Topic_id_invalid" in e.message:
+                # Topic deleted — kill window, unbind, and clean up state
+                w = await tmux_manager.find_window_by_id(wid)
+                if w:
+                    await tmux_manager.kill_window(w.window_id)
+                _probe_failures.pop(wid, None)
+                await clear_topic_state(user_id, thread_id, bot, window_id=wid)
+                session_manager.unbind_thread(user_id, thread_id)
+                logger.info(
+                    "Topic deleted: killed window_id '%s' and "
+                    "unbound thread %d for user %d",
+                    wid,
+                    thread_id,
+                    user_id,
+                )
+            else:
+                count = _record_probe_failure(wid)
+                if count < _MAX_PROBE_FAILURES:
+                    log_throttled(
+                        logger,
+                        f"topic-probe:{wid}",
+                        "Topic probe error for %s: %s",
+                        wid,
+                        e,
+                    )
+
+
 async def status_poll_loop(bot: Bot) -> None:
     """Background task to poll terminal status for all thread-bound windows."""
     logger.info("Status polling started (interval: %ss)", STATUS_POLL_INTERVAL)
@@ -759,47 +827,7 @@ async def status_poll_loop(bot: Bot) -> None:
             now = time.monotonic()
             if now - last_topic_check >= TOPIC_CHECK_INTERVAL:
                 last_topic_check = now
-                for user_id, thread_id, wid in list(
-                    session_manager.iter_thread_bindings()
-                ):
-                    try:
-                        await bot.unpin_all_forum_topic_messages(
-                            chat_id=session_manager.resolve_chat_id(user_id, thread_id),
-                            message_thread_id=thread_id,
-                        )
-                    except BadRequest as e:
-                        if "Topic_id_invalid" in e.message:
-                            # Topic deleted — kill window, unbind, and clean up state
-                            w = await tmux_manager.find_window_by_id(wid)
-                            if w:
-                                await tmux_manager.kill_window(w.window_id)
-                            session_manager.unbind_thread(user_id, thread_id)
-                            await clear_topic_state(
-                                user_id, thread_id, bot, window_id=wid
-                            )
-                            logger.info(
-                                "Topic deleted: killed window_id '%s' and "
-                                "unbound thread %d for user %d",
-                                wid,
-                                thread_id,
-                                user_id,
-                            )
-                        else:
-                            log_throttled(
-                                logger,
-                                f"topic-probe:{wid}",
-                                "Topic probe error for %s: %s",
-                                wid,
-                                e,
-                            )
-                    except TelegramError as e:
-                        log_throttled(
-                            logger,
-                            f"topic-probe:{wid}",
-                            "Topic probe error for %s: %s",
-                            wid,
-                            e,
-                        )
+                await _probe_topic_existence(bot)
 
             for user_id, thread_id, wid in list(session_manager.iter_thread_bindings()):
                 structlog.contextvars.clear_contextvars()

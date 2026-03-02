@@ -60,6 +60,7 @@ async def clear_topic_state(
         clear_autoclose_timer,
         clear_dead_notification,
         clear_idle_clear_timer,
+        clear_probe_failures,
         clear_screen_buffer,
         clear_seen_status,
         clear_typing_state,
@@ -70,6 +71,7 @@ async def clear_topic_state(
     clear_typing_state(user_id, thread_id)
     clear_idle_clear_timer(user_id, thread_id)
     if window_id:
+        clear_probe_failures(window_id)
         clear_seen_status(window_id)
         clear_screen_buffer(window_id)
         log_throttle_reset(f"topic-probe:{window_id}")

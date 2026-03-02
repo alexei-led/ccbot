@@ -38,6 +38,7 @@ from .message_sender import (
     safe_reply,
 )
 from .recovery_callbacks import build_recovery_keyboard
+from .status_polling import clear_probe_failures
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 from ..markdown_v2 import convert_markdown
 from ..session import session_manager
@@ -336,6 +337,8 @@ async def _forward_message(
 
     # Cancel any running bash capture — new message pushes pane content down
     _cancel_bash_capture(user_id, thread_id)
+
+    clear_probe_failures(window_id)
 
     success, err_message = await session_manager.send_to_window(window_id, text)
     if not success:

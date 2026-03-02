@@ -6,6 +6,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from telegram.error import BadRequest, TelegramError
 
 from conftest import make_mock_provider
 
@@ -19,6 +20,9 @@ from ccbot.handlers.status_polling import (
     _has_seen_status,
     _idle_clear_timers,
     _idle_status_cleared,
+    _MAX_PROBE_FAILURES,
+    _probe_failures,
+    _probe_topic_existence,
     _start_autoclose_timer,
     _start_idle_clear_timer,
     _startup_times,
@@ -26,6 +30,7 @@ from ccbot.handlers.status_polling import (
     is_shell_prompt,
     reset_autoclose_state,
     reset_idle_clear_state,
+    reset_probe_failures_state,
     reset_seen_status_state,
 )
 
@@ -35,9 +40,11 @@ def _reset():
     reset_autoclose_state()
     reset_seen_status_state()
     reset_idle_clear_state()
+    reset_probe_failures_state()
     yield
     reset_autoclose_state()
     reset_seen_status_state()
+    reset_probe_failures_state()
     reset_idle_clear_state()
 
 
@@ -135,8 +142,6 @@ class TestAutocloseTimers:
         bot.close_forum_topic.assert_not_called()
 
     async def test_check_telegram_error_handled(self) -> None:
-        from telegram.error import TelegramError
-
         _start_autoclose_timer(1, 42, "done", 0.0)
         bot = AsyncMock()
         bot.close_forum_topic.side_effect = TelegramError("fail")
@@ -712,3 +717,89 @@ class TestActiveStatusCancelsIdleTimer:
             mock_sm.get_display_name.return_value = "project"
             await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
         assert (1, 42) not in _idle_clear_timers
+
+
+class TestProbeFailures:
+    async def test_probe_skips_suspended_windows(self) -> None:
+        _probe_failures["@5"] = _MAX_PROBE_FAILURES
+        bot = AsyncMock()
+        with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
+            mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
+            await _probe_topic_existence(bot)
+        bot.unpin_all_forum_topic_messages.assert_not_called()
+
+    async def test_probe_success_resets_counter(self) -> None:
+
+        _probe_failures["@5"] = 2
+        bot = AsyncMock()
+        with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
+            mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
+            mock_sm.resolve_chat_id.return_value = -100
+            await _probe_topic_existence(bot)
+        assert "@5" not in _probe_failures
+        bot.unpin_all_forum_topic_messages.assert_called_once_with(
+            chat_id=-100, message_thread_id=42
+        )
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(TelegramError("Timed out"), id="telegram-error"),
+            pytest.param(BadRequest("Permission denied"), id="bad-request-other"),
+        ],
+    )
+    async def test_probe_error_increments_counter(self, exc: TelegramError) -> None:
+        bot = AsyncMock()
+        bot.unpin_all_forum_topic_messages.side_effect = exc
+        with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
+            mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
+            mock_sm.resolve_chat_id.return_value = -100
+            await _probe_topic_existence(bot)
+        assert _probe_failures["@5"] == 1
+
+    async def test_probe_suspends_after_max_failures(self) -> None:
+        bot = AsyncMock()
+        bot.unpin_all_forum_topic_messages.side_effect = TelegramError("Timed out")
+        with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
+            mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
+            mock_sm.resolve_chat_id.return_value = -100
+            for _ in range(_MAX_PROBE_FAILURES + 1):
+                await _probe_topic_existence(bot)
+        assert bot.unpin_all_forum_topic_messages.call_count == _MAX_PROBE_FAILURES
+        assert _probe_failures["@5"] == _MAX_PROBE_FAILURES
+
+    @pytest.mark.parametrize(
+        "window_alive",
+        [
+            pytest.param(True, id="window-alive"),
+            pytest.param(False, id="window-already-gone"),
+        ],
+    )
+    async def test_topic_deleted_cleans_up(self, window_alive: bool) -> None:
+        _probe_failures["@5"] = 1
+        bot = AsyncMock()
+        bot.unpin_all_forum_topic_messages.side_effect = BadRequest("Topic_id_invalid")
+        mock_window = MagicMock()
+        mock_window.window_id = "@5"
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.tmux_manager") as mock_tm,
+            patch(
+                "ccbot.handlers.status_polling.clear_topic_state",
+                new_callable=AsyncMock,
+            ) as mock_cleanup,
+        ):
+            mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_tm.find_window_by_id = AsyncMock(
+                return_value=mock_window if window_alive else None
+            )
+            mock_tm.kill_window = AsyncMock()
+            await _probe_topic_existence(bot)
+        if window_alive:
+            mock_tm.kill_window.assert_called_once_with("@5")
+        else:
+            mock_tm.kill_window.assert_not_called()
+        mock_cleanup.assert_called_once_with(1, 42, bot, window_id="@5")
+        mock_sm.unbind_thread.assert_called_once_with(1, 42)
+        assert "@5" not in _probe_failures
