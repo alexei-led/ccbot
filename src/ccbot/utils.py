@@ -59,6 +59,23 @@ def log_throttle_reset(prefix: str) -> None:
         del _throttle_state[k]
 
 
+def log_throttle_sweep(
+    max_age: float = 600.0,
+    _clock: Callable[[], float] = time.monotonic,
+) -> int:
+    """Remove throttle entries older than *max_age* seconds.
+
+    Returns the number of entries removed.  Intended to be called
+    periodically (e.g. every 60 s from the poll loop) to prevent
+    unbounded growth of ``_throttle_state``.
+    """
+    now = _clock()
+    stale = [k for k, (ts, _) in _throttle_state.items() if now - ts >= max_age]
+    for k in stale:
+        del _throttle_state[k]
+    return len(stale)
+
+
 CCBOT_DIR_ENV = "CCBOT_DIR"
 
 # Maximum number of JSONL lines to scan when extracting session metadata.

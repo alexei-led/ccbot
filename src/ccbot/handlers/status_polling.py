@@ -50,7 +50,7 @@ from ..providers.base import StatusUpdate
 from ..session import session_manager
 from ..session_monitor import get_active_monitor
 from ..tmux_manager import tmux_manager
-from ..utils import log_throttled
+from ..utils import log_throttle_sweep, log_throttled
 from .interactive_ui import (
     clear_interactive_msg,
     get_interactive_window,
@@ -756,6 +756,12 @@ async def _handle_dead_window_notification(
     if dead_key in _dead_notified:
         return
     _get_window_state(wid).has_seen_status = False
+
+    # Clean up stale tool message IDs for this topic (window is dead,
+    # no more tool_result edits will arrive).
+    from .message_queue import clear_tool_msg_ids_for_topic
+
+    clear_tool_msg_ids_for_topic(user_id, thread_id)
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
     display = session_manager.get_display_name(wid)
     await update_topic_emoji(bot, chat_id, thread_id, "dead", display)
@@ -977,6 +983,8 @@ async def status_poll_loop(bot: Bot) -> None:
                 live_windows = await tmux_manager.list_windows()
                 await _prune_stale_state(live_windows)
                 await _probe_topic_existence(bot)
+                # Sweep stale log-throttle entries to prevent unbounded growth
+                log_throttle_sweep()
 
             for user_id, thread_id, wid in list(session_manager.iter_thread_bindings()):
                 structlog.contextvars.clear_contextvars()

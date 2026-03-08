@@ -264,18 +264,23 @@ def _resolve_window_id(pane_id: str) -> tuple[str, str, str] | None:
 
     Returns None if resolution fails.
     """
-    result = subprocess.run(
-        [
-            "tmux",
-            "display-message",
-            "-t",
-            pane_id,
-            "-p",
-            "#{session_name}\t#{window_id}\t#{window_name}",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "tmux",
+                "display-message",
+                "-t",
+                pane_id,
+                "-p",
+                "#{session_name}\t#{window_id}\t#{window_name}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("tmux display-message timed out for pane %s", pane_id)
+        return None
     raw_output = result.stdout.strip()
     parts = raw_output.split("\t", 2)
     if len(parts) < _TMUX_FORMAT_PARTS:
