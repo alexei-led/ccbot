@@ -99,12 +99,14 @@ class TestSendWithFallback:
         result = await _send_with_fallback(bot, 123, "hello")
         assert result is None
 
-    async def test_retry_after_reraised(self) -> None:
+    async def test_retry_after_sleeps_and_retries(self) -> None:
         bot = AsyncMock()
-        bot.send_message.side_effect = RetryAfter(30)
+        sent = AsyncMock(spec=Message)
+        bot.send_message.side_effect = [RetryAfter(1), sent]
 
-        with pytest.raises(RetryAfter):
-            await _send_with_fallback(bot, 123, "hello")
+        result = await _send_with_fallback(bot, 123, "hello")
+        assert result is sent
+        assert bot.send_message.call_count == 2
 
     async def test_fallback_strips_mdv2_escapes(self) -> None:
         bot = AsyncMock()
