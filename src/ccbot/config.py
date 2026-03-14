@@ -97,6 +97,13 @@ class Config:
             "CCBOT_SHOW_HIDDEN_DIRS", ""
         ).lower() in ("1", "true", "yes")
 
+        # Whisper transcription
+        self.whisper_provider: str = os.getenv("CCBOT_WHISPER_PROVIDER", "")
+        self.whisper_api_key: str = os.getenv("CCBOT_WHISPER_API_KEY", "")
+        self.whisper_base_url: str = os.getenv("CCBOT_WHISPER_BASE_URL", "")
+        self.whisper_model: str = os.getenv("CCBOT_WHISPER_MODEL", "")
+        self.whisper_language: str = os.getenv("CCBOT_WHISPER_LANGUAGE", "")
+
         # Auto-close stale topics (minutes; 0 = disabled)
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
         self.autoclose_dead_minutes = int(os.getenv("AUTOCLOSE_DEAD_MINUTES", "10"))

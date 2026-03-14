@@ -29,6 +29,7 @@ dependencies = [
     "structlog>=24.0.0",
     "click>=8.1.0",
     "pyte>=0.8.2",
+    "openai>=1.58.0",
 ]
 
 [project.urls]
