@@ -213,7 +213,8 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
 
     pending = user_data.get(VOICE_PENDING, {})
     assert pending, "Expected a pending voice entry in user_data"
-    confirm_msg_id = next(iter(pending))
+    pending_key = next(iter(pending))
+    confirm_msg_id = pending_key[1]
 
     calls.clear()
 
@@ -229,7 +230,7 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
     await wait_for_pane(tmux, window_id, pattern=transcribed[:20], timeout=15)
 
     # Pending state must be cleared
-    assert confirm_msg_id not in user_data.get(VOICE_PENDING, {})
+    assert pending_key not in user_data.get(VOICE_PENDING, {})
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +270,8 @@ async def test_voice_discard_clears_pending(e2e_app, work_dir):
 
     pending = user_data.get(VOICE_PENDING, {})
     assert pending
-    confirm_msg_id = next(iter(pending))
+    pending_key = next(iter(pending))
+    confirm_msg_id = pending_key[1]
 
     calls.clear()
 
@@ -285,7 +287,7 @@ async def test_voice_discard_clears_pending(e2e_app, work_dir):
     await wait_for_send(calls, method="deleteMessage", timeout=5.0)
 
     # Pending state must be cleared
-    assert confirm_msg_id not in user_data.get(VOICE_PENDING, {})
+    assert pending_key not in user_data.get(VOICE_PENDING, {})
 
 
 # ---------------------------------------------------------------------------

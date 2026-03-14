@@ -56,6 +56,8 @@ def _make_callback_query(
     # Make message an actual Message instance for isinstance check
     query.message = MagicMock(spec=Message)
     query.message.message_id = message_id
+    query.message.chat = MagicMock()
+    query.message.chat.id = 999
     query.message.delete = AsyncMock()
     query.answer = AsyncMock()
     return query
@@ -191,6 +193,8 @@ class TestHandleVoiceMessage:
 
         mock_reply_msg = MagicMock()
         mock_reply_msg.message_id = 42
+        mock_reply_msg.chat = MagicMock()
+        mock_reply_msg.chat.id = 999
         mock_reply_msg.edit_reply_markup = AsyncMock()
         mock_reply.return_value = mock_reply_msg
         update = _make_update()
@@ -202,8 +206,8 @@ class TestHandleVoiceMessage:
         await voice_handler.handle_voice_message(update, context)
 
         assert VOICE_PENDING in context.user_data
-        assert 42 in context.user_data[VOICE_PENDING]
-        assert context.user_data[VOICE_PENDING][42] == "do the thing"
+        assert (999, 42) in context.user_data[VOICE_PENDING]
+        assert context.user_data[VOICE_PENDING][(999, 42)] == "do the thing"
         update.message.get_bot.return_value.send_chat_action.assert_awaited_once_with(
             chat_id=999,
             message_thread_id=42,
@@ -213,6 +217,37 @@ class TestHandleVoiceMessage:
             b"fake audio bytes", "voice.ogg"
         )
         mock_reply.assert_not_called()
+
+    @patch(f"{_VH}._download_voice", new_callable=AsyncMock)
+    @patch(f"{_VH}.session_manager")
+    @patch(f"{_VH}.config")
+    @patch(f"{_VH}.get_transcriber")
+    @patch(f"{_VH}.safe_reply", new_callable=AsyncMock)
+    async def test_voice_handler_factory_value_error(
+        self,
+        mock_reply: AsyncMock,
+        mock_get_transcriber: MagicMock,
+        mock_config: MagicMock,
+        mock_session_manager: MagicMock,
+        mock_download: AsyncMock,
+    ) -> None:
+        """Test get_transcriber misconfiguration shows a friendly error."""
+        from ccbot.handlers import voice_handler
+
+        mock_config.is_user_allowed.return_value = True
+        mock_get_transcriber.side_effect = ValueError("missing OPENAI_API_KEY")
+        mock_session_manager.resolve_window_for_thread.return_value = "@0"
+        mock_download.return_value = b"fake audio bytes"
+        update = _make_update()
+
+        context = MagicMock()
+        context.user_data = {}
+
+        await voice_handler.handle_voice_message(update, context)
+
+        mock_reply.assert_called_once()
+        assert "missing openai_api_key" in mock_reply.call_args.args[1].lower()
+        update.message.get_bot.return_value.send_chat_action.assert_not_awaited()
 
     @patch(f"{_VH}._download_voice", new_callable=AsyncMock)
     @patch(f"{_VH}.session_manager")
@@ -308,14 +343,14 @@ class TestHandleVoiceCallback:
         update.effective_user.id = 100
 
         context = MagicMock()
-        context.user_data = {VOICE_PENDING: {42: "hello"}}
+        context.user_data = {VOICE_PENDING: {(999, 42): "hello"}}
 
         await voice_callbacks.handle_voice_callback(update, context)
 
         mock_session_manager.send_to_window.assert_called_once_with("@0", "hello")
         update.callback_query.message.delete.assert_called_once()
         update.callback_query.answer.assert_called_once_with("✓ Sent")
-        assert 42 not in context.user_data.get(VOICE_PENDING, {})
+        assert (999, 42) not in context.user_data.get(VOICE_PENDING, {})
 
     @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.get_thread_id")
@@ -333,7 +368,7 @@ class TestHandleVoiceCallback:
         update.effective_user.id = 100
 
         context = MagicMock()
-        context.user_data = {VOICE_PENDING: {42: "hello"}}
+        context.user_data = {VOICE_PENDING: {(999, 42): "hello"}}
 
         await voice_callbacks.handle_voice_callback(update, context)
 
@@ -341,7 +376,7 @@ class TestHandleVoiceCallback:
         update.callback_query.message.delete.assert_called_once()
 
         # Verify pending entry was cleaned up
-        assert 42 not in context.user_data.get(VOICE_PENDING, {})
+        assert (999, 42) not in context.user_data.get(VOICE_PENDING, {})
 
         # Verify answer was called
         update.callback_query.answer.assert_called_once_with("Discarded")
@@ -367,8 +402,11 @@ class TestHandleVoiceCallback:
         await voice_callbacks.handle_voice_callback(update, context)
 
         update.callback_query.answer.assert_called_once()
-        call_args = str(update.callback_query.answer.call_args)
-        assert "expired" in call_args.lower() or "resend" in call_args.lower()
+        call = update.callback_query.answer.call_args
+        answer_text = (
+            call.args[0] if call.args else call.kwargs.get("text", "")
+        ).lower()
+        assert "expired" in answer_text or "resend" in answer_text
 
     @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.get_thread_id")
@@ -387,22 +425,22 @@ class TestHandleVoiceCallback:
         update.effective_user.id = 100
 
         context = MagicMock()
-        context.user_data = {VOICE_PENDING: {42: "hello"}}
+        context.user_data = {VOICE_PENDING: {(999, 42): "hello"}}
 
         await voice_callbacks.handle_voice_callback(update, context)
 
         update.callback_query.answer.assert_called_once_with(
             "⚠️ No session bound.", show_alert=True
         )
-        assert 42 in context.user_data.get(VOICE_PENDING, {})
+        assert (999, 42) in context.user_data.get(VOICE_PENDING, {})
         update.callback_query.message.delete.assert_not_called()
 
     @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.get_thread_id")
-    async def test_voice_callback_send_failure_clears_pending(
+    async def test_voice_callback_send_failure_preserves_pending(
         self, mock_get_thread_id: MagicMock, mock_session_manager: MagicMock
     ) -> None:
-        """Test failed vc:send surfaces the error and clears pending state."""
+        """Test failed vc:send surfaces the error and preserves pending state."""
         from ccbot.handlers import voice_callbacks
 
         mock_get_thread_id.return_value = 42
@@ -417,7 +455,7 @@ class TestHandleVoiceCallback:
         update.effective_user.id = 100
 
         context = MagicMock()
-        context.user_data = {VOICE_PENDING: {42: "hello"}}
+        context.user_data = {VOICE_PENDING: {(999, 42): "hello"}}
 
         await voice_callbacks.handle_voice_callback(update, context)
 
@@ -425,7 +463,38 @@ class TestHandleVoiceCallback:
             "❌ tmux down", show_alert=True
         )
         update.callback_query.message.delete.assert_not_called()
-        assert 42 not in context.user_data.get(VOICE_PENDING, {})
+        assert (999, 42) in context.user_data.get(VOICE_PENDING, {})
+
+    @patch(f"{_VC}.session_manager")
+    @patch(f"{_VC}.get_thread_id")
+    async def test_voice_callback_send_exception_restores_pending(
+        self, mock_get_thread_id: MagicMock, mock_session_manager: MagicMock
+    ) -> None:
+        """Test raised send errors restore pending state for retry."""
+        from ccbot.handlers import voice_callbacks
+
+        mock_get_thread_id.return_value = 42
+        mock_session_manager.resolve_window_for_thread.return_value = "@0"
+        mock_session_manager.send_to_window = AsyncMock(
+            side_effect=RuntimeError("boom")
+        )
+
+        update = MagicMock()
+        update.callback_query = _make_callback_query("vc:send:42", message_id=42)
+        update.effective_user = MagicMock()
+        update.effective_user.id = 100
+
+        context = MagicMock()
+        context.user_data = {VOICE_PENDING: {(999, 42): "hello"}}
+
+        with patch.object(voice_callbacks.logger, "exception") as mock_log_exception:
+            await voice_callbacks.handle_voice_callback(update, context)
+
+        mock_log_exception.assert_called_once()
+        update.callback_query.answer.assert_called_once_with(
+            "❌ Failed to send voice transcription", show_alert=True
+        )
+        assert (999, 42) in context.user_data.get(VOICE_PENDING, {})
 
     async def test_voice_callback_invalid_payload(self) -> None:
         """Test malformed callback data is rejected."""
@@ -439,7 +508,7 @@ class TestHandleVoiceCallback:
         update.effective_user.id = 100
 
         context = MagicMock()
-        context.user_data = {VOICE_PENDING: {42: "hello"}}
+        context.user_data = {VOICE_PENDING: {(999, 42): "hello"}}
 
         await voice_callbacks.handle_voice_callback(update, context)
 

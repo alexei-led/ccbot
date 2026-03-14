@@ -19,6 +19,11 @@ from .user_state import VOICE_PENDING
 logger = structlog.get_logger()
 
 
+def _pending_voice_key(chat_id: int, message_id: int) -> tuple[int, int]:
+    """Build the user_data key for a pending voice transcription."""
+    return (chat_id, message_id)
+
+
 async def handle_voice_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -61,11 +66,11 @@ async def _handle_send(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle vc:send — forward transcribed text to the agent window."""
-    pending_text = (
-        context.user_data.get(VOICE_PENDING, {}).get(message_id)
-        if context.user_data
-        else None
+    pending_key = _pending_voice_key(msg.chat.id, message_id)
+    pending_store = (
+        context.user_data.get(VOICE_PENDING, {}) if context.user_data else {}
     )
+    pending_text = pending_store.get(pending_key)
     if pending_text is None:
         await query.answer("⚠️ Session expired, resend voice message", show_alert=True)
         return
@@ -76,7 +81,14 @@ async def _handle_send(
         await query.answer("⚠️ No session bound.", show_alert=True)
         return
 
-    success, err = await session_manager.send_to_window(window_id, pending_text)
+    pending_text = pending_store.pop(pending_key)
+    try:
+        success, err = await session_manager.send_to_window(window_id, pending_text)
+    except Exception:
+        pending_store[pending_key] = pending_text
+        logger.exception("Failed to send voice transcription to window")
+        await query.answer("❌ Failed to send voice transcription", show_alert=True)
+        return
 
     if success:
         try:
@@ -85,11 +97,8 @@ async def _handle_send(
             logger.warning("Failed to delete voice confirm message: %s", e)
         await query.answer("✓ Sent")
     else:
+        pending_store[pending_key] = pending_text
         await query.answer(f"❌ {err}", show_alert=True)
-
-    # Clean up pending state regardless of outcome
-    if context.user_data is not None:
-        context.user_data.get(VOICE_PENDING, {}).pop(message_id, None)
 
 
 async def _handle_drop(
@@ -100,7 +109,8 @@ async def _handle_drop(
 ) -> None:
     """Handle vc:drop — discard the transcription and delete the confirm message."""
     if context.user_data is not None:
-        context.user_data.get(VOICE_PENDING, {}).pop(message_id, None)
+        pending_key = _pending_voice_key(msg.chat.id, message_id)
+        context.user_data.get(VOICE_PENDING, {}).pop(pending_key, None)
 
     try:
         await msg.delete()

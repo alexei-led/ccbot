@@ -28,6 +28,11 @@ logger = structlog.get_logger()
 _MAX_VOICE_SIZE = 25 * 1024 * 1024
 
 
+def _pending_voice_key(chat_id: int, message_id: int) -> tuple[int, int]:
+    """Build the user_data key for a pending voice transcription."""
+    return (chat_id, message_id)
+
+
 def _build_voice_keyboard(message_id: int) -> InlineKeyboardMarkup:
     """Build the confirm/discard inline keyboard for a transcribed voice message."""
     return InlineKeyboardMarkup(
@@ -58,6 +63,24 @@ async def _download_voice(message: Message, file_id: str) -> bytes | None:
         return None
 
 
+async def _get_transcriber_or_reply(message: Message):
+    """Resolve the configured transcriber and surface user-facing errors."""
+    try:
+        transcriber = get_transcriber()
+    except (ValueError, RuntimeError) as e:
+        await safe_reply(message, f"❌ {e}")
+        return None
+
+    if transcriber is None:
+        await safe_reply(
+            message,
+            "⚠️ Voice transcription is not configured. Set CCBOT_WHISPER_PROVIDER to enable it.\n\nSupported providers: openai, groq",
+        )
+        return None
+
+    return transcriber
+
+
 async def _transcribe_audio(
     message: Message, transcriber, audio_bytes: bytes
 ) -> TranscriptionResult | None:
@@ -84,7 +107,8 @@ async def _send_confirm_message(
     )
 
     if context.user_data is not None:
-        context.user_data.setdefault(VOICE_PENDING, {})[confirm_msg.message_id] = text
+        pending_key = _pending_voice_key(confirm_msg.chat.id, confirm_msg.message_id)
+        context.user_data.setdefault(VOICE_PENDING, {})[pending_key] = text
 
     try:
         await confirm_msg.edit_reply_markup(
@@ -122,12 +146,8 @@ async def handle_voice_message(
         )
         return
 
-    transcriber = get_transcriber()
+    transcriber = await _get_transcriber_or_reply(message)
     if transcriber is None:
-        await safe_reply(
-            message,
-            "⚠️ Voice transcription is not configured. Set CCBOT_WHISPER_PROVIDER to enable it.\n\nSupported providers: openai, groq",
-        )
         return
 
     audio_bytes = await _download_voice(message, voice.file_id)
