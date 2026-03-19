@@ -653,6 +653,8 @@ async def forward_command_handler(
     provider_map, current_supported = _get_provider_command_metadata(provider)
     resolved_name = provider_map.get(tg_cmd, tg_cmd)
     cc_name = resolved_name.lstrip("/")
+    if not args and cc_name in ("remote-control", "rc"):
+        args = display
     cc_slash = f"/{cc_name} {args}".rstrip() if args else f"/{cc_name}"
     command_token = _normalize_slash_token(cc_slash)
 
@@ -841,13 +843,11 @@ async def _maybe_send_command_failure_message(
         pane_after = await tmux_manager.capture_pane(window_id)
         pane_delta = _extract_pane_delta(pane_before, pane_after)
         error_line = _extract_probe_error_line(pane_delta)
-    if not error_line:
-        return
-
-    await safe_reply(
-        message,
-        f"\u274c [{display}] `{cc_slash}` failed\n> {error_line}",
-    )
+    if error_line:
+        await safe_reply(
+            message,
+            f"\u274c [{display}] `{cc_slash}` failed\n> {error_line}",
+        )
 
 
 def _spawn_command_failure_probe(

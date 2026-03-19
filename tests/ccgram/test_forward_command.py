@@ -401,7 +401,7 @@ class TestCommandFailureProbe:
             patch(
                 "ccgram.bot._probe_transcript_command_error",
                 new_callable=AsyncMock,
-                return_value="unrecognized command '/cost'",
+                return_value="unrecognized command '/foo'",
             ),
             patch("ccgram.bot.safe_reply", new_callable=AsyncMock) as mock_reply,
         ):
@@ -409,7 +409,7 @@ class TestCommandFailureProbe:
                 message,
                 "@1",
                 "project",
-                "/cost",
+                "/foo",
                 provider=provider,
                 transcript_path="/tmp/codex.jsonl",
                 since_offset=0,
@@ -434,7 +434,7 @@ class TestCommandFailureProbe:
             patch(
                 "ccgram.bot.tmux_manager.capture_pane",
                 new_callable=AsyncMock,
-                return_value="before\nunknown command: /cost",
+                return_value="before\nunknown command: /foo",
             ),
             patch("ccgram.bot.safe_reply", new_callable=AsyncMock) as mock_reply,
         ):
@@ -442,7 +442,7 @@ class TestCommandFailureProbe:
                 message,
                 "@1",
                 "project",
-                "/cost",
+                "/foo",
                 provider=provider,
                 transcript_path=None,
                 since_offset=None,
@@ -474,7 +474,7 @@ class TestCommandFailureProbe:
                 message,
                 "@1",
                 "project",
-                "/cost",
+                "/help",
                 provider=provider,
                 transcript_path=None,
                 since_offset=None,

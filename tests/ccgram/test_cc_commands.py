@@ -118,7 +118,7 @@ class TestDiscoverBuiltins:
         commands = discover_cc_commands(claude_dir=tmp_path)
         for cmd in commands:
             if cmd.source == "builtin":
-                assert cmd.telegram_name == cmd.name
+                assert cmd.telegram_name == _sanitize_telegram_name(cmd.name)
 
 
 class TestDiscoverSkills:
@@ -276,7 +276,7 @@ class TestRegisterCommands:
         registered = bot.set_my_commands.call_args[0][0]
         names = [c.command for c in registered]
         assert "status" in names
-        assert get_cc_name("status") == "/status"
+        assert get_cc_name("status") == "status"
 
     async def test_description_truncation(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / "skills" / "verbose"

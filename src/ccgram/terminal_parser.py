@@ -116,10 +116,10 @@ UI_PATTERNS: list[UIPattern] = [
     ),
     # ── Structural catch-all (MUST be last — catches anything above) ─
     # Ink's SelectInput renders ❯ (U+276F) as the selection cursor for
-    # the highlighted option.  Combined with a bottom action hint, this
-    # catches ANY selection UI regardless of the question wording above.
-    # context_above=10 pulls in the prompt/question text for display.
-    # min_gap=1 because compact prompts can have ❯ directly above Esc.
+    # the highlighted option.  Combined with a bottom action hint OR a
+    # non-selected list item, this catches ANY selection UI.
+    # context_above=10 pulls in the question/description text above the
+    # cursor.  min_gap=1 for compact prompts.
     UIPattern(
         name="SelectionUI",
         top=(re.compile(r"^\s*[❯›]\s"),),
@@ -129,6 +129,8 @@ UI_PATTERNS: list[UIPattern] = [
             re.compile(r"^\s*ctrl-g to edit"),
             re.compile(r"(?i)^\s*Press enter to (confirm|select|continue|submit)"),
             re.compile(r"(?i)^\s*enter to (submit|confirm|select)"),
+            # Non-selected list items (e.g. /remote-control has no footer)
+            re.compile(r"^\s+\d+\.\s"),
         ),
         min_gap=1,
         context_above=10,

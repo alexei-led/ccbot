@@ -43,6 +43,7 @@ runloop() {
 	}
 
 	acquire_lock
+	unset VIRTUAL_ENV
 	ulimit -c 0
 	echo "[ccgram-dev] started in ${TARGET}"
 	echo "[ccgram-dev] hint: Ctrl-C restarts ccgram"

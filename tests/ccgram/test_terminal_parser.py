@@ -255,6 +255,22 @@ class TestExtractInteractiveContent:
         assert result.name == "SelectionUI"
         assert "Pick a thing" in result.content
 
+    def test_numbered_list_without_footer(self):
+        """Selection UI with numbered items but no action hint footer."""
+        pane = (
+            "Remote Control\n"
+            "\n"
+            "   Remote Control lets you access this CLI session.\n"
+            "\n"
+            "   ❯ 1. Enable Remote Control for this session\n"
+            "     2. Never mind\n"
+        )
+        result = extract_interactive_content(pane)
+        assert result is not None
+        assert result.name == "SelectionUI"
+        assert "Remote Control" in result.content
+        assert "❯" in result.content
+
     def test_codex_selection_cursor(self):
         """Codex uses › (U+203A) instead of ❯ (U+276F) for selection cursor."""
         pane = "  Which option?\n\n  › Option A    Option B\n\n  Esc to cancel\n"
