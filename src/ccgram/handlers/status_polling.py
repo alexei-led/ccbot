@@ -574,18 +574,6 @@ def _parse_with_pyte(
         parse_status_from_screen,
     )
 
-    # Content-hash early exit: skip parsing when pane content and dimensions
-    # are unchanged. Dimensions are included because the same text re-parsed
-    # at different widths can produce different line wrapping / separator hits.
-    ws = _get_window_state(window_id)
-    content_hash = hash((pane_text, columns, rows))
-    if (
-        content_hash == ws.last_pane_hash
-        and ws.last_pane_hash != 0
-        and (ws.last_pyte_result is None or not ws.last_pyte_result.is_interactive)
-    ):
-        return ws.last_pyte_result
-
     # Fall back to default dimensions if not provided, invalid, or non-int
     # (non-int can happen when callers pass MagicMock in tests)
     if (
@@ -595,6 +583,19 @@ def _parse_with_pyte(
         or rows <= 0
     ):
         columns, rows = 200, 50
+
+    # Content-hash early exit: skip parsing when pane content and dimensions
+    # are unchanged. Dimensions are included because the same text re-parsed
+    # at different widths can produce different line wrapping / separator hits.
+    # Computed after normalization so 0/0 and 200/50 produce the same hash.
+    ws = _get_window_state(window_id)
+    content_hash = hash((pane_text, columns, rows))
+    if (
+        content_hash == ws.last_pane_hash
+        and ws.last_pane_hash != 0
+        and (ws.last_pyte_result is None or not ws.last_pyte_result.is_interactive)
+    ):
+        return ws.last_pyte_result
     buf = _get_screen_buffer(window_id, columns, rows)
 
     buf.feed(pane_text)

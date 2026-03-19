@@ -107,7 +107,7 @@ def build_screenshot_keyboard(
 
 
 def build_toolbar_keyboard(window_id: str) -> InlineKeyboardMarkup:
-    """Build inline keyboard for /buttons toolbar."""
+    """Build inline keyboard for /toolbar command."""
     from .status_polling import is_rc_active
 
     rc_label = "\U0001f4e1\u2713 RC" if is_rc_active(window_id) else "\U0001f4e1 RC"
