@@ -26,6 +26,7 @@ import libtmux
 from libtmux.exc import LibTmuxException
 
 from .config import config
+from .providers import detect_provider_from_command
 from .window_resolver import EMDASH_SESSION_PREFIX as _EMDASH_PREFIX, is_foreign_window
 
 logger = structlog.get_logger()
@@ -248,7 +249,7 @@ class TmuxManager:
             )
             async with asyncio.timeout(5.0):
                 stdout, _ = await proc.communicate()
-        except (TimeoutError, OSError):
+        except TimeoutError, OSError:
             return None
         if proc.returncode != 0:
             return None
@@ -483,7 +484,7 @@ class TmuxManager:
                     check=False,
                 )
             return True
-        except (subprocess.TimeoutExpired, OSError):
+        except subprocess.TimeoutExpired, OSError:
             logger.exception("Failed to send keys to foreign window %s", target)
             return False
 
@@ -666,7 +667,7 @@ class TmuxManager:
             )
             async with asyncio.timeout(5.0):
                 stdout, _ = await proc.communicate()
-        except (TimeoutError, OSError):
+        except TimeoutError, OSError:
             return []
         if proc.returncode != 0:
             return []
@@ -679,63 +680,60 @@ class TmuxManager:
             else []
         )
 
-        from .providers import detect_provider_from_command
-
         results: list[TmuxWindow] = []
         for session_name in stdout.decode().strip().split("\n"):
-            if not session_name:
+            if not session_name or session_name == self.session_name:
                 continue
-            # Always skip our own session
-            if session_name == self.session_name:
-                continue
-            # Apply glob filter when patterns are configured
             if patterns and not any(
                 fnmatch.fnmatch(session_name, pat) for pat in patterns
             ):
                 continue
-
-            # Scan all windows in this session for AI agent processes
-            try:
-                win_proc = await asyncio.create_subprocess_exec(
-                    "tmux",
-                    "list-windows",
-                    "-t",
-                    session_name,
-                    "-F",
-                    "#{window_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                async with asyncio.timeout(5.0):
-                    win_stdout, _ = await win_proc.communicate()
-            except (TimeoutError, OSError):
-                continue
-            if win_proc.returncode != 0:
-                continue
-
-            for line in win_stdout.decode().strip().split("\n"):
-                if not line:
-                    continue
-                parts = line.split("\t", 3)
-                if len(parts) < 4:  # noqa: PLR2004
-                    continue
-                win_id, win_name, cwd, cmd = parts
-                # Only include windows running a recognised AI provider
-                if not detect_provider_from_command(cmd):
-                    continue
-                qualified_id = f"{session_name}:{win_id}"
-                results.append(
-                    TmuxWindow(
-                        window_id=qualified_id,
-                        window_name=win_name or session_name.removeprefix(_EMDASH_PREFIX),
-                        cwd=cwd,
-                        pane_current_command=cmd,
-                    )
-                )
+            results.extend(await self._scan_session_windows(session_name))
 
         self._external_cache = results
         self._external_cache_expires = now + _EXTERNAL_DISCOVERY_TTL
         return list(results)
+
+    async def _scan_session_windows(self, session_name: str) -> list[TmuxWindow]:
+        """List windows in *session_name* that run a recognised AI provider."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "list-windows",
+                "-t",
+                session_name,
+                "-F",
+                "#{window_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            async with asyncio.timeout(5.0):
+                win_stdout, _ = await proc.communicate()
+        except TimeoutError, OSError:
+            return []
+        if proc.returncode != 0:
+            return []
+
+        results: list[TmuxWindow] = []
+        for line in win_stdout.decode().strip().split("\n"):
+            if not line:
+                continue
+            parts = line.split("\t", 3)
+            if len(parts) < 4:  # noqa: PLR2004
+                continue
+            win_id, win_name, cwd, cmd = parts
+            if not detect_provider_from_command(cmd):
+                continue
+            qualified_id = f"{session_name}:{win_id}"
+            results.append(
+                TmuxWindow(
+                    window_id=qualified_id,
+                    window_name=win_name or session_name.removeprefix(_EMDASH_PREFIX),
+                    cwd=cwd,
+                    pane_current_command=cmd,
+                )
+            )
+        return results
 
     async def discover_emdash_sessions(self) -> list[TmuxWindow]:
         """Discover emdash tmux sessions (deprecated alias).
