@@ -1711,6 +1711,53 @@ class TestUpdateStatusMessageEdgeCases:
             await update_status_message(bot, 1, "@0", thread_id=42)
         mock_vim.assert_called_once_with("@0")
 
+    async def test_status_includes_subagent_names(self) -> None:
+        from ccgram.handlers.status_polling import update_status_message
+        from ccgram.providers.base import StatusUpdate
+
+        pyte_status = StatusUpdate(
+            raw_text="Working", display_label="\u23f3 Working\u2026"
+        )
+        mock_window = MagicMock()
+        mock_window.window_id = "@0"
+        mock_window.pane_width = 80
+        mock_window.pane_height = 24
+        mock_window.pane_current_command = "node"
+        bot = AsyncMock(spec=Bot)
+        with (
+            patch("ccgram.handlers.status_polling.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccgram.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccgram.handlers.status_polling.enqueue_status_update",
+                new_callable=AsyncMock,
+            ) as mock_enqueue,
+            patch(
+                "ccgram.handlers.status_polling.get_interactive_window",
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.status_polling._parse_with_pyte",
+                return_value=pyte_status,
+            ),
+            patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
+            patch("ccgram.tmux_manager.notify_vim_insert_seen"),
+            patch("ccgram.handlers.status_polling._send_typing_throttled"),
+            patch(
+                "ccgram.handlers.hook_events.get_subagent_names",
+                return_value=["write-tests"],
+            ),
+        ):
+            mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
+            mock_tm.capture_pane = AsyncMock(return_value="some output")
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_notification_mode.return_value = "normal"
+            await update_status_message(bot, 1, "@0", thread_id=42)
+        status_text = mock_enqueue.call_args[0][3]
+        assert "write-tests" in status_text
+        assert "\U0001f916" in status_text
+
     async def test_interactive_window_clears_when_ui_disappears(self) -> None:
         from ccgram.handlers.status_polling import update_status_message
         from ccgram.providers.base import StatusUpdate

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.hook_events import build_subagent_label
 from ccgram.handlers.message_queue import (
     BATCH_MAX_ENTRIES,
     BATCH_MAX_LENGTH,
@@ -115,34 +114,6 @@ class TestFormatBatchMessage:
         header = result.split("\n")[0]
         assert "[" in header
         assert "2 subagents" in header
-
-
-class TestBuildSubagentLabel:
-    def test_empty_list(self) -> None:
-        assert build_subagent_label([]) is None
-
-    def test_single_name(self) -> None:
-        result = build_subagent_label(["write-tests"])
-        assert result == "\U0001f916 write-tests"
-
-    def test_two_names(self) -> None:
-        result = build_subagent_label(["write-tests", "refactor"])
-        assert result is not None
-        assert "2 subagents" in result
-        assert "write-tests" in result
-        assert "refactor" in result
-
-    def test_three_names(self) -> None:
-        result = build_subagent_label(["a", "b", "c"])
-        assert result is not None
-        assert "3 subagents" in result
-
-    def test_truncates_at_three(self) -> None:
-        result = build_subagent_label(["a", "b", "c", "d"])
-        assert result is not None
-        assert "4 subagents" in result
-        assert "a, b, c" in result
-        assert "d" not in result
 
 
 # --- _is_batch_eligible tests ---
@@ -752,6 +723,24 @@ class TestFlushBatch:
         await _flush_batch(bot, 1, 0)
         assert (1, 0) not in _active_batches
         bot.edit_message_text.assert_not_awaited()
+
+    @patch(
+        "ccgram.handlers.hook_events.get_subagent_names", return_value=["researcher"]
+    )
+    @patch("ccgram.handlers.message_queue.session_manager")
+    async def test_flush_includes_subagent_label(self, mock_sm, _mock_names) -> None:
+        mock_sm.resolve_chat_id.return_value = 42
+        _active_batches[(1, 0)] = ToolBatch(
+            window_id="@0",
+            thread_id=0,
+            entries=[ToolBatchEntry("t1", "Read x", "ok")],
+            telegram_msg_id=100,
+        )
+
+        bot = AsyncMock()
+        await _flush_batch(bot, 1, 0)
+        text_sent = bot.edit_message_text.call_args.kwargs["text"]
+        assert "researcher" in text_sent
 
     @patch("ccgram.handlers.message_queue.session_manager")
     async def test_flush_handles_telegram_error(self, mock_sm) -> None:
