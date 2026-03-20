@@ -42,9 +42,13 @@ _NOTO_CODEPOINTS: set[int] = {
 }
 # Tier 3: only in Symbola (misc symbols not in either JB or Noto)
 _SYMBOLA_CODEPOINTS: set[int] = {
+    0x23EA,  # ⏪ BLACK LEFT-POINTING DOUBLE TRIANGLE
     0x23F5,  # ⏵ BLACK MEDIUM RIGHT-POINTING TRIANGLE
     0x2714,  # ✔ HEAVY CHECK MARK
     0x274C,  # ❌ CROSS MARK
+    0x1F3B2,  # 🎲 GAME DIE
+    0x1F4A5,  # 💥 COLLISION SYMBOL
+    0x1F7E1,  # 🟡 LARGE YELLOW CIRCLE
 }
 
 # ANSI color mapping (basic 16 colors)

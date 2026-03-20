@@ -80,7 +80,7 @@ def build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
     if caps.supports_resume:
         options.append(
             InlineKeyboardButton(
-                "\U0001f4c2 Resume",
+                "\u23ea Resume",
                 callback_data=f"{CB_RECOVERY_RESUME}{window_id}"[:64],
             )
         )
@@ -537,7 +537,7 @@ async def _handle_resume(
     keyboard = _build_resume_picker_keyboard(sessions, old_wid)
     await safe_edit(
         query,
-        f"\U0001f4c2 Select a session to resume:\n(`{cwd}`)",
+        f"\u23ea Select a session to resume:\n(`{cwd}`)",
         reply_markup=keyboard,
     )
     await query.answer()

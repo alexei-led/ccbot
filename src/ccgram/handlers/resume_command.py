@@ -254,7 +254,7 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     keyboard = _build_resume_keyboard(session_dicts, page=0)
     await safe_reply(
         update.message,
-        "\U0001f4c2 Select a session to resume:",
+        "\u23ea Select a session to resume:",
         reply_markup=keyboard,
     )
 
@@ -411,7 +411,7 @@ async def _handle_page(
     keyboard = _build_resume_keyboard(stored, page=page)
     await safe_edit(
         query,
-        "\U0001f4c2 Select a session to resume:",
+        "\u23ea Select a session to resume:",
         reply_markup=keyboard,
     )
     await query.answer()

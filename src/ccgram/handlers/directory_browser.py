@@ -329,7 +329,7 @@ def build_mode_picker(
         ],
         [
             InlineKeyboardButton(
-                "🚀 YOLO",
+                "🎲 YOLO",
                 callback_data=f"{CB_MODE_SELECT}{provider_name}:yolo",
             )
         ],

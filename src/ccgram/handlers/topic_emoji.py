@@ -25,12 +25,15 @@ logger = structlog.get_logger()
 
 # Emoji prefixes for session states
 EMOJI_ACTIVE = "\U0001f7e2"  # Green circle
-EMOJI_IDLE = "\U0001f4a4"  # Zzz / sleeping
+EMOJI_IDLE = "\U0001f7e1"  # Yellow circle (your turn / attention needed)
 EMOJI_DONE = "\u2705"  # Check mark (Claude exited normally)
-EMOJI_DEAD = "\u274c"  # Cross mark
-EMOJI_YOLO = "\U0001f680"  # Rocket (positive YOLO indicator)
+EMOJI_DEAD = "\U0001f4a5"  # Collision / crash
+EMOJI_YOLO = "\U0001f3b2"  # Dice (risk/gamble — auto-approve mode)
 EMOJI_RC = "\U0001f4e1"  # Satellite dish (Remote Control active)
-_EMOJI_DEAD_OLD = "\u26ab"  # Legacy dead emoji (black circle, pre-2026-02)
+_EMOJI_DEAD_OLD = (
+    "\u26ab",
+    "\u274c",
+)  # Legacy dead emoji (black circle pre-2026-02, cross mark pre-2026-03)
 
 # Debounce: state must be stable for this many seconds before updating topic name.
 # Prevents rapid active↔idle toggling from flooding chat with rename messages.
@@ -198,7 +201,7 @@ async def update_topic_emoji(
 
 def strip_emoji_prefix(name: str) -> str:
     """Remove known emoji prefix from a topic name."""
-    for emoji in (EMOJI_ACTIVE, EMOJI_IDLE, EMOJI_DONE, EMOJI_DEAD, _EMOJI_DEAD_OLD):
+    for emoji in (EMOJI_ACTIVE, EMOJI_IDLE, EMOJI_DONE, EMOJI_DEAD, *_EMOJI_DEAD_OLD):
         prefix = f"{emoji} "
         if name.startswith(prefix):
             name = name[len(prefix) :]
