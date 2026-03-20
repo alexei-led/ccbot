@@ -202,26 +202,35 @@ Never mark done until: `make check` passes (fmt + lint + typecheck + test).
 
 ### PyPI + Homebrew Release Process
 
-Tag format: use `v` prefix (e.g., `v0.2.0`) — hatch-vcs strips it to generate version `0.2.0`.
+Tag format: use `v` prefix (e.g., `v2.1.2`) — hatch-vcs strips it to generate version `2.1.2`.
 
-Release workflow:
+Release process:
 
 ```bash
-# After changes are on main
-git tag v0.2.1
-git push origin v0.2.1
+# 1. Generate CHANGELOG locally
+git cliff --tag vX.Y.Z --output CHANGELOG.md
+# 2. Commit (do NOT use [skip ci] — see gotcha below)
+git add CHANGELOG.md && git commit -m "docs: update CHANGELOG.md for vX.Y.Z"
+git push origin main
+# 3. Tag and push
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-This triggers `.github/workflows/release.yml`:
+This triggers `.github/workflows/release.yml` (3 jobs):
 
-1. Build package (`uv build`)
-2. Publish to PyPI via OIDC trusted publishing
-3. Auto-bump Homebrew formula in `alexei-led/homebrew-tap`
+1. **publish**: Build (`uv build`) + publish to PyPI via OIDC trusted publishing
+2. **update-homebrew**: Generate formula via `scripts/generate_homebrew_formula.py` + push to `alexei-led/homebrew-tap`
+3. **github-release**: Generate release notes (git-cliff inline) + create GitHub Release
+
+CHANGELOG.md is maintained locally only — CI cannot push to protected `main`.
+
+### Release Gotchas
+
+- **`[skip ci]` kills tag-triggered workflows** — GitHub Actions skips workflows when the tag points to a commit with `[skip ci]` in its message. Never tag a `[skip ci]` commit. If needed, create an empty commit (`git commit --allow-empty -m "chore: release vX.Y.Z"`) as the tag target.
 
 ### GitHub Actions Best Practices
 
 - Action refs: use exact format from docs (`release/v1` vs `v1` — branch refs differ from tags)
-- Homebrew bump action: `mislav/bump-homebrew-formula-action` (not `-pr`)
 - Workflow permissions: scope `id-token: write` at job level for OIDC, not workflow level
 - PyPI trusted publishing: match owner/repo/workflow/environment exactly in PyPI settings
 
