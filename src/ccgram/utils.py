@@ -306,6 +306,21 @@ def check_duplicate_ccgram(session_name: str) -> str | None:
     return None
 
 
+def assert_sendable(file_path: str | Path) -> None:
+    """Block sending files from ccgram's own state directory.
+
+    Prevents accidental leakage of tokens, session maps, or config
+    via any outbound file-sending path.
+    """
+    try:
+        real = Path(file_path).resolve()
+        state_real = ccgram_dir().resolve()
+    except OSError as exc:
+        raise ValueError(f"cannot verify path safety: {file_path}") from exc
+    if real == state_real or str(real).startswith(str(state_real) + os.sep):
+        raise ValueError(f"refusing to send state file: {file_path}")
+
+
 def task_done_callback(task: asyncio.Task[None]) -> None:
     """Log unhandled exceptions from background asyncio tasks.
 

@@ -69,6 +69,7 @@ _FLAG_TO_ENV: list[tuple[str, str]] = [
     ("show_hidden_dirs", "CCGRAM_SHOW_HIDDEN_DIRS"),
     ("claude_config_dir", "CLAUDE_CONFIG_DIR"),
     ("whisper_provider", "CCGRAM_WHISPER_PROVIDER"),
+    ("ack_reaction", "CCGRAM_ACK_REACTION"),
 ]
 
 
@@ -185,6 +186,12 @@ def apply_args_to_env(**kwargs: object) -> None:
     default=None,
     envvar="CCGRAM_WHISPER_PROVIDER",
     help='Whisper transcription provider: "openai", "groq", or "" (disabled).',
+)
+@click.option(
+    "--ack-reaction",
+    default=None,
+    envvar="CCGRAM_ACK_REACTION",
+    help='React to forwarded messages with emoji (e.g., "👀"). Empty=disabled.',
 )
 def run_cmd(**kwargs: object) -> None:
     """Start the bot with optional overrides."""

@@ -22,7 +22,7 @@ from telegram.ext import ContextTypes
 from ..config import config
 from ..session import session_manager
 from .callback_helpers import get_thread_id
-from .message_sender import safe_reply
+from .message_sender import ack_reaction, safe_reply
 
 logger = structlog.get_logger()
 
@@ -213,6 +213,7 @@ async def _upload_and_notify(
 
     success, err = await session_manager.send_to_window(window_id, claude_msg)
     if success:
+        await ack_reaction(message.get_bot(), message.chat.id, message.message_id)
         await safe_reply(message, f"{success_emoji} Uploaded `{rel_path}`")
     else:
         await safe_reply(

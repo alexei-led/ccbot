@@ -34,6 +34,7 @@ from .interactive_ui import get_interactive_window, handle_interactive_ui
 from .message_queue import enqueue_status_update
 from .message_sender import (
     NO_LINK_PREVIEW,
+    ack_reaction,
     rate_limit_send_message,
     safe_reply,
 )
@@ -346,6 +347,8 @@ async def _forward_message(
     if not success:
         await safe_reply(message, f"\u274c {err_message}")
         return
+
+    await ack_reaction(bot, message.chat.id, message.message_id)
 
     from .command_history import record_command
 

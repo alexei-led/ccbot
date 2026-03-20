@@ -1,4 +1,4 @@
-"""Tests for ccgram.utils: ccgram_dir, atomic_write_json, read_cwd_from_jsonl, read_session_metadata_from_jsonl, log_throttled."""
+"""Tests for ccgram.utils: ccgram_dir, atomic_write_json, read_cwd_from_jsonl, read_session_metadata_from_jsonl, log_throttled, assert_sendable."""
 
 import json
 from pathlib import Path
@@ -9,6 +9,7 @@ import structlog
 from ccgram.utils import (
     _SCAN_LINES,
     _throttle_state,
+    assert_sendable,
     atomic_write_json,
     ccgram_dir,
     log_throttle_reset,
@@ -372,3 +373,75 @@ class TestLogThrottleSweep:
         removed = log_throttle_sweep(max_age=10.0, _clock=lambda: 1000.0)
         assert removed == 2
         assert len(_throttle_state) == 0
+
+
+class TestAssertSendable:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("CCBOT_DIR", raising=False)
+
+    def test_path_inside_state_dir_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        state_dir = tmp_path / ".ccgram"
+        state_dir.mkdir()
+        secret = state_dir / "state.json"
+        secret.touch()
+        monkeypatch.setenv("CCGRAM_DIR", str(state_dir))
+        with pytest.raises(ValueError, match="refusing to send state file"):
+            assert_sendable(secret)
+
+    def test_state_dir_itself_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        state_dir = tmp_path / ".ccgram"
+        state_dir.mkdir()
+        monkeypatch.setenv("CCGRAM_DIR", str(state_dir))
+        with pytest.raises(ValueError, match="refusing to send state file"):
+            assert_sendable(state_dir)
+
+    def test_path_outside_state_dir_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        state_dir = tmp_path / ".ccgram"
+        state_dir.mkdir()
+        safe_file = tmp_path / "project" / "file.txt"
+        safe_file.parent.mkdir()
+        safe_file.touch()
+        monkeypatch.setenv("CCGRAM_DIR", str(state_dir))
+        assert_sendable(safe_file)
+
+    def test_nonexistent_path_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        state_dir = tmp_path / ".ccgram"
+        state_dir.mkdir()
+        monkeypatch.setenv("CCGRAM_DIR", str(state_dir))
+        assert_sendable(tmp_path / "does" / "not" / "exist.txt")
+
+    def test_sibling_dir_with_prefix_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        state_dir = tmp_path / ".ccgram"
+        state_dir.mkdir()
+        sibling = tmp_path / ".ccgram-uploads"
+        sibling.mkdir()
+        monkeypatch.setenv("CCGRAM_DIR", str(state_dir))
+        assert_sendable(sibling / "photo.jpg")
+
+    def test_os_error_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        state_dir = tmp_path / ".ccgram"
+        state_dir.mkdir()
+        monkeypatch.setenv("CCGRAM_DIR", str(state_dir))
+        original_resolve = Path.resolve
+
+        def broken_resolve(self: Path, strict: bool = False) -> Path:
+            if "file.txt" in str(self):
+                raise OSError("simulated resolve failure")
+            return original_resolve(self, strict=strict)
+
+        monkeypatch.setattr(Path, "resolve", broken_resolve)
+        with pytest.raises(ValueError, match="cannot verify path safety"):
+            assert_sendable("/some/file.txt")

@@ -14,6 +14,7 @@ from telegram.ext import ContextTypes
 
 from ..session import session_manager
 from .callback_helpers import get_thread_id
+from .message_sender import ack_reaction
 from .user_state import VOICE_PENDING
 
 logger = structlog.get_logger()
@@ -79,6 +80,7 @@ async def _handle_send(
     success, err = await session_manager.send_to_window(window_id, pending_text)
 
     if success:
+        await ack_reaction(msg.get_bot(), msg.chat.id, message_id)
         try:
             await msg.delete()
         except TelegramError as e:

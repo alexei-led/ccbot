@@ -12,13 +12,14 @@ Functions:
 """
 
 import asyncio
+import contextlib
 import re
 import structlog
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message
+from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message, ReactionTypeEmoji
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ..markdown_v2 import convert_markdown
@@ -221,3 +222,21 @@ async def safe_send(
         return await bot.send_message(chat_id=chat_id, text=text, **kw)
 
     await _with_mdv2_fallback(_send, text, f"send message to {chat_id}", **kwargs)
+
+
+async def ack_reaction(bot: Bot, chat_id: int, message_id: int) -> None:
+    """React to a message with the configured ack emoji, if enabled.
+
+    Fire-and-forget: invalid or unsupported emoji are silently ignored.
+    Telegram only accepts a fixed whitelist of emoji for reactions.
+    """
+    from ..config import config
+
+    if not config.ack_reaction:
+        return
+    with contextlib.suppress(TelegramError):
+        await bot.set_message_reaction(
+            chat_id=chat_id,
+            message_id=message_id,
+            reaction=[ReactionTypeEmoji(emoji=config.ack_reaction)],
+        )

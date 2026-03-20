@@ -119,6 +119,11 @@ class Config:
             "CCGRAM_SHOW_HIDDEN_DIRS", "CCBOT_SHOW_HIDDEN_DIRS"
         ).lower() in ("1", "true", "yes")
 
+        # Ack reaction: react to forwarded messages with an emoji (empty = disabled)
+        self.ack_reaction: str = _env_with_fallback(
+            "CCGRAM_ACK_REACTION", "CCBOT_ACK_REACTION"
+        )
+
         # Whisper transcription
         self.whisper_provider: str = _env_with_fallback(
             "CCGRAM_WHISPER_PROVIDER", "CCBOT_WHISPER_PROVIDER"
