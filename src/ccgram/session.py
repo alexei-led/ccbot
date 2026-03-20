@@ -45,6 +45,9 @@ APPROVAL_MODES: frozenset[str] = frozenset({"normal", "yolo"})
 DEFAULT_APPROVAL_MODE = "normal"
 YOLO_APPROVAL_MODE = "yolo"
 
+BATCH_MODES: tuple[str, ...] = ("batched", "verbose")
+DEFAULT_BATCH_MODE = "batched"
+
 
 _LEGACY_SESSION_PREFIX = "ccbot:"
 
@@ -112,6 +115,7 @@ class WindowState:
     notification_mode: str = "all"
     provider_name: str = ""
     approval_mode: str = DEFAULT_APPROVAL_MODE
+    batch_mode: str = DEFAULT_BATCH_MODE
     external: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -129,6 +133,8 @@ class WindowState:
             d["provider_name"] = self.provider_name
         if self.approval_mode != DEFAULT_APPROVAL_MODE:
             d["approval_mode"] = self.approval_mode
+        if self.batch_mode != DEFAULT_BATCH_MODE:
+            d["batch_mode"] = self.batch_mode
         if self.external:
             d["external"] = True
         return d
@@ -143,6 +149,7 @@ class WindowState:
             notification_mode=data.get("notification_mode", "all"),
             provider_name=data.get("provider_name", ""),
             approval_mode=data.get("approval_mode", DEFAULT_APPROVAL_MODE),
+            batch_mode=data.get("batch_mode", DEFAULT_BATCH_MODE),
             external=data.get("external", False),
         )
 
@@ -1057,6 +1064,30 @@ class SessionManager:
         idx = modes.index(current) if current in modes else 0
         new_mode = modes[(idx + 1) % len(modes)]
         self.set_notification_mode(window_id, new_mode)
+        return new_mode
+
+    # --- Batch mode ---
+
+    def get_batch_mode(self, window_id: str) -> str:
+        """Get batch mode for a window (default: 'batched')."""
+        state = self.window_states.get(window_id)
+        mode = state.batch_mode if state else DEFAULT_BATCH_MODE
+        return mode if mode in BATCH_MODES else DEFAULT_BATCH_MODE
+
+    def set_batch_mode(self, window_id: str, mode: str) -> None:
+        """Set batch mode for a window."""
+        if mode not in BATCH_MODES:
+            raise ValueError(f"Invalid batch mode: {mode!r}")
+        state = self.get_window_state(window_id)
+        if state.batch_mode != mode:
+            state.batch_mode = mode
+            self._save_state()
+
+    def cycle_batch_mode(self, window_id: str) -> str:
+        """Toggle batch mode: batched ↔ verbose. Returns new mode."""
+        current = self.get_batch_mode(window_id)
+        new_mode = "verbose" if current == "batched" else "batched"
+        self.set_batch_mode(window_id, new_mode)
         return new_mode
 
     # --- User directory favorites ---

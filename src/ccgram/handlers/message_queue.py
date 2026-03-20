@@ -48,6 +48,76 @@ logger = structlog.get_logger()
 # Merge limit for content messages
 MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
 
+# Batch limits for tool call chains
+BATCH_MAX_LENGTH = 3800  # Same as merge limit
+BATCH_MAX_ENTRIES = 20
+
+
+@dataclass
+class ToolBatchEntry:
+    """A single tool call entry within a batch."""
+
+    tool_use_id: str | None
+    tool_use_text: str  # Formatted summary from build_response_parts
+    tool_result_text: str | None = None  # None until result arrives
+
+
+@dataclass
+class ToolBatch:
+    """Accumulator for consecutive tool calls to batch into one Telegram message."""
+
+    window_id: str
+    thread_id: int  # thread_id_or_0
+    entries: list[ToolBatchEntry] = field(default_factory=list)
+    telegram_msg_id: int | None = None
+    total_length: int = 0
+
+
+# Tool emoji map for batch display
+_TOOL_ICONS: dict[str, str] = {
+    "Read": "\U0001f4d6",  # 📖
+    "Edit": "\u270f\ufe0f",  # ✏️
+    "Write": "\U0001f4dd",  # 📝
+    "Bash": "\u26a1",  # ⚡
+    "Grep": "\U0001f50d",  # 🔍
+    "Glob": "\U0001f4c2",  # 📂
+    "MultiEdit": "\u270f\ufe0f",  # ✏️
+    "Agent": "\U0001f916",  # 🤏
+}
+_DEFAULT_TOOL_ICON = "\U0001f527"  # 🔧
+
+
+def _is_batch_eligible(task: MessageTask) -> bool:
+    """Check if a task is eligible for tool call batching."""
+    return task.task_type == "content" and task.content_type in (
+        "tool_use",
+        "tool_result",
+    )
+
+
+def format_batch_message(entries: list[ToolBatchEntry]) -> str:
+    """Render a batch of tool calls as a single compact message.
+
+    Format:
+        ⚡ 3 tool calls
+        📖 Read  src/foo.py       ⎿  42 lines
+        ✏️ Edit  src/foo.py       ⎿  +3 −1
+        ⚡ Bash  make test        ⏳
+    """
+    count = len(entries)
+    label = "tool call" if count == 1 else "tool calls"
+    lines = [f"\u26a1 {count} {label}"]
+
+    for entry in entries:
+        line = entry.tool_use_text
+        if entry.tool_result_text is not None:
+            line = f"{line}  \u23bf  {entry.tool_result_text}"
+        else:
+            line = f"{line}  \u23f3"
+        lines.append(line)
+
+    return "\n".join(lines)
+
 
 def build_status_keyboard(
     window_id: str, history: list[str] | None = None
@@ -123,6 +193,9 @@ _tool_msg_ids: dict[tuple[str, int, int], int] = {}
 
 # Status message tracking: (user_id, thread_id_or_0) -> (message_id, window_id, last_text)
 _status_msg_info: dict[tuple[int, int], tuple[int, str, str]] = {}
+
+# Active tool batches: (user_id, thread_id_or_0) -> ToolBatch
+_active_batches: dict[tuple[int, int], ToolBatch] = {}
 
 
 def get_message_queue(user_id: int) -> asyncio.Queue[MessageTask] | None:
@@ -275,6 +348,171 @@ async def _coalesce_status_updates(
     return selected, dropped
 
 
+def _should_batch(window_id: str) -> bool:
+    """Check if batching is enabled for a window."""
+    return session_manager.get_batch_mode(window_id) == "batched"
+
+
+async def _process_batch_task(bot: Bot, user_id: int, task: MessageTask) -> None:
+    """Add a tool_use or tool_result to the active batch, send/edit the batch message."""
+    window_id = task.window_id or ""
+    thread_id = task.thread_id or 0
+    bkey = (user_id, thread_id)
+    chat_id = session_manager.resolve_chat_id(user_id, task.thread_id)
+
+    batch = _active_batches.get(bkey)
+
+    if task.content_type == "tool_result" and task.tool_use_id and batch:
+        # Find matching entry and update with result text
+        for entry in batch.entries:
+            if entry.tool_use_id == task.tool_use_id:
+                result_text = task.text or ""
+                # Compact result: first line only, truncated
+                first_line = result_text.split("\n", 1)[0][:80]
+                entry.tool_result_text = first_line
+                break
+        else:
+            # No matching entry — fall through to normal processing
+            await _flush_batch(bot, user_id, thread_id)
+            await _process_content_task(bot, user_id, task)
+            return
+    elif task.content_type == "tool_use":
+        if not batch or batch.window_id != window_id:
+            # Flush any existing batch for a different window
+            if batch:
+                await _flush_batch(bot, user_id, thread_id)
+            batch = ToolBatch(window_id=window_id, thread_id=thread_id)
+            _active_batches[bkey] = batch
+
+        # Build entry text from the task's formatted parts
+        entry_text = task.text or "\n".join(task.parts) or "tool call"
+        # Strip markdown conversion artifacts for batch display
+        entry = ToolBatchEntry(
+            tool_use_id=task.tool_use_id,
+            tool_use_text=entry_text,
+        )
+        batch.entries.append(entry)
+        batch.total_length += len(entry_text)
+
+        # Check if batch exceeds limits — flush and start new
+        if (
+            len(batch.entries) > BATCH_MAX_ENTRIES
+            or batch.total_length > BATCH_MAX_LENGTH
+        ):
+            overflow_entry = batch.entries.pop()
+            batch.total_length -= len(entry_text)
+            await _flush_batch(bot, user_id, thread_id)
+            # Start new batch with the overflow entry
+            batch = ToolBatch(window_id=window_id, thread_id=thread_id)
+            batch.entries.append(overflow_entry)
+            batch.total_length = len(entry_text)
+            _active_batches[bkey] = batch
+    else:
+        # Unexpected content_type in batch path
+        return
+
+    # Send or edit batch message
+    batch_text = format_batch_message(batch.entries)
+    md_text = convert_markdown(batch_text)
+
+    if batch.telegram_msg_id is None:
+        # Clear status message first, then send new batch message
+        await _do_clear_status_message(bot, user_id, thread_id)
+        sent = await rate_limit_send_message(
+            bot,
+            chat_id,
+            batch_text,
+            **_send_kwargs(task.thread_id),  # type: ignore[arg-type]
+        )
+        if sent:
+            batch.telegram_msg_id = sent.message_id
+    else:
+        # Edit existing batch message
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=batch.telegram_msg_id,
+                text=md_text,
+                parse_mode="MarkdownV2",
+                link_preview_options=NO_LINK_PREVIEW,
+            )
+        except RetryAfter:
+            raise
+        except TelegramError:
+            # Fallback to plain text
+            with contextlib.suppress(TelegramError):
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=batch.telegram_msg_id,
+                    text=batch_text,
+                    link_preview_options=NO_LINK_PREVIEW,
+                )
+
+
+async def _flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
+    """Finalize the active batch: do a final edit and clear state."""
+    bkey = (user_id, thread_id_or_0)
+    batch = _active_batches.pop(bkey, None)
+    if not batch or not batch.entries:
+        return
+
+    # Final edit with all results resolved
+    if batch.telegram_msg_id is not None:
+        chat_id = session_manager.resolve_chat_id(
+            user_id, thread_id_or_0 if thread_id_or_0 != 0 else None
+        )
+        batch_text = format_batch_message(batch.entries)
+        md_text = convert_markdown(batch_text)
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=batch.telegram_msg_id,
+                text=md_text,
+                parse_mode="MarkdownV2",
+                link_preview_options=NO_LINK_PREVIEW,
+            )
+        except RetryAfter:
+            raise
+        except TelegramError:
+            with contextlib.suppress(TelegramError):
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=batch.telegram_msg_id,
+                    text=batch_text,
+                    link_preview_options=NO_LINK_PREVIEW,
+                )
+
+
+async def _handle_content_task(
+    bot: Bot,
+    user_id: int,
+    task: MessageTask,
+    queue: asyncio.Queue[MessageTask],
+    lock: asyncio.Lock,
+) -> int:
+    """Route a content task through batching or normal processing.
+
+    Returns the number of additional merged tasks (caller must call task_done for each).
+    """
+    # Batch-eligible tool tasks with batching enabled
+    if _is_batch_eligible(task) and task.window_id and _should_batch(task.window_id):
+        await _process_batch_task(bot, user_id, task)
+        return 0
+
+    # Non-tool content: flush any active batch first
+    thread_id = task.thread_id or 0
+    bkey = (user_id, thread_id)
+    if bkey in _active_batches:
+        await _flush_batch(bot, user_id, thread_id)
+
+    # Try to merge consecutive content tasks
+    merged_task, merge_count = await _merge_content_tasks(queue, task, lock)
+    if merge_count > 0:
+        logger.debug("Merged %d tasks for user %s", merge_count, user_id)
+    await _process_content_task(bot, user_id, merged_task)
+    return merge_count
+
+
 async def _message_queue_worker(bot: Bot, user_id: int) -> None:
     """Process message tasks for a user sequentially."""
     queue = _message_queues[user_id]
@@ -286,19 +524,15 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
             task = await queue.get()
             try:
                 if task.task_type == "content":
-                    # Try to merge consecutive content tasks
-                    merged_task, merge_count = await _merge_content_tasks(
-                        queue, task, lock
-                    )
-                    if merge_count > 0:
-                        logger.debug(
-                            "Merged %d tasks for user %s", merge_count, user_id
-                        )
-                        # Mark merged tasks as done
-                        for _ in range(merge_count):
-                            queue.task_done()
-                    await _process_content_task(bot, user_id, merged_task)
+                    extra = await _handle_content_task(bot, user_id, task, queue, lock)
+                    for _ in range(extra):
+                        queue.task_done()
                 elif task.task_type == "status_update":
+                    # Flush batch before status
+                    thread_id = task.thread_id or 0
+                    bkey = (user_id, thread_id)
+                    if bkey in _active_batches:
+                        await _flush_batch(bot, user_id, thread_id)
                     collapsed_task, dropped = await _coalesce_status_updates(
                         queue, task, lock
                     )
@@ -623,6 +857,12 @@ async def _check_and_send_status(
     queue = _message_queues.get(user_id)
     if queue and not queue.empty():
         return
+
+    # Flush any active batch before showing status
+    thread_id_or_0 = thread_id or 0
+    bkey = (user_id, thread_id_or_0)
+    if bkey in _active_batches:
+        await _flush_batch(bot, user_id, thread_id_or_0)
     w = await tmux_manager.find_window_by_id(window_id)
     if not w:
         return
@@ -636,7 +876,6 @@ async def _check_and_send_status(
     if notif_mode in ("muted", "errors_only"):
         return
 
-    thread_id_or_0 = thread_id or 0
     status = get_provider_for_window(window_id).parse_terminal_status(pane_text)
     if status and not status.is_interactive:
         await _do_send_status_message(
@@ -721,4 +960,5 @@ async def shutdown_workers() -> None:
     _queue_workers.clear()
     _message_queues.clear()
     _queue_locks.clear()
+    _active_batches.clear()
     logger.info("Message queue workers stopped")

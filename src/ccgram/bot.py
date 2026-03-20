@@ -1138,6 +1138,39 @@ async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
     )
 
 
+async def verbose_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle tool call batching for this topic."""
+    user = update.effective_user
+    if not user or not is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    if thread_id is None:
+        await safe_reply(update.message, "\u274c Use this command inside a topic.")
+        return
+
+    window_id = session_manager.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(
+            update.message, "\u274c This topic is not bound to any session."
+        )
+        return
+
+    new_mode = session_manager.cycle_batch_mode(window_id)
+    if new_mode == "batched":
+        await safe_reply(
+            update.message,
+            "\u26a1 Tool calls will be *batched* into a single message.",
+        )
+    else:
+        await safe_reply(
+            update.message,
+            "\U0001f4ac Tool calls will be sent *individually* (verbose mode).",
+        )
+
+
 async def inline_query_handler(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1786,6 +1819,9 @@ def create_bot() -> Application:
     application.add_handler(CommandHandler("sync", sync_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("toolbar", toolbar_command, filters=_group_filter)
+    )
+    application.add_handler(
+        CommandHandler("verbose", verbose_command, filters=_group_filter)
     )
     application.add_handler(
         CommandHandler("restore", restore_command, filters=_group_filter)
