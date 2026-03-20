@@ -488,9 +488,17 @@ class SessionMonitor:
 
         # Parse new entries using the shared logic, carrying over pending tools
         carry = self._pending_tools.get(session_id, {})
+        # Get cwd from session_map for path shortening in tool summaries
+        session_cwd: str | None = None
+        for _wkey, details in self._last_session_map.items():
+            if details.get("session_id") == session_id:
+                session_cwd = details.get("cwd")
+                break
+
         agent_messages, remaining = provider.parse_transcript_entries(
             new_entries,
             pending_tools=carry,
+            cwd=session_cwd,
         )
         if remaining:
             self._pending_tools[session_id] = remaining

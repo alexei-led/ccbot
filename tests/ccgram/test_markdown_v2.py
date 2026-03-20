@@ -1,75 +1,176 @@
-"""Tests for Markdown → Telegram MarkdownV2 conversion."""
+"""Tests for Markdown → Telegram entity-based conversion."""
 
-import pytest
+from telegram import MessageEntity
 
 from ccgram.markdown_v2 import (
-    _escape_mdv2,
     _strip_indented_code_blocks,
-    convert_markdown,
+    _truncate_quote_text,
+    convert_to_entities,
 )
 from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
 from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
 
 
-class TestEscapeMdv2:
-    @pytest.mark.parametrize(
-        "input_text,expected",
-        [
-            (
-                "_*[]()~>#+\\-=|{}.!",
-                "\\_\\*\\[\\]\\(\\)\\~\\>\\#\\+\\\\\\-\\=\\|\\{\\}\\.\\!",
-            ),
-            ("hello world 123", "hello world 123"),
-            ("", ""),
-        ],
-        ids=["special-chars", "alphanumeric-unchanged", "empty-string"],
-    )
-    def test_escape(self, input_text: str, expected: str) -> None:
-        assert _escape_mdv2(input_text) == expected
-
-
-class TestConvertMarkdown:
+class TestConvertToEntities:
     def test_plain_text(self) -> None:
-        result = convert_markdown("hello world")
-        assert "hello world" in result
+        text, entities = convert_to_entities("hello world")
+        assert "hello world" in text
+        assert isinstance(entities, list)
 
     def test_bold(self) -> None:
-        result = convert_markdown("**bold text**")
-        assert "*bold text*" in result
-        assert "**bold text**" not in result
+        text, entities = convert_to_entities("**bold text**")
+        assert "bold text" in text
+        # Should have a bold entity
+        bold_entities = [e for e in entities if e.type == MessageEntity.BOLD]
+        assert len(bold_entities) == 1
+        assert (
+            text[
+                bold_entities[0].offset : bold_entities[0].offset
+                + bold_entities[0].length
+            ]
+            == "bold text"
+        )
+
+    def test_italic(self) -> None:
+        text, entities = convert_to_entities("*italic text*")
+        assert "italic text" in text
+        italic_entities = [e for e in entities if e.type == MessageEntity.ITALIC]
+        assert len(italic_entities) == 1
+
+    def test_inline_code(self) -> None:
+        text, entities = convert_to_entities("`inline code`")
+        assert "inline code" in text
+        code_entities = [e for e in entities if e.type == MessageEntity.CODE]
+        assert len(code_entities) == 1
 
     def test_code_block_preserved(self) -> None:
-        result = convert_markdown("```python\nprint('hi')\n```")
-        assert "```" in result
-        assert "print" in result
+        text, entities = convert_to_entities("```python\nprint('hi')\n```")
+        assert "print" in text
+        pre_entities = [e for e in entities if e.type == MessageEntity.PRE]
+        assert len(pre_entities) == 1
+
+    def test_code_block_with_language(self) -> None:
+        text, entities = convert_to_entities("```python\nx = 1\n```")
+        pre_entities = [e for e in entities if e.type == MessageEntity.PRE]
+        assert len(pre_entities) == 1
+        assert pre_entities[0].language == "python"
 
     def test_expandable_quote_sentinels(self) -> None:
-        text = f"{EXP_START}quoted content{EXP_END}"
-        result = convert_markdown(text)
-        assert EXP_START not in result
-        assert EXP_END not in result
-        assert ">quoted content||" in result
+        text, entities = convert_to_entities(f"{EXP_START}quoted content{EXP_END}")
+        assert EXP_START not in text
+        assert EXP_END not in text
+        assert "quoted content" in text
+        exp_entities = [
+            e for e in entities if e.type == MessageEntity.EXPANDABLE_BLOCKQUOTE
+        ]
+        assert len(exp_entities) == 1
 
     def test_mixed_text_and_expandable_quote(self) -> None:
-        text = f"before {EXP_START}inside quote{EXP_END} after"
-        result = convert_markdown(text)
-        assert EXP_START not in result
-        assert EXP_END not in result
-        assert ">inside quote||" in result
-        assert "before" in result
-        assert "after" in result
+        text, entities = convert_to_entities(
+            f"before {EXP_START}inside quote{EXP_END} after"
+        )
+        assert EXP_START not in text
+        assert EXP_END not in text
+        assert "inside quote" in text
+        assert "before" in text
+        assert "after" in text
+        exp_entities = [
+            e for e in entities if e.type == MessageEntity.EXPANDABLE_BLOCKQUOTE
+        ]
+        assert len(exp_entities) == 1
 
     def test_indented_text_not_treated_as_code(self) -> None:
-        result = convert_markdown("Some text:\n\n    indented line\n\nMore text")
-        assert "```" not in result
-        assert "indented line" in result
+        text, entities = convert_to_entities(
+            "Some text:\n\n    indented line\n\nMore text"
+        )
+        assert "indented line" in text
+        # No pre entity for indented text (stripped by _strip_indented_code_blocks)
+        pre_entities = [e for e in entities if e.type == MessageEntity.PRE]
+        assert len(pre_entities) == 0
 
     def test_fenced_code_block_indentation_preserved(self) -> None:
-        text = "```python\ndef foo():\n    x = 1\n\n    y = 2\n    return x + y\n```"
-        result = convert_markdown(text)
-        assert "    x = 1" in result
-        assert "    y = 2" in result
-        assert "    return x + y" in result
+        md = "```python\ndef foo():\n    x = 1\n\n    y = 2\n    return x + y\n```"
+        text, entities = convert_to_entities(md)
+        assert "    x = 1" in text
+        assert "    y = 2" in text
+        assert "    return x + y" in text
+
+    def test_emoji_in_text(self) -> None:
+        text, entities = convert_to_entities("Hello 🌍 **world**")
+        assert text == "Hello 🌍 world"
+        bold_entities = [e for e in entities if e.type == MessageEntity.BOLD]
+        assert len(bold_entities) == 1
+        # Verify the bold entity points to "world" correctly
+        # 🌍 is 2 UTF-16 code units, so offset must account for it
+        ent = bold_entities[0]
+        # Extract using UTF-16 offsets: encode, slice, decode
+        utf16 = text.encode("utf-16-le")
+        extracted = utf16[ent.offset * 2 : (ent.offset + ent.length) * 2].decode(
+            "utf-16-le"
+        )
+        assert extracted == "world"
+
+    def test_special_chars_no_parse_error(self) -> None:
+        """Entity-based formatting should handle special chars without errors."""
+        text, entities = convert_to_entities(
+            "_var_name_ and `file-path.txt` and #heading"
+        )
+        assert "var_name" in text
+        assert "file-path.txt" in text
+        assert isinstance(entities, list)
+
+    def test_link(self) -> None:
+        text, entities = convert_to_entities("[click here](https://example.com)")
+        assert "click here" in text
+        link_entities = [e for e in entities if e.type == MessageEntity.TEXT_LINK]
+        assert len(link_entities) == 1
+        assert link_entities[0].url == "https://example.com"
+
+    def test_empty_text(self) -> None:
+        text, entities = convert_to_entities("")
+        assert text == ""
+        assert entities == []
+
+    def test_multiple_expandable_quotes(self) -> None:
+        md = f"text1\n{EXP_START}quote1{EXP_END}\nmiddle\n{EXP_START}quote2{EXP_END}\nend"
+        text, entities = convert_to_entities(md)
+        exp_entities = [
+            e for e in entities if e.type == MessageEntity.EXPANDABLE_BLOCKQUOTE
+        ]
+        assert len(exp_entities) == 2
+        assert "quote1" in text
+        assert "quote2" in text
+
+    def test_expandable_quote_with_formatting_around(self) -> None:
+        md = f"**bold** {EXP_START}quoted{EXP_END} *italic*"
+        text, entities = convert_to_entities(md)
+        bold_entities = [e for e in entities if e.type == MessageEntity.BOLD]
+        italic_entities = [e for e in entities if e.type == MessageEntity.ITALIC]
+        exp_entities = [
+            e for e in entities if e.type == MessageEntity.EXPANDABLE_BLOCKQUOTE
+        ]
+        assert len(bold_entities) >= 1
+        assert len(italic_entities) >= 1
+        assert len(exp_entities) == 1
+
+    def test_returns_telegram_message_entity_types(self) -> None:
+        text, entities = convert_to_entities("**bold** `code`")
+        for ent in entities:
+            assert isinstance(ent, MessageEntity)
+
+
+class TestTruncateQuoteText:
+    def test_short_text_not_truncated(self) -> None:
+        text, truncated = _truncate_quote_text("short text")
+        assert text == "short text"
+        assert not truncated
+
+    def test_long_text_truncated(self) -> None:
+        long_text = "line\n" * 2000
+        text, truncated = _truncate_quote_text(long_text)
+        assert truncated
+        assert len(text) <= 3800 + 50  # budget + suffix
+        assert "truncated" in text
 
 
 class TestStripIndentedCodeBlocks:

@@ -181,16 +181,21 @@ class TranscriptParser:
         return "\n".join(result_lines)
 
     @classmethod
-    def format_tool_use_summary(cls, name: str, input_data: dict | Any) -> str:
+    def format_tool_use_summary(
+        cls, name: str, input_data: dict | Any, cwd: str | None = None
+    ) -> str:
         """Format a tool_use block into a brief summary line.
 
         Args:
             name: Tool name (e.g. "Read", "Write", "Bash")
             input_data: The tool input dict
+            cwd: Optional working directory for shortening file paths
 
         Returns:
             Formatted string like "**Read**(file.py)"
         """
+        from .utils import shorten_path
+
         if not isinstance(input_data, dict):
             emoji = cls.TOOL_EMOJI.get(name, "")
             prefix = f"{emoji} " if emoji else ""
@@ -200,10 +205,13 @@ class TranscriptParser:
         summary = ""
         if name in ("Read", "Glob"):
             summary = input_data.get("file_path") or input_data.get("pattern", "")
+            if name == "Read":
+                summary = shorten_path(summary, cwd)
         elif name == "Write":
-            summary = input_data.get("file_path", "")
+            summary = shorten_path(input_data.get("file_path", ""), cwd)
         elif name in ("Edit", "NotebookEdit"):
             summary = input_data.get("file_path") or input_data.get("notebook_path", "")
+            summary = shorten_path(summary, cwd)
             # Note: Edit/Update diff and stats are generated in tool_result stage,
             # not here. We just show the tool name and file path.
         elif name == "Bash":
@@ -328,7 +336,7 @@ class TranscriptParser:
         Shows relevant statistics for each tool type, with expandable quote for full content.
 
         No truncation here — per project principles, truncation is handled
-        only at the send layer (split_message / _render_expandable_quote).
+        only at the send layer (split_message / _truncate_quote_text).
         """
         if not text:
             return ""
@@ -380,6 +388,7 @@ class TranscriptParser:
         cls,
         entries: list[dict],
         pending_tools: dict[str, PendingToolInfo] | None = None,
+        cwd: str | None = None,
     ) -> tuple[list[ParsedEntry], dict[str, PendingToolInfo]]:
         """Parse a list of JSONL entries into a flat list of display-ready messages.
 
@@ -473,7 +482,7 @@ class TranscriptParser:
                         tool_id = block.get("id", "")
                         name = block.get("name", "unknown")
                         inp = block.get("input", {})
-                        summary = cls.format_tool_use_summary(name, inp)
+                        summary = cls.format_tool_use_summary(name, inp, cwd=cwd)
 
                         # ExitPlanMode: emit plan content as text before tool_use entry
                         if name == "ExitPlanMode" and isinstance(inp, dict):

@@ -1,14 +1,15 @@
-"""Safe message sending helpers with MarkdownV2 fallback.
+"""Safe message sending helpers with entity-based formatting.
 
 Provides utility functions for sending Telegram messages with automatic
-conversion to MarkdownV2 format and fallback to plain text on failure.
+conversion to entity-based formatting (no parse errors possible) and
+fallback to plain text on failure.
 
 Functions:
   - rate_limit_send: Rate limiter to avoid Telegram flood control
   - rate_limit_send_message: Combined rate limiting + send with fallback
-  - safe_reply: Reply with MarkdownV2, fallback to plain text
-  - safe_edit: Edit message with MarkdownV2, fallback to plain text
-  - safe_send: Send message with MarkdownV2, fallback to plain text
+  - safe_reply: Reply with entities, fallback to plain text
+  - safe_edit: Edit message with entities, fallback to plain text
+  - safe_send: Send message with entities, fallback to plain text
 """
 
 import asyncio
@@ -22,16 +23,13 @@ from typing import Any
 from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message, ReactionTypeEmoji
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
-from ..markdown_v2 import convert_markdown
+from ..markdown_v2 import convert_to_entities
 
 logger = structlog.get_logger()
 
 # Disable link previews in all messages to reduce visual noise
 NO_LINK_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
-# Regex to strip MarkdownV2 escape sequences from plain text fallback.
-# Matches a backslash followed by any MarkdownV2 special character.
-_MDV2_STRIP_RE = re.compile(r"\\([_*\[\]()~`>#+\-=|{}.!\\])")
 # Strip expandable blockquote syntax: leading ">" prefix and trailing "||"
 _BLOCKQUOTE_PREFIX_RE = re.compile(r"^>", re.MULTILINE)
 _BLOCKQUOTE_CLOSE_RE = re.compile(r"\|\|$", re.MULTILINE)
@@ -47,13 +45,11 @@ def _retry_after_seconds(exc: RetryAfter) -> int:
     return ra if isinstance(ra, int) else int(ra.total_seconds())
 
 
-def strip_mdv2(text: str) -> str:
-    """Strip MarkdownV2 formatting artifacts for clean plain text fallback.
+def strip_plain(text: str) -> str:
+    """Strip formatting artifacts for clean plain text fallback.
 
-    Removes backslash escapes before special chars and blockquote syntax
-    so the fallback message is readable without formatting artifacts.
+    Removes blockquote syntax so the fallback message is readable.
     """
-    text = _MDV2_STRIP_RE.sub(r"\1", text)
     text = _BLOCKQUOTE_CLOSE_RE.sub("", text)
     return _BLOCKQUOTE_PREFIX_RE.sub("", text)
 
@@ -73,48 +69,49 @@ async def rate_limit_send(chat_id: int) -> None:
     _last_send_time[chat_id] = time.monotonic()
 
 
-async def _with_mdv2_fallback(
+async def _with_entity_fallback(
     send_fn: Callable[..., Awaitable[Any]],
     text: str,
     context_label: str,
     **kwargs: Any,
 ) -> Message | None:
-    """Try MarkdownV2, fall back to plain text, handle RetryAfter throughout.
+    """Convert to entities, send, fall back to plain text on error.
 
-    Generic helper that eliminates the repeated MarkdownV2 → plain text →
-    RetryAfter pattern across all send/reply/edit functions.
+    Entity-based formatting uses character offsets — no syntax to parse,
+    no parse errors possible. The only failure mode is Telegram API errors
+    (rate limiting, message gone, etc.), which fall back to plain text.
 
     Args:
-        send_fn: Async callable accepting (text, parse_mode=..., **kwargs).
+        send_fn: Async callable accepting (text, **kwargs).
         text: Raw markdown text (pre-conversion).
         context_label: Label for warning log messages (e.g. "send to 123").
         **kwargs: Extra keyword arguments forwarded to send_fn.
 
     Returns the result Message on success, None on failure.
     """
-    mdv2_text = convert_markdown(text)
-    plain_text = strip_mdv2(text)
+    plain_text, entities = convert_to_entities(text)
 
-    # Phase 1: try MarkdownV2
+    # Phase 1: try with entities
     try:
-        return await send_fn(mdv2_text, parse_mode="MarkdownV2", **kwargs)
+        return await send_fn(plain_text, entities=entities, **kwargs)
     except RetryAfter as e:
         await asyncio.sleep(_retry_after_seconds(e) + 1)
         try:
-            return await send_fn(mdv2_text, parse_mode="MarkdownV2", **kwargs)
+            return await send_fn(plain_text, entities=entities, **kwargs)
         except TelegramError as e2:
             logger.warning("Failed to %s after retry: %s", context_label, e2)
             return None
     except TelegramError:
         pass
 
-    # Phase 2: fall back to plain text (stripped MarkdownV2 artifacts)
+    # Phase 2: fall back to plain text (no entities)
+    fallback_text = strip_plain(text)
     try:
-        return await send_fn(plain_text, **kwargs)
+        return await send_fn(fallback_text, **kwargs)
     except RetryAfter as e:
         await asyncio.sleep(_retry_after_seconds(e) + 1)
         try:
-            return await send_fn(plain_text, **kwargs)
+            return await send_fn(fallback_text, **kwargs)
         except TelegramError as e2:
             logger.warning("Failed to %s after retry: %s", context_label, e2)
             return None
@@ -129,10 +126,8 @@ async def _send_with_fallback(
     text: str,
     **kwargs: Any,
 ) -> Message | None:
-    """Send message with MarkdownV2, falling back to plain text on failure.
+    """Send message with entity formatting, falling back to plain text on failure.
 
-    Internal helper that handles the MarkdownV2 → plain text fallback pattern.
-    Handles RetryAfter with a single sleep+retry instead of propagating.
     Returns the sent Message on success, None on failure.
     """
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
@@ -140,7 +135,7 @@ async def _send_with_fallback(
     async def _send(text: str, **kw: Any) -> Message:
         return await bot.send_message(chat_id=chat_id, text=text, **kw)
 
-    return await _with_mdv2_fallback(
+    return await _with_entity_fallback(
         _send, text, f"send message to {chat_id}", **kwargs
     )
 
@@ -151,11 +146,9 @@ async def rate_limit_send_message(
     text: str,
     **kwargs: Any,
 ) -> Message | None:
-    """Rate-limited send with MarkdownV2 fallback.
+    """Rate-limited send with entity formatting fallback.
 
     Combines rate_limit_send() + _send_with_fallback() for convenience.
-    The chat_id should be the group chat ID for forum topics, or the user ID
-    for direct messages.  Use session_manager.resolve_chat_id() to obtain it.
     Returns the sent Message on success, None on failure.
     """
     await rate_limit_send(chat_id)
@@ -163,10 +156,9 @@ async def rate_limit_send_message(
 
 
 async def safe_reply(message: Message, text: str, **kwargs: Any) -> Message | None:
-    """Reply with MarkdownV2, falling back to plain text on failure.
+    """Reply with entity formatting, falling back to plain text on failure.
 
     Returns None if the original message no longer exists (e.g. deleted topic).
-    Handles RetryAfter with a single sleep+retry instead of propagating.
     """
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
 
@@ -180,17 +172,13 @@ async def safe_reply(message: Message, text: str, **kwargs: Any) -> Message | No
             raise
 
     try:
-        return await _with_mdv2_fallback(_reply, text, "reply", **kwargs)
+        return await _with_entity_fallback(_reply, text, "reply", **kwargs)
     except _MessageGoneError:
         return None
 
 
 async def safe_edit(target: Message | CallbackQuery, text: str, **kwargs: Any) -> None:
-    """Edit message with MarkdownV2, falling back to plain text on failure.
-
-    Accepts either a CallbackQuery (edit_message_text) or a Message (edit_text).
-    Handles RetryAfter with a single sleep+retry instead of propagating.
-    """
+    """Edit message with entity formatting, falling back to plain text on failure."""
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
     # Message.edit_text vs CallbackQuery.edit_message_text
     raw_edit_fn = (
@@ -200,7 +188,7 @@ async def safe_edit(target: Message | CallbackQuery, text: str, **kwargs: Any) -
     async def _edit(text: str, **kw: Any) -> Any:
         return await raw_edit_fn(text, **kw)
 
-    await _with_mdv2_fallback(_edit, text, "edit message", **kwargs)
+    await _with_entity_fallback(_edit, text, "edit message", **kwargs)
 
 
 async def safe_send(
@@ -210,10 +198,7 @@ async def safe_send(
     message_thread_id: int | None = None,
     **kwargs: Any,
 ) -> None:
-    """Send message with MarkdownV2, falling back to plain text on failure.
-
-    Handles RetryAfter with a single sleep+retry instead of propagating.
-    """
+    """Send message with entity formatting, falling back to plain text on failure."""
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
     if message_thread_id is not None:
         kwargs.setdefault("message_thread_id", message_thread_id)
@@ -221,15 +206,52 @@ async def safe_send(
     async def _send(text: str, **kw: Any) -> Message:
         return await bot.send_message(chat_id=chat_id, text=text, **kw)
 
-    await _with_mdv2_fallback(_send, text, f"send message to {chat_id}", **kwargs)
+    await _with_entity_fallback(_send, text, f"send message to {chat_id}", **kwargs)
+
+
+async def edit_with_fallback(
+    bot: Bot,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    **kwargs: Any,
+) -> bool:
+    """Edit a message with entity formatting, falling back to plain text.
+
+    Returns True on success, False on failure.
+    """
+    kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
+    plain_text, entities = convert_to_entities(text)
+
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=plain_text,
+            entities=entities,
+            **kwargs,
+        )
+        return True
+    except RetryAfter:
+        raise
+    except TelegramError:
+        try:
+            fallback = strip_plain(text)
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=fallback,
+                **kwargs,
+            )
+            return True
+        except RetryAfter:
+            raise
+        except TelegramError:
+            return False
 
 
 async def ack_reaction(bot: Bot, chat_id: int, message_id: int) -> None:
-    """React to a message with the configured ack emoji, if enabled.
-
-    Fire-and-forget: invalid or unsupported emoji are silently ignored.
-    Telegram only accepts a fixed whitelist of emoji for reactions.
-    """
+    """React to a message with the configured ack emoji, if enabled."""
     from ..config import config
 
     if not config.ack_reaction:

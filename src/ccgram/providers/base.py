@@ -34,8 +34,8 @@ EXPANDABLE_QUOTE_END = "\x02EXPQUOTE_END\x02"
 def format_expandable_quote(text: str) -> str:
     """Wrap text with sentinel markers for a Telegram expandable blockquote.
 
-    The actual MarkdownV2 formatting (> prefix, || suffix, escaping) is done
-    in convert_markdown() after telegramify processes the surrounding content.
+    The actual formatting (expandable_blockquote entity) is done
+    in convert_to_entities() after telegramify processes the surrounding content.
     """
     return f"{EXPANDABLE_QUOTE_START}{text}{EXPANDABLE_QUOTE_END}"
 
@@ -179,8 +179,12 @@ class AgentProvider(Protocol):
         self,
         entries: list[dict[str, Any]],
         pending_tools: dict[str, Any],
+        cwd: str | None = None,
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         """Parse a batch of transcript entries into AgentMessages.
+
+        Args:
+            cwd: Working directory for shortening file paths in tool summaries.
 
         Returns (messages, updated_pending_tools).
         """

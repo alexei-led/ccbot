@@ -17,6 +17,7 @@ from ccgram.utils import (
     log_throttled,
     read_cwd_from_jsonl,
     read_session_metadata_from_jsonl,
+    shorten_path,
 )
 
 
@@ -445,3 +446,36 @@ class TestAssertSendable:
         monkeypatch.setattr(Path, "resolve", broken_resolve)
         with pytest.raises(ValueError, match="cannot verify path safety"):
             assert_sendable("/some/file.txt")
+
+
+class TestShortenPath:
+    def test_subpath_shortened(self) -> None:
+        assert (
+            shorten_path("/home/user/project/src/file.py", "/home/user/project")
+            == "src/file.py"
+        )
+
+    def test_not_subpath_unchanged(self) -> None:
+        assert (
+            shorten_path("/other/path/file.py", "/home/user/project")
+            == "/other/path/file.py"
+        )
+
+    def test_cwd_none_unchanged(self) -> None:
+        assert shorten_path("/some/path/file.py", None) == "/some/path/file.py"
+
+    def test_empty_path_unchanged(self) -> None:
+        assert shorten_path("", "/home/user") == ""
+
+    def test_cwd_trailing_slash(self) -> None:
+        assert (
+            shorten_path("/home/user/project/src/f.py", "/home/user/project/")
+            == "src/f.py"
+        )
+
+    def test_exact_cwd_match(self) -> None:
+        result = shorten_path("/home/user/project", "/home/user/project")
+        assert result == "/home/user/project"
+
+    def test_relative_path_unchanged(self) -> None:
+        assert shorten_path("src/file.py", "/home/user/project") == "src/file.py"

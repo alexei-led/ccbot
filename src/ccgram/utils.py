@@ -321,6 +321,17 @@ def assert_sendable(file_path: str | Path) -> None:
         raise ValueError(f"refusing to send state file: {file_path}")
 
 
+def shorten_path(full_path: str, cwd: str | None) -> str:
+    """Return path relative to cwd if it's a subpath, else return as-is."""
+    if not cwd or not full_path:
+        return full_path
+    # Normalize trailing slashes
+    cwd = cwd.rstrip("/")
+    if full_path.startswith(cwd + "/"):
+        return os.path.relpath(full_path, cwd)
+    return full_path
+
+
 def task_done_callback(task: asyncio.Task[None]) -> None:
     """Log unhandled exceptions from background asyncio tasks.
 

@@ -106,9 +106,12 @@ class ClaudeProvider:
         self,
         entries: list[dict[str, Any]],
         pending_tools: dict[str, Any],
+        cwd: str | None = None,
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         """Parse JSONL entries via TranscriptParser and wrap as AgentMessages."""
-        parsed, remaining = TranscriptParser.parse_entries(entries, pending_tools)
+        parsed, remaining = TranscriptParser.parse_entries(
+            entries, pending_tools, cwd=cwd
+        )
 
         messages = [
             AgentMessage(

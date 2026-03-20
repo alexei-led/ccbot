@@ -24,7 +24,8 @@ from typing import Literal
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter, TelegramError
 
-from ..markdown_v2 import convert_markdown
+import contextlib
+
 from ..session import session_manager
 from ..providers import get_provider_for_window
 from ..tmux_manager import tmux_manager
@@ -37,8 +38,7 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from .message_sender import NO_LINK_PREVIEW, rate_limit_send_message
-import contextlib
+from .message_sender import edit_with_fallback, rate_limit_send_message
 
 # Top-level loop resilience: catch any error to keep the worker alive
 _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
@@ -422,26 +422,13 @@ async def _process_batch_task(bot: Bot, user_id: int, task: MessageTask) -> None
         if sent:
             batch.telegram_msg_id = sent.message_id
     else:
-        # Edit existing batch message (MarkdownV2 with plain text fallback)
-        md_text = convert_markdown(batch_text)
-        try:
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=batch.telegram_msg_id,
-                text=md_text,
-                parse_mode="MarkdownV2",
-                link_preview_options=NO_LINK_PREVIEW,
-            )
-        except RetryAfter:
-            raise
-        except TelegramError:
-            with contextlib.suppress(TelegramError):
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=batch.telegram_msg_id,
-                    text=batch_text,
-                    link_preview_options=NO_LINK_PREVIEW,
-                )
+        # Edit existing batch message with entity-based formatting
+        await edit_with_fallback(
+            bot,
+            chat_id,
+            batch.telegram_msg_id,
+            batch_text,
+        )
 
 
 async def _flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
@@ -470,25 +457,12 @@ async def _flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
         return
 
     # Final edit with all results resolved
-    md_text = convert_markdown(batch_text)
-    try:
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=batch.telegram_msg_id,
-            text=md_text,
-            parse_mode="MarkdownV2",
-            link_preview_options=NO_LINK_PREVIEW,
-        )
-    except RetryAfter:
-        raise
-    except TelegramError:
-        with contextlib.suppress(TelegramError):
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=batch.telegram_msg_id,
-                text=batch_text,
-                link_preview_options=NO_LINK_PREVIEW,
-            )
+    await edit_with_fallback(
+        bot,
+        chat_id,
+        batch.telegram_msg_id,
+        batch_text,
+    )
 
 
 async def _handle_content_task(
@@ -607,37 +581,17 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
             await _do_clear_status_message(bot, user_id, thread_id)
             # Join all parts for editing (merged content goes together)
             full_text = "\n\n".join(task.parts)
-            try:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=edit_msg_id,
-                    text=full_text,
-                    parse_mode="MarkdownV2",
-                    link_preview_options=NO_LINK_PREVIEW,
-                )
+            success = await edit_with_fallback(
+                bot,
+                chat_id,
+                edit_msg_id,
+                full_text,
+            )
+            if success:
                 await _check_and_send_status(bot, user_id, window_id, task.thread_id)
                 return
-            except RetryAfter:
-                raise
-            except TelegramError:
-                try:
-                    # Fallback: strip markdown
-                    plain_text = task.text or full_text
-                    await bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=edit_msg_id,
-                        text=plain_text,
-                        link_preview_options=NO_LINK_PREVIEW,
-                    )
-                    await _check_and_send_status(
-                        bot, user_id, window_id, task.thread_id
-                    )
-                    return
-                except RetryAfter:
-                    raise
-                except TelegramError:
-                    logger.debug("Failed to edit tool msg %s, sending new", edit_msg_id)
-                    # Fall through to send as new message
+            logger.debug("Failed to edit tool msg %s, sending new", edit_msg_id)
+            # Fall through to send as new message
 
     # 2. Send content messages, converting status message to first content part
     first_part = True
@@ -704,35 +658,17 @@ async def _convert_status_to_content(
         return None
 
     # Edit status message to show content (remove status buttons)
-    try:
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=msg_id,
-            text=content_text,
-            parse_mode="MarkdownV2",
-            reply_markup=None,
-            link_preview_options=NO_LINK_PREVIEW,
-        )
+    success = await edit_with_fallback(
+        bot,
+        chat_id,
+        msg_id,
+        content_text,
+        reply_markup=None,
+    )
+    if success:
         return msg_id
-    except RetryAfter:
-        raise
-    except TelegramError:
-        try:
-            # Fallback to plain text
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=msg_id,
-                text=content_text,
-                reply_markup=None,
-                link_preview_options=NO_LINK_PREVIEW,
-            )
-            return msg_id
-        except RetryAfter:
-            raise
-        except TelegramError as e:
-            logger.debug("Failed to convert status to content: %s", e)
-            # Message might be deleted or too old, caller will send new message
-            return None
+    # Message might be deleted or too old, caller will send new message
+    return None
 
 
 def _get_idle_history(
@@ -781,36 +717,20 @@ async def _process_status_update_task(
             # Same window, text changed - edit in place
             history = _get_idle_history(user_id, thread_id, status_text)
             keyboard = build_status_keyboard(window_id, history=history)
-            try:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=msg_id,
-                    text=convert_markdown(status_text),
-                    parse_mode="MarkdownV2",
-                    reply_markup=keyboard,
-                    link_preview_options=NO_LINK_PREVIEW,
-                )
+            success = await edit_with_fallback(
+                bot,
+                chat_id,
+                msg_id,
+                status_text,
+                reply_markup=keyboard,
+            )
+            if success:
                 _status_msg_info[skey] = (msg_id, window_id, status_text)
-            except RetryAfter:
-                raise
-            except TelegramError:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=msg_id,
-                        text=status_text,
-                        reply_markup=keyboard,
-                        link_preview_options=NO_LINK_PREVIEW,
-                    )
-                    _status_msg_info[skey] = (msg_id, window_id, status_text)
-                except RetryAfter:
-                    raise
-                except TelegramError as e:
-                    logger.debug("Failed to edit status message: %s", e)
-                    _status_msg_info.pop(skey, None)
-                    await _do_send_status_message(
-                        bot, user_id, thread_id, window_id, status_text
-                    )
+            else:
+                _status_msg_info.pop(skey, None)
+                await _do_send_status_message(
+                    bot, user_id, thread_id, window_id, status_text
+                )
     else:
         # No existing status message, send new
         await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)

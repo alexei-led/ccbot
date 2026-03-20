@@ -15,9 +15,10 @@ class TestBuildResponseParts:
         long_text = "a" * 4000
         parts = build_response_parts(long_text, is_complete=True, role="user")
         assert len(parts) == 1
-        short_parts = build_response_parts("b" * 100, is_complete=True, role="user")
+        # Should contain truncation marker
+        assert "\u2026" in parts[0]
+        # Should be shorter than original
         assert len(parts[0]) < len(long_text)
-        assert len(short_parts[0]) < len(parts[0])
 
     def test_thinking_content_truncated_at_500_chars(self):
         inner = "x" * 800
@@ -56,3 +57,18 @@ class TestBuildResponseParts:
         assert len(parts) == 1
         assert "\U0001f464" not in parts[0]
         assert "Thinking" not in parts[0]
+
+    def test_returns_raw_markdown_not_mdv2(self):
+        """Response builder should return raw markdown, not MarkdownV2."""
+        parts = build_response_parts("**bold** text", is_complete=True)
+        assert len(parts) == 1
+        # Raw markdown keeps ** markers (not converted to MarkdownV2 *..* escaping)
+        assert "**bold**" in parts[0]
+
+    def test_expandable_quote_sentinels_preserved(self):
+        """Sentinels should pass through for conversion at send time."""
+        text = f"{EXP_START}quote content{EXP_END}"
+        parts = build_response_parts(text, is_complete=True)
+        assert len(parts) == 1
+        assert EXP_START in parts[0]
+        assert EXP_END in parts[0]

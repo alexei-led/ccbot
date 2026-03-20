@@ -8,12 +8,10 @@ The orchestrator (handle_text_message) calls steps in sequence.
 """
 
 import asyncio
-import contextlib
 import structlog
 from pathlib import Path
 from telegram import Bot, Message, Update
 from telegram.constants import ChatAction
-from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .callback_helpers import get_thread_id as _get_thread_id
@@ -33,15 +31,14 @@ from .directory_browser import (
 from .interactive_ui import get_interactive_window, handle_interactive_ui
 from .message_queue import enqueue_status_update
 from .message_sender import (
-    NO_LINK_PREVIEW,
     ack_reaction,
+    edit_with_fallback,
     rate_limit_send_message,
     safe_reply,
 )
 from .recovery_callbacks import build_recovery_keyboard
 from .status_polling import clear_probe_failures
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
-from ..markdown_v2 import convert_markdown
 from ..session import session_manager
 from ..providers import get_provider_for_window
 from ..tmux_manager import tmux_manager
@@ -65,23 +62,8 @@ def _cancel_bash_capture(user_id: int, thread_id: int) -> None:
 
 
 async def _edit_bash_message(bot: Bot, chat_id: int, msg_id: int, output: str) -> None:
-    """Edit an existing bash-output message with MarkdownV2 fallback."""
-    try:
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=msg_id,
-            text=convert_markdown(output),
-            parse_mode="MarkdownV2",
-            link_preview_options=NO_LINK_PREVIEW,
-        )
-    except TelegramError:
-        with contextlib.suppress(TelegramError):
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=msg_id,
-                text=output,
-                link_preview_options=NO_LINK_PREVIEW,
-            )
+    """Edit an existing bash-output message with entity-based formatting fallback."""
+    await edit_with_fallback(bot, chat_id, msg_id, output)
 
 
 async def _capture_bash_output(

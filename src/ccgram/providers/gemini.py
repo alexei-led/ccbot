@@ -501,6 +501,7 @@ class GeminiProvider(JsonlProvider):
         self,
         entries: list[dict[str, Any]],
         pending_tools: dict[str, Any],
+        cwd: str | None = None,  # noqa: ARG002
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         """Parse Gemini transcript entries into AgentMessages.
 

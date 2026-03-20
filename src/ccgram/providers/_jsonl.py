@@ -188,6 +188,7 @@ class JsonlProvider:
         self,
         entries: list[dict[str, Any]],
         pending_tools: dict[str, Any],
+        cwd: str | None = None,  # noqa: ARG002
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         return parse_jsonl_entries(entries, pending_tools)
 

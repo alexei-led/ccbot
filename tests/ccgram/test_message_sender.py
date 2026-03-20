@@ -3,7 +3,6 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from telegram import Message
 from telegram.error import RetryAfter, TelegramError
 
@@ -12,8 +11,10 @@ from ccgram.handlers.message_sender import (
     _last_send_time,
     _send_with_fallback,
     rate_limit_send,
-    strip_mdv2,
+    strip_plain,
 )
+
+import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -69,7 +70,7 @@ class TestRateLimitSend:
 
 
 class TestSendWithFallback:
-    async def test_markdown_success(self) -> None:
+    async def test_entity_success(self) -> None:
         bot = AsyncMock()
         sent = AsyncMock(spec=Message)
         bot.send_message.return_value = sent
@@ -77,22 +78,28 @@ class TestSendWithFallback:
         result = await _send_with_fallback(bot, 123, "hello")
         assert result is sent
         bot.send_message.assert_called_once()
-        assert bot.send_message.call_args.kwargs["parse_mode"] == "MarkdownV2"
+        # Entity-based: should have entities param, no parse_mode
+        call_kwargs = bot.send_message.call_args.kwargs
+        assert "entities" in call_kwargs
+        assert "parse_mode" not in call_kwargs
 
     async def test_fallback_to_plain(self) -> None:
         bot = AsyncMock()
         sent = AsyncMock(spec=Message)
-        bot.send_message.side_effect = [TelegramError("parse error"), sent]
+        bot.send_message.side_effect = [TelegramError("entity error"), sent]
 
         result = await _send_with_fallback(bot, 123, "hello")
         assert result is sent
         assert bot.send_message.call_count == 2
-        assert "parse_mode" not in bot.send_message.call_args_list[1].kwargs
+        # Fallback: no entities, no parse_mode
+        fallback_kwargs = bot.send_message.call_args_list[1].kwargs
+        assert "parse_mode" not in fallback_kwargs
+        assert "entities" not in fallback_kwargs
 
     async def test_both_fail_returns_none(self) -> None:
         bot = AsyncMock()
         bot.send_message.side_effect = [
-            TelegramError("md fail"),
+            TelegramError("entity fail"),
             TelegramError("plain fail"),
         ]
 
@@ -122,7 +129,7 @@ class TestSendWithFallback:
         bot = AsyncMock()
         sent = AsyncMock(spec=Message)
         bot.send_message.side_effect = [
-            TelegramError("md fail"),
+            TelegramError("entity fail"),
             RetryAfter(1),
             sent,
         ]
@@ -133,7 +140,7 @@ class TestSendWithFallback:
     async def test_plain_text_retry_after_then_permanent_fail(self) -> None:
         bot = AsyncMock()
         bot.send_message.side_effect = [
-            TelegramError("md fail"),
+            TelegramError("entity fail"),
             RetryAfter(1),
             TelegramError("plain also dead"),
         ]
@@ -141,44 +148,24 @@ class TestSendWithFallback:
         assert result is None
         assert bot.send_message.call_count == 3
 
-    async def test_fallback_strips_mdv2_escapes(self) -> None:
+    async def test_bold_formatting_sends_entities(self) -> None:
         bot = AsyncMock()
         sent = AsyncMock(spec=Message)
-        bot.send_message.side_effect = [TelegramError("parse error"), sent]
+        bot.send_message.return_value = sent
 
-        await _send_with_fallback(bot, 123, r"Hello \*world\* from bot\.py")
+        await _send_with_fallback(bot, 123, "**bold text**")
 
-        assert bot.send_message.call_count == 2
-        fallback_text = bot.send_message.call_args_list[1].kwargs["text"]
-        assert "\\" not in fallback_text
-        assert fallback_text == "Hello *world* from bot.py"
+        call_kwargs = bot.send_message.call_args.kwargs
+        assert call_kwargs["text"] == "bold text"
+        entities = call_kwargs["entities"]
+        assert len(entities) >= 1
+        assert any(e.type == "bold" for e in entities)
 
 
-class TestStripMdv2:
+class TestStripPlain:
     @pytest.mark.parametrize(
         ("input_text", "expected"),
         [
-            pytest.param(r"\*bold\*", "*bold*", id="escaped-asterisks"),
-            pytest.param(r"\_italic\_", "_italic_", id="escaped-underscores"),
-            pytest.param(r"\~strike\~", "~strike~", id="escaped-tildes"),
-            pytest.param(r"\[link\]", "[link]", id="escaped-brackets"),
-            pytest.param(r"\(url\)", "(url)", id="escaped-parens"),
-            pytest.param(r"\#heading", "#heading", id="escaped-hash"),
-            pytest.param(r"\+plus", "+plus", id="escaped-plus"),
-            pytest.param(r"\-minus", "-minus", id="escaped-minus"),
-            pytest.param(r"\=equals", "=equals", id="escaped-equals"),
-            pytest.param(r"\|pipe", "|pipe", id="escaped-pipe"),
-            pytest.param(r"\{brace\}", "{brace}", id="escaped-braces"),
-            pytest.param(r"\!bang", "!bang", id="escaped-bang"),
-            pytest.param("\\\\backslash", "\\backslash", id="escaped-backslash"),
-            pytest.param(
-                r"src/ccgram/bot\.py", "src/ccgram/bot.py", id="file-path-dot"
-            ),
-            pytest.param(
-                r"src/ccgram/message\_sender\.py",
-                "src/ccgram/message_sender.py",
-                id="file-path-underscore-dot",
-            ),
             pytest.param(">line1\n>line2", "line1\nline2", id="blockquote-prefix"),
             pytest.param(">content||", "content", id="expandable-quote-close"),
             pytest.param(
@@ -187,11 +174,8 @@ class TestStripMdv2:
                 id="expandable-quote-multi",
             ),
             pytest.param("plain text here", "plain text here", id="plain-passthrough"),
-            pytest.param(
-                "no special chars 123", "no special chars 123", id="no-changes"
-            ),
             pytest.param("", "", id="empty-string"),
         ],
     )
-    def test_strip_mdv2(self, input_text: str, expected: str) -> None:
-        assert strip_mdv2(input_text) == expected
+    def test_strip_plain(self, input_text: str, expected: str) -> None:
+        assert strip_plain(input_text) == expected

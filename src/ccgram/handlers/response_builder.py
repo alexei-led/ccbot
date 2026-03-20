@@ -2,7 +2,7 @@
 
 Builds paginated response messages from Claude Code output:
   - Handles different content types (text, thinking, tool_use, tool_result)
-  - Converts markdown to Telegram MarkdownV2 format
+  - Returns raw markdown strings (entity conversion happens at send time)
   - Splits long messages into pages within Telegram's 4096 char limit
   - Truncates thinking content to keep messages compact
 
@@ -10,7 +10,6 @@ Key function:
   - build_response_parts: Build paginated response messages
 """
 
-from ..markdown_v2 import convert_markdown
 from ..providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ..telegram_sender import split_message
 
@@ -26,19 +25,18 @@ def build_response_parts(
 ) -> list[str]:
     """Build paginated response messages for Telegram.
 
-    Returns a list of message strings, each within Telegram's 4096 char limit.
+    Returns a list of raw markdown strings (NOT MarkdownV2).
+    Entity conversion happens at send time in the message sender layer.
     Multi-part messages get a [1/N] suffix.
     """
     text = text.strip()
 
     # User messages: add emoji prefix (no newline)
     if role == "user":
-        prefix = "👤 "
-        separator = ""
-        # User messages are typically short, no special processing needed
+        prefix = "\U0001f464 "
         if len(text) > _MAX_USER_MSG_LENGTH:
-            text = text[:_MAX_USER_MSG_LENGTH] + "…"
-        return [convert_markdown(f"{prefix}{text}")]
+            text = text[:_MAX_USER_MSG_LENGTH] + "\u2026"
+        return [f"{prefix}{text}"]
 
     # Truncate thinking content to keep it compact
     if content_type == "thinking" and is_complete:
@@ -48,10 +46,10 @@ def build_response_parts(
         if start_tag in text and end_tag in text:
             inner = text[text.index(start_tag) + len(start_tag) : text.index(end_tag)]
             if len(inner) > max_thinking:
-                inner = inner[:max_thinking] + "\n\n… (thinking truncated)"
+                inner = inner[:max_thinking] + "\n\n\u2026 (thinking truncated)"
             text = start_tag + inner + end_tag
         elif len(text) > max_thinking:
-            text = text[:max_thinking] + "\n\n… (thinking truncated)"
+            text = text[:max_thinking] + "\n\n\u2026 (thinking truncated)"
 
     # Format based on content type
     if content_type == "thinking":
@@ -64,15 +62,15 @@ def build_response_parts(
 
     # If text contains expandable quote sentinels, don't split —
     # the quote must stay atomic. Truncation is handled by
-    # _render_expandable_quote in markdown_v2.py.
+    # _truncate_quote_text in markdown_v2.py.
     if EXPANDABLE_QUOTE_START in text:
         if prefix:
-            return [convert_markdown(f"{prefix}{separator}{text}")]
+            return [f"{prefix}{separator}{text}"]
         else:
-            return [convert_markdown(text)]
+            return [text]
 
-    # Split markdown first, then convert each chunk to HTML.
-    # Use conservative max to leave room for HTML tags added by conversion.
+    # Split raw markdown text, then each chunk is sent individually.
+    # Entity conversion happens at send time.
     max_text = 3000 - len(prefix) - len(separator)
 
     text_chunks = split_message(text, max_length=max_text)
@@ -80,16 +78,14 @@ def build_response_parts(
 
     if total == 1:
         if prefix:
-            return [convert_markdown(f"{prefix}{separator}{text_chunks[0]}")]
+            return [f"{prefix}{separator}{text_chunks[0]}"]
         else:
-            return [convert_markdown(text_chunks[0])]
+            return [text_chunks[0]]
 
     parts = []
     for i, chunk in enumerate(text_chunks, 1):
         if prefix:
-            parts.append(
-                convert_markdown(f"{prefix}{separator}{chunk}\n\n[{i}/{total}]")
-            )
+            parts.append(f"{prefix}{separator}{chunk}\n\n[{i}/{total}]")
         else:
-            parts.append(convert_markdown(f"{chunk}\n\n[{i}/{total}]"))
+            parts.append(f"{chunk}\n\n[{i}/{total}]")
     return parts
