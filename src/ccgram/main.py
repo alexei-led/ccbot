@@ -129,7 +129,10 @@ def run_bot() -> None:
 
     logger.info("Tmux session '%s' ready", session.session_name)
 
-    logger.info("Starting Telegram bot...")
+    from . import __version__
+
+    dev = "+dev" if "+unknown" in __version__ or ".dev" in __version__ else ""
+    logger.info("Starting ccgram %s%s", __version__, dev)
     from .bot import create_bot
 
     application = create_bot()
