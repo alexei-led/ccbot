@@ -1,14 +1,23 @@
-"""Tests for Markdown → Telegram entity-based conversion."""
+"""Tests for entity_formatting: Markdown → Telegram entity-based conversion."""
 
 from telegram import MessageEntity
+from telegramify_markdown import utf16_len as _utf16_len
 
-from ccgram.markdown_v2 import (
+from ccgram.entity_formatting import (
+    _EXPQUOTE_MAX_RENDERED,
+    _MIN_PARTIAL_LINE_LEN,
     _strip_indented_code_blocks,
     _truncate_quote_text,
     convert_to_entities,
 )
 from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
 from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
+
+
+def _extract_utf16(text: str, offset: int, length: int) -> str:
+    """Extract a substring using UTF-16 code unit offsets."""
+    utf16 = text.encode("utf-16-le")
+    return utf16[offset * 2 : (offset + length) * 2].decode("utf-16-le")
 
 
 class TestConvertToEntities:
@@ -158,6 +167,23 @@ class TestConvertToEntities:
         for ent in entities:
             assert isinstance(ent, MessageEntity)
 
+    def test_bold_offset_after_expandable_quote(self) -> None:
+        md = f"{EXP_START}quoted content{EXP_END}**bold**"
+        text, entities = convert_to_entities(md)
+        bold = [e for e in entities if e.type == MessageEntity.BOLD]
+        assert len(bold) == 1
+        assert _extract_utf16(text, bold[0].offset, bold[0].length) == "bold"
+
+    def test_emoji_before_expandable_quote_offsets(self) -> None:
+        md = f"Hello 🌍 {EXP_START}quoted{EXP_END}**bold**"
+        text, entities = convert_to_entities(md)
+        exp = [e for e in entities if e.type == MessageEntity.EXPANDABLE_BLOCKQUOTE]
+        bold = [e for e in entities if e.type == MessageEntity.BOLD]
+        assert len(exp) == 1
+        assert _extract_utf16(text, exp[0].offset, exp[0].length) == "quoted"
+        assert len(bold) == 1
+        assert _extract_utf16(text, bold[0].offset, bold[0].length) == "bold"
+
 
 class TestTruncateQuoteText:
     def test_short_text_not_truncated(self) -> None:
@@ -169,8 +195,25 @@ class TestTruncateQuoteText:
         long_text = "line\n" * 2000
         text, truncated = _truncate_quote_text(long_text)
         assert truncated
-        assert len(text) <= 3800 + 50  # budget + suffix
+        assert _utf16_len(text) <= _EXPQUOTE_MAX_RENDERED + 50
         assert "truncated" in text
+
+    def test_exactly_at_budget_not_truncated(self) -> None:
+        text = "a" * _EXPQUOTE_MAX_RENDERED
+        result, truncated = _truncate_quote_text(text)
+        assert result == text
+        assert not truncated
+
+    def test_partial_line_skipped_when_too_short(self) -> None:
+        short_line = "x" * (_MIN_PARTIAL_LINE_LEN - 1)
+        # 37*100 + 44 + 19 + 38 newlines = 3801 > 3800 → triggers truncation
+        # After 37 full lines + "b"*44: total_len=3782; short_line overflows
+        # with remaining=3 < _MIN_PARTIAL_LINE_LEN → partial line skipped
+        lines = ["a" * 100] * 37 + ["b" * 44, short_line]
+        long_text = "\n".join(lines)
+        result, truncated = _truncate_quote_text(long_text)
+        assert truncated
+        assert short_line not in result
 
 
 class TestStripIndentedCodeBlocks:

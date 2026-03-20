@@ -529,14 +529,14 @@ wheels = [
 
 [[package]]
 name = "telegramify-markdown"
-version = "1.0.0"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyromark" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/f4/25dbb8c01dea6f02d3ceac6095ef9aa34ddeaf2ad333b6ef5a573f000f43/telegramify_markdown-1.0.0.tar.gz", hash = "sha256:d4c266b7e93a74771ccc953a3efb4a0f933daa605e450d1970d8c39e62b70d55", size = 57365, upload-time = "2026-03-10T14:30:33.618Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/94/0b29f09c3c9d28cd7b8790c4bc8aa805b126ece87f2ddc5d0c28dc9cb922/telegramify_markdown-1.1.1.tar.gz", hash = "sha256:0fc66835b889e156ef47aa1c70a215368f9673f86cac23e539f5d9fa923a4c35", size = 58615, upload-time = "2026-03-18T04:05:12.865Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/eb/d5215f6f0299bfece60deba1c95c4bf67162d59b4c69db4df4aa29fc6059/telegramify_markdown-1.0.0-py3-none-any.whl", hash = "sha256:efb18bbce52ac309dcd9698d61924dec14ba41f293be4a3dcc1af4144b87ae7c", size = 40634, upload-time = "2026-03-10T14:30:32.539Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/6d/71552ae1f5e959d36c9943ec5a04063ec9db69f9d524643c41a92ba422e7/telegramify_markdown-1.1.1-py3-none-any.whl", hash = "sha256:860348bae4e4e107b3fc02333ff3f592888b1e6bd9da8291aaf210e094dbd005", size = 41506, upload-time = "2026-03-18T04:05:11.636Z" },
 ]
 
 [[package]]

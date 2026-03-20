@@ -58,11 +58,11 @@ class TestBuildResponseParts:
         assert "\U0001f464" not in parts[0]
         assert "Thinking" not in parts[0]
 
-    def test_returns_raw_markdown_not_mdv2(self):
-        """Response builder should return raw markdown, not MarkdownV2."""
+    def test_returns_raw_markdown(self):
+        """Response builder should return raw markdown (entity conversion at send time)."""
         parts = build_response_parts("**bold** text", is_complete=True)
         assert len(parts) == 1
-        # Raw markdown keeps ** markers (not converted to MarkdownV2 *..* escaping)
+        # Raw markdown keeps ** markers (entity conversion happens at send time)
         assert "**bold**" in parts[0]
 
     def test_expandable_quote_sentinels_preserved(self):

@@ -11,10 +11,16 @@ import re
 
 from telegram import MessageEntity as TelegramEntity
 
+from telegramify_markdown import config as _tm_config
 from telegramify_markdown import convert as _tm_convert
 from telegramify_markdown import utf16_len as _utf16_len
+from telegramify_markdown.entity import MessageEntity as _LibEntity
 
 from .providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
+
+# Disable auto-promotion of long blockquotes to expandable blockquotes —
+# ccgram manages expandable quotes exclusively through sentinel tokens.
+_tm_config.get_runtime_config().cite_expandable = False
 
 _EXPQUOTE_RE = re.compile(
     re.escape(EXPANDABLE_QUOTE_START) + r"([\s\S]*?)" + re.escape(EXPANDABLE_QUOTE_END)
@@ -90,15 +96,15 @@ def _deindent(text: str, is_start: bool) -> str:
     )
 
 
-def _lib_entity_to_telegram(ent: object, offset_shift: int = 0) -> TelegramEntity:
+def _lib_entity_to_telegram(ent: _LibEntity, offset_shift: int = 0) -> TelegramEntity:
     """Convert a telegramify_markdown MessageEntity to telegram.MessageEntity."""
     return TelegramEntity(
-        type=ent.type,  # type: ignore[union-attr]
-        offset=ent.offset + offset_shift,  # type: ignore[union-attr]
-        length=ent.length,  # type: ignore[union-attr]
-        url=ent.url,  # type: ignore[union-attr]
-        language=ent.language,  # type: ignore[union-attr]
-        custom_emoji_id=ent.custom_emoji_id,  # type: ignore[union-attr]
+        type=ent.type,
+        offset=ent.offset + offset_shift,
+        length=ent.length,
+        url=ent.url,
+        language=ent.language,
+        custom_emoji_id=ent.custom_emoji_id,
     )
 
 
@@ -115,17 +121,17 @@ def _truncate_quote_text(text: str) -> tuple[str, bool]:
 
     Returns (truncated_text, was_truncated).
     """
-    if len(text) <= _EXPQUOTE_MAX_RENDERED:
+    if _utf16_len(text) <= _EXPQUOTE_MAX_RENDERED:
         return text, False
 
     lines = text.split("\n")
     built: list[str] = []
     total_len = 0
     suffix = "\n… (truncated)"
-    budget = _EXPQUOTE_MAX_RENDERED - len(suffix)
+    budget = _EXPQUOTE_MAX_RENDERED - _utf16_len(suffix)
 
     for line in lines:
-        line_cost = len(line) + 1  # +1 for newline
+        line_cost = _utf16_len(line) + 1  # +1 for newline
         if total_len + line_cost > budget:
             remaining = budget - total_len - 1  # -1 for newline
             if remaining > _MIN_PARTIAL_LINE_LEN:

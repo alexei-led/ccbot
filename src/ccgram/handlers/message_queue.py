@@ -46,10 +46,10 @@ _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 logger = structlog.get_logger()
 
 # Merge limit for content messages
-MERGE_MAX_LENGTH = 3800  # Leave room for markdown conversion overhead
+MERGE_MAX_LENGTH = 3800  # Leave room within Telegram's 4096 char message limit
 
 # Batch limits for tool call chains
-# Keep conservative: header + entries + result text + separators + MarkdownV2 escaping
+# Keep conservative: header + entries + result text + separators
 # must fit 4096 chars. Worst case: 10 * (250 + 85 + 6) + 20 ≈ 3430 chars.
 BATCH_MAX_LENGTH = 2800
 BATCH_MAX_ENTRIES = 10

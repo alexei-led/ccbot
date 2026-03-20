@@ -285,8 +285,7 @@ async def handle_interactive_ui(
         "Sending interactive UI to user %d for window_id %s", user_id, window_id
     )
     _send_cooldowns[ikey] = now
-    # Send as plain text — terminal content has characters like (, _, .
-    # that MarkdownV2 conversion would mangle.
+    # Send as plain text — terminal content should not be formatted.
     sent: Message | None = None
     await rate_limit_send(chat_id)
     try:

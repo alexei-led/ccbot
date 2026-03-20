@@ -4,8 +4,8 @@
 graph TB
     subgraph bot["Telegram Bot — bot.py"]
         direction TB
-        BotCore["Topic routing · /history · /sessions\nStatus messages · Interactive UI\nMessage queue + worker · MarkdownV2"]
-        BotSub1["markdown_v2.py\nMD → MarkdownV2 + expandable quotes"]
+        BotCore["Topic routing · /history · /sessions\nStatus messages · Interactive UI\nMessage queue + worker · Entity formatting"]
+        BotSub1["entity_formatting.py\nMD → plain text + MessageEntity offsets"]
         BotSub2["telegram_sender.py\nsplit_message — 4096 limit"]
         Terminal["terminal_parser.py + screen_buffer.py\npyte VT100 · interactive UI detection\nspinner parsing · separator detection"]
     end
@@ -143,7 +143,7 @@ graph TB
 - **Hook-based event system** — Claude Code hooks (SessionStart, Notification, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) write to `session_map.json` and `events.jsonl`. SessionMonitor reads both: session_map for session tracking, events.jsonl for instant event dispatch (interactive UI, done detection, API error alerting, session lifecycle, subagent status, team notifications). Terminal scraping remains as fallback. Missing hooks are detected at startup with an actionable warning.
 - **Multi-pane awareness** — Windows with multiple panes (e.g. Claude Code agent teams) are scanned for interactive prompts in non-active panes. Blocked panes are auto-surfaced as inline keyboard alerts. `/panes` command lists all panes with status and per-pane screenshot buttons. Callback data format extended to include pane_id: `"aq:enter:@12:%5"`.
 - **Tool use ↔ tool result pairing** — `tool_use_id` tracked across poll cycles; tool result edits the original tool_use Telegram message in-place.
-- **MarkdownV2 with fallback** — All messages go through `safe_reply`/`safe_edit`/`safe_send` which convert via `telegramify-markdown` and fall back to plain text on parse failure.
+- **Entity-based formatting** — All messages go through `safe_reply`/`safe_edit`/`safe_send` which convert markdown to plain text + `MessageEntity` offsets via `telegramify-markdown`, falling back to plain text on failure. No parse errors possible.
 - **No truncation at parse layer** — Full content preserved; splitting at send layer respects Telegram's 4096 char limit with expandable quote atomicity.
 - Only sessions registered in `session_map.json` (via hook) are monitored.
 - Notifications delivered to users via thread bindings (topic → window_id → session).

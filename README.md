@@ -79,7 +79,7 @@ Each Telegram Forum topic binds to one tmux window running an agent CLI. Message
 
 - Assistant responses, thinking content, tool use/result pairs, and command output
 - Live status line showing what the agent is currently doing
-- MarkdownV2 formatting with automatic plain text fallback
+- Entity-based formatting with automatic plain text fallback
 
 **Session management**
 

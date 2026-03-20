@@ -479,3 +479,9 @@ class TestShortenPath:
 
     def test_relative_path_unchanged(self) -> None:
         assert shorten_path("src/file.py", "/home/user/project") == "src/file.py"
+
+    def test_prefix_match_guard(self) -> None:
+        assert (
+            shorten_path("/home/userextra/file.py", "/home/user")
+            == "/home/userextra/file.py"
+        )

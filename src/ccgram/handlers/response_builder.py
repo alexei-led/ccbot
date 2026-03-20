@@ -25,7 +25,7 @@ def build_response_parts(
 ) -> list[str]:
     """Build paginated response messages for Telegram.
 
-    Returns a list of raw markdown strings (NOT MarkdownV2).
+    Returns a list of raw markdown strings.
     Entity conversion happens at send time in the message sender layer.
     Multi-part messages get a [1/N] suffix.
     """
@@ -62,7 +62,7 @@ def build_response_parts(
 
     # If text contains expandable quote sentinels, don't split —
     # the quote must stay atomic. Truncation is handled by
-    # _truncate_quote_text in markdown_v2.py.
+    # _truncate_quote_text in entity_formatting.py.
     if EXPANDABLE_QUOTE_START in text:
         if prefix:
             return [f"{prefix}{separator}{text}"]

@@ -755,7 +755,7 @@ class TestFlushBatch:
         )
 
         bot = AsyncMock()
-        # First edit (MarkdownV2) fails, fallback to plain text also fails
+        # First edit (entity) fails, fallback to plain text also fails
         bot.edit_message_text.side_effect = TelegramError("bad markup")
         await _flush_batch(bot, 1, 0)
         # Should not raise, batch still cleaned up

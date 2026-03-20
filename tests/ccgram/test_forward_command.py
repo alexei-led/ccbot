@@ -188,7 +188,7 @@ class TestForwardCommandResolution:
         await forward_command_handler(update, _make_context())
 
         reply_text = update.message.reply_text.call_args[0][0]
-        # safe_reply escapes MarkdownV2 chars (- -> \-), so check unescaped
+        # safe_reply converts to entities, check the text content
         assert "committing" in reply_text and "code" in reply_text
 
     async def test_clear_clears_session(self) -> None:

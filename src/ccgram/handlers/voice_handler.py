@@ -96,10 +96,7 @@ async def _send_confirm_message(
     text under that id, then edit the keyboard in — so callback_data always carries
     a real message_id and the user_data entry exists before any tap is possible.
     """
-    confirm_msg = await message.reply_text(
-        f"🎤 Transcribed:\n\n{text}",
-        parse_mode=None,
-    )
+    confirm_msg = await message.reply_text(f"🎤 Transcribed:\n\n{text}")
 
     try:
         await confirm_msg.edit_reply_markup(

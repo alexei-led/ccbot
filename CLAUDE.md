@@ -38,7 +38,7 @@ ccgram --autoclose-dead 0              # Disable auto-close for dead sessions
 - **1 Topic = 1 Window = 1 Session** — all internal routing keyed by tmux window ID (`@0`, `@12`), not window name. Window names kept as display names. Same directory can have multiple windows.
 - **Topic-only** — no backward-compat for non-topic mode. No `active_sessions`, no `/list`, no General topic routing.
 - **No message truncation** at parse layer — splitting only at send layer (`split_message`, 4096 char limit).
-- **MarkdownV2 only** — use `safe_reply`/`safe_edit`/`safe_send` helpers (auto fallback to plain text). Internal queue/UI code calls bot API directly with its own fallback.
+- **Entity-based formatting** — use `safe_reply`/`safe_edit`/`safe_send` helpers which convert markdown to plain text + MessageEntity offsets (no parse errors possible, auto fallback to plain text). Internal queue/UI code calls bot API directly with its own fallback.
 - **Hook-based session tracking** — Claude Code hooks (SessionStart, Notification, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) write to `session_map.json` and `events.jsonl`; monitor polls both to detect session changes and deliver instant event notifications. Missing hooks are detected at startup with an actionable warning.
 - **Message queue per user** — FIFO ordering, message merging (3800 char limit), tool_use/tool_result pairing.
 - **Rate limiting** — 1.1s minimum interval between messages per user via `rate_limit_send()`.

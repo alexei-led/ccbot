@@ -10,9 +10,11 @@ from ccgram.handlers.message_sender import (
     MESSAGE_SEND_INTERVAL,
     _last_send_time,
     _send_with_fallback,
+    edit_with_fallback,
     rate_limit_send,
-    strip_plain,
 )
+from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
+from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
 
 import pytest
 
@@ -115,15 +117,17 @@ class TestSendWithFallback:
         assert result is sent
         assert bot.send_message.call_count == 2
 
-    async def test_retry_after_then_permanent_fail_returns_none(self) -> None:
+    async def test_retry_after_then_permanent_fail_falls_through_to_plain(self) -> None:
         bot = AsyncMock()
+        sent = AsyncMock(spec=Message)
         bot.send_message.side_effect = [
             RetryAfter(1),
             TelegramError("permanent fail"),
+            sent,
         ]
         result = await _send_with_fallback(bot, 123, "hello")
-        assert result is None
-        assert bot.send_message.call_count == 2
+        assert result is sent
+        assert bot.send_message.call_count == 3
 
     async def test_plain_text_retry_after_then_success(self) -> None:
         bot = AsyncMock()
@@ -162,20 +166,73 @@ class TestSendWithFallback:
         assert any(e.type == "bold" for e in entities)
 
 
-class TestStripPlain:
-    @pytest.mark.parametrize(
-        ("input_text", "expected"),
-        [
-            pytest.param(">line1\n>line2", "line1\nline2", id="blockquote-prefix"),
-            pytest.param(">content||", "content", id="expandable-quote-close"),
-            pytest.param(
-                ">first||\n>second||",
-                "first\nsecond",
-                id="expandable-quote-multi",
+class TestEditWithFallback:
+    async def test_entity_success(self) -> None:
+        bot = AsyncMock()
+        result = await edit_with_fallback(bot, 123, 1, "hello")
+        assert result is True
+        call_kwargs = bot.edit_message_text.call_args.kwargs
+        assert "entities" in call_kwargs
+
+    async def test_entity_fail_plain_success(self) -> None:
+        bot = AsyncMock()
+        bot.edit_message_text.side_effect = [TelegramError("entity fail"), None]
+        result = await edit_with_fallback(bot, 123, 1, "hello")
+        assert result is True
+        assert bot.edit_message_text.call_count == 2
+        fallback_kwargs = bot.edit_message_text.call_args_list[1].kwargs
+        assert "entities" not in fallback_kwargs
+
+    async def test_both_fail_returns_false(self) -> None:
+        bot = AsyncMock()
+        bot.edit_message_text.side_effect = [
+            TelegramError("entity fail"),
+            TelegramError("plain fail"),
+        ]
+        result = await edit_with_fallback(bot, 123, 1, "hello")
+        assert result is False
+
+    async def test_retry_after_reraised(self) -> None:
+        bot = AsyncMock()
+        bot.edit_message_text.side_effect = RetryAfter(5)
+        with pytest.raises(RetryAfter):
+            await edit_with_fallback(bot, 123, 1, "hello")
+
+    async def test_retry_after_in_fallback_reraised(self) -> None:
+        bot = AsyncMock()
+        bot.edit_message_text.side_effect = [
+            TelegramError("entity fail"),
+            RetryAfter(5),
+        ]
+        with pytest.raises(RetryAfter):
+            await edit_with_fallback(bot, 123, 1, "hello")
+
+
+class TestFallbackNoSentinelLeak:
+    async def test_no_sentinel_bytes_in_fallback(self) -> None:
+        bot = AsyncMock()
+        sent = AsyncMock(spec=Message)
+        bot.send_message.side_effect = [TelegramError("entity error"), sent]
+
+        text_with_sentinels = f"before {EXP_START}quoted{EXP_END} after"
+        await _send_with_fallback(bot, 123, text_with_sentinels)
+
+        fallback_text = bot.send_message.call_args_list[1].kwargs.get(
+            "text",
+            (
+                bot.send_message.call_args_list[1].args[0]
+                if bot.send_message.call_args_list[1].args
+                else ""
             ),
-            pytest.param("plain text here", "plain text here", id="plain-passthrough"),
-            pytest.param("", "", id="empty-string"),
-        ],
-    )
-    def test_strip_plain(self, input_text: str, expected: str) -> None:
-        assert strip_plain(input_text) == expected
+        )
+        assert "\x02" not in fallback_text
+
+    async def test_edit_fallback_no_sentinel_bytes(self) -> None:
+        bot = AsyncMock()
+        bot.edit_message_text.side_effect = [TelegramError("entity fail"), None]
+
+        text_with_sentinels = f"before {EXP_START}quoted{EXP_END} after"
+        await edit_with_fallback(bot, 123, 1, text_with_sentinels)
+
+        fallback_kwargs = bot.edit_message_text.call_args_list[1].kwargs
+        assert "\x02" not in fallback_kwargs["text"]

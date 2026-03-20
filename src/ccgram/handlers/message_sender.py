@@ -14,7 +14,6 @@ Functions:
 
 import asyncio
 import contextlib
-import re
 import structlog
 import time
 from collections.abc import Awaitable, Callable
@@ -23,16 +22,12 @@ from typing import Any
 from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message, ReactionTypeEmoji
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
-from ..markdown_v2 import convert_to_entities
+from ..entity_formatting import convert_to_entities
 
 logger = structlog.get_logger()
 
 # Disable link previews in all messages to reduce visual noise
 NO_LINK_PREVIEW = LinkPreviewOptions(is_disabled=True)
-
-# Strip expandable blockquote syntax: leading ">" prefix and trailing "||"
-_BLOCKQUOTE_PREFIX_RE = re.compile(r"^>", re.MULTILINE)
-_BLOCKQUOTE_CLOSE_RE = re.compile(r"\|\|$", re.MULTILINE)
 
 
 class _MessageGoneError(Exception):
@@ -43,15 +38,6 @@ def _retry_after_seconds(exc: RetryAfter) -> int:
     """Extract retry delay from RetryAfter, handling both int and timedelta."""
     ra = exc.retry_after
     return ra if isinstance(ra, int) else int(ra.total_seconds())
-
-
-def strip_plain(text: str) -> str:
-    """Strip formatting artifacts for clean plain text fallback.
-
-    Removes blockquote syntax so the fallback message is readable.
-    """
-    text = _BLOCKQUOTE_CLOSE_RE.sub("", text)
-    return _BLOCKQUOTE_PREFIX_RE.sub("", text)
 
 
 # Rate limiting: last send time per chat to avoid Telegram flood control
@@ -100,12 +86,12 @@ async def _with_entity_fallback(
             return await send_fn(plain_text, entities=entities, **kwargs)
         except TelegramError as e2:
             logger.warning("Failed to %s after retry: %s", context_label, e2)
-            return None
+            # Fall through to Phase 2 plain text
     except TelegramError:
         pass
 
     # Phase 2: fall back to plain text (no entities)
-    fallback_text = strip_plain(text)
+    fallback_text = plain_text
     try:
         return await send_fn(fallback_text, **kwargs)
     except RetryAfter as e:
@@ -236,7 +222,7 @@ async def edit_with_fallback(
         raise
     except TelegramError:
         try:
-            fallback = strip_plain(text)
+            fallback = plain_text
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
