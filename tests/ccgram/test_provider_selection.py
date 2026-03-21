@@ -110,6 +110,8 @@ def _make_update(thread_id: int = 42) -> MagicMock:
     update.callback_query = MagicMock()
     update.callback_query.message = MagicMock()
     update.callback_query.message.message_thread_id = thread_id
+    update.callback_query.message.chat.type = "supergroup"
+    update.callback_query.message.chat.id = -100999
     return update
 
 
@@ -249,6 +251,7 @@ class TestHandleModeSelect:
         )
         mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
         mock_sm.set_window_approval_mode.assert_called_once_with("@5", "yolo")
+        mock_sm.set_group_chat_id.assert_called_once_with(100, 42, -100999)
 
     @patch("ccgram.handlers.directory_callbacks.provider_registry")
     async def test_rejects_unknown_mode(self, mock_registry: MagicMock) -> None:

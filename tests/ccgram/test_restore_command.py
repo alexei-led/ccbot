@@ -44,6 +44,8 @@ def _make_update(*, user_id: int = 100, thread_id: int | None = 42):
     update.effective_user = MagicMock(id=user_id)
     update.message = AsyncMock()
     update.message.message_thread_id = thread_id
+    update.message.chat.type = "supergroup"
+    update.message.chat.id = -100999
     return update
 
 
@@ -153,6 +155,7 @@ class TestRestoreCommand:
 
             # Binds new window
             mock_sm.bind_thread.assert_called_once()
+            mock_sm.set_group_chat_id.assert_called_once_with(100, 42, -100999)
 
             # Success message
             mock_reply.assert_called_once()

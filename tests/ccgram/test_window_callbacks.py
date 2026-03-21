@@ -20,6 +20,8 @@ def _make_query_update_context(
 
     msg = MagicMock()
     msg.message_thread_id = thread_id
+    msg.chat.type = "supergroup"
+    msg.chat.id = -100999
 
     update = MagicMock(spec=Update)
     update.message = None
@@ -60,6 +62,7 @@ class TestBindWindowCallback:
             mock_sm.bind_thread.assert_called_once_with(
                 100, 42, "@5", window_name="my-project"
             )
+            mock_sm.set_group_chat_id.assert_called_once_with(100, 42, -100999)
             mock_edit.assert_called_once()
             assert "my-project" in mock_edit.call_args[0][1]
 

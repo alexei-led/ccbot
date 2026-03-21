@@ -379,6 +379,9 @@ async def _create_and_bind_window(
     session_manager.bind_thread(
         user_id, thread_id, created_wid, window_name=created_wname
     )
+    chat = query.message.chat if query.message else None
+    if chat and chat.type in ("group", "supergroup"):
+        session_manager.set_group_chat_id(user_id, thread_id, chat.id)
 
     try:
         await context.bot.edit_forum_topic(

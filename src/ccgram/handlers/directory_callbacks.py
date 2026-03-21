@@ -502,6 +502,12 @@ async def _handle_mode_select(
     session_manager.bind_thread(
         user_id, pending_thread_id, created_wid, window_name=created_wname
     )
+    query_message = (
+        update.callback_query.message if update.callback_query else None
+    ) or query.message
+    chat = query_message.chat if query_message else None
+    if chat and chat.type in ("group", "supergroup"):
+        session_manager.set_group_chat_id(user_id, pending_thread_id, chat.id)
 
     try:
         await context.bot.edit_forum_topic(

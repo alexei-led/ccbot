@@ -474,6 +474,7 @@ class TestRecoveryFreshCallback:
         mock_sm.bind_thread.assert_called_once_with(
             100, 42, "@5", window_name="project"
         )
+        mock_sm.set_group_chat_id.assert_called_once_with(100, 42, -100999)
 
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.session_manager")

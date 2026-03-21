@@ -97,6 +97,12 @@ async def _handle_bind(
     display = w.window_name
     clear_window_picker_state(context.user_data)
     session_manager.bind_thread(user_id, thread_id, selected_wid, window_name=display)
+    query_message = (
+        update.callback_query.message if update.callback_query else None
+    ) or query.message
+    chat = query_message.chat if query_message else None
+    if chat and chat.type in ("group", "supergroup"):
+        session_manager.set_group_chat_id(user_id, thread_id, chat.id)
 
     try:
         await context.bot.edit_forum_topic(
