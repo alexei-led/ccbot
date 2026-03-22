@@ -37,12 +37,12 @@ class TestParseCommandResult:
         assert result.command == "pwd"
         assert result.explanation == "Print dir"
 
-    def test_invalid_json_returns_raw_text(self) -> None:
+    def test_invalid_json_returns_raw_text_marked_dangerous(self) -> None:
         text = "this is not json at all"
         result = _parse_command_result(text)
         assert result.command == "this is not json at all"
         assert result.explanation == ""
-        assert result.is_dangerous is False
+        assert result.is_dangerous is True
 
     def test_json_missing_command_field(self) -> None:
         text = '{"explanation": "No command here", "dangerous": false}'
@@ -50,11 +50,11 @@ class TestParseCommandResult:
         assert result.command == text.strip()
         assert result.explanation == ""
 
-    def test_empty_string(self) -> None:
+    def test_empty_string_marked_dangerous(self) -> None:
         result = _parse_command_result("")
         assert result.command == ""
         assert result.explanation == ""
-        assert result.is_dangerous is False
+        assert result.is_dangerous is True
 
     def test_json_with_empty_command(self) -> None:
         text = '{"command": "", "explanation": "nothing", "dangerous": false}'

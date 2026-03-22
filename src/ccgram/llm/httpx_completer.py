@@ -72,14 +72,14 @@ def _parse_command_result(text: str) -> CommandResult:
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
-        return CommandResult(command=cleaned, explanation="", is_dangerous=False)
+        return CommandResult(command=cleaned, explanation="", is_dangerous=True)
 
     if not isinstance(data, dict):
-        return CommandResult(command=cleaned, explanation="", is_dangerous=False)
+        return CommandResult(command=cleaned, explanation="", is_dangerous=True)
 
     command = data.get("command", "")
     if not isinstance(command, str) or not command:
-        return CommandResult(command=cleaned, explanation="", is_dangerous=False)
+        return CommandResult(command=cleaned, explanation="", is_dangerous=True)
 
     explanation = data.get("explanation", "")
     if not isinstance(explanation, str):
@@ -95,7 +95,8 @@ class _BaseCompleter:
     """Shared base for LLM command generators using httpx.
 
     Subclasses implement ``_request()`` for API-specific payload and
-    response parsing.  The httpx client is created once and reused.
+    response parsing.  Creates a fresh httpx client per request to
+    avoid lifecycle issues in long-running bots.
     """
 
     def __init__(
@@ -111,7 +112,6 @@ class _BaseCompleter:
         self.temperature = temperature
         self._api_key = api_key
         self._base_url = (base_url or default_base_url).rstrip("/")
-        self._client = httpx.AsyncClient()
 
     async def generate_command(
         self,
@@ -138,10 +138,6 @@ class _BaseCompleter:
     async def _request(self, user_msg: str) -> str:
         """Send the request and return the response text."""
         raise NotImplementedError
-
-    async def close(self) -> None:
-        """Close the underlying httpx client."""
-        await self._client.aclose()
 
 
 class OpenAICompatCompleter(_BaseCompleter):
@@ -172,23 +168,24 @@ class OpenAICompatCompleter(_BaseCompleter):
             ],
             "temperature": self.temperature,
         }
-        try:
-            response = await self._client.post(
-                f"{self._base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            msg = f"LLM request failed: {exc.response.status_code} {exc.response.text[:200]}"
-            raise RuntimeError(msg) from exc
-        except httpx.HTTPError as exc:
-            msg = f"LLM request failed: {exc}"
-            raise RuntimeError(msg) from exc
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                msg = f"LLM request failed: {exc.response.status_code}"
+                raise RuntimeError(msg) from exc
+            except httpx.HTTPError as exc:
+                msg = f"LLM request failed: {exc}"
+                raise RuntimeError(msg) from exc
 
         try:
             return response.json()["choices"][0]["message"]["content"]
@@ -224,24 +221,25 @@ class AnthropicCompleter(_BaseCompleter):
             "messages": [{"role": "user", "content": user_msg}],
             "temperature": self.temperature,
         }
-        try:
-            response = await self._client.post(
-                f"{self._base_url}/messages",
-                headers={
-                    "x-api-key": self._api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            msg = f"LLM request failed: {exc.response.status_code} {exc.response.text[:200]}"
-            raise RuntimeError(msg) from exc
-        except httpx.HTTPError as exc:
-            msg = f"LLM request failed: {exc}"
-            raise RuntimeError(msg) from exc
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"{self._base_url}/messages",
+                    headers={
+                        "x-api-key": self._api_key,
+                        "anthropic-version": "2023-06-01",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                msg = f"LLM request failed: {exc.response.status_code}"
+                raise RuntimeError(msg) from exc
+            except httpx.HTTPError as exc:
+                msg = f"LLM request failed: {exc}"
+                raise RuntimeError(msg) from exc
 
         try:
             return response.json()["content"][0]["text"]

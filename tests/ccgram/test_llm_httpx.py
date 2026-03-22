@@ -17,7 +17,7 @@ from ccgram.llm.httpx_completer import (
     _SYSTEM_PROMPT,
 )
 
-# ── Response builders ────────────────────────────────────────────────────
+_MOD = "ccgram.llm.httpx_completer"
 
 
 def _openai_response(
@@ -46,7 +46,14 @@ def _mock_http_response(json_data: dict) -> MagicMock:
     return resp
 
 
-# ── OpenAI-compatible completer ──────────────────────────────────────────
+def _patch_httpx_client(mock_post: AsyncMock):
+    """Create a patch for httpx.AsyncClient that returns a mock with given post."""
+    mock_client = AsyncMock()
+    mock_client.post = mock_post
+    mock_ctx = MagicMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_ctx.__aexit__ = AsyncMock(return_value=False)
+    return patch(f"{_MOD}.httpx.AsyncClient", return_value=mock_ctx)
 
 
 class TestOpenAICompleterRequest:
@@ -55,10 +62,8 @@ class TestOpenAICompleterRequest:
         return OpenAICompatCompleter(api_key="sk-test", model="test-model")
 
     async def test_payload_structure(self, completer: OpenAICompatCompleter) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(_openai_response("ls"))
+        mock_post = AsyncMock(return_value=_mock_http_response(_openai_response("ls")))
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("list files", os_info="Linux")
 
             payload = mock_post.call_args.kwargs["json"]
@@ -70,10 +75,8 @@ class TestOpenAICompleterRequest:
             assert "list files" in payload["messages"][1]["content"]
 
     async def test_authorization_header(self, completer: OpenAICompatCompleter) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(_openai_response("ls"))
+        mock_post = AsyncMock(return_value=_mock_http_response(_openai_response("ls")))
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("test", os_info="Linux")
 
             headers = mock_post.call_args.kwargs["headers"]
@@ -83,10 +86,8 @@ class TestOpenAICompleterRequest:
     async def test_posts_to_chat_completions_endpoint(
         self, completer: OpenAICompatCompleter
     ) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(_openai_response("ls"))
+        mock_post = AsyncMock(return_value=_mock_http_response(_openai_response("ls")))
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("test", os_info="Linux")
 
             url = mock_post.call_args[0][0]
@@ -95,12 +96,10 @@ class TestOpenAICompleterRequest:
     async def test_returns_parsed_command(
         self, completer: OpenAICompatCompleter
     ) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(
-                _openai_response("echo hi", "Print hi")
-            )
+        mock_post = AsyncMock(
+            return_value=_mock_http_response(_openai_response("echo hi", "Print hi"))
+        )
+        with _patch_httpx_client(mock_post):
             result = await completer.generate_command("print hi", os_info="Linux")
 
         assert result.command == "echo hi"
@@ -110,18 +109,15 @@ class TestOpenAICompleterRequest:
     async def test_dangerous_flag_passthrough(
         self, completer: OpenAICompatCompleter
     ) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(
+        mock_post = AsyncMock(
+            return_value=_mock_http_response(
                 _openai_response("rm -rf /", "Delete all", dangerous=True)
             )
+        )
+        with _patch_httpx_client(mock_post):
             result = await completer.generate_command("delete all", os_info="Linux")
 
         assert result.is_dangerous is True
-
-
-# ── Anthropic completer ──────────────────────────────────────────────────
 
 
 class TestAnthropicCompleterRequest:
@@ -130,10 +126,10 @@ class TestAnthropicCompleterRequest:
         return AnthropicCompleter(api_key="sk-ant-test", model="claude-test")
 
     async def test_payload_structure(self, completer: AnthropicCompleter) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(_anthropic_response("ls"))
+        mock_post = AsyncMock(
+            return_value=_mock_http_response(_anthropic_response("ls"))
+        )
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("list files", os_info="Linux")
 
             payload = mock_post.call_args.kwargs["json"]
@@ -143,10 +139,10 @@ class TestAnthropicCompleterRequest:
             assert payload["messages"][0]["role"] == "user"
 
     async def test_anthropic_headers(self, completer: AnthropicCompleter) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(_anthropic_response("ls"))
+        mock_post = AsyncMock(
+            return_value=_mock_http_response(_anthropic_response("ls"))
+        )
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("test", os_info="Linux")
 
             headers = mock_post.call_args.kwargs["headers"]
@@ -156,29 +152,26 @@ class TestAnthropicCompleterRequest:
     async def test_posts_to_messages_endpoint(
         self, completer: AnthropicCompleter
     ) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(_anthropic_response("ls"))
+        mock_post = AsyncMock(
+            return_value=_mock_http_response(_anthropic_response("ls"))
+        )
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("test", os_info="Linux")
 
             url = mock_post.call_args[0][0]
             assert url.endswith("/messages")
 
     async def test_returns_parsed_command(self, completer: AnthropicCompleter) -> None:
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(
+        mock_post = AsyncMock(
+            return_value=_mock_http_response(
                 _anthropic_response("pwd", "Print directory")
             )
+        )
+        with _patch_httpx_client(mock_post):
             result = await completer.generate_command("current dir", os_info="Linux")
 
         assert result.command == "pwd"
         assert result.explanation == "Print directory"
-
-
-# ── Shared error handling ────────────────────────────────────────────────
 
 
 class TestCompleterErrors:
@@ -198,14 +191,16 @@ class TestCompleterErrors:
         mock_resp.status_code = 429
         mock_resp.text = "Rate limited"
 
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.side_effect = httpx.HTTPStatusError(
+        mock_post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
                 "429", request=MagicMock(), response=mock_resp
             )
-            with pytest.raises(RuntimeError, match="LLM request failed.*429"):
-                await completer.generate_command("test", os_info="Linux")
+        )
+        with (
+            _patch_httpx_client(mock_post),
+            pytest.raises(RuntimeError, match="LLM request failed.*429"),
+        ):
+            await completer.generate_command("test", os_info="Linux")
 
     @pytest.mark.parametrize(
         ("cls", "api_key"),
@@ -220,12 +215,12 @@ class TestCompleterErrors:
     ) -> None:
         completer = cls(api_key=api_key, model="m")
 
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.side_effect = httpx.ConnectError("Connection refused")
-            with pytest.raises(RuntimeError, match="LLM request failed"):
-                await completer.generate_command("test", os_info="Linux")
+        mock_post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        with (
+            _patch_httpx_client(mock_post),
+            pytest.raises(RuntimeError, match="LLM request failed"),
+        ):
+            await completer.generate_command("test", os_info="Linux")
 
     @pytest.mark.parametrize(
         ("cls", "api_key", "bad_response"),
@@ -240,15 +235,12 @@ class TestCompleterErrors:
     ) -> None:
         completer = cls(api_key=api_key, model="m")
 
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(bad_response)
-            with pytest.raises(RuntimeError, match="Unexpected LLM response"):
-                await completer.generate_command("test", os_info="Linux")
-
-
-# ── Temperature passthrough ──────────────────────────────────────────────
+        mock_post = AsyncMock(return_value=_mock_http_response(bad_response))
+        with (
+            _patch_httpx_client(mock_post),
+            pytest.raises(RuntimeError, match="Unexpected LLM response"),
+        ):
+            await completer.generate_command("test", os_info="Linux")
 
 
 class TestCompleterTemperature:
@@ -274,17 +266,12 @@ class TestCompleterTemperature:
     ) -> None:
         completer = cls(api_key="sk-test", model="m", temperature=temp)
 
-        with patch.object(
-            completer._client, "post", new_callable=AsyncMock
-        ) as mock_post:
-            mock_post.return_value = _mock_http_response(response_factory("ls"))
+        mock_post = AsyncMock(return_value=_mock_http_response(response_factory("ls")))
+        with _patch_httpx_client(mock_post):
             await completer.generate_command("test", os_info="Linux")
 
             payload = mock_post.call_args.kwargs["json"]
             assert payload["temperature"] == temp
-
-
-# ── Base URL configuration ───────────────────────────────────────────────
 
 
 class TestCompleterBaseUrl:

@@ -146,7 +146,14 @@ class Config:
         self.llm_api_key: str = os.getenv("CCGRAM_LLM_API_KEY", "")
         self.llm_base_url: str = os.getenv("CCGRAM_LLM_BASE_URL", "")
         self.llm_model: str = os.getenv("CCGRAM_LLM_MODEL", "")
-        self.llm_temperature: float = float(os.getenv("CCGRAM_LLM_TEMPERATURE", "0.1"))
+        try:
+            self.llm_temperature: float = float(
+                os.getenv("CCGRAM_LLM_TEMPERATURE", "0.1")
+            )
+        except ValueError as e:
+            raise ValueError(
+                f"CCGRAM_LLM_TEMPERATURE must be a valid number: {e}"
+            ) from e
 
         # Auto-close stale topics (minutes; 0 = disabled)
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
