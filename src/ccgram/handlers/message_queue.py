@@ -27,8 +27,6 @@ from telegram.error import RetryAfter, TelegramError
 import contextlib
 
 from ..session import session_manager
-from ..providers import get_provider_for_window
-from ..tmux_manager import tmux_manager
 from ..utils import task_done_callback
 from .callback_data import (
     CB_STATUS_ESC,
@@ -588,7 +586,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
                 full_text,
             )
             if success:
-                await _check_and_send_status(bot, user_id, window_id, task.thread_id)
+                # Status will be recreated by the poll loop — no eager send.
                 return
             logger.debug("Failed to edit tool msg %s, sending new", edit_msg_id)
             # Fall through to send as new message
@@ -627,8 +625,8 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
     if last_msg_id and task.tool_use_id and task.content_type == "tool_use":
         _tool_msg_ids[(task.tool_use_id, user_id, thread_id)] = last_msg_id
 
-    # 4. After content, check and send status
-    await _check_and_send_status(bot, user_id, window_id, task.thread_id)
+    # Status will be recreated by the 1-second poll loop — no need to
+    # eagerly send a new status message here (doing so caused pile-up).
 
 
 async def _convert_status_to_content(
@@ -727,10 +725,10 @@ async def _process_status_update_task(
             if success:
                 _status_msg_info[skey] = (msg_id, window_id, status_text)
             else:
+                # Edit failed (message deleted, rate limit, etc.)
+                # Clear tracking and let the next poll cycle recreate it
+                # instead of sending a new message (which causes pile-up).
                 _status_msg_info.pop(skey, None)
-                await _do_send_status_message(
-                    bot, user_id, thread_id, window_id, status_text
-                )
     else:
         # No existing status message, send new
         await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)
@@ -743,12 +741,36 @@ async def _do_send_status_message(
     window_id: str,
     text: str,
 ) -> None:
-    """Send a new status message with action buttons and track it."""
+    """Send a new status message with action buttons and track it.
+
+    If a status message already exists for this (user, thread), edit it
+    in-place instead of sending a new one — prevents orphaned duplicates.
+    """
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
     history = _get_idle_history(user_id, thread_id_or_0, text)
     keyboard = build_status_keyboard(window_id, history=history)
+
+    # Guard: if a status message already exists, edit it instead of sending new
+    existing = _status_msg_info.get(skey)
+    if existing:
+        msg_id, stored_wid, last_text = existing
+        if stored_wid == window_id and text == last_text:
+            return  # identical, nothing to do
+        if stored_wid == window_id:
+            success = await edit_with_fallback(
+                bot, chat_id, msg_id, text, reply_markup=keyboard
+            )
+            if success:
+                _status_msg_info[skey] = (msg_id, window_id, text)
+                return
+            # Edit failed — clear tracking, fall through to send new
+            _status_msg_info.pop(skey, None)
+        else:
+            # Different window — delete old status first
+            await _do_clear_status_message(bot, user_id, thread_id_or_0)
+
     sent = await rate_limit_send_message(
         bot,
         chat_id,
@@ -776,48 +798,6 @@ async def _do_clear_status_message(
             await bot.delete_message(chat_id=chat_id, message_id=msg_id)
         except TelegramError as e:
             logger.debug("Failed to delete status message %s: %s", msg_id, e)
-
-
-async def _check_and_send_status(
-    bot: Bot,
-    user_id: int,
-    window_id: str,
-    thread_id: int | None = None,
-) -> None:
-    """Check terminal for status line and send status message if present."""
-    # Skip if there are more messages pending in the queue
-    queue = _message_queues.get(user_id)
-    if queue and not queue.empty():
-        return
-
-    # Flush any active batch before showing status
-    thread_id_or_0 = thread_id or 0
-    bkey = (user_id, thread_id_or_0)
-    if bkey in _active_batches:
-        await _flush_batch(bot, user_id, thread_id_or_0)
-    w = await tmux_manager.find_window_by_id(window_id)
-    if not w:
-        return
-
-    pane_text = await tmux_manager.capture_pane(w.window_id)
-    if not pane_text:
-        return
-
-    # Suppress status for muted/errors_only windows (mirrors update_status_message)
-    notif_mode = session_manager.get_notification_mode(window_id)
-    if notif_mode in ("muted", "errors_only"):
-        return
-
-    status = get_provider_for_window(window_id).parse_terminal_status(pane_text)
-    if status and not status.is_interactive:
-        from .hook_events import build_subagent_label, get_subagent_names
-
-        display = status.display_label
-        subagent_names = get_subagent_names(window_id)
-        if subagent_names:
-            label = build_subagent_label(subagent_names)
-            display = f"{display} ({label})"
-        await _do_send_status_message(bot, user_id, thread_id_or_0, window_id, display)
 
 
 async def enqueue_content_message(
