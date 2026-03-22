@@ -107,6 +107,10 @@ from .handlers.callback_data import (
     CB_TOOLBAR_CTRLC,
     CB_TOOLBAR_DISMISS,
     CB_VOICE,
+    CB_SHELL_CANCEL,
+    CB_SHELL_CONFIRM_DANGER,
+    CB_SHELL_EDIT,
+    CB_SHELL_RUN,
     CB_WIN_BIND,
     CB_WIN_CANCEL,
     CB_WIN_NEW,
@@ -1276,6 +1280,7 @@ _CB_RECOVERY = (
 )
 _CB_VOICE = (CB_VOICE,)
 _CB_RESUME = (CB_RESUME_PICK, CB_RESUME_PAGE, CB_RESUME_CANCEL)
+_CB_SHELL = (CB_SHELL_RUN, CB_SHELL_EDIT, CB_SHELL_CANCEL, CB_SHELL_CONFIRM_DANGER)
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1363,7 +1368,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await handle_voice_callback(update, context)
 
     # Shell command approval
-    elif data.startswith("sh:"):
+    elif data.startswith(_CB_SHELL):
         from .handlers.shell_commands import handle_shell_callback
 
         thread_id = _get_thread_id(update)

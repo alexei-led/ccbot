@@ -6,6 +6,7 @@ flow for the shell provider. Also handles raw command execution via ``!`` prefix
 Key components:
   - handle_shell_message: Route shell text (NL or raw ``!`` command)
   - handle_shell_callback: Dispatch approval keyboard callbacks
+  - clear_shell_pending: Cleanup for topic deletion
 """
 
 import structlog
@@ -35,19 +36,12 @@ from .status_polling import clear_probe_failures
 
 logger = structlog.get_logger()
 
-# Module-level pending command state: (chat_id, thread_id) -> (command, description)
-_shell_pending: dict[tuple[int, int], tuple[str, str]] = {}
+# Module-level pending command state: (chat_id, thread_id) -> (command, user_id)
+_shell_pending: dict[tuple[int, int], tuple[str, int]] = {}
 
 
-def _set_pending(chat_id: int, thread_id: int, command: str, description: str) -> None:
-    _shell_pending[(chat_id, thread_id)] = (command, description)
-
-
-def _get_pending(chat_id: int, thread_id: int) -> tuple[str, str] | None:
-    return _shell_pending.get((chat_id, thread_id))
-
-
-def _clear_pending(chat_id: int, thread_id: int) -> None:
+def clear_shell_pending(chat_id: int, thread_id: int) -> None:
+    """Clear any pending shell command for this topic (used by cleanup)."""
     _shell_pending.pop((chat_id, thread_id), None)
 
 
@@ -57,7 +51,7 @@ async def handle_shell_message(
     thread_id: int,
     window_id: str,
     text: str,
-    message: Message,
+    message: Message | None = None,
 ) -> None:
     """Route shell provider messages: ``!`` prefix = raw, else = NL via LLM."""
     await enqueue_status_update(bot, user_id, window_id, None, thread_id)
@@ -65,15 +59,21 @@ async def handle_shell_message(
 
     # Clear any stale pending command for this topic
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    _clear_pending(chat_id, thread_id)
+    clear_shell_pending(chat_id, thread_id)
 
     if text.startswith("!"):
         raw = text[1:].lstrip()
-        if raw:
-            await _execute_raw_command(bot, user_id, thread_id, window_id, raw)
+        if not raw:
             return
+        await _execute_raw_command(bot, user_id, thread_id, window_id, raw)
+        return
 
-    completer = get_completer()
+    try:
+        completer = get_completer()
+    except ValueError:
+        logger.exception("LLM misconfigured, falling back to raw")
+        completer = None
+
     if not completer:
         await _execute_raw_command(bot, user_id, thread_id, window_id, text)
         return
@@ -101,7 +101,9 @@ async def handle_shell_message(
         await _execute_raw_command(bot, user_id, thread_id, window_id, text)
         return
 
-    await _show_command_approval(chat_id, thread_id, window_id, result, text, message)
+    await _show_command_approval(
+        bot, chat_id, thread_id, window_id, result, user_id, message
+    )
 
 
 async def _execute_raw_command(
@@ -124,12 +126,13 @@ async def _execute_raw_command(
 
 
 async def _show_command_approval(
+    bot: Bot,
     chat_id: int,
     thread_id: int,
     window_id: str,
     result: CommandResult,
-    description: str,
-    message: Message,
+    user_id: int,
+    message: Message | None = None,
 ) -> None:
     """Show a suggested command with approval keyboard."""
     text = f"`{result.command}`"
@@ -139,8 +142,13 @@ async def _show_command_approval(
         text = f"\u26a0\ufe0f *Potentially dangerous*\n{text}"
 
     keyboard = _build_approval_keyboard(window_id, result.is_dangerous)
-    await safe_reply(message, text, reply_markup=keyboard)
-    _set_pending(chat_id, thread_id, result.command, description)
+    if message:
+        await safe_reply(message, text, reply_markup=keyboard)
+    else:
+        await safe_send(
+            bot, chat_id, text, message_thread_id=thread_id, reply_markup=keyboard
+        )
+    _shell_pending[(chat_id, thread_id)] = (result.command, user_id)
 
 
 def _build_approval_keyboard(
@@ -195,12 +203,12 @@ async def handle_shell_callback(
         return
 
     chat_id = session_manager.resolve_chat_id(user_id, thread_id)
-    pending = _get_pending(chat_id, thread_id)
+    pending = _shell_pending.get((chat_id, thread_id))
 
     if data.startswith(CB_SHELL_RUN) or data.startswith(CB_SHELL_CONFIRM_DANGER):
-        await _cb_run(query, bot, user_id, thread_id, data, chat_id, pending)
+        await _cb_run(query, bot, user_id, thread_id, chat_id, pending)
     elif data.startswith(CB_SHELL_EDIT):
-        await _cb_edit(query, pending)
+        await _cb_edit(query, chat_id, thread_id, pending)
     elif data.startswith(CB_SHELL_CANCEL):
         await _cb_cancel(query, chat_id, thread_id)
 
@@ -210,29 +218,41 @@ async def _cb_run(
     bot: Bot,
     user_id: int,
     thread_id: int,
-    data: str,
     chat_id: int,
-    pending: tuple[str, str] | None,
+    pending: tuple[str, int] | None,
 ) -> None:
     """Handle Run / Confirm Danger callbacks."""
-    prefix = CB_SHELL_RUN if data.startswith(CB_SHELL_RUN) else CB_SHELL_CONFIRM_DANGER
-    window_id = data[len(prefix) :]
     await query.answer()
-    if pending:
-        command = pending[0]
-        _clear_pending(chat_id, thread_id)
-        await safe_edit(query, f"\u25b6 `{command}`")
-        await _execute_raw_command(bot, user_id, thread_id, window_id, command)
-    else:
+    if not pending:
         await safe_edit(query, "\u274c Command expired")
+        return
+
+    command, pending_user_id = pending
+    if pending_user_id != user_id:
+        await safe_edit(query, "\u274c Not your command")
+        return
+
+    # Use window from thread binding (authoritative), not callback data
+    window_id = session_manager.get_window_for_thread(user_id, thread_id)
+    if not window_id:
+        clear_shell_pending(chat_id, thread_id)
+        await safe_edit(query, "\u274c No session bound")
+        return
+
+    clear_shell_pending(chat_id, thread_id)
+    await safe_edit(query, f"\u25b6 `{command}`")
+    await _execute_raw_command(bot, user_id, thread_id, window_id, command)
 
 
 async def _cb_edit(
     query: CallbackQuery,
-    pending: tuple[str, str] | None,
+    chat_id: int,
+    thread_id: int,
+    pending: tuple[str, int] | None,
 ) -> None:
     """Handle Edit callback."""
     await query.answer()
+    clear_shell_pending(chat_id, thread_id)
     if pending:
         await safe_edit(
             query,
@@ -249,5 +269,5 @@ async def _cb_cancel(
 ) -> None:
     """Handle Cancel callback."""
     await query.answer("Cancelled")
-    _clear_pending(chat_id, thread_id)
+    clear_shell_pending(chat_id, thread_id)
     await safe_edit(query, "Cancelled")

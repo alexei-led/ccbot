@@ -554,18 +554,31 @@ async def _create_window_and_bind(
         if context.user_data is not None:
             context.user_data.pop(PENDING_THREAD_TEXT, None)
             context.user_data.pop(PENDING_THREAD_ID, None)
-        send_ok, send_msg = await session_manager.send_to_window(
-            created_wid,
-            pending_text,
-        )
-        if not send_ok:
-            logger.warning("Failed to forward pending text: %s", send_msg)
-            await safe_send(
+
+        # Shell provider: route through NL→command approval flow
+        if provider_name == "shell":
+            from .shell_commands import handle_shell_message
+
+            await handle_shell_message(
                 context.bot,
-                session_manager.resolve_chat_id(user_id, pending_thread_id),
-                f"❌ Failed to send pending message: {send_msg}",
-                message_thread_id=pending_thread_id,
+                user_id,
+                pending_thread_id,
+                created_wid,
+                pending_text,
             )
+        else:
+            send_ok, send_msg = await session_manager.send_to_window(
+                created_wid,
+                pending_text,
+            )
+            if not send_ok:
+                logger.warning("Failed to forward pending text: %s", send_msg)
+                await safe_send(
+                    context.bot,
+                    session_manager.resolve_chat_id(user_id, pending_thread_id),
+                    f"❌ Failed to send pending message: {send_msg}",
+                    message_thread_id=pending_thread_id,
+                )
     elif context.user_data is not None:
         context.user_data.pop(PENDING_THREAD_ID, None)
 
