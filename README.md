@@ -182,7 +182,8 @@ ccgram hook --install
 
 ## Documentation
 
-See **[docs/guides.md](docs/guides.md)** for CLI reference, configuration, upgrading, multi-instance setup, session recovery, testing, and more.
+- **[docs/guides.md](docs/guides.md)** — CLI reference, configuration, upgrading, multi-instance setup, session recovery, testing
+- **[docs/providers.md](docs/providers.md)** — Provider details (Claude, Codex, Gemini, Shell), session modes, LLM configuration, custom launch commands
 
 ## Development
 

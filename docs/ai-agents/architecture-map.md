@@ -23,7 +23,7 @@
 - `src/ccgram/providers/base.py` defines the provider contract.
   - `discover_transcript(cwd, window_key, *, max_age=None)` is the hookless discovery contract (used by Codex/Gemini; `max_age=0` disables staleness checks for alive panes).
 - `src/ccgram/providers/__init__.py` resolves per-window provider selection.
-- `src/ccgram/providers/{claude,codex,gemini}.py` implement provider-specific behavior.
+- `src/ccgram/providers/{claude,codex,gemini,shell}.py` implement provider-specific behavior.
 - `src/ccgram/command_catalog.py` discovers provider commands from filesystem (skills, custom commands) with 60s TTL caching.
 - `src/ccgram/cc_commands.py` registers discovered commands as Telegram bot menu entries.
 - `src/ccgram/interactive_prompt_formatter.py` normalizes provider interactive prompt text for Telegram readability (currently Codex edit approvals).
@@ -33,8 +33,8 @@
 4a. LLM command generation layer
 
 - `src/ccgram/llm/base.py` defines the `CommandGenerator` protocol and `CommandResult` datatype used by all LLM backends.
-- `src/ccgram/llm/httpx_completer.py` implements completers for OpenAI-compatible APIs and the Anthropic API via httpx.
-- `src/ccgram/llm/__init__.py` owns the `_PROVIDERS` registry and resolves the active backend from config.
+- `src/ccgram/llm/httpx_completer.py` implements completers for OpenAI-compatible APIs and the Anthropic API via httpx. Temperature is configurable via `CCGRAM_LLM_TEMPERATURE`.
+- `src/ccgram/llm/__init__.py` owns the `_PROVIDERS` registry and resolves the active backend from config (provider, model, temperature).
 - `src/ccgram/handlers/shell_commands.py` consumes `CommandGenerator` to drive the NL→command→approval-keyboard flow; also handles raw `!` command execution.
 - `src/ccgram/handlers/shell_capture.py` polls the shell pane after execution and streams output back to Telegram via in-place edits.
 

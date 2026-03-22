@@ -115,14 +115,15 @@ Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume bu
 
 The shell provider uses an LLM to translate natural language input into shell commands. LLM settings are independent of the agent provider and apply only when a shell topic is active.
 
-| Setting      | Env Var               | Default         |
-| ------------ | --------------------- | --------------- |
-| LLM provider | `CCGRAM_LLM_PROVIDER` | (empty)         |
-| LLM API key  | `CCGRAM_LLM_API_KEY`  | (empty)         |
-| LLM base URL | `CCGRAM_LLM_BASE_URL` | (from provider) |
-| LLM model    | `CCGRAM_LLM_MODEL`    | (from provider) |
+| Setting         | Env Var                  | Default         |
+| --------------- | ------------------------ | --------------- |
+| LLM provider    | `CCGRAM_LLM_PROVIDER`    | (empty)         |
+| LLM API key     | `CCGRAM_LLM_API_KEY`     | (empty)         |
+| LLM base URL    | `CCGRAM_LLM_BASE_URL`    | (from provider) |
+| LLM model       | `CCGRAM_LLM_MODEL`       | (from provider) |
+| LLM temperature | `CCGRAM_LLM_TEMPERATURE` | `0.1`           |
 
-Supported LLM providers: `openai`, `xai`, `deepseek`, `anthropic`, `groq`, `ollama`. API key resolution: `CCGRAM_LLM_API_KEY` > provider-specific env var (e.g. `XAI_API_KEY`) > `OPENAI_API_KEY` (universal fallback). When `CCGRAM_LLM_PROVIDER` is unset, the shell provider skips NL→command generation and forwards all input as raw commands.
+Supported LLM providers: `openai`, `xai`, `deepseek`, `anthropic`, `groq`, `ollama`. API key resolution: `CCGRAM_LLM_API_KEY` > provider-specific env var (e.g. `XAI_API_KEY`) > `OPENAI_API_KEY` (universal fallback). When `CCGRAM_LLM_PROVIDER` is unset, the shell provider skips NL→command generation and forwards all input as raw commands. Set temperature to `0` for deterministic output with cheap/fast models.
 
 ### Migration Notes
 

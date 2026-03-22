@@ -73,7 +73,7 @@ Change provider behavior (commands, parsing, capabilities):
 
 - `src/ccgram/providers/base.py` for contract/capabilities.
 - `src/ccgram/providers/__init__.py` for per-window provider resolution.
-- `src/ccgram/providers/{claude,codex,gemini}.py` for provider-specific behavior.
+- `src/ccgram/providers/{claude,codex,gemini,shell}.py` for provider-specific behavior.
 - `src/ccgram/interactive_prompt_formatter.py` for provider-facing interactive prompt text normalization (currently Codex edit approval readability).
 
 Change shell command generation behavior:
@@ -83,7 +83,7 @@ Change shell command generation behavior:
 
 Add new LLM provider:
 
-- `src/ccgram/llm/__init__.py`: add entry to `_PROVIDERS` dict with `base_url`, `model`, and `api_key_env` keys.
+- `src/ccgram/llm/__init__.py`: add entry to `_PROVIDERS` dict with `base_url`, `model`, and `api_key_env` keys. Temperature is passed through from config automatically.
 
 Change Telegram interactive UX:
 

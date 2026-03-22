@@ -42,6 +42,13 @@ Add file upload handling:
 3. Agent is notified via tmux keys with the file path.
 4. Extend `file_handler.py` for new media types or post-processing.
 
+Add a new LLM provider (for shell command generation):
+
+1. Add entry to `_PROVIDERS` dict in `src/ccgram/llm/__init__.py` with `base_url`, `model`, and `api_key_env` keys.
+2. If the provider uses the OpenAI-compatible API, no new completer code is needed.
+3. If the provider uses a different API format, add a new completer class in `src/ccgram/llm/httpx_completer.py` extending `_BaseCompleter`.
+4. Temperature is passed through from `config.llm_temperature` automatically.
+
 Adjust status or transcript parsing:
 
 1. Keep parsing provider-specific where possible.
