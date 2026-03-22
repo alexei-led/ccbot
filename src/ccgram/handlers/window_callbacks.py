@@ -11,7 +11,7 @@ Key function: handle_window_callback (uniform callback handler signature).
 import structlog
 from pathlib import Path
 
-from telegram import CallbackQuery, Update
+from telegram import CallbackQuery, Chat, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
@@ -36,7 +36,7 @@ from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 logger = structlog.get_logger()
 
 
-def _get_topic_chat(update: Update, query: CallbackQuery) -> object | None:
+def _get_topic_chat(update: Update, query: CallbackQuery) -> Chat | None:
     """Resolve the chat object for the current callback topic, if available."""
     query_message = (
         update.callback_query.message if update.callback_query else None
