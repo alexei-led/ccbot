@@ -36,6 +36,23 @@ from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 logger = structlog.get_logger()
 
 
+def _get_topic_chat(update: Update, query: CallbackQuery) -> object | None:
+    """Resolve the chat object for the current callback topic, if available."""
+    query_message = (
+        update.callback_query.message if update.callback_query else None
+    ) or query.message
+    return query_message.chat if query_message else None
+
+
+def _store_group_chat_id(
+    user_id: int, thread_id: int, update: Update, query: CallbackQuery
+) -> None:
+    """Persist group chat routing for a topic thread (best-effort)."""
+    chat = _get_topic_chat(update, query)
+    if chat and chat.type in ("group", "supergroup"):
+        session_manager.set_group_chat_id(user_id, thread_id, chat.id)
+
+
 async def handle_window_callback(
     query: CallbackQuery,
     user_id: int,
@@ -97,12 +114,7 @@ async def _handle_bind(
     display = w.window_name
     clear_window_picker_state(context.user_data)
     session_manager.bind_thread(user_id, thread_id, selected_wid, window_name=display)
-    query_message = (
-        update.callback_query.message if update.callback_query else None
-    ) or query.message
-    chat = query_message.chat if query_message else None
-    if chat and chat.type in ("group", "supergroup"):
-        session_manager.set_group_chat_id(user_id, thread_id, chat.id)
+    _store_group_chat_id(user_id, thread_id, update, query)
 
     try:
         await context.bot.edit_forum_topic(
