@@ -37,11 +37,21 @@ _EMOJI_DEAD_OLD = (
 
 # Debounce: state must be stable for this many seconds before updating topic name.
 # Prevents rapid active↔idle toggling from flooding chat with rename messages.
-# Asymmetric: active/idle transitions are noisy (agent work cycles), so they get
-# a long debounce. Done/dead transitions are meaningful (session ended), so they
-# fire faster.
-DEBOUNCE_ACTIVE_IDLE_SECONDS = 30.0
+#
+# Asymmetric by design:
+#   → active (5s):  fast feedback — user sees "agent is working" quickly
+#   → idle (30s):   slow transition — brief pauses during work don't cause flicker
+#   → done/dead (5s): meaningful lifecycle events, fire fast
+DEBOUNCE_TO_ACTIVE_SECONDS = 5.0
+DEBOUNCE_TO_IDLE_SECONDS = 30.0
 DEBOUNCE_TERMINAL_SECONDS = 5.0  # done, dead
+
+_DEBOUNCE_BY_STATE: dict[str, float] = {
+    "active": DEBOUNCE_TO_ACTIVE_SECONDS,
+    "idle": DEBOUNCE_TO_IDLE_SECONDS,
+    "done": DEBOUNCE_TERMINAL_SECONDS,
+    "dead": DEBOUNCE_TERMINAL_SECONDS,
+}
 
 # Topic state tracking: (chat_id, thread_id) -> (state, approval_mode, rc_active)
 _topic_states: dict[tuple[int, int], tuple[str, str, bool]] = {}
@@ -159,11 +169,7 @@ async def update_topic_emoji(
         _pending_transitions[key] = (state, now)
         return
 
-    debounce = (
-        DEBOUNCE_TERMINAL_SECONDS
-        if state in ("done", "dead")
-        else DEBOUNCE_ACTIVE_IDLE_SECONDS
-    )
+    debounce = _DEBOUNCE_BY_STATE.get(state, DEBOUNCE_TO_IDLE_SECONDS)
     if now - pending[1] < debounce:
         # Not stable long enough yet
         return
