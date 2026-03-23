@@ -433,6 +433,11 @@ class TmuxManager:
         except OSError:
             return ""
 
+    async def stamp_pane_title(self, window_id: str, provider_name: str) -> None:
+        """Set pane title to ``ccgram:<provider>`` for instant re-detection."""
+        osc = rf"\033]2;ccgram:{provider_name}\007"
+        await self.send_keys(window_id, f"printf '{osc}'", raw=True)
+
     async def _capture_pane_plain(self, window_id: str) -> str | None:
         """Capture pane as plain text via libtmux.
 

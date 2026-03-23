@@ -80,6 +80,19 @@ class TestDetectProviderFromRuntime:
     def test_prefers_command_detection_when_available(self) -> None:
         assert detect_provider_from_runtime("codex", pane_title="◇ Ready") == "codex"
 
+    def test_detects_provider_from_ccgram_title_stamp(self) -> None:
+        assert detect_provider_from_runtime("bun", pane_title="ccgram:codex") == "codex"
+        assert (
+            detect_provider_from_runtime("node", pane_title="ccgram:claude") == "claude"
+        )
+        assert (
+            detect_provider_from_runtime("bun", pane_title="ccgram:gemini") == "gemini"
+        )
+        assert detect_provider_from_runtime("bun", pane_title="ccgram:shell") == "shell"
+
+    def test_ignores_invalid_ccgram_stamp(self) -> None:
+        assert detect_provider_from_runtime("bun", pane_title="ccgram:unknown") == ""
+
 
 class TestHandleNewWindowAutoDetection:
     @patch("ccgram.bot.tmux_manager")

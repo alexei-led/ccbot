@@ -159,6 +159,9 @@ def should_probe_pane_title_for_provider_detection(pane_current_command: str) ->
     return False
 
 
+_CCGRAM_TITLE_PREFIX = "ccgram:"
+
+
 def detect_provider_from_runtime(
     pane_current_command: str,
     *,
@@ -168,6 +171,13 @@ def detect_provider_from_runtime(
     detected = detect_provider_from_command(pane_current_command)
     if detected or not pane_title:
         return detected
+
+    # Check for ccgram title stamp (set on launch via stamp_pane_title)
+    if pane_title.startswith(_CCGRAM_TITLE_PREFIX):
+        stamped = pane_title[len(_CCGRAM_TITLE_PREFIX) :].strip()
+        _ensure_registered()
+        if registry.is_valid(stamped):
+            return stamped
 
     _ensure_registered()
     for name in registry.provider_names():

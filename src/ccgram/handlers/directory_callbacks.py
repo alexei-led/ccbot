@@ -513,6 +513,8 @@ async def _create_window_and_bind(
         user_id,
         pending_thread_id,
     )
+    await tmux_manager.stamp_pane_title(created_wid, provider_name)
+
     if provider_name == "shell":
         from ccgram.providers.shell import setup_shell_prompt
 

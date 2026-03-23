@@ -230,6 +230,7 @@ class TestHandleModeSelect:
         mock_tmux.create_window = AsyncMock(
             return_value=(True, "Created window 'proj'", "proj", "@5")
         )
+        mock_tmux.stamp_pane_title = AsyncMock()
         mock_sm.get_window_for_thread.return_value = None
         mock_sm.resolve_chat_id.return_value = 123
         mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
@@ -249,6 +250,7 @@ class TestHandleModeSelect:
             "/tmp/proj",
             launch_command="codex --dangerously-bypass-approvals-and-sandbox",
         )
+        mock_tmux.stamp_pane_title.assert_awaited_once_with("@5", "codex")
         mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
         mock_sm.set_window_approval_mode.assert_called_once_with("@5", "yolo")
         mock_sm.set_group_chat_id.assert_called_once_with(100, 42, -100999)
@@ -287,6 +289,7 @@ class TestHandleModeSelect:
         mock_tmux.create_window = AsyncMock(
             return_value=(True, "Created window 'proj'", "proj", "@1")
         )
+        mock_tmux.stamp_pane_title = AsyncMock()
         mock_sm.get_window_for_thread.return_value = None
         mock_sm.resolve_chat_id.return_value = 123
         mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
