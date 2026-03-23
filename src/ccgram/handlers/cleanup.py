@@ -98,6 +98,9 @@ async def clear_topic_state(
     clear_shell_pending(chat_id, thread_id)
     if window_id:
         clear_marker_skip(window_id)
+        from ..providers.process_detection import clear_detection_cache
+
+        clear_detection_cache(window_id)
 
     # Clear pending thread state from user_data
     if user_data is not None and user_data.get(PENDING_THREAD_ID) == thread_id:

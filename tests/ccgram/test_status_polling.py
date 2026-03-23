@@ -863,7 +863,8 @@ class TestProviderSwitchPromptSetup:
             patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
             patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="shell",
             ),
             patch(
@@ -898,7 +899,8 @@ class TestProviderSwitchPromptSetup:
             patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
             patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="claude",
             ),
             patch(
@@ -935,7 +937,8 @@ class TestProviderSwitchPromptSetup:
             patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
             patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="claude",
             ),
             patch(
@@ -971,7 +974,8 @@ class TestProviderSwitchPromptSetup:
             patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
             patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="claude",
             ),
             patch(
@@ -1007,7 +1011,8 @@ class TestProviderSwitchPromptSetup:
             patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
             patch("ccgram.handlers.status_polling.config") as mock_config,
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="",
             ),
             patch(
@@ -1041,7 +1046,8 @@ class TestProviderSwitchPromptSetup:
             patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
             patch("ccgram.handlers.status_polling.config") as mock_config,
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="",
             ),
             patch(
@@ -1085,7 +1091,8 @@ class TestProviderSwitchPromptSetup:
                 patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
                 patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
                 patch(
-                    "ccgram.handlers.status_polling.detect_provider_from_command",
+                    "ccgram.handlers.status_polling.detect_provider_from_pane",
+                    new_callable=AsyncMock,
                     return_value="claude",
                 ),
                 patch(
@@ -1115,7 +1122,8 @@ class TestProviderSwitchPromptSetup:
                 patch("ccgram.handlers.status_polling.session_manager") as mock_sm,
                 patch("ccgram.handlers.status_polling.tmux_manager") as mock_tmux,
                 patch(
-                    "ccgram.handlers.status_polling.detect_provider_from_command",
+                    "ccgram.handlers.status_polling.detect_provider_from_pane",
+                    new_callable=AsyncMock,
                     return_value="shell",
                 ),
                 patch(
@@ -1615,7 +1623,8 @@ class TestMaybeDiscoverTranscript:
                 side_effect=_provider_for_window,
             ),
             patch(
-                "ccgram.handlers.status_polling.detect_provider_from_command",
+                "ccgram.handlers.status_polling.detect_provider_from_pane",
+                new_callable=AsyncMock,
                 return_value="",
             ),
             patch("ccgram.handlers.status_polling.config") as mock_config,

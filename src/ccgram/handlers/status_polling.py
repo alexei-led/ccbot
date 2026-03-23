@@ -43,6 +43,7 @@ from telegram.error import BadRequest, TelegramError
 from ..config import config
 from ..providers import (
     detect_provider_from_command,
+    detect_provider_from_pane,
     detect_provider_from_transcript_path,
     detect_provider_from_runtime,
     get_provider_for_window,
@@ -1049,7 +1050,9 @@ async def _maybe_discover_transcript(
 
     # Re-detect provider from the current pane to recover from stale mappings.
     if w and w.pane_current_command:
-        detected = detect_provider_from_command(w.pane_current_command)
+        detected = await detect_provider_from_pane(
+            w.pane_current_command, pane_tty=w.pane_tty, window_id=window_id
+        )
         if not detected and should_probe_pane_title_for_provider_detection(
             w.pane_current_command
         ):

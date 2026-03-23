@@ -177,6 +177,37 @@ def detect_provider_from_runtime(
     return ""
 
 
+_JS_RUNTIMES = frozenset({"node", "bun", "npx", "bunx"})
+
+
+async def detect_provider_from_pane(
+    pane_current_command: str,
+    *,
+    pane_tty: str = "",
+    window_id: str = "",
+) -> str:
+    """Detect provider using fast path + ps-based TTY detection.
+
+    1. Fast path: basename match via ``detect_provider_from_command()``
+    2. If command is a JS runtime (node/bun/npx) and tty is available,
+       fall back to ``ps -t`` foreground process inspection with PGID cache.
+    """
+    detected = detect_provider_from_command(pane_current_command)
+    if detected:
+        return detected
+
+    if pane_tty and pane_current_command:
+        basename = os.path.basename(pane_current_command.strip().lower().split()[0])
+        if basename in _JS_RUNTIMES:
+            from .process_detection import detect_provider_cached
+
+            detected = await detect_provider_cached(window_id or "", pane_tty)
+            if detected:
+                return detected
+
+    return ""
+
+
 def resolve_launch_command(
     provider_name: str, *, approval_mode: str = _APPROVAL_MODE_NORMAL
 ) -> str:
@@ -257,6 +288,7 @@ __all__ = [
     "StatusUpdate",
     "UnknownProviderError",
     "detect_provider_from_command",
+    "detect_provider_from_pane",
     "detect_provider_from_transcript_path",
     "detect_provider_from_runtime",
     "get_provider",

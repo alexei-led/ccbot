@@ -56,7 +56,7 @@ from .cc_commands import (
 )
 from .providers import (
     AgentProvider,
-    detect_provider_from_command,
+    detect_provider_from_pane,
     detect_provider_from_runtime,
     get_provider,
     get_provider_for_window,
@@ -1530,7 +1530,11 @@ async def _handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
     if not existing_provider:
         w = await tmux_manager.find_window_by_id(event.window_id)
         if w and w.pane_current_command:
-            detected = detect_provider_from_command(w.pane_current_command)
+            detected = await detect_provider_from_pane(
+                w.pane_current_command,
+                pane_tty=w.pane_tty,
+                window_id=event.window_id,
+            )
             if not detected and should_probe_pane_title_for_provider_detection(
                 w.pane_current_command
             ):

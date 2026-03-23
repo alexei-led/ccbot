@@ -96,6 +96,7 @@ class TmuxWindow:
     window_name: str
     cwd: str  # Current working directory
     pane_current_command: str = ""  # Process running in active pane
+    pane_tty: str = ""  # TTY device for the active pane (e.g. /dev/ttys003)
     pane_width: int = 0  # Active pane width (columns)
     pane_height: int = 0  # Active pane height (rows)
 
@@ -181,11 +182,13 @@ class TmuxManager:
                     if pane:
                         cwd = pane.pane_current_path or ""
                         pane_cmd = pane.pane_current_command or ""
+                        pane_tty = getattr(pane, "pane_tty", "") or ""
                         pw = int(pane.pane_width or 0)
                         ph = int(pane.pane_height or 0)
                     else:
                         cwd = ""
                         pane_cmd = ""
+                        pane_tty = ""
                         pw = 0
                         ph = 0
 
@@ -195,6 +198,7 @@ class TmuxManager:
                             window_name=name,
                             cwd=cwd,
                             pane_current_command=pane_cmd,
+                            pane_tty=pane_tty,
                             pane_width=pw,
                             pane_height=ph,
                         )
@@ -251,7 +255,7 @@ class TmuxManager:
                 "-t",
                 session_name,
                 "-F",
-                "#{window_id}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}",
+                "#{window_id}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{pane_tty}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -262,7 +266,7 @@ class TmuxManager:
         if proc.returncode != 0:
             return None
         for line in stdout.decode().strip().split("\n"):
-            parts = line.split("\t", 4)
+            parts = line.split("\t", 5)
             if parts and parts[0] == window_id_part:
                 cwd = parts[1] if len(parts) > 1 else ""
                 cmd = parts[2] if len(parts) > 2 else ""  # noqa: PLR2004
@@ -276,11 +280,13 @@ class TmuxManager:
                     if len(parts) > 4 and parts[4].isdigit()  # noqa: PLR2004
                     else 0
                 )
+                tty = parts[5] if len(parts) > 5 else ""  # noqa: PLR2004
                 return TmuxWindow(
                     window_id=qualified_id,
                     window_name=session_name.removeprefix(_EMDASH_PREFIX),
                     cwd=cwd,
                     pane_current_command=cmd,
+                    pane_tty=tty,
                     pane_width=pw,
                     pane_height=ph,
                 )
@@ -731,7 +737,7 @@ class TmuxManager:
                 "-t",
                 session_name,
                 "-F",
-                "#{window_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}",
+                "#{window_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_tty}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -746,10 +752,11 @@ class TmuxManager:
         for line in win_stdout.decode().strip().split("\n"):
             if not line:
                 continue
-            parts = line.split("\t", 3)
+            parts = line.split("\t", 4)
             if len(parts) < 4:  # noqa: PLR2004
                 continue
-            win_id, win_name, cwd, cmd = parts
+            win_id, win_name, cwd, cmd = parts[:4]
+            tty = parts[4] if len(parts) > 4 else ""  # noqa: PLR2004
             detected = detect_provider_from_command(cmd)
             if not detected or detected == "shell":
                 continue
@@ -760,6 +767,7 @@ class TmuxManager:
                     window_name=win_name or session_name.removeprefix(_EMDASH_PREFIX),
                     cwd=cwd,
                     pane_current_command=cmd,
+                    pane_tty=tty,
                 )
             )
         return results
