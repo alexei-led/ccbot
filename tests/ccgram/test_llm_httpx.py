@@ -367,18 +367,29 @@ class TestBuildSystemPrompt:
         mock_response = MagicMock()
         mock_response.json.return_value = _openai_response("ls")
         mock_response.raise_for_status = MagicMock()
+        mock_post = AsyncMock(return_value=mock_response)
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.post = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value.__aenter__ = AsyncMock(
-                return_value=mock_client
-            )
-            mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-
+        with _patch_httpx_client(mock_post):
             c = OpenAICompatCompleter(api_key="sk-test", model="m")
             await c.generate_command("list files", shell="fish")
 
-        payload = mock_client.post.call_args[1]["json"]
+        payload = mock_post.call_args[1]["json"]
         system_msg = payload["messages"][0]["content"]
         assert "NOT POSIX-compatible" in system_msg
+
+    async def test_os_info_auto_populated_from_platform(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = _openai_response("uname -a")
+        mock_response.raise_for_status = MagicMock()
+        mock_post = AsyncMock(return_value=mock_response)
+
+        with (
+            _patch_httpx_client(mock_post),
+            patch("ccgram.llm.httpx_completer.platform.system", return_value="Linux"),
+        ):
+            c = OpenAICompatCompleter(api_key="sk-test", model="m")
+            await c.generate_command("show system info")
+
+        payload = mock_post.call_args[1]["json"]
+        user_msg = payload["messages"][1]["content"]
+        assert "Linux" in user_msg

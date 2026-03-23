@@ -168,7 +168,9 @@ _pgid_cache: dict[str, tuple[int, str]] = {}
 async def detect_provider_cached(window_id: str, tty_path: str) -> str:
     """Detect provider with PGID-based caching.
 
-    Only calls ``ps`` when the foreground PGID changes (or on first call).
+    Always calls ``ps`` to read the current foreground PGID, but skips
+    the more expensive ``classify_provider_from_args`` when the PGID
+    matches the cached value.
     """
     args, pgid = await get_foreground_args(tty_path)
     if not args or pgid == 0:

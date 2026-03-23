@@ -15,6 +15,7 @@ from ccgram.handlers.callback_data import (
 )
 from ccgram.handlers.shell_commands import (
     _build_approval_keyboard,
+    _cancel_stuck_input,
     _shell_pending,
     clear_marker_skip,
     clear_shell_pending,
@@ -97,6 +98,7 @@ class TestHandleShellMessage:
             patch(f"{_MOD}.start_shell_capture") as mock_capture,
         ):
             mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             await handle_shell_message(bot, 1, 42, "@0", "!ls -la", message)
 
@@ -246,6 +248,11 @@ class TestHandleShellMessage:
             patch(f"{_MOD}.clear_probe_failures"),
             patch(f"{_MOD}.session_manager") as mock_sm,
             patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
+            patch(
+                "ccgram.providers.shell.has_prompt_marker",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
             mock_sm.send_to_window = AsyncMock(return_value=(False, "Window not found"))
             mock_sm.resolve_chat_id.return_value = -100
@@ -302,6 +309,7 @@ class TestHandleShellCallback:
             mock_sm.resolve_chat_id.return_value = -100
             mock_sm.get_window_for_thread.return_value = "@0"
             mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             _shell_pending[(-100, 42)] = ("ls -la", 1)
 
@@ -451,6 +459,172 @@ class TestHandleShellCallback:
             assert _shell_pending.get((-100, 42)) is None
 
 
+class TestGatherLlmContext:
+    async def test_assembles_cwd_shell_and_tools(self) -> None:
+        from ccgram.handlers.shell_commands import gather_llm_context
+
+        with (
+            patch(
+                "ccgram.providers.shell.detect_pane_shell",
+                new_callable=AsyncMock,
+                return_value="fish",
+            ),
+            patch(
+                f"{_MOD}._detect_shell_tools",
+                return_value="rg (grep replacement)",
+            ),
+            patch(f"{_MOD}.session_manager") as mock_sm,
+        ):
+            mock_sm.get_window_state.return_value = MagicMock(cwd="/home/user/project")
+            ctx = await gather_llm_context("@0")
+
+        assert ctx["cwd"] == "/home/user/project"
+        assert ctx["shell"] == "fish"
+        assert ctx["shell_tools"] == "rg (grep replacement)"
+
+    async def test_empty_cwd_when_none(self) -> None:
+        from ccgram.handlers.shell_commands import gather_llm_context
+
+        with (
+            patch(
+                "ccgram.providers.shell.detect_pane_shell",
+                new_callable=AsyncMock,
+                return_value="bash",
+            ),
+            patch(
+                f"{_MOD}._detect_shell_tools",
+                return_value="",
+            ),
+            patch(f"{_MOD}.session_manager") as mock_sm,
+        ):
+            mock_sm.get_window_state.return_value = MagicMock(cwd=None)
+            ctx = await gather_llm_context("@0")
+
+        assert ctx["cwd"] == ""
+
+
+class TestCancelStuckInput:
+    def _mock_window(self, pane_cmd: str = "fish"):  # noqa: ANN202
+        from ccgram.tmux_manager import TmuxWindow
+
+        return TmuxWindow(
+            window_id="@0",
+            window_name="test",
+            cwd="/tmp",
+            pane_current_command=pane_cmd,
+        )
+
+    async def test_clean_prompt_does_nothing(self) -> None:
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(return_value=self._mock_window())
+            mock_tm.capture_pane = AsyncMock(return_value="output\nccgram:0❯ ")
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_not_called()
+
+    async def test_stuck_continuation_sends_ctrl_c(self) -> None:
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(return_value=self._mock_window())
+            mock_tm.capture_pane = AsyncMock(
+                return_value="ccgram:0❯ begin\n  for x in 1 2 3"
+            )
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_called_once_with(
+                "@0", "C-c", enter=False, literal=False
+            )
+
+    async def test_running_command_skips(self) -> None:
+        """When foreground process is not a shell (e.g. python), don't Ctrl+C."""
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(
+                return_value=self._mock_window(pane_cmd="python3")
+            )
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_not_called()
+
+    async def test_no_window_skips(self) -> None:
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_not_called()
+
+    async def test_partial_typed_text_sends_ctrl_c(self) -> None:
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(return_value=self._mock_window())
+            mock_tm.capture_pane = AsyncMock(return_value="ccgram:0❯ some partial inp")
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_called_once()
+
+    async def test_tail_dash_f_running_skips(self) -> None:
+        """tail -f shows as foreground process, should not be interrupted."""
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(
+                return_value=self._mock_window(pane_cmd="tail")
+            )
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_not_called()
+
+    async def test_login_shell_detected(self) -> None:
+        """Login shells have - prefix (e.g. -bash), should still detect."""
+        with patch(f"{_MOD}.tmux_manager") as mock_tm:
+            mock_tm.find_window_by_id = AsyncMock(
+                return_value=self._mock_window(pane_cmd="-bash")
+            )
+            mock_tm.capture_pane = AsyncMock(return_value="ccgram:0❯ echo 'unclosed")
+            mock_tm.send_keys = AsyncMock()
+
+            await _cancel_stuck_input("@0")
+
+            mock_tm.send_keys.assert_called_once()
+
+
+class TestShowCommandApprovalPaths:
+    def setup_method(self) -> None:
+        _shell_pending.clear()
+
+    async def test_message_present_uses_safe_reply(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+        result = CommandResult(
+            command="ls", explanation="List files", is_dangerous=False
+        )
+
+        with patch(f"{_MOD}.safe_reply", new_callable=AsyncMock) as mock_reply:
+            await show_command_approval(bot, -100, 42, "@0", result, 1, message)
+
+        mock_reply.assert_called_once()
+        assert "`ls`" in mock_reply.call_args[0][1]
+        assert _shell_pending[(-100, 42)] == ("ls", 1)
+
+    async def test_message_none_uses_safe_send(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        result = CommandResult(command="pwd", explanation="", is_dangerous=False)
+
+        with patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send:
+            await show_command_approval(bot, -100, 42, "@0", result, 1, None)
+
+        mock_send.assert_called_once()
+        assert "`pwd`" in mock_send.call_args[0][2]
+        assert _shell_pending[(-100, 42)] == ("pwd", 1)
+
+
 class TestOfferPromptSetup:
     def setup_method(self) -> None:
         from ccgram.handlers.shell_commands import _marker_setup_skipped
@@ -576,6 +750,7 @@ class TestLazyMarkerRecovery:
             ) as mock_setup,
         ):
             mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
 
@@ -601,6 +776,7 @@ class TestLazyMarkerRecovery:
             ) as mock_setup,
         ):
             mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
 
@@ -626,6 +802,7 @@ class TestLazyMarkerRecovery:
                 ) as mock_setup,
             ):
                 mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
+                mock_tm.find_window_by_id = AsyncMock(return_value=None)
                 mock_tm.capture_pane = AsyncMock(return_value=None)
                 await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
 

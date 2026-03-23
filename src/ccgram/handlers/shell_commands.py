@@ -11,6 +11,8 @@ Key components:
   - clear_shell_pending: Cleanup for topic deletion
 """
 
+import asyncio
+import os
 import shutil
 
 import structlog
@@ -22,7 +24,6 @@ from telegram import (
     InlineKeyboardMarkup,
     Message,
 )
-
 from ..llm import get_completer
 from ..llm import CommandResult
 from ..session import session_manager
@@ -148,6 +149,56 @@ async def _ensure_prompt_marker(window_id: str) -> None:
         await setup_shell_prompt(window_id)
 
 
+async def _cancel_stuck_input(window_id: str) -> None:
+    """Send Ctrl+C if the shell is stuck in partial/continuation input.
+
+    Uses two signals to distinguish stuck-at-continuation from running-command:
+
+    1. ``pane_current_command`` — when a shell is idle at *any* prompt
+       (including continuation), the foreground process is the shell itself
+       (fish/bash/zsh).  When a command is running, it's that command
+       (python/grep/etc).  Only proceed if the foreground is a known shell.
+    2. Last pane line — if it's a clean bare ``ccgram:N❯`` prompt, the
+       shell is ready.  Otherwise (continuation marker like ``...>``, or
+       partial typed text), it's stuck.
+
+    This avoids interrupting running commands while still recovering from
+    LLM-generated malformed commands that leave the shell in multi-line
+    input mode (e.g. unclosed ``begin`` block in fish).
+    """
+    from ..providers.shell import KNOWN_SHELLS, PROMPT_RE
+
+    # Step 1: check if the shell itself is the foreground process.
+    # If a command is running (python, grep, etc.), don't interrupt it.
+    window = await tmux_manager.find_window_by_id(window_id)
+    if not window or not window.pane_current_command:
+        return
+    tokens = window.pane_current_command.split()
+    if not tokens:
+        return
+    foreground = os.path.basename(tokens[0]).lstrip("-")
+    if foreground not in KNOWN_SHELLS:
+        return  # a command is running — don't interrupt
+
+    # Step 2: check if the last pane line is a clean prompt.
+    raw = await tmux_manager.capture_pane(window_id)
+    if not raw:
+        return
+    lines = raw.rstrip().splitlines()
+    if not lines:
+        return
+
+    last = lines[-1]
+    m = PROMPT_RE.match(last)
+    if m and not m.group(2).strip():
+        return  # clean bare prompt — all good
+
+    # Shell is idle but NOT at a clean prompt → continuation or partial input.
+    logger.debug("Cancelling stuck input in window %s", window_id)
+    await tmux_manager.send_keys(window_id, "C-c", enter=False, literal=False)
+    await asyncio.sleep(0.3)
+
+
 async def handle_shell_message(
     bot: Bot,
     user_id: int,
@@ -232,6 +283,8 @@ async def _execute_raw_command(
     command: str,
 ) -> None:
     """Send a raw command to the shell and start output capture."""
+    await _cancel_stuck_input(window_id)
+
     # Capture baseline BEFORE sending so we can diff later
     baseline = ""
     raw_pane = await tmux_manager.capture_pane(window_id)

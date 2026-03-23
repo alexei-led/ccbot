@@ -39,7 +39,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ChatAction
-from telegram.error import Conflict, RetryAfter, TelegramError
+from telegram.error import BadRequest, Conflict, RetryAfter, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -1801,6 +1801,9 @@ async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) ->
             "Shutting down to avoid conflicts."
         )
         os.kill(os.getpid(), signal.SIGINT)
+        return
+    if isinstance(context.error, BadRequest) and "too old" in str(context.error):
+        logger.debug("Callback query expired (query too old)")
         return
     logger.error("Unhandled bot error", exc_info=context.error)
 

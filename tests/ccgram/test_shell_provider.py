@@ -184,3 +184,96 @@ class TestDetectPaneShell:
         )
         with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/bash"):
             assert await detect_pane_shell("@0") == "bash"
+
+    async def test_whitespace_only_command_falls_back(self, mock_tmux) -> None:
+        mock_tmux.find_window_by_id = AsyncMock(
+            return_value=TmuxWindow(
+                window_id="@0",
+                window_name="test",
+                cwd="/tmp",
+                pane_current_command="   ",
+            )
+        )
+        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/zsh"):
+            assert await detect_pane_shell("@0") == "zsh"
+
+
+class TestSetupShellPrompt:
+    @pytest.fixture
+    def mock_tmux(self):
+        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
+            yield mock_tm
+
+    @pytest.mark.parametrize(
+        ("shell", "expected_substring"),
+        [
+            ("fish", "fish_prompt"),
+            ("bash", "PS1="),
+            ("zsh", "PROMPT="),
+            ("tcsh", "PS1="),
+            ("ksh", "PS1="),
+        ],
+        ids=["fish", "bash", "zsh", "tcsh-fallback", "ksh-fallback"],
+    )
+    async def test_sends_correct_prompt_command(
+        self, mock_tmux, shell: str, expected_substring: str
+    ) -> None:
+        from ccgram.providers.shell import setup_shell_prompt
+
+        mock_tmux.find_window_by_id = AsyncMock(
+            return_value=TmuxWindow(
+                window_id="@0",
+                window_name="test",
+                cwd="/tmp",
+                pane_current_command=shell,
+            )
+        )
+        mock_tmux.send_keys = AsyncMock()
+
+        await setup_shell_prompt("@0")
+
+        calls = mock_tmux.send_keys.call_args_list
+        prompt_call = calls[0]
+        assert expected_substring in prompt_call[0][1]
+
+    async def test_sends_clear_after_prompt(self, mock_tmux) -> None:
+        from ccgram.providers.shell import setup_shell_prompt
+
+        mock_tmux.find_window_by_id = AsyncMock(
+            return_value=TmuxWindow(
+                window_id="@0",
+                window_name="test",
+                cwd="/tmp",
+                pane_current_command="bash",
+            )
+        )
+        mock_tmux.send_keys = AsyncMock()
+
+        await setup_shell_prompt("@0")
+
+        calls = mock_tmux.send_keys.call_args_list
+        assert len(calls) == 2
+        assert calls[1][0][1] == "clear"
+
+
+class TestGetShellName:
+    def test_returns_basename_of_shell_env(self) -> None:
+        from ccgram.providers.shell import get_shell_name
+
+        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/zsh"):
+            assert get_shell_name() == "zsh"
+
+    def test_returns_empty_when_shell_unset(self) -> None:
+        from ccgram.providers.shell import get_shell_name
+
+        with patch.dict("os.environ", {}, clear=True):
+            assert get_shell_name() == ""
+
+    def test_returns_basename_from_full_path(self) -> None:
+        from ccgram.providers.shell import get_shell_name
+
+        with patch(
+            "ccgram.providers.shell.os.environ.get",
+            return_value="/opt/homebrew/bin/fish",
+        ):
+            assert get_shell_name() == "fish"

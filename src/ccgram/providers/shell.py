@@ -46,7 +46,10 @@ async def detect_pane_shell(window_id: str) -> str:
 
     window = await tmux_manager.find_window_by_id(window_id)
     if window and window.pane_current_command:
-        basename = os.path.basename(window.pane_current_command.split()[0])
+        tokens = window.pane_current_command.split()
+        if not tokens:
+            return get_shell_name()
+        basename = os.path.basename(tokens[0])
         cleaned = basename.lstrip("-")
         if cleaned in KNOWN_SHELLS:
             return cleaned

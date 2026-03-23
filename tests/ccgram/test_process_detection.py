@@ -207,10 +207,17 @@ class TestDetectProviderCached:
         mock_proc.returncode = 0
         mock_proc.communicate.return_value = (PS_OUTPUT_CLAUDE.encode(), b"")
 
-        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch(
+                "ccgram.providers.process_detection.classify_provider_from_args"
+            ) as mock_classify,
+        ):
             result = await detect_provider_cached("@0", "/dev/ttys003")
 
         assert result == "claude"
+        # PGID unchanged → classify skipped (cache hit)
+        mock_classify.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_cache_invalidates_on_pgid_change(self) -> None:
@@ -225,6 +232,18 @@ class TestDetectProviderCached:
 
         assert result == "codex"
         assert _pgid_cache["@0"] == (10050, "codex")
+
+    @pytest.mark.asyncio
+    async def test_empty_args_returns_empty(self) -> None:
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 1
+        mock_proc.communicate.return_value = (b"", b"error")
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            result = await detect_provider_cached("@0", "/dev/ttys003")
+
+        assert result == ""
+        assert "@0" not in _pgid_cache
 
 
 class TestClearDetectionCache:

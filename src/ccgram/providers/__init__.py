@@ -208,7 +208,10 @@ async def detect_provider_from_pane(
         return detected
 
     if pane_tty and pane_current_command:
-        basename = os.path.basename(pane_current_command.strip().lower().split()[0])
+        cmd = pane_current_command.strip().lower()
+        if not cmd:
+            return ""
+        basename = os.path.basename(cmd.split()[0])
         if basename in _JS_RUNTIMES:
             from .process_detection import detect_provider_cached
 

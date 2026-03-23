@@ -152,9 +152,10 @@ class TestShellCaptureLoop:
             await asyncio.sleep(0)
             await asyncio.sleep(0)
             try:
-                await asyncio.wait_for(task, timeout=1.0)
+                await asyncio.wait_for(task, timeout=2.0)
             except asyncio.TimeoutError:
                 task.cancel()
+                pytest.fail("Capture task did not complete within timeout")
 
         assert (1, 42) not in _shell_capture_tasks
 

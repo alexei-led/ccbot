@@ -235,6 +235,28 @@ class TestRegistryIsValid:
         assert reg.is_valid("nonexistent") is False
 
 
+class TestEnsureRegistered:
+    """Verify _ensure_registered() registers all expected providers."""
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        from ccgram.providers import _reset_provider
+
+        _reset_provider()
+        yield
+        _reset_provider()
+
+    @pytest.mark.parametrize(
+        "name",
+        ["claude", "codex", "gemini", "shell"],
+    )
+    def test_all_providers_registered(self, name: str) -> None:
+        from ccgram.providers import _ensure_registered, registry
+
+        _ensure_registered()
+        assert registry.is_valid(name), f"Provider {name!r} not registered"
+
+
 class TestGetProviderForWindow:
     @pytest.fixture(autouse=True)
     def _reset(self):

@@ -729,3 +729,60 @@ class TestUpdateErrorMessage:
         formatted = mock_edit.call_args[0][3]
         body = formatted.split("```\n", 1)[1].rsplit("\n```", 1)[0]
         assert "```" not in body
+
+
+class TestMaybeSuggestFixNoLlm:
+    async def test_no_completer_skips_suggestion(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        state = _CaptureState(
+            exit_code=1, msg_id=99, last_output="err", command="bad-cmd"
+        )
+
+        with (
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock) as mock_edit,
+            patch("ccgram.llm.get_completer", return_value=None),
+            patch(
+                "ccgram.handlers.shell_commands.show_command_approval",
+                new_callable=AsyncMock,
+            ) as mock_approval,
+        ):
+            await _maybe_suggest_fix(bot, 1, -100, 42, "@0", state)
+
+        mock_edit.assert_awaited_once()
+        mock_approval.assert_not_awaited()
+
+
+class TestRelayOutputBackticks:
+    async def test_triple_backticks_escaped_in_relay(self) -> None:
+        from ccgram.handlers.shell_capture import _relay_output
+
+        bot = AsyncMock(spec=Bot)
+        state = _CaptureState()
+
+        mock_sent = MagicMock()
+        mock_sent.message_id = 42
+
+        with patch(
+            f"{_MOD}.rate_limit_send_message",
+            new_callable=AsyncMock,
+            return_value=mock_sent,
+        ) as mock_send:
+            await _relay_output(bot, -100, 42, "output has ``` backticks", state)
+
+        formatted = mock_send.call_args[0][2]
+        inner = formatted.split("```\n", 1)[1].rsplit("\n```", 1)[0]
+        assert "```" not in inner
+        assert "` ` `" in inner
+
+    async def test_relay_skips_whitespace_only_output(self) -> None:
+        from ccgram.handlers.shell_capture import _relay_output
+
+        bot = AsyncMock(spec=Bot)
+        state = _CaptureState()
+
+        with patch(
+            f"{_MOD}.rate_limit_send_message", new_callable=AsyncMock
+        ) as mock_send:
+            await _relay_output(bot, -100, 42, "   \n  \n  ", state)
+
+        mock_send.assert_not_called()
