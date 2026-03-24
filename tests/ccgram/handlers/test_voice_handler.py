@@ -587,6 +587,93 @@ class TestHandleVoiceCallback:
 
         update.callback_query.answer.assert_called_once_with("Invalid callback data")
 
+    @patch(f"{_VC}.ack_reaction", new_callable=AsyncMock)
+    @patch(f"{_VC}.get_provider_for_window")
+    @patch(f"{_VC}.session_manager")
+    @patch(f"{_VC}.get_thread_id")
+    async def test_send_shell_provider_routes_through_llm(
+        self,
+        mock_get_thread_id: MagicMock,
+        mock_session_manager: MagicMock,
+        mock_get_provider: MagicMock,
+        mock_ack: AsyncMock,
+    ) -> None:
+        from ccgram.handlers import voice_callbacks
+
+        mock_get_thread_id.return_value = 42
+        mock_session_manager.resolve_window_for_thread.return_value = "@0"
+
+        mock_provider = MagicMock()
+        mock_provider.capabilities.name = "shell"
+        mock_get_provider.return_value = mock_provider
+
+        update = MagicMock()
+        update.callback_query = _make_callback_query("vc:send:42", message_id=42)
+        update.effective_user = MagicMock()
+        update.effective_user.id = 100
+
+        context = MagicMock()
+        context.user_data = {VOICE_PENDING: {(999, 42): "list files"}}
+
+        with patch(
+            "ccgram.handlers.shell_commands.handle_shell_message",
+            new_callable=AsyncMock,
+        ) as mock_shell:
+            await voice_callbacks.handle_voice_callback(update, context)
+
+            mock_shell.assert_called_once_with(
+                update.callback_query.message.get_bot(),
+                100,
+                42,
+                "@0",
+                "list files",
+            )
+
+        mock_session_manager.send_to_window.assert_not_called()
+        update.callback_query.message.delete.assert_called_once()
+        update.callback_query.answer.assert_called_once_with("✓ Sent")
+        mock_ack.assert_called_once()
+
+    @patch(f"{_VC}.get_provider_for_window")
+    @patch(f"{_VC}.session_manager")
+    @patch(f"{_VC}.get_thread_id")
+    async def test_send_shell_provider_error_preserves_pending(
+        self,
+        mock_get_thread_id: MagicMock,
+        mock_session_manager: MagicMock,
+        mock_get_provider: MagicMock,
+    ) -> None:
+        from ccgram.handlers import voice_callbacks
+
+        mock_get_thread_id.return_value = 42
+        mock_session_manager.resolve_window_for_thread.return_value = "@0"
+
+        mock_provider = MagicMock()
+        mock_provider.capabilities.name = "shell"
+        mock_get_provider.return_value = mock_provider
+
+        update = MagicMock()
+        update.callback_query = _make_callback_query("vc:send:42", message_id=42)
+        update.effective_user = MagicMock()
+        update.effective_user.id = 100
+
+        context = MagicMock()
+        context.user_data = {VOICE_PENDING: {(999, 42): "list files"}}
+
+        with patch(
+            "ccgram.handlers.shell_commands.handle_shell_message",
+            new_callable=AsyncMock,
+            side_effect=OSError("tmux died"),
+        ):
+            await voice_callbacks.handle_voice_callback(update, context)
+
+        # Text restored to pending store
+        assert context.user_data[VOICE_PENDING][(999, 42)] == "list files"
+        update.callback_query.answer.assert_called_once_with(
+            "❌ Failed to send", show_alert=True
+        )
+        mock_session_manager.send_to_window.assert_not_called()
+
     async def test_inaccessible_message(self) -> None:
         from ccgram.handlers import voice_callbacks
 

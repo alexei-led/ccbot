@@ -12,6 +12,7 @@ from telegram import CallbackQuery, Message, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from ..providers import get_provider_for_window
 from ..session import session_manager
 from .callback_helpers import get_thread_id
 from .message_sender import ack_reaction
@@ -75,6 +76,28 @@ async def _handle_send(
     if not window_id:
         pending_store[(msg.chat.id, message_id)] = pending_text
         await query.answer("⚠️ No session bound.", show_alert=True)
+        return
+
+    # Shell provider: route through LLM for NL→command generation
+    provider = get_provider_for_window(window_id)
+    if provider.capabilities.name == "shell" and thread_id is not None:
+        from .shell_commands import handle_shell_message
+
+        try:
+            await handle_shell_message(
+                msg.get_bot(), user_id, thread_id, window_id, pending_text
+            )
+        except (OSError, TelegramError) as exc:
+            logger.warning("Shell message handling failed: %s", exc)
+            pending_store[(msg.chat.id, message_id)] = pending_text
+            await query.answer("❌ Failed to send", show_alert=True)
+            return
+        await ack_reaction(msg.get_bot(), msg.chat.id, message_id)
+        try:
+            await msg.delete()
+        except TelegramError as e:
+            logger.warning("Failed to delete voice confirm message: %s", e)
+        await query.answer("✓ Sent")
         return
 
     success, err = await session_manager.send_to_window(window_id, pending_text)
