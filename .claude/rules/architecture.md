@@ -128,7 +128,7 @@ graph TB
 | `upgrade.py`               | /upgrade command: uv tool upgrade + process restart                                          |
 | `file_handler.py`          | Photo/document handler (save to .ccgram-uploads/, notify agent)                              |
 | `voice_handler.py`         | Voice message download, transcription, confirm keyboard                                      |
-| `voice_callbacks.py`       | Voice callback routing (vc:send/vc:drop actions)                                             |
+| `voice_callbacks.py`       | Voice callback routing (vc:send/vc:drop); shell provider transcriptions route through LLM    |
 | `command_history.py`       | Per-user/per-topic in-memory command recall (max 20)                                         |
 | `topic_emoji.py`           | Topic name emoji updates (active/idle/done/dead + RC/YOLO badges), debounced                 |
 | `hook_events.py`           | Hook event dispatcher (Stop, StopFailure, SessionEnd, Notification, Subagent*, Team*)        |

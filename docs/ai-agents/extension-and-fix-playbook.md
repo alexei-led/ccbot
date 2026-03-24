@@ -48,6 +48,13 @@ Add a new LLM provider (for shell command generation):
 2. If the provider uses the OpenAI-compatible API, no new completer code is needed.
 3. If the provider uses a different API format, add a new completer class in `src/ccgram/llm/httpx_completer.py` extending `_BaseCompleter`.
 4. Temperature is passed through from `config.llm_temperature` automatically.
+5. Voice messages in shell topics automatically use the configured LLM (routed through `voice_callbacks.py` -> `shell_commands.py`).
+
+Add a new Whisper provider (for voice transcription):
+
+1. Add entry to the provider resolution in `src/ccgram/whisper/__init__.py`.
+2. If the provider uses the OpenAI-compatible Whisper API, no new transcriber code is needed.
+3. If the API format differs, add a new transcriber class in `src/ccgram/whisper/httpx_transcriber.py`.
 
 Adjust status or transcript parsing:
 

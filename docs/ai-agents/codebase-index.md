@@ -39,6 +39,8 @@ Telegram handler surface:
 - `src/ccgram/handlers/upgrade.py`: `/upgrade` uv tool upgrade + `os.execv()` restart.
 - `src/ccgram/handlers/sync_command.py`: `/sync` state audit + fix button.
 - `src/ccgram/handlers/command_history.py`: per-user/per-topic command recall (in-memory, max 20).
+- `src/ccgram/handlers/voice_handler.py`: voice message download, Whisper transcription, confirm/discard keyboard.
+- `src/ccgram/handlers/voice_callbacks.py`: voice callback routing (vc:send/vc:drop); shell provider transcriptions route through LLM.
 
 Provider and command surface:
 
@@ -49,6 +51,7 @@ Provider and command surface:
 - `src/ccgram/llm/`: LLM command generation (CommandGenerator protocol, httpx completers for OpenAI-compatible and Anthropic APIs, provider registry).
 - `src/ccgram/handlers/shell_commands.py`: shell NL→command approval flow; routes NL text through LLM, renders approval keyboard, handles raw `!` prefix execution.
 - `src/ccgram/handlers/shell_capture.py`: shell terminal output capture and relay; polls tmux pane output and streams updates to Telegram via in-place message editing.
+- `src/ccgram/whisper/`: voice transcription (WhisperTranscriber protocol, httpx transcriber for OpenAI-compatible APIs, provider factory).
 
 Supporting modules:
 

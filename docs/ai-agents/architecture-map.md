@@ -38,6 +38,14 @@
 - `src/ccgram/handlers/shell_commands.py` consumes `CommandGenerator` to drive the NL→command→approval-keyboard flow; also handles raw `!` command execution.
 - `src/ccgram/handlers/shell_capture.py` polls the shell pane after execution and streams output back to Telegram via in-place edits.
 
+4b. Voice transcription layer
+
+- `src/ccgram/whisper/base.py` defines the `WhisperTranscriber` protocol and `TranscriptionResult` datatype.
+- `src/ccgram/whisper/httpx_transcriber.py` implements OpenAI-compatible transcription via httpx (OpenAI, Groq).
+- `src/ccgram/whisper/__init__.py` resolves the active transcriber from config (provider, API key, model).
+- `src/ccgram/handlers/voice_handler.py` downloads voice audio, transcribes via Whisper, and shows confirm/discard keyboard.
+- `src/ccgram/handlers/voice_callbacks.py` handles confirm/discard callbacks; shell provider transcriptions route through the LLM for NL→command generation.
+
 5. Integrations
 
 - `src/ccgram/tmux_manager.py` is the tmux IO boundary.
@@ -59,6 +67,14 @@ Shell provider message flow (NL -> command -> shell):
 3. Telegram approval keyboard is rendered; user confirms or cancels.
 4. On approval, the command is sent to the tmux pane via `tmux_manager.py`.
 5. `shell_capture.py` polls pane output and relays it back to Telegram via in-place edits.
+
+Voice message flow (voice -> transcription -> agent):
+
+1. `handlers/voice_handler.py` downloads audio and transcribes via `whisper/`.
+2. Confirm/discard keyboard is shown with the transcription.
+3. On confirm, `handlers/voice_callbacks.py` checks the window's provider.
+4. For shell provider: routes transcribed text through `shell_commands.py` (LLM -> approval keyboard).
+5. For other providers: sends transcribed text directly to the tmux window.
 
 Outbound agent output (provider transcript/event -> Telegram):
 
