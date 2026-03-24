@@ -21,7 +21,7 @@ runloop() {
 	acquire_lock() {
 		if mkdir "${LOCK_DIR}" 2>/dev/null; then
 			echo "$$" >"${LOCK_DIR}/pid"
-			trap 'rm -rf "${LOCK_DIR}"' EXIT INT TERM
+			trap 'rm -rf "${LOCK_DIR}"' EXIT
 			return
 		fi
 		local pid=""
@@ -35,7 +35,7 @@ runloop() {
 		rm -rf "${LOCK_DIR}" 2>/dev/null || true
 		if mkdir "${LOCK_DIR}" 2>/dev/null; then
 			echo "$$" >"${LOCK_DIR}/pid"
-			trap 'rm -rf "${LOCK_DIR}"' EXIT INT TERM
+			trap 'rm -rf "${LOCK_DIR}"' EXIT
 			return
 		fi
 		echo "[ccgram-dev] failed to acquire lock at ${LOCK_DIR}"
@@ -43,6 +43,10 @@ runloop() {
 	}
 
 	acquire_lock
+	# Signals: let the child (Python) handle INT/QUIT and exit with the right
+	# code (130/131).  The no-op traps (':') keep bash's while-loop running
+	# without propagating SIG_IGN to the child (unlike `trap '' SIG`).
+	trap ':' INT QUIT
 	unset VIRTUAL_ENV
 	ulimit -c 0
 	echo "[ccgram-dev] started in ${TARGET}"

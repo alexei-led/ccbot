@@ -8,12 +8,47 @@ command after CLI flags have been applied to the environment.
 
 import logging
 import os
+import signal
 import sys
 
 import structlog
 
 # Set by the upgrade handler to trigger os.execv() after run_polling() returns
 _restart_requested = False
+
+# Tracks which signal triggered shutdown (0 = none/clean exit)
+_shutdown_signal = 0
+
+
+def _install_signal_handlers() -> None:
+    """Install signal handlers that record the signal and trigger PTB shutdown.
+
+    PTB's default signal handling catches SIGINT/SIGTERM/SIGABRT and exits
+    with code 0 after graceful shutdown.  The restart.sh supervisor needs the
+    real signal exit code (130 for SIGINT=restart, 131 for SIGQUIT=stop), so
+    we install our own handlers and tell PTB not to override them via
+    ``stop_signals=None``.
+    """
+
+    def _on_signal(signum: int, _frame: object) -> None:
+        global _shutdown_signal
+        _shutdown_signal = signum
+        raise SystemExit
+
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGQUIT, _on_signal)
+
+
+def _reraise_shutdown_signal() -> None:
+    """Re-raise the original signal with default disposition.
+
+    This makes the process exit with the correct code (128 + signum) so the
+    parent (restart.sh) can distinguish restart from stop.
+    """
+    if _shutdown_signal:
+        signal.signal(_shutdown_signal, signal.SIG_DFL)
+        os.kill(os.getpid(), _shutdown_signal)
 
 
 def setup_logging(log_level: str) -> None:
@@ -136,11 +171,17 @@ def run_bot() -> None:
     from .bot import create_bot
 
     application = create_bot()
-    application.run_polling(allowed_updates=["message", "callback_query"])
+    _install_signal_handlers()
+    application.run_polling(
+        allowed_updates=["message", "callback_query"],
+        stop_signals=None,
+    )
 
     if _restart_requested:
         logger.info("Restarting bot via os.execv(%s)", sys.argv)
         os.execv(sys.argv[0], sys.argv)
+
+    _reraise_shutdown_signal()
 
 
 def main() -> None:
