@@ -401,9 +401,6 @@ async def _check_autoclose_timers(bot: Bot) -> None:
             expired.append((user_id, thread_id))
 
     for user_id, thread_id in expired:
-        ts = _topic_poll_state.get((user_id, thread_id))
-        if ts:
-            ts.autoclose = None
         chat_id = session_manager.resolve_chat_id(user_id, thread_id)
         window_id = session_manager.get_window_for_thread(user_id, thread_id)
         removed = False
@@ -419,6 +416,9 @@ async def _check_autoclose_timers(bot: Bot) -> None:
             except TelegramError as e:
                 logger.debug("Failed to auto-close topic thread=%d: %s", thread_id, e)
         if removed:
+            ts = _topic_poll_state.get((user_id, thread_id))
+            if ts:
+                ts.autoclose = None
             logger.info(
                 "Auto-removed topic: chat=%d thread=%d (user=%d)",
                 chat_id,
@@ -914,7 +914,7 @@ async def _handle_dead_window_notification(
         except BadRequest as probe_err:
             if (
                 "thread not found" in probe_err.message.lower()
-                or "Topic_id_invalid" in probe_err.message
+                or "topic_id_invalid" in probe_err.message.lower()
             ):
                 _get_window_state(wid).probe_failures = 0
                 await clear_topic_state(user_id, thread_id, bot, window_id=wid)

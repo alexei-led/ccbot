@@ -127,16 +127,24 @@ def _format_report(
     return text, keyboard
 
 
+def _is_topic_gone(exc: BadRequest) -> bool:
+    """Check if a BadRequest means the topic no longer exists."""
+    msg = exc.message.lower()
+    return "thread not found" in msg or "topic_id_invalid" in msg
+
+
 async def _remove_topic(bot: Bot, chat_id: int, thread_id: int) -> bool:
     """Try to delete a topic, fall back to close. Returns True on success.
 
-    BadRequest (topic already gone) is treated as success.
+    Only "topic not found" BadRequest is treated as success; other BadRequest
+    errors (e.g. insufficient rights) fall through to the close fallback.
     """
     try:
         await bot.delete_forum_topic(chat_id, thread_id)
         return True
-    except BadRequest:
-        return True
+    except BadRequest as e:
+        if _is_topic_gone(e):
+            return True
     except TelegramError:
         pass
     try:

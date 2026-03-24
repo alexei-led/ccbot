@@ -434,9 +434,30 @@ class TmuxManager:
             return ""
 
     async def stamp_pane_title(self, window_id: str, provider_name: str) -> None:
-        """Set pane title to ``ccgram:<provider>`` for instant re-detection."""
-        osc = rf"\033]2;ccgram:{provider_name}\007"
-        await self.send_keys(window_id, f"printf '{osc}'", raw=True)
+        """Set pane title to ``ccgram:<provider>`` for instant re-detection.
+
+        Uses ``tmux select-pane -T`` to set the title directly, avoiding
+        ``send_keys`` which would deliver the command as input to agent CLIs.
+        """
+        title = f"ccgram:{provider_name}"
+        if is_foreign_window(window_id):
+            target = window_id
+        else:
+            target = f"{self.session_name}:{window_id}"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "select-pane",
+                "-t",
+                target,
+                "-T",
+                title,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.communicate()
+        except OSError:
+            pass
 
     async def _capture_pane_plain(self, window_id: str) -> str | None:
         """Capture pane as plain text via libtmux.
