@@ -843,3 +843,204 @@ class TestMarkTelegramCommand:
         assert state.telegram_user_id == 2
         assert state.telegram_thread_id == 99
         reset_shell_monitor_state()
+
+
+class TestRelayOutputTruncation:
+    async def test_long_output_gets_truncated_with_ellipsis(self) -> None:
+        from ccgram.handlers.shell_capture import _relay_output
+
+        bot = AsyncMock(spec=Bot)
+        mock_sent = MagicMock()
+        mock_sent.message_id = 300
+
+        long_output = "x" * 5000
+
+        with patch(
+            f"{_MOD}.rate_limit_send_message",
+            new_callable=AsyncMock,
+            return_value=mock_sent,
+        ) as mock_send:
+            await _relay_output(bot, -100, 42, long_output)
+
+        sent_text = mock_send.call_args[0][2]
+        assert sent_text.startswith("```\n\u2026 ")
+        assert len(sent_text) < 5000
+
+    async def test_short_output_not_truncated(self) -> None:
+        from ccgram.handlers.shell_capture import _relay_output
+
+        bot = AsyncMock(spec=Bot)
+        mock_sent = MagicMock()
+        mock_sent.message_id = 301
+
+        with patch(
+            f"{_MOD}.rate_limit_send_message",
+            new_callable=AsyncMock,
+            return_value=mock_sent,
+        ) as mock_send:
+            await _relay_output(bot, -100, 42, "short output")
+
+        sent_text = mock_send.call_args[0][2]
+        assert "\u2026" not in sent_text
+        assert "short output" in sent_text
+
+
+@pytest.mark.usefixtures("_clean_monitor_state")
+class TestMaybeSuggestFix:
+    async def test_calls_llm_and_shows_approval_on_error(self) -> None:
+        from ccgram.handlers.shell_capture import _maybe_suggest_fix
+
+        bot = AsyncMock(spec=Bot)
+        mock_completer = AsyncMock()
+        from ccgram.llm.base import CommandResult
+
+        mock_completer.generate_command = AsyncMock(
+            return_value=CommandResult(
+                command="ls -la", explanation="Fixed", is_dangerous=False
+            )
+        )
+
+        with (
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(
+                "ccgram.llm.get_completer",
+                return_value=mock_completer,
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.safe_send",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            await _maybe_suggest_fix(
+                bot,
+                1,
+                -100,
+                42,
+                "@0",
+                command="lss",
+                exit_code=127,
+                msg_id=50,
+                output="lss: not found",
+            )
+
+        mock_completer.generate_command.assert_called_once()
+        mock_send.assert_called_once()
+        sent_text = mock_send.call_args[0][2]
+        assert "ls -la" in sent_text
+
+    async def test_skips_when_no_llm(self) -> None:
+        from ccgram.handlers.shell_capture import _maybe_suggest_fix
+
+        bot = AsyncMock(spec=Bot)
+
+        with (
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(
+                "ccgram.llm.get_completer",
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.safe_send",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            await _maybe_suggest_fix(
+                bot,
+                1,
+                -100,
+                42,
+                "@0",
+                command="bad",
+                exit_code=1,
+                msg_id=50,
+                output="error",
+            )
+
+        mock_send.assert_not_called()
+
+    async def test_skips_when_fix_equals_original(self) -> None:
+        from ccgram.handlers.shell_capture import _maybe_suggest_fix
+
+        bot = AsyncMock(spec=Bot)
+        mock_completer = AsyncMock()
+        from ccgram.llm.base import CommandResult
+
+        mock_completer.generate_command = AsyncMock(
+            return_value=CommandResult(
+                command="bad-cmd", explanation="Same", is_dangerous=False
+            )
+        )
+
+        with (
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(
+                "ccgram.llm.get_completer",
+                return_value=mock_completer,
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.safe_send",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            await _maybe_suggest_fix(
+                bot,
+                1,
+                -100,
+                42,
+                "@0",
+                command="bad-cmd",
+                exit_code=1,
+                msg_id=50,
+                output="error",
+            )
+
+        mock_send.assert_not_called()
+
+    async def test_skips_when_llm_errors(self) -> None:
+        from ccgram.handlers.shell_capture import _maybe_suggest_fix
+
+        bot = AsyncMock(spec=Bot)
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = AsyncMock(
+            side_effect=RuntimeError("API error")
+        )
+
+        with (
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(
+                "ccgram.llm.get_completer",
+                return_value=mock_completer,
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+            patch(
+                "ccgram.handlers.shell_commands.safe_send",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            await _maybe_suggest_fix(
+                bot,
+                1,
+                -100,
+                42,
+                "@0",
+                command="bad",
+                exit_code=1,
+                msg_id=50,
+                output="error",
+            )
+
+        mock_send.assert_not_called()

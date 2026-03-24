@@ -298,6 +298,95 @@ class TestHandleDeadWindow:
         mock_sm.unbind_thread.assert_called_once_with(100, 42)
 
 
+class TestShellProviderRouting:
+    @patch(f"{_TH}.get_provider_for_window")
+    @patch(f"{_TH}._handle_dead_window", new_callable=AsyncMock, return_value=False)
+    @patch(f"{_TH}.session_manager")
+    async def test_shell_provider_routes_to_handle_shell_message(
+        self,
+        mock_sm: MagicMock,
+        _mock_dead: AsyncMock,
+        mock_get_provider: MagicMock,
+    ) -> None:
+        mock_sm.get_window_for_thread.return_value = "@0"
+        mock_sm.is_authorized.return_value = True
+
+        provider = MagicMock()
+        provider.capabilities.name = "shell"
+        mock_get_provider.return_value = provider
+
+        with patch(
+            "ccgram.handlers.shell_commands.handle_shell_message",
+            new_callable=AsyncMock,
+        ) as mock_shell:
+            from ccgram.handlers.text_handler import handle_text_message
+
+            update = MagicMock()
+            update.effective_user.id = 100
+            context = MagicMock()
+            context.bot = AsyncMock()
+            context.user_data = {}
+            message = AsyncMock()
+            message.message_thread_id = 42
+            message.text = "list files"
+            message.chat_id = -100
+            message.chat.type = "supergroup"
+            update.message = message
+            update.effective_user = MagicMock()
+            update.effective_user.id = 100
+
+            await handle_text_message(update, context)
+
+            mock_shell.assert_called_once()
+            call_args = mock_shell.call_args
+            assert call_args[0][2] == 42
+            assert call_args[0][3] == "@0"
+            assert call_args[0][4] == "list files"
+
+    @patch(f"{_TH}.get_provider_for_window")
+    @patch(f"{_TH}._handle_dead_window", new_callable=AsyncMock, return_value=False)
+    @patch(f"{_TH}.session_manager")
+    async def test_non_shell_provider_does_not_route_to_shell(
+        self,
+        mock_sm: MagicMock,
+        _mock_dead: AsyncMock,
+        mock_get_provider: MagicMock,
+    ) -> None:
+        mock_sm.get_window_for_thread.return_value = "@0"
+        mock_sm.is_authorized.return_value = True
+        mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
+
+        provider = MagicMock()
+        provider.capabilities.name = "claude"
+        mock_get_provider.return_value = provider
+
+        with (
+            patch(
+                "ccgram.handlers.shell_commands.handle_shell_message",
+                new_callable=AsyncMock,
+            ) as mock_shell,
+            patch(f"{_TH}.get_interactive_window", return_value=None),
+        ):
+            from ccgram.handlers.text_handler import handle_text_message
+
+            update = MagicMock()
+            context = MagicMock()
+            context.bot = AsyncMock()
+            context.user_data = {}
+            message = AsyncMock()
+            message.message_thread_id = 42
+            message.text = "hello"
+            message.chat_id = -100
+            message.chat.type = "supergroup"
+            update.message = message
+            update.effective_user = MagicMock()
+            update.effective_user.id = 100
+
+            await handle_text_message(update, context)
+
+            mock_shell.assert_not_called()
+
+
 class TestForwardMessage:
     @patch(f"{_TH}.session_manager")
     async def test_sends_to_window(self, mock_sm: MagicMock) -> None:

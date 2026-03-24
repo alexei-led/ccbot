@@ -779,3 +779,136 @@ class TestDetectShellTools:
             second = _detect_shell_tools()
 
         assert first is second
+
+
+class TestGenerationCounter:
+    async def test_stale_generation_dropped(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+
+        call_count = 0
+
+        async def slow_generate(*args, **kwargs):  # noqa: ARG001
+            nonlocal call_count
+            call_count += 1
+            return CommandResult(
+                command=f"cmd-{call_count}", explanation="", is_dangerous=False
+            )
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = slow_generate
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_reply", new_callable=AsyncMock),
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(bot, 1, 42, "@0", "first command", message)
+
+        assert (-100, 42) in _shell_pending
+        assert _shell_pending[(-100, 42)][0] == "cmd-1"
+
+    async def test_generation_counter_increments(self) -> None:
+        bot = AsyncMock(spec=Bot)
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = AsyncMock(
+            return_value=CommandResult(command="ls", explanation="", is_dangerous=False)
+        )
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(bot, 1, 42, "@0", "first")
+            assert _generation_counter[(-100, 42)] == 1
+
+            await handle_shell_message(bot, 1, 42, "@0", "second")
+            assert _generation_counter[(-100, 42)] == 1
+
+
+class TestCommandHistoryRecording:
+    async def test_llm_path_records_command_history(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = AsyncMock(
+            return_value=CommandResult(command="ls", explanation="", is_dangerous=False)
+        )
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_reply", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+            patch("ccgram.handlers.command_history.record_command") as mock_record,
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(
+                bot, 1, 42, "@0", "list all python files", message
+            )
+
+        mock_record.assert_called_once_with(1, 42, "list all python files")
+
+
+class TestShowCommandApprovalPreventsOverwrite:
+    async def test_returns_false_when_slot_occupied(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        result = CommandResult(command="pwd", explanation="", is_dangerous=False)
+
+        _shell_pending[(-100, 42)] = ("ls", 1)
+
+        with patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send:
+            returned = await show_command_approval(
+                bot, -100, 42, "@0", result, user_id=2
+            )
+
+        assert returned is False
+        mock_send.assert_not_called()
+        assert _shell_pending[(-100, 42)] == ("ls", 1)
+
+    async def test_returns_true_when_slot_empty(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        result = CommandResult(command="pwd", explanation="", is_dangerous=False)
+
+        with patch(f"{_MOD}.safe_send", new_callable=AsyncMock):
+            returned = await show_command_approval(
+                bot, -100, 42, "@0", result, user_id=1
+            )
+
+        assert returned is True
+        assert _shell_pending[(-100, 42)] == ("pwd", 1)
