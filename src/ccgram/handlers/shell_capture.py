@@ -67,7 +67,10 @@ async def _capture_with_scrollback(
             stdout, _ = await proc.communicate()
         text = stdout.decode("utf-8", errors="replace").rstrip()
         return text if text else None
-    except TimeoutError, OSError:
+    except (TimeoutError, OSError) as exc:
+        logger.debug(
+            "capture_with_scrollback failed", window_id=window_id, error=str(exc)
+        )
         return None
 
 

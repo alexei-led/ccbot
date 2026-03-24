@@ -226,11 +226,11 @@ class _BaseCompleter:
                 msg = f"LLM request failed: {exc}"
                 raise RuntimeError(msg) from exc
 
-        try:
-            return extract(response.json())
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
-            msg = f"Unexpected LLM response: {response.text[:200]}"
-            raise RuntimeError(msg) from exc
+            try:
+                return extract(response.json())
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                msg = f"Unexpected LLM response: {response.text[:200]}"
+                raise RuntimeError(msg) from exc
 
     async def _request(self, user_msg: str, *, shell: str = "") -> str:
         """Send the request and return the response text."""
