@@ -202,6 +202,7 @@ class TestSetupShellPrompt:
     @pytest.fixture
     def mock_tmux(self):
         with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
+            mock_tm.capture_pane = AsyncMock(return_value=None)
             yield mock_tm
 
     @pytest.mark.parametrize(

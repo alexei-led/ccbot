@@ -3,10 +3,12 @@
 Extends JsonlProvider to inherit default no-op implementations.
 Tmux opens the user's $SHELL by default; overrides only what differs
 from the base class (no transcripts, no commands, no bash output).
-Prompt marker (ccgram:N❯) enables output isolation and exit code detection.
+Prompt marker ({prefix}:N❯) enables output isolation and exit code detection.
+The prefix is configurable via CCGRAM_PROMPT_MARKER (default "ccgram").
 """
 
 import asyncio
+import functools
 import os
 import re
 from typing import Any, ClassVar
@@ -14,20 +16,42 @@ from typing import Any, ClassVar
 from ccgram.providers._jsonl import JsonlProvider
 from ccgram.providers.base import ProviderCapabilities
 
-PROMPT_MARKER = "ccgram:"
-PROMPT_RE = re.compile(r"^ccgram:(\d+)❯\s?(.*)")
+_DEFAULT_MARKER = "ccgram"
+
+
+def _get_marker_prefix() -> str:
+    """Return the configured prompt marker prefix."""
+    from ccgram.config import config
+
+    return getattr(config, "prompt_marker", _DEFAULT_MARKER) or _DEFAULT_MARKER
+
+
+@functools.cache
+def _compile_prompt_re(prefix: str) -> re.Pattern[str]:
+    """Compile prompt regex for a given prefix (cached per unique prefix)."""
+    return re.compile(rf"^{re.escape(prefix)}:(\d+)❯\s?(.*)")
+
+
+def get_prompt_re() -> re.Pattern[str]:
+    """Return compiled prompt regex for the configured marker prefix."""
+    return _compile_prompt_re(_get_marker_prefix())
+
+
+# Legacy alias — kept for backward compatibility in imports
+PROMPT_RE = re.compile(rf"^{_DEFAULT_MARKER}:(\d+)❯\s?(.*)")
 
 KNOWN_SHELLS = frozenset({"bash", "zsh", "fish", "sh", "dash", "tcsh", "csh", "ksh"})
 
 
 async def has_prompt_marker(window_id: str) -> bool:
-    """Check if the ccgram prompt marker is present in the pane."""
+    """Check if the prompt marker is present in the pane."""
     from ccgram.tmux_manager import tmux_manager
 
     capture = await tmux_manager.capture_pane(window_id)
     if not capture:
         return False
-    return any(PROMPT_RE.match(line) for line in capture.rstrip().splitlines()[-5:])
+    prompt_re = get_prompt_re()
+    return any(prompt_re.match(line) for line in capture.rstrip().splitlines()[-5:])
 
 
 def get_shell_name() -> str:
@@ -59,16 +83,23 @@ async def detect_pane_shell(window_id: str) -> str:
 
 
 async def setup_shell_prompt(window_id: str) -> None:
-    """Override shell prompt with ccgram marker including exit code."""
+    """Override shell prompt with marker including exit code.
+
+    No-op if the marker is already present in the pane (idempotent).
+    """
+    if await has_prompt_marker(window_id):
+        return
+
     from ccgram.tmux_manager import tmux_manager
 
+    prefix = _get_marker_prefix()
     shell = await detect_pane_shell(window_id)
     cmds = {
-        "fish": 'function fish_prompt; printf "ccgram:$status❯ "; end',
-        "bash": "PS1='ccgram:$?❯ '",
-        "zsh": "PROMPT='ccgram:%?❯ '",
-        "tcsh": 'set prompt = "ccgram:$status❯ "',
-        "csh": 'set prompt = "ccgram:$status❯ "',
+        "fish": f'function fish_prompt; printf "{prefix}:$status❯ "; end',
+        "bash": f"PS1='{prefix}:$?❯ '",
+        "zsh": f"PROMPT='{prefix}:%?❯ '",
+        "tcsh": f'set prompt = "{prefix}:$status❯ "',
+        "csh": f'set prompt = "{prefix}:$status❯ "',
     }
     cmd = cmds.get(shell, cmds["bash"])
     await tmux_manager.send_keys(window_id, cmd)
