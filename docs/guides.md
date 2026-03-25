@@ -107,7 +107,7 @@ All settings accept both CLI flags and environment variables. CLI flags take pre
 | `ALLOWED_USERS` / `--allowed-users`              | _(required)_         | Comma-separated Telegram user IDs                             |
 | `CCGRAM_DIR` / `--config-dir`                    | `~/.ccgram`          | Config and state directory                                    |
 | `TMUX_SESSION_NAME` / `--tmux-session`           | `ccgram`             | tmux session name                                             |
-| `CCGRAM_PROVIDER` / `--provider`                 | `claude`             | Default agent provider (`claude`, `codex`, `gemini`)          |
+| `CCGRAM_PROVIDER` / `--provider`                 | `claude`             | Default agent provider (`claude`, `codex`, `gemini`, `shell`) |
 | `CCGRAM_<NAME>_COMMAND`                          | _(from provider)_    | Per-provider launch command (env only, see below)             |
 | `CCGRAM_GROUP_ID` / `--group-id`                 | _(all groups)_       | Restrict to one Telegram group                                |
 | `CCGRAM_INSTANCE_NAME` / `--instance-name`       | hostname             | Display label for this instance                               |
@@ -162,6 +162,8 @@ CCGRAM_WHISPER_LANGUAGE=en                     # omit for auto-detect
 2. Bot downloads the audio (max 25 MB) and sends it to the Whisper API
 3. Transcription appears with **✓ Send to agent** and **✗ Discard** buttons
 4. Tap **Send** to forward the text to the agent, or **Discard** to cancel
+
+In shell topics, voice transcriptions are automatically routed through the LLM for command generation (if `CCGRAM_LLM_PROVIDER` is set). In agent topics, the transcribed text is sent directly to the agent.
 
 Leave `CCGRAM_WHISPER_PROVIDER` empty (the default) to disable voice transcription.
 
@@ -267,7 +269,7 @@ When an agent session exits or crashes, the bot detects the dead window and offe
 - **Continue** — Resume the last conversation (all providers support this)
 - **Resume** — Browse and select a past session to resume from
 
-The buttons shown adapt to each provider's capabilities. All three providers (Claude, Codex, Gemini) support Fresh, Continue, and Resume.
+The buttons shown adapt to each provider's capabilities. Claude, Codex, and Gemini support Fresh, Continue, and Resume. Shell supports Fresh only (shell sessions are ephemeral).
 
 ## Providers
 
@@ -284,7 +286,7 @@ All state files live in `$CCGRAM_DIR` (`~/.ccgram/` by default):
 | `events.jsonl`       | Append-only hook event log (read incrementally by monitor)  |
 | `monitor_state.json` | Byte offsets per session (prevents duplicate notifications) |
 
-Session transcripts are read from provider-specific locations (read-only): `~/.claude/projects/` (Claude), `~/.codex/sessions/` (Codex), `~/.gemini/tmp/` (Gemini). The bot never writes to agent data directories.
+Session transcripts are read from provider-specific locations (read-only): `~/.claude/projects/` (Claude), `~/.codex/sessions/` (Codex), `~/.gemini/tmp/` (Gemini). Shell has no transcript — output is captured directly from the tmux pane. The bot never writes to agent data directories.
 
 ## Running as a Service
 

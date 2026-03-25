@@ -30,12 +30,14 @@ graph LR
     T1["💬 Topic: api"]
     T2["💬 Topic: ui"]
     T3["💬 Topic: docs"]
+    T4["💬 Topic: server"]
   end
 
   subgraph machine["🖥️ Your Machine — tmux"]
     W1["⚡ window @0<br>claude ↻ running"]
     W2["⚡ window @1<br>codex ↻ running"]
     W3["⚡ window @2<br>gemini ↻ running"]
+    W4["🐚 window @3<br>shell ↻ ready"]
   end
 
   T1 -- "text →" --> W1
@@ -44,15 +46,19 @@ graph LR
   W2 -. "← responses" .-> T2
   T3 -- "text →" --> W3
   W3 -. "← responses" .-> T3
+  T4 -- "text / voice →" --> W4
+  W4 -. "← output" .-> T4
 
   style phone fill:#e8f4fd,stroke:#0088cc,stroke-width:2px,color:#333
   style machine fill:#f0faf0,stroke:#2ea44f,stroke-width:2px,color:#333
   style T1 fill:#fff,stroke:#0088cc,stroke-width:1px,color:#333
   style T2 fill:#fff,stroke:#0088cc,stroke-width:1px,color:#333
   style T3 fill:#fff,stroke:#0088cc,stroke-width:1px,color:#333
+  style T4 fill:#fff,stroke:#0088cc,stroke-width:1px,color:#333
   style W1 fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
   style W2 fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
   style W3 fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
+  style W4 fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
 ```
 
 Each Telegram Forum topic binds to one tmux window running an agent CLI. Messages you type in the topic are sent as keystrokes to the tmux pane; the agent's output is parsed from session transcripts and delivered back as Telegram messages.
@@ -91,12 +97,20 @@ Each Telegram Forum topic binds to one tmux window running an agent CLI. Message
 
 **Multi-provider support**
 
-- Claude Code (default), OpenAI Codex CLI, Google Gemini CLI, and plain shell
+- Claude Code (default), OpenAI Codex CLI, Google Gemini CLI, and Shell
 - Per-topic provider selection — different topics can use different agents simultaneously
-- Shell provider supports LLM command generation — describe what you want and get a shell command to run
 - Auto-detects provider from externally created tmux windows (process name, with ps-based TTY detection fallback for JS-runtime-wrapped CLIs like bun/node)
 - Provider-aware recovery (Continue/Resume buttons adapt to each provider's capabilities)
 - [Emdash](https://emdash.ai) integration — auto-discovers emdash tmux sessions; bind Telegram topics to emdash-managed agents with zero configuration
+
+**Shell provider**
+
+- Chat-first: type natural language → LLM generates a shell command → approve with one tap → output streams back
+- Raw mode: prefix with `!` to bypass the LLM and send commands directly
+- Voice-to-command: voice messages transcribed via Whisper, then routed through the LLM for command generation
+- Dangerous command detection with extra confirmation step
+- BYOK LLM — supports OpenAI, Anthropic, xAI, DeepSeek, Groq, Ollama (zero new dependencies)
+- See **[docs/providers.md](docs/providers.md#shell)** for LLM configuration
 
 **Extensibility**
 
@@ -153,6 +167,16 @@ ccgram hook --install
 This registers Claude Code hooks (SessionStart, Notification, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) for automatic session tracking, instant interactive UI detection, API error alerting, session lifecycle cleanup, and agent team notifications. Not needed for Codex or Gemini — those providers are discovered from hookless transcripts and tmux window/provider detection.
 
 > If hooks are missing, ccgram warns at startup with the fix command. Hooks are optional — terminal scraping works as fallback.
+
+### Configure LLM for Shell Provider (optional)
+
+To enable natural language → shell command generation in shell topics, add an LLM provider:
+
+```ini
+CCGRAM_LLM_PROVIDER=openai   # or: anthropic, xai, deepseek, groq, ollama
+```
+
+See **[docs/providers.md](docs/providers.md#llm-configuration)** for all options. Without an LLM, shell topics forward text as raw commands.
 
 ### Run
 

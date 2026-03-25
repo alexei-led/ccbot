@@ -31,6 +31,7 @@ Before considering work complete, run at least:
 - async/file IO: `aiofiles`
 - logging: `structlog`
 - terminal parsing: `pyte`
+- HTTP client (LLM, Whisper): `httpx`
 - screenshot rendering: `Pillow`
 
 ## Test Layout
@@ -53,6 +54,8 @@ Examples:
 - hook/event changes -> `tests/ccgram/test_hook.py`, `tests/ccgram/test_hook_events.py`, `tests/ccgram/test_session_monitor_events.py`
 - cleanup/lifecycle changes -> `tests/ccgram/test_cleanup.py`, `tests/ccgram/test_topic_emoji.py`
 - provider changes -> `tests/ccgram/test_provider_contracts.py`, `tests/ccgram/test_jsonl_providers.py`
+- shell/LLM changes -> `tests/ccgram/test_shell_provider.py`, `tests/ccgram/test_shell_commands.py`, `tests/ccgram/test_shell_capture.py`, `tests/ccgram/test_llm_completer.py`
+- voice changes -> `tests/ccgram/test_voice_handler.py`, `tests/ccgram/test_voice_callbacks.py`
 
 ## Quality Constraints
 
