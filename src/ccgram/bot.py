@@ -968,6 +968,7 @@ def create_bot() -> Application:
     application = (
         Application.builder()
         .token(config.telegram_bot_token)
+        .request(ResilientPollingHTTPXRequest())
         .get_updates_request(ResilientPollingHTTPXRequest(connection_pool_size=1))
         .post_init(post_init)
         .post_stop(post_stop)

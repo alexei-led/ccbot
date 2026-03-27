@@ -50,7 +50,7 @@ class TestResilientPollingHTTPXRequest:
 
 class TestCreateBotPollingRequest:
     @patch("ccgram.bot.config")
-    def test_uses_resilient_request_for_get_updates(
+    def test_uses_resilient_request_for_telegram_traffic(
         self, mock_config: MagicMock
     ) -> None:
         mock_config.telegram_bot_token = "fake:token"
@@ -58,6 +58,6 @@ class TestCreateBotPollingRequest:
         app = create_bot()
 
         assert isinstance(app.bot._request[0], ResilientPollingHTTPXRequest)
-        assert isinstance(app.bot._request[1], HTTPXRequest)
-        assert not isinstance(app.bot._request[1], ResilientPollingHTTPXRequest)
+        assert isinstance(app.bot._request[1], ResilientPollingHTTPXRequest)
         assert app.bot._request[0]._client._transport._pool._max_connections == 1
+        assert app.bot._request[1]._client._transport._pool._max_connections == 256
