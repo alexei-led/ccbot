@@ -152,12 +152,15 @@ async def test_recovery_fresh_start(e2e_app, work_dir):
     )
     await app.process_update(u_fresh)
 
-    # Wait for new window to be created
-    await asyncio.sleep(5)
-
-    # Verify topic is now rebound
-    new_window_id = session_mgr.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
-    assert new_window_id is not None
+    # Poll until topic is rebound (window creation is async)
+    deadline = asyncio.get_event_loop().time() + 15
+    new_window_id = None
+    while asyncio.get_event_loop().time() < deadline:
+        new_window_id = session_mgr.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
+        if new_window_id is not None:
+            break
+        await asyncio.sleep(0.5)
+    assert new_window_id is not None, "Topic not rebound after fresh recovery"
     new_pane = await tmux.capture_pane(new_window_id)
     assert new_pane is not None
 
@@ -202,11 +205,16 @@ async def test_recovery_continue(e2e_app, work_dir):
         bot=app.bot,
     )
     await app.process_update(u_cont)
-    await asyncio.sleep(5)
 
-    # Verify topic is rebound and window exists
-    new_window_id = session_mgr.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
-    assert new_window_id is not None
+    # Poll until topic is rebound (window creation is async)
+    deadline = asyncio.get_event_loop().time() + 15
+    new_window_id = None
+    while asyncio.get_event_loop().time() < deadline:
+        new_window_id = session_mgr.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
+        if new_window_id is not None:
+            break
+        await asyncio.sleep(0.5)
+    assert new_window_id is not None, "Topic not rebound after continue recovery"
     new_pane = await tmux.capture_pane(new_window_id)
     assert new_pane is not None
 

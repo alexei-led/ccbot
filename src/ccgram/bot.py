@@ -1855,8 +1855,8 @@ async def _send_shutdown_notification(application: Application) -> None:
             text=text,
             message_thread_id=1,  # General topic
         )
-    except TelegramError, RuntimeError:
-        logger.debug("Failed to send shutdown notification", exc_info=True)
+    except (TelegramError, RuntimeError) as exc:
+        logger.debug("Shutdown notification skipped: %s", exc)
 
 
 async def post_stop(application: Application) -> None:

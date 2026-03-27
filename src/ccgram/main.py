@@ -10,7 +10,6 @@ import logging
 import os
 import signal
 import sys
-import traceback
 from types import FrameType
 
 import structlog
@@ -30,26 +29,14 @@ def _install_signal_handlers() -> None:
     real signal exit code (130 for SIGINT=restart, 131 for SIGQUIT=stop), so
     we install our own handlers and tell PTB not to override them via
     ``stop_signals=None``.
-
-    In DEBUG mode, logs the full call stack at the moment the signal arrives
-    to help diagnose unexpected SIGINT sources.
     """
 
-    def _on_signal(signum: int, frame: FrameType | None) -> None:
+    def _on_signal(signum: int, _frame: FrameType | None) -> None:
         global _shutdown_signal
         _shutdown_signal = signum
-
         sig_name = signal.Signals(signum).name
-        # Always log stack trace for signal diagnosis (helps find phantom SIGINTs)
-        if frame is not None:
-            stack = "".join(traceback.format_stack(frame))
-            sys.stderr.write(
-                f"\n[ccgram] {sig_name} received (pid={os.getpid()}) — call stack:\n{stack}\n"
-            )
-        else:
-            sys.stderr.write(f"\n[ccgram] {sig_name} received (pid={os.getpid()})\n")
+        sys.stderr.write(f"\n[ccgram] {sig_name} received (pid={os.getpid()})\n")
         sys.stderr.flush()
-
         raise SystemExit
 
     signal.signal(signal.SIGINT, _on_signal)

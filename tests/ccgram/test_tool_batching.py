@@ -801,6 +801,7 @@ class TestBatchIsolation:
 
 class TestShutdownClearsBatches:
     async def test_shutdown_clears_active_batches(self) -> None:
+        await shutdown_workers()  # ensure clean state from previous tests
         _active_batches[(1, 0)] = ToolBatch(window_id="@0", thread_id=0)
         _active_batches[(2, 5)] = ToolBatch(window_id="@1", thread_id=5)
         await shutdown_workers()

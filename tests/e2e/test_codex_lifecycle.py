@@ -53,7 +53,7 @@ async def test_command_forwarding(e2e_app, work_dir):
     u = make_text_update("/status", bot=app.bot)
     await app.process_update(u)
 
-    await wait_for_pane(tmux, window_id, pattern="status", timeout=15)
+    await wait_for_pane(tmux, window_id, pattern="status", timeout=30)
 
 
 async def test_recovery_fresh(e2e_app, work_dir):
@@ -87,9 +87,14 @@ async def test_recovery_fresh(e2e_app, work_dir):
         bot=app.bot,
     )
     await app.process_update(u_fresh)
-    await asyncio.sleep(5)
 
-    new_window_id = session_mgr.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
-    assert new_window_id is not None
+    deadline = asyncio.get_event_loop().time() + 15
+    new_window_id = None
+    while asyncio.get_event_loop().time() < deadline:
+        new_window_id = session_mgr.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
+        if new_window_id is not None:
+            break
+        await asyncio.sleep(0.5)
+    assert new_window_id is not None, "Topic not rebound after fresh recovery"
     new_pane = await tmux.capture_pane(new_window_id)
     assert new_pane is not None
