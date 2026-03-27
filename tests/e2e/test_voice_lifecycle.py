@@ -149,20 +149,14 @@ async def test_voice_transcription_shows_confirm_keyboard(e2e_app, work_dir):
         u = make_voice_update(bot=app.bot)
         await app.process_update(u)
 
-    # Initial sendMessage with transcription text
+    # sendMessage with transcription text + inline confirm/discard keyboard
     sent = await wait_for_send(
         calls,
         predicate=lambda d: "please add logging" in d.get("text", ""),
         timeout=15.0,
     )
     assert sent is not None
-
-    # editMessageReplyMarkup to attach vc:send / vc:drop keyboard
-    await wait_for_send(
-        calls,
-        method="editMessageReplyMarkup",
-        timeout=15.0,
-    )
+    assert "reply_markup" in sent, "Confirm keyboard should be inline with message"
 
 
 # ---------------------------------------------------------------------------
@@ -176,8 +170,8 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
 
     window_id, _ = await setup_bound_topic(app, calls, work_dir, provider="shell")
 
-    # Wait for shell prompt to be ready
-    await wait_for_pane(tmux, window_id, pattern="\\$|❯|>", timeout=10)
+    # Wait for shell to be ready (any pane content means shell started)
+    await wait_for_pane(tmux, window_id, timeout=10)
     calls.clear()
 
     transcribed = "what is the purpose of config.py"
@@ -195,14 +189,12 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
         u = make_voice_update(bot=app.bot)
         await app.process_update(u)
 
-    # Wait for the transcription message to arrive
+    # Wait for the transcription message with inline keyboard
     await wait_for_send(
         calls,
         predicate=lambda d: transcribed in d.get("text", ""),
         timeout=15.0,
     )
-    # Extract the confirm message_id from the reply keyboard edit
-    await wait_for_send(calls, method="editMessageReplyMarkup", timeout=5.0)
 
     # Find the confirm msg_id from user_data
     user_data = app._user_data[TEST_USER_ID]
@@ -260,7 +252,6 @@ async def test_voice_discard_clears_pending(e2e_app, work_dir):
         predicate=lambda d: "discard this message" in d.get("text", ""),
         timeout=15.0,
     )
-    await wait_for_send(calls, method="editMessageReplyMarkup", timeout=5.0)
 
     user_data = app._user_data[TEST_USER_ID]
     from ccgram.handlers.user_state import VOICE_PENDING

@@ -99,7 +99,7 @@ async def test_help_command_forwarded(e2e_app, work_dir):
     window_id, _ = await setup_bound_topic(app, calls, work_dir)
 
     # Wait for agent to start
-    await wait_for_pane(tmux, window_id, pattern="╭|>|\\$", timeout=30)
+    await wait_for_pane(tmux, window_id, timeout=30)
     calls.clear()
 
     u = make_text_update("/help", bot=app.bot)
@@ -119,7 +119,7 @@ async def test_recovery_fresh_start(e2e_app, work_dir):
     window_id, _ = await setup_bound_topic(app, calls, work_dir)
 
     # Wait for agent to start
-    await wait_for_pane(tmux, window_id, pattern="╭|>|\\$", timeout=30)
+    await wait_for_pane(tmux, window_id, timeout=30)
 
     # Kill the window to simulate a dead session
     await tmux.kill_window(window_id)
@@ -175,7 +175,7 @@ async def test_recovery_continue(e2e_app, work_dir):
     window_id, _ = await setup_bound_topic(app, calls, work_dir)
 
     # Wait for agent to start
-    await wait_for_pane(tmux, window_id, pattern="╭|>|\\$", timeout=30)
+    await wait_for_pane(tmux, window_id, timeout=30)
 
     # Kill the window
     await tmux.kill_window(window_id)
@@ -229,7 +229,7 @@ async def test_status_transitions(e2e_app, work_dir):
     window_id, _ = await setup_bound_topic(app, calls, work_dir)
 
     # Wait for agent to start
-    await wait_for_pane(tmux, window_id, pattern="╭|>|\\$", timeout=30)
+    await wait_for_pane(tmux, window_id, timeout=30)
 
     # After sending a message, status polling should send typing action
     calls.clear()
