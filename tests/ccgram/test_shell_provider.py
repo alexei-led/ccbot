@@ -201,7 +201,14 @@ class TestDetectPaneShell:
 class TestSetupShellPrompt:
     @pytest.fixture
     def mock_tmux(self):
-        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
+        with (
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
+            patch(
+                "ccgram.providers.shell._is_interactive_shell",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             mock_tm.capture_pane = AsyncMock(return_value=None)
             yield mock_tm
 
@@ -359,7 +366,14 @@ class TestWrapModeRegex:
 class TestWrapModeSetup:
     @pytest.fixture
     def mock_tmux(self):
-        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
+        with (
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
+            patch(
+                "ccgram.providers.shell._is_interactive_shell",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             mock_tm.capture_pane = AsyncMock(return_value=None)
             yield mock_tm
 
@@ -412,7 +426,7 @@ class TestWrapModeSetup:
 
         cmd = mock_tmux.send_keys.call_args_list[1][0][1]
         assert "functions --copy fish_prompt __ccgram_orig_prompt" in cmd
-        assert "functions -q __ccgram_orig_prompt" in cmd
+        assert "functions --query __ccgram_orig_prompt" in cmd
         assert "__ccgram_orig_prompt" in cmd
         assert "⌘%d⌘" in cmd
         assert "set_color brblack" in cmd
@@ -508,7 +522,7 @@ class TestWrapSetupCommands:
             ("fish", "__ccgram_orig_prompt"),
             ("fish", "set_color brblack"),
             ("fish", "or function __ccgram_orig_prompt"),
-            ("fish", "functions -q __ccgram_orig_prompt"),
+            ("fish", "functions --query __ccgram_orig_prompt"),
             ("bash", "PROMPT_COMMAND"),
             ("bash", "⌘\\${__ccgram_x}⌘"),
             ("bash", "type __ccgram_sc"),
@@ -585,7 +599,14 @@ class TestSetupShellPromptClearsBefore:
 
     @pytest.fixture
     def mock_tmux(self):
-        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
+        with (
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
+            patch(
+                "ccgram.providers.shell._is_interactive_shell",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             mock_tm.capture_pane = AsyncMock(return_value=None)
             yield mock_tm
 

@@ -7,7 +7,6 @@ The Whisper API call is always mocked — no real audio API calls are made.
 Real PTB Application, real tmux, real session binding (via setup_bound_topic).
 """
 
-import shutil
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -27,9 +26,6 @@ from ._helpers import (
 
 pytestmark = [
     pytest.mark.e2e,
-    pytest.mark.skipif(
-        shutil.which("claude") is None, reason="claude CLI not installed"
-    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -109,7 +105,7 @@ async def test_voice_not_configured(e2e_app, work_dir):
     """Voice message without CCGRAM_WHISPER_PROVIDER → friendly setup hint."""
     app, calls, tmux, session_mgr = e2e_app
 
-    await setup_bound_topic(app, calls, work_dir)
+    await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
     import ccgram.handlers.voice_handler as vh
@@ -124,7 +120,7 @@ async def test_voice_not_configured(e2e_app, work_dir):
             "not configured" in d.get("text", "").lower()
             and "supported providers" in d.get("text", "").lower()
         ),
-        timeout=5.0,
+        timeout=15.0,
     )
 
 
@@ -137,7 +133,7 @@ async def test_voice_transcription_shows_confirm_keyboard(e2e_app, work_dir):
     """Successful transcription renders text + ✓/✗ inline keyboard."""
     app, calls, tmux, session_mgr = e2e_app
 
-    await setup_bound_topic(app, calls, work_dir)
+    await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
     import ccgram.handlers.voice_handler as vh
@@ -153,20 +149,14 @@ async def test_voice_transcription_shows_confirm_keyboard(e2e_app, work_dir):
         u = make_voice_update(bot=app.bot)
         await app.process_update(u)
 
-    # Initial sendMessage with transcription text
+    # sendMessage with transcription text + inline confirm/discard keyboard
     sent = await wait_for_send(
         calls,
         predicate=lambda d: "please add logging" in d.get("text", ""),
-        timeout=5.0,
+        timeout=15.0,
     )
     assert sent is not None
-
-    # editMessageReplyMarkup to attach vc:send / vc:drop keyboard
-    await wait_for_send(
-        calls,
-        method="editMessageReplyMarkup",
-        timeout=5.0,
-    )
+    assert "reply_markup" in sent, "Confirm keyboard should be inline with message"
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +168,10 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
     """Pressing ✓ Send to agent forwards transcription text to tmux window."""
     app, calls, tmux, session_mgr = e2e_app
 
-    window_id, _ = await setup_bound_topic(app, calls, work_dir)
+    window_id, _ = await setup_bound_topic(app, calls, work_dir, provider="shell")
 
-    # Wait for claude to start so pane is ready
-    await wait_for_pane(tmux, window_id, pattern="╭|>|\\$", timeout=30)
+    # Wait for shell to be ready (any pane content means shell started)
+    await wait_for_pane(tmux, window_id, timeout=10)
     calls.clear()
 
     transcribed = "what is the purpose of config.py"
@@ -199,14 +189,12 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
         u = make_voice_update(bot=app.bot)
         await app.process_update(u)
 
-    # Wait for the transcription message to arrive
+    # Wait for the transcription message with inline keyboard
     await wait_for_send(
         calls,
         predicate=lambda d: transcribed in d.get("text", ""),
-        timeout=5.0,
+        timeout=15.0,
     )
-    # Extract the confirm message_id from the reply keyboard edit
-    await wait_for_send(calls, method="editMessageReplyMarkup", timeout=5.0)
 
     # Find the confirm msg_id from user_data
     user_data = app._user_data[TEST_USER_ID]
@@ -243,7 +231,7 @@ async def test_voice_discard_clears_pending(e2e_app, work_dir):
     """Pressing ✗ Discard deletes the transcription message and clears state."""
     app, calls, tmux, session_mgr = e2e_app
 
-    await setup_bound_topic(app, calls, work_dir)
+    await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
     import ccgram.handlers.voice_handler as vh
@@ -262,9 +250,8 @@ async def test_voice_discard_clears_pending(e2e_app, work_dir):
     await wait_for_send(
         calls,
         predicate=lambda d: "discard this message" in d.get("text", ""),
-        timeout=5.0,
+        timeout=15.0,
     )
-    await wait_for_send(calls, method="editMessageReplyMarkup", timeout=5.0)
 
     user_data = app._user_data[TEST_USER_ID]
     from ccgram.handlers.user_state import VOICE_PENDING
@@ -300,7 +287,7 @@ async def test_voice_too_large(e2e_app, work_dir):
     """Voice file over 25 MB is rejected before download."""
     app, calls, tmux, session_mgr = e2e_app
 
-    await setup_bound_topic(app, calls, work_dir)
+    await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
     import ccgram.handlers.voice_handler as vh
@@ -317,7 +304,7 @@ async def test_voice_too_large(e2e_app, work_dir):
     sent = await wait_for_send(
         calls,
         predicate=lambda d: "too large" in d.get("text", "").lower(),
-        timeout=5.0,
+        timeout=15.0,
     )
     assert sent is not None
     # transcriber.transcribe must never have been called

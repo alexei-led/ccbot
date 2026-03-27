@@ -92,7 +92,6 @@ def e2e_tmux(monkeypatch):
         "ccgram.handlers.text_handler",
         "ccgram.handlers.directory_callbacks",
         "ccgram.handlers.status_polling",
-        "ccgram.handlers.message_queue",
         "ccgram.handlers.recovery_callbacks",
         "ccgram.handlers.sessions_dashboard",
         "ccgram.handlers.screenshot_callbacks",
@@ -263,7 +262,9 @@ async def e2e_app(e2e_state_dir, e2e_tmux, intercepted_calls, monkeypatch):
             if app.post_init:
                 await app.post_init(app)
             yield app, intercepted_calls, e2e_tmux, fresh_manager
-            # post_shutdown likewise only runs in run_polling()
+            # post_stop/post_shutdown only run in run_polling(); call manually
+            if app.post_stop:
+                await app.post_stop(app)
             if app.post_shutdown:
                 await app.post_shutdown(app)
 
