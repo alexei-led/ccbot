@@ -14,6 +14,22 @@ from ccgram.providers.base import AgentProvider, StatusUpdate
 
 
 @pytest.fixture(autouse=True)
+async def _shutdown_queue_workers():
+    """Kill background queue workers created as side-effects of handler calls.
+
+    Tests that call real handler code (forward_command_handler, handle_text_message,
+    update_status_message) may trigger enqueue_status_update → get_or_create_queue,
+    which spawns an infinite asyncio worker task.  Without cleanup the event loop
+    waits for these pending tasks, causing 30 s hangs on Linux CI.
+    """
+    yield
+    from ccgram.handlers.message_queue import _queue_workers, shutdown_workers
+
+    if _queue_workers:
+        await shutdown_workers()
+
+
+@pytest.fixture(autouse=True)
 def _clean_provider_env(monkeypatch):
     """Remove CCBOT_*/CCGRAM_*_COMMAND env vars so tests use provider defaults."""
     for key in list(os.environ):
