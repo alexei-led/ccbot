@@ -361,10 +361,14 @@ _general_topic_pin_cache: dict[int, bool] = {}
 def is_general_topic(message: Message) -> bool:
     """Return True if the message is in the General (default) forum topic.
 
-    Distinguishes General topic (message_thread_id == 1) from non-forum
-    contexts (message_thread_id is None).
+    In Telegram forum groups, messages sent directly in the General topic
+    (not as replies) may have message_thread_id=None instead of 1.
+    We check chat.is_forum to distinguish General-topic messages from
+    non-forum contexts.
     """
-    return getattr(message, "message_thread_id", None) == 1
+    thread_id = getattr(message, "message_thread_id", None)
+    is_forum = getattr(message.chat, "is_forum", False) if message.chat else False
+    return is_forum and (thread_id is None or thread_id == 1)
 
 
 async def handle_general_topic_message(

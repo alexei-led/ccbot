@@ -604,14 +604,29 @@ class TestIsGeneralTopic:
     def test_general_topic_thread_id_1(self) -> None:
         message = MagicMock()
         message.message_thread_id = 1
+        message.chat.is_forum = True
+        assert is_general_topic(message) is True
+
+    def test_general_topic_thread_id_none_in_forum(self) -> None:
+        message = MagicMock()
+        message.message_thread_id = None
+        message.chat.is_forum = True
         assert is_general_topic(message) is True
 
     def test_named_topic(self) -> None:
         message = MagicMock()
         message.message_thread_id = 42
+        message.chat.is_forum = True
         assert is_general_topic(message) is False
 
     def test_non_forum_context(self) -> None:
         message = MagicMock()
+        message.message_thread_id = None
+        message.chat.is_forum = False
+        assert is_general_topic(message) is False
+
+    def test_no_chat(self) -> None:
+        message = MagicMock()
+        message.chat = None
         message.message_thread_id = None
         assert is_general_topic(message) is False
