@@ -243,17 +243,12 @@ async def _adopt_orphaned_windows(bot: Bot, issues: list[AuditIssue]) -> None:
             logger.exception("Failed to adopt orphaned window %s", window_id)
 
 
-async def _probe_dead_topics(
-    bot: Bot, *, skip_threads: set[int] | None = None
-) -> list[AuditIssue]:
+async def _probe_dead_topics(bot: Bot) -> list[AuditIssue]:
     """Probe Telegram topics for all live bindings, return dead_topic issues.
 
     Sends a silent zero-width-space message to each thread and deletes it
     immediately. ``send_chat_action`` does NOT validate thread existence —
     only ``send_message`` reliably throws "thread not found" for deleted topics.
-
-    Args:
-        skip_threads: Thread IDs to skip (e.g., just-recreated topics).
     """
     bindings = [
         (uid, tid, wid, session_manager.resolve_chat_id(uid, tid))
@@ -261,12 +256,6 @@ async def _probe_dead_topics(
     ]
     # Only probe bindings with a group chat (chat_id != user_id)
     bindings = [(uid, tid, wid, cid) for uid, tid, wid, cid in bindings if cid != uid]
-    if skip_threads:
-        bindings = [
-            (uid, tid, wid, cid)
-            for uid, tid, wid, cid in bindings
-            if tid not in skip_threads
-        ]
     if not bindings:
         return []
 
@@ -417,19 +406,12 @@ async def handle_sync_fix(query: CallbackQuery) -> None:
     recreated_count = await _recreate_dead_topics(bot, pre_audit.issues)
     await _adopt_orphaned_windows(bot, pre_audit.issues)
 
-    # Collect thread_ids from dead-topic issues — skip re-probing them
-    # (either recreated with a new thread or still dead, either way re-probing
-    # the old thread_id is wasteful/impossible).
-    dead_thread_ids: set[int] = set()
-    for issue in pre_audit.issues:
-        if issue.category == "dead_topic":
-            m = _GHOST_RE.search(issue.detail)
-            if m:
-                dead_thread_ids.add(int(m.group(2)))
-
-    # Re-audit and compute actual fixed count (handles partial failures)
+    # Re-audit and compute actual fixed count (handles partial failures).
+    # No skip_threads here: successful recreations use a new thread_id (old
+    # one is unbound and won't be probed), while failed ones restore the old
+    # binding and must be re-probed to avoid inflating actual_fixed.
     post_audit = await _run_audit()
-    post_dead = await _probe_dead_topics(bot, skip_threads=dead_thread_ids)
+    post_dead = await _probe_dead_topics(bot)
     post_audit.issues.extend(post_dead)
     actual_fixed = pre_audit.fixable_count - post_audit.fixable_count
     text, keyboard = _format_report(
