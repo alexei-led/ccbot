@@ -127,17 +127,13 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
         chat_id = session_manager.resolve_chat_id(user_id, thread_id)
         display = session_manager.get_display_name(window_id)
         await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
-        # Respect notification mode: muted/errors_only windows should not
-        # show a "Ready" status bubble.
         notif_mode = session_manager.get_notification_mode(window_id)
-        if notif_mode in ("muted", "errors_only"):
-            await enqueue_status_update(
-                bot, user_id, window_id, None, thread_id=thread_id
-            )
-        else:
-            await enqueue_status_update(
-                bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
-            )
+        status_text = (
+            None if notif_mode in ("muted", "errors_only") else IDLE_STATUS_TEXT
+        )
+        await enqueue_status_update(
+            bot, user_id, window_id, status_text, thread_id=thread_id
+        )
 
 
 # Track active subagents per window: window_id -> {subagent_id -> name}

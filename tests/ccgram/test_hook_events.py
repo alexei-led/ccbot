@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from telegram import Bot
 
 from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
@@ -161,7 +163,8 @@ class TestHandleStop:
                 bot, 100, "@0", IDLE_STATUS_TEXT, thread_id=42
             )
 
-    async def test_stop_muted_clears_status(self, monkeypatch) -> None:
+    @pytest.mark.parametrize("mode", ["muted", "errors_only"])
+    async def test_stop_silent_mode_clears_status(self, monkeypatch, mode) -> None:
         monkeypatch.setattr(
             "ccgram.handlers.hook_events.session_manager.iter_thread_bindings",
             lambda: iter([(100, 42, "@0")]),
@@ -178,7 +181,7 @@ class TestHandleStop:
             ),
             patch(
                 "ccgram.handlers.hook_events.session_manager.get_notification_mode",
-                return_value="muted",
+                return_value=mode,
             ),
             patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
             patch(
