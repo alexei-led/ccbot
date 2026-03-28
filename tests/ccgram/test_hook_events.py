@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 from telegram import Bot
 
+from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
+
 from ccgram.handlers.hook_events import (
     HookEvent,
     _active_subagents,
@@ -156,7 +158,7 @@ class TestHandleStop:
 
             mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "project")
             mock_enqueue.assert_called_once_with(
-                bot, 100, "@0", "\u2713 Ready", thread_id=42
+                bot, 100, "@0", IDLE_STATUS_TEXT, thread_id=42
             )
 
     async def test_stop_muted_clears_status(self, monkeypatch) -> None:
