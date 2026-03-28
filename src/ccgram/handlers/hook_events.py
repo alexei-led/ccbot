@@ -102,11 +102,16 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
 
 
 async def _handle_stop(event: HookEvent, bot: Bot) -> None:
-    """Handle a Stop event — instant done detection."""
-    from .status_polling import (
-        _start_autoclose_timer,
-        clear_seen_status,
-    )
+    """Handle a Stop event — transition directly to idle.
+
+    Previous behaviour cleared has_seen_status and the status message, which
+    forced the poll loop through a startup-grace → active → idle dance,
+    producing two topic-rename service messages and a brand-new "Ready"
+    message on every agent turn.  Now we transition straight to idle: the
+    status message is edited in-place (dedup catches identical text) and the
+    topic emoji goes to idle without an intermediate active flicker.
+    """
+    from .callback_data import IDLE_STATUS_TEXT
     from .message_queue import enqueue_status_update
     from .topic_emoji import update_topic_emoji
 
@@ -114,9 +119,6 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     if not users:
         return
 
-    import time
-
-    now = time.monotonic()
     stop_reason = event.data.get("stop_reason", "")
     logger.debug(
         "Hook stop: window_key=%s, stop_reason=%s",
@@ -125,12 +127,19 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     )
 
     for user_id, thread_id, window_id in users:
-        clear_seen_status(window_id)
+        # Don't clear has_seen_status — keeps the poll loop on the idle
+        # path so it won't trigger the startup-grace → active → idle dance.
         chat_id = session_manager.resolve_chat_id(user_id, thread_id)
         display = session_manager.get_display_name(window_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "done", display)
-        _start_autoclose_timer(user_id, thread_id, "done", now)
-        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+        await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+        # No autoclose timer here — the poll loop manages autoclose when
+        # it detects a shell prompt (is_shell_prompt); the timer from Stop
+        # was always immediately cleared by _transition_to_idle → _clear_autoclose_if_active.
+        # Update status to "Ready" (edit-in-place); don't clear (avoids
+        # deleting the message and recreating it as a new bubble).
+        await enqueue_status_update(
+            bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
+        )
 
 
 # Track active subagents per window: window_id -> {subagent_id -> name}

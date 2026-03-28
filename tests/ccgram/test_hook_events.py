@@ -1,6 +1,6 @@
 """Tests for hook event dispatcher."""
 
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 
 from telegram import Bot
 
@@ -127,7 +127,7 @@ class TestDispatchHookEvent:
 
 
 class TestHandleStop:
-    async def test_sends_done_notification(self, monkeypatch) -> None:
+    async def test_transitions_to_idle(self, monkeypatch) -> None:
         monkeypatch.setattr(
             "ccgram.handlers.hook_events.session_manager.iter_thread_bindings",
             lambda: iter([(100, 42, "@0")]),
@@ -146,18 +146,14 @@ class TestHandleStop:
             patch(
                 "ccgram.handlers.message_queue.enqueue_status_update"
             ) as mock_enqueue,
-            patch("ccgram.handlers.status_polling.clear_seen_status") as mock_clear,
-            patch(
-                "ccgram.handlers.status_polling._start_autoclose_timer"
-            ) as mock_timer,
         ):
             event = _make_event(event_type="Stop", data={"stop_reason": "done"})
             await dispatch_hook_event(event, bot)
 
-            mock_clear.assert_called_once_with("@0")
-            mock_emoji.assert_called_once_with(bot, -100, 42, "done", "project")
-            mock_timer.assert_called_once_with(100, 42, "done", ANY)
-            mock_enqueue.assert_called_once_with(bot, 100, "@0", None, thread_id=42)
+            mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "project")
+            mock_enqueue.assert_called_once_with(
+                bot, 100, "@0", "\u2713 Ready", thread_id=42
+            )
 
     async def test_stop_no_users_skips(self, monkeypatch) -> None:
         monkeypatch.setattr(
