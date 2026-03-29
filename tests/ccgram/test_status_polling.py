@@ -1,6 +1,3 @@
-"""Tests for status polling: shell detection, autoclose timers, rename sync,
-activity heuristic, and startup timeout."""
-
 import time
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -35,7 +32,6 @@ from ccgram.handlers.polling_strategies import (
 )
 from ccgram.tmux_manager import PaneInfo
 
-# Strategy internal state references (for test assertions)
 _window_poll_state = terminal_strategy._states
 _topic_poll_state = lifecycle_strategy._states
 _dead_notified = lifecycle_strategy._dead_notified
@@ -44,7 +40,6 @@ _start_autoclose_timer = lifecycle_strategy.start_autoclose_timer
 _clear_autoclose_if_active = lifecycle_strategy.clear_autoclose_if_active
 
 
-# Helpers for readable assertions on dataclass-based state
 def _has_autoclose(user_id: int, thread_id: int) -> bool:
     ts = _topic_poll_state.get((user_id, thread_id))
     return ts is not None and ts.autoclose is not None
@@ -349,8 +344,6 @@ _SEP = "─" * 30
 
 @pytest.mark.usefixtures("_reset_pyte")
 class TestParseWithPyte:
-    """Tests for pyte-based screen parsing integration."""
-
     @pytest.mark.parametrize(
         ("spinner", "text", "expected_raw"),
         [
@@ -405,8 +398,6 @@ class TestParseWithPyte:
 
 @pytest.mark.usefixtures("_reset_pyte")
 class TestPyteContentHashCaching:
-    """Tests for content-hash optimization in _parse_with_pyte."""
-
     def test_cache_hit_returns_same_result(self) -> None:
         pane_text = f"Output\n✻ Working on task\n{_SEP}\n"
         result1 = _parse_with_pyte("@0", pane_text)
@@ -428,7 +419,6 @@ class TestPyteContentHashCaching:
         result2 = _parse_with_pyte("@0", pane_text, columns=120, rows=40)
         assert result1 is not None
         assert result2 is not None
-        # Same text, different dimensions — must re-parse (not cache hit)
         assert result2 is not result1
 
     def test_cache_none_result(self) -> None:
@@ -464,8 +454,6 @@ class TestPyteContentHashCaching:
 
 @pytest.mark.usefixtures("_reset_pyte")
 class TestPyteDimensionPassthrough:
-    """Tests that _parse_with_pyte uses actual pane dimensions."""
-
     def test_custom_dimensions_used(self) -> None:
         _parse_with_pyte("@0", f"Output\n✻ Working\n{_SEP}\n", columns=80, rows=24)
         buf = _get_window_state("@0").screen_buffer
@@ -496,8 +484,6 @@ class TestPyteDimensionPassthrough:
 
 @pytest.mark.usefixtures("_reset_pyte")
 class TestAnsiCapturePyteParsing:
-    """Tests for ANSI capture -> pyte rendering -> clean fallback text."""
-
     def test_ansi_spinner_detected(self) -> None:
         pane_text = f"Some output\n\x1b[36m✻ Reading file src/main.py\x1b[0m\n{_SEP}\n"
         result = _parse_with_pyte("@0", pane_text)
@@ -545,7 +531,6 @@ class TestAnsiCapturePyteParsing:
 
 
 def _mock_update_status_patches(*, pyte_result, provider):
-    """Context manager stack for update_status_message tests."""
     from contextlib import ExitStack
 
     stack = ExitStack()
@@ -599,8 +584,6 @@ def _mock_update_status_patches(*, pyte_result, provider):
 
 
 class TestPyteFallbackInUpdateStatus:
-    """Tests that update_status_message falls back to regex when pyte returns None."""
-
     async def test_empty_rendered_text_does_not_fall_back_to_raw_ansi(self) -> None:
         stack, mocks = _mock_update_status_patches(
             pyte_result=None, provider=make_mock_provider(has_status=False)
@@ -1260,7 +1243,6 @@ class TestMaybeDiscoverTranscript:
         mock_sm.write_hookless_session_map.assert_not_called()
 
     async def test_session_map_write_runs_in_background_thread(self) -> None:
-        """Regression: write_hookless_session_map must run in a thread (flock)."""
         from ccgram.handlers.polling_coordinator import _maybe_discover_transcript
         from ccgram.providers.base import SessionStartEvent
 
@@ -1295,7 +1277,6 @@ class TestMaybeDiscoverTranscript:
             mock_asyncio.to_thread = AsyncMock(side_effect=[event, None])
             await _maybe_discover_transcript("@7")
 
-        # discover_transcript in thread, write_hookless_session_map in thread
         assert mock_asyncio.to_thread.call_count == 2
         discover_call = mock_asyncio.to_thread.call_args_list[0]
         assert discover_call.args[0] == mock_provider.discover_transcript
@@ -1304,7 +1285,6 @@ class TestMaybeDiscoverTranscript:
         mock_sm.register_hookless_session.assert_called_once()
 
     async def test_tries_hookless_providers_when_provider_name_empty(self) -> None:
-        """When provider_name is empty (detection failed), try all hookless providers."""
         from ccgram.handlers.polling_coordinator import _maybe_discover_transcript
         from ccgram.providers.base import SessionStartEvent
 
@@ -1364,7 +1344,6 @@ class TestMaybeDiscoverTranscript:
         )
 
     async def test_skips_hookless_fallback_when_pane_is_shell(self) -> None:
-        """When provider_name is empty and pane is a shell, skip discovery."""
         from ccgram.handlers.polling_coordinator import _maybe_discover_transcript
 
         mock_window = MagicMock(pane_current_command="bash")
@@ -1612,8 +1591,6 @@ class TestMaybeDiscoverTranscript:
 
 class TestDeadWindowNotification:
     async def test_marks_notified_even_when_send_fails(self) -> None:
-        """When rate_limit_send_message returns None (send fails),
-        _dead_notified is still populated so we don't retry forever."""
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.polling_coordinator.session_manager") as mock_sm,
@@ -1645,7 +1622,6 @@ class TestDeadWindowNotification:
         assert (1, 42, "@5") in _dead_notified
 
     async def test_no_retry_after_failed_send(self) -> None:
-        """Second call is a no-op because _dead_notified was set on first call."""
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.polling_coordinator.session_manager") as mock_sm,
@@ -1686,7 +1662,6 @@ class TestDeadWindowNotification:
         ],
     )
     async def test_probe_cleans_up_on_thread_not_found(self, error_msg: str) -> None:
-        """Probe handles thread-not-found variants by cleaning up the binding."""
         bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = BadRequest(error_msg)
         mock_window = MagicMock()
@@ -1710,9 +1685,6 @@ class TestDeadWindowNotification:
         mock_tr.unbind_thread.assert_called_once_with(1, 42)
 
 
-# ── Pane alert helpers ─────────────────────────────────────────────────
-
-
 class TestPaneAlertHelpers:
     def test_has_pane_alert_true_when_present(self) -> None:
         _pane_alert_hashes["%1"] = ("prompt text", 100.0, "@0")
@@ -1729,9 +1701,6 @@ class TestPaneAlertHelpers:
         assert "%1" not in _pane_alert_hashes
         assert "%2" not in _pane_alert_hashes
         assert "%3" in _pane_alert_hashes
-
-
-# ── Multi-pane scanning ────────────────────────────────────────────────
 
 
 def _make_pane(pane_id: str = "%1", *, active: bool = True, index: int = 0) -> PaneInfo:
@@ -1883,9 +1852,6 @@ class TestScanWindowPanes:
             await _scan_window_panes(bot, 1, "@0", 42)
             await _scan_window_panes(bot, 1, "@0", 42)
         mock_tm.list_panes.assert_called_once()
-
-
-# ── update_status_message edge cases ───────────────────────────────────
 
 
 @pytest.mark.usefixtures("_reset_pyte")
@@ -2098,8 +2064,6 @@ class TestUpdateStatusMessageEdgeCases:
 
 @pytest.mark.usefixtures("_reset_pyte")
 class TestCheckInteractiveOnly:
-    """Tests for _check_interactive_only — interactive UI detection during queue backlog."""
-
     @pytest.mark.parametrize(
         "interactive_window",
         [

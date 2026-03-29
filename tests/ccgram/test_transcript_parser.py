@@ -1,5 +1,3 @@
-"""Tests for ccgram.transcript_parser — pure logic, no I/O."""
-
 import pytest
 
 from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXPQUOTE_END
@@ -8,8 +6,6 @@ from ccgram.transcript_parser import (
     ParsedMessage,
     TranscriptParser,
 )
-
-# ── parse_line ───────────────────────────────────────────────────────────
 
 
 class TestParseLine:
@@ -25,9 +21,6 @@ class TestParseLine:
     )
     def test_parse_line(self, line: str, expected: dict | None):
         assert TranscriptParser.parse_line(line) == expected
-
-
-# ── extract_text_only ────────────────────────────────────────────────────
 
 
 class TestExtractTextOnly:
@@ -61,9 +54,6 @@ class TestExtractTextOnly:
         assert TranscriptParser.extract_text_only(content) == "green and red"
 
 
-# ── ANSI stripping in parse_entries ──────────────────────────────────────
-
-
 class TestAnsiStripping:
     def test_ansi_stripped_from_assistant_text_block(self):
         entries = [
@@ -90,9 +80,6 @@ class TestAnsiStripping:
         result, _ = TranscriptParser.parse_entries(entries)
         assert len(result) == 1
         assert result[0].text == "user input"
-
-
-# ── format_tool_use_summary ──────────────────────────────────────────────
 
 
 class TestFormatToolUseSummary:
@@ -177,9 +164,6 @@ class TestFormatToolUseSummary:
         assert result == f"\u26a1 **Bash** `{'x' * 200}\u2026`"
 
 
-# ── extract_tool_result_text ─────────────────────────────────────────────
-
-
 class TestExtractToolResultText:
     @pytest.mark.parametrize(
         "content, expected",
@@ -199,9 +183,6 @@ class TestExtractToolResultText:
     )
     def test_extract_tool_result_text(self, content: str | list | None, expected: str):
         assert TranscriptParser.extract_tool_result_text(content) == expected
-
-
-# ── parse_message ────────────────────────────────────────────────────────
 
 
 class TestParseMessage:
@@ -273,9 +254,6 @@ class TestParseMessage:
         assert result == ParsedMessage(message_type="assistant", text="plain response")
 
 
-# ── _format_edit_diff ────────────────────────────────────────────────────
-
-
 class TestFormatEditDiff:
     @pytest.mark.parametrize(
         "old, new, check",
@@ -301,9 +279,6 @@ class TestFormatEditDiff:
     def test_format_edit_diff(self, old: str, new: str, check):
         result = TranscriptParser._format_edit_diff(old, new)
         assert check(result), f"Check failed for ({old!r}, {new!r}): {result!r}"
-
-
-# ── _format_tool_result_text ─────────────────────────────────────────────
 
 
 class TestFormatToolResultText:
@@ -362,9 +337,6 @@ class TestFormatToolResultText:
     def test_format_tool_result_text(self, text: str, tool_name: str, check):
         result = TranscriptParser._format_tool_result_text(text, tool_name)
         assert check(result), f"Failed check for {tool_name!r}: {result!r}"
-
-
-# ── parse_entries ────────────────────────────────────────────────────────
 
 
 class TestParseEntries:

@@ -1,5 +1,3 @@
-"""Tests for Codex transcript status snapshot helper."""
-
 import json
 
 from ccgram.providers.codex_status import (

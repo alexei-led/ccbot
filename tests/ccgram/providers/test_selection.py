@@ -1,5 +1,3 @@
-"""Tests for provider selection UI in directory browser flow."""
-
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 

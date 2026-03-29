@@ -1,5 +1,3 @@
-"""Tests for ps-based foreground process detection."""
-
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -205,7 +203,6 @@ class TestDetectProviderCached:
             result = await detect_provider_cached("@0", "/dev/ttys003")
 
         assert result == "claude"
-        # PGID unchanged → classify skipped (cache hit)
         mock_classify.assert_not_called()
 
     async def test_cache_invalidates_on_pgid_change(self) -> None:

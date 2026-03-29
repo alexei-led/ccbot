@@ -1,9 +1,3 @@
-"""Contract tests for the AgentProvider protocol.
-
-Every provider must pass these tests. The PROVIDER_FIXTURES list contains
-StubProvider plus all real providers (Claude, Codex, Gemini).
-"""
-
 import json
 from dataclasses import FrozenInstanceError
 from typing import Any
@@ -24,16 +18,8 @@ from ccgram.providers.codex import CodexProvider
 from ccgram.providers.gemini import GeminiProvider
 from ccgram.providers.shell import ShellProvider
 
-# ── Stub provider (minimal conforming implementation) ────────────────────
-
 
 class StubProvider(JsonlProvider):
-    """Minimal provider that satisfies AgentProvider for contract testing.
-
-    Extends JsonlProvider with hook support and continue flag to exercise
-    all contract test branches that real hookless providers skip.
-    """
-
     _CAPS = ProviderCapabilities(
         name="stub",
         launch_command="stub-cli",
@@ -71,8 +57,6 @@ class StubProvider(JsonlProvider):
         )
 
 
-# ── Fixtures ─────────────────────────────────────────────────────────────
-
 PROVIDER_FIXTURES: list[type] = [
     StubProvider,
     ClaudeProvider,
@@ -87,14 +71,10 @@ def provider(request: pytest.FixtureRequest) -> AgentProvider:
     return request.param()
 
 
-# ── Contract tests ───────────────────────────────────────────────────────
-
-
 class TestAgentProviderCapabilities:
     def test_required_fields(self, provider: AgentProvider) -> None:
         caps = provider.capabilities
         assert caps.name
-        # Shell provider has empty launch_command (tmux opens $SHELL by default)
         if caps.name != "shell":
             assert caps.launch_command
 
@@ -180,7 +160,6 @@ class TestParseTranscriptLine:
 def _make_assistant_entry(
     provider: AgentProvider, text: str = "hello"
 ) -> dict[str, Any]:
-    """Build an assistant transcript entry in the correct format for the provider."""
     name = provider.capabilities.name
     if name == "codex":
         return {
@@ -193,7 +172,6 @@ def _make_assistant_entry(
         }
     if name == "gemini":
         return {"type": "gemini", "content": text}
-    # Claude / stub — standard JSONL
     return {
         "type": "assistant",
         "message": {"content": [{"type": "text", "text": text}]},
@@ -201,7 +179,6 @@ def _make_assistant_entry(
 
 
 def _make_tool_use_entry(provider: AgentProvider) -> dict[str, Any]:
-    """Build a tool_use transcript entry in the correct format."""
     name = provider.capabilities.name
     if name == "codex":
         return {
@@ -228,7 +205,6 @@ def _make_tool_use_entry(provider: AgentProvider) -> dict[str, Any]:
 
 
 def _make_tool_result_entry(provider: AgentProvider) -> dict[str, Any]:
-    """Build a tool_result transcript entry in the correct format."""
     name = provider.capabilities.name
     if name == "codex":
         return {
@@ -240,8 +216,6 @@ def _make_tool_result_entry(provider: AgentProvider) -> dict[str, Any]:
             },
         }
     if name == "gemini":
-        # Gemini doesn't have explicit tool_result entries — tool calls are
-        # tracked in pending but never cleared by a result entry.
         return {"type": "gemini", "content": "result ok"}
     return {
         "type": "user",
@@ -283,7 +257,6 @@ class TestParseTranscriptEntries:
             _make_tool_result_entry(provider),
         ]
         _, pending = provider.parse_transcript_entries(entries, {})
-        # Gemini doesn't have explicit tool_result entries
         if provider.capabilities.name == "gemini":
             assert "t1" in pending
         else:
@@ -295,8 +268,6 @@ class TestParseTerminalStatus:
         assert provider.parse_terminal_status("", pane_title="") is None
 
     def test_status_update_fields(self, provider: AgentProvider) -> None:
-        # Claude detects spinner format; hookless providers (Codex, Gemini)
-        # return None for non-interactive panes (no spinner support).
         sep = "─" * 30
         pane = f"output\n✻ Reading files\n{sep}\n❯ \n{sep}\n"
         result = provider.parse_terminal_status(pane, pane_title="")
@@ -415,7 +386,6 @@ class TestParseHistoryEntry:
 class TestDiscoverTranscript:
     def test_returns_none_or_event(self, provider: AgentProvider) -> None:
         result = provider.discover_transcript("/nonexistent/path", "ccgram:@99")
-        # All providers should return None for a nonexistent path
         assert result is None
 
     def test_accepts_optional_max_age_kwarg(self, provider: AgentProvider) -> None:

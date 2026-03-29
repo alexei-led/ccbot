@@ -1,5 +1,3 @@
-"""Unit tests for MonitorState and TrackedSession persistence."""
-
 import json
 
 import pytest

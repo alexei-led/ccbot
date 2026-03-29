@@ -1,5 +1,3 @@
-"""Tests for /resume command (TASK-011)."""
-
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -370,7 +368,6 @@ class TestBuildResumeKeyboard:
     def test_session_buttons(self) -> None:
         sessions = self._sessions(2)
         kb = _build_resume_keyboard(sessions)
-        # First row: project header, then 2 session rows, then nav row
         assert len(kb.inline_keyboard) == 4
         assert kb.inline_keyboard[1][0].callback_data == f"{CB_RESUME_PICK}0"
         assert kb.inline_keyboard[2][0].callback_data == f"{CB_RESUME_PICK}1"

@@ -1,5 +1,3 @@
-"""Tests for hook event dispatcher."""
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

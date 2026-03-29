@@ -1,5 +1,3 @@
-"""Tests for provider registry, config integration, and per-window resolution."""
-
 import json
 import shlex
 from unittest.mock import patch
@@ -8,9 +6,7 @@ import pytest
 
 from ccgram.providers.base import ProviderCapabilities
 from ccgram.providers.registry import ProviderRegistry, UnknownProviderError
-from test_provider_contracts import StubProvider as _StubProvider
-
-# ── Registry tests ──────────────────────────────────────────────────────
+from test_contracts import StubProvider as _StubProvider
 
 
 class TestProviderRegistry:
@@ -57,9 +53,6 @@ class TestProviderRegistry:
             reg.get("missing")
 
 
-# ── Config integration tests ────────────────────────────────────────────
-
-
 class TestConfigProviderSettings:
     def test_default_provider_name(self) -> None:
         env = {
@@ -85,9 +78,6 @@ class TestConfigProviderSettings:
 
             cfg = Config()
             assert cfg.provider_name == "codex"
-
-
-# ── resolve_launch_command tests ──────────────────────────────────────────
 
 
 class TestResolveLaunchCommand:
@@ -185,9 +175,6 @@ class TestResolveLaunchCommand:
         )
 
 
-# ── Integration: registry wired together ─────────────────────────────────
-
-
 class TestModuleLevelRegistry:
     def test_singleton_exists_with_claude(self, monkeypatch) -> None:
         from ccgram.providers import _reset_provider, get_provider, registry
@@ -236,8 +223,6 @@ class TestRegistryIsValid:
 
 
 class TestEnsureRegistered:
-    """Verify _ensure_registered() registers all expected providers."""
-
     @pytest.fixture(autouse=True)
     def _reset(self):
         from ccgram.providers import _reset_provider

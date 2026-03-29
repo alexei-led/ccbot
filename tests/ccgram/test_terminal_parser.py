@@ -1,5 +1,3 @@
-"""Tests for terminal_parser — regex-based detection of Claude Code UI elements."""
-
 from typing import TYPE_CHECKING
 
 import pytest
@@ -16,8 +14,6 @@ from ccgram.terminal_parser import (
     parse_status_line,
     strip_pane_chrome,
 )
-
-# ── is_likely_spinner ────────────────────────────────────────────────────
 
 
 class TestIsLikelySpinner:
@@ -85,9 +81,6 @@ class TestIsLikelySpinner:
     )
     def test_ascii_punctuation_rejected(self, char: str):
         assert is_likely_spinner(char) is False
-
-
-# ── parse_status_line ────────────────────────────────────────────────────
 
 
 _SEPARATOR = "─" * 30
@@ -180,9 +173,6 @@ class TestParseStatusLine:
         assert parse_status_line(sample_pane_status_line) == "Reading file src/main.py"
 
 
-# ── extract_interactive_content ──────────────────────────────────────────
-
-
 class TestExtractInteractiveContent:
     def test_exit_plan_mode(self, sample_pane_exit_plan: str):
         result = extract_interactive_content(sample_pane_exit_plan)
@@ -219,7 +209,6 @@ class TestExtractInteractiveContent:
         assert "Do you want to proceed?" in result.content
 
     def test_edit_permission_prompt_structural(self):
-        """PermissionPrompt now matches 'Do you want to make this edit' directly."""
         pane = (
             "  Do you want to make this edit to status_polling.py?\n"
             "\n"
@@ -233,7 +222,6 @@ class TestExtractInteractiveContent:
         assert "make this edit" in result.content
 
     def test_unknown_selection_ui_structural(self):
-        """Catch-all detects any future selection prompt with ❯ + action hint."""
         pane = (
             "  Some brand new question nobody predicted?\n"
             "\n"
@@ -248,7 +236,6 @@ class TestExtractInteractiveContent:
         assert "brand new question" in result.content
 
     def test_structural_catchall_enter_to_confirm(self):
-        """Catch-all works with 'Enter to confirm' bottom hint too."""
         pane = "  Pick a thing:\n  ❯ Alpha\n    Beta\n  Enter to confirm\n"
         result = extract_interactive_content(pane)
         assert result is not None
@@ -256,7 +243,6 @@ class TestExtractInteractiveContent:
         assert "Pick a thing" in result.content
 
     def test_numbered_list_without_footer(self):
-        """Selection UI with numbered items but no action hint footer."""
         pane = (
             "Remote Control\n"
             "\n"
@@ -272,7 +258,6 @@ class TestExtractInteractiveContent:
         assert "❯" in result.content
 
     def test_codex_selection_cursor(self):
-        """Codex uses › (U+203A) instead of ❯ (U+276F) for selection cursor."""
         pane = "  Which option?\n\n  › Option A    Option B\n\n  Esc to cancel\n"
         result = extract_interactive_content(pane)
         assert result is not None
@@ -299,7 +284,6 @@ class TestExtractInteractiveContent:
         ],
     )
     def test_codex_bottom_text_variants(self, bottom_text: str):
-        """Codex uses different bottom action hint phrasing."""
         pane = f"  Question?\n  › Option A\n    Option B\n{bottom_text}\n"
         result = extract_interactive_content(pane)
         assert result is not None
@@ -371,7 +355,6 @@ class TestExtractInteractiveContent:
         assert "Network request outside of sandbox" in result.content
 
     def test_network_request_no_cursor(self):
-        """Network sandbox prompt detected even without ❯ cursor."""
         pane = (
             "  Network request outside of sandbox\n"
             "\n"
@@ -463,9 +446,6 @@ class TestExtractInteractiveContent:
         assert extract_interactive_content(pane) is None
 
 
-# ── extract_interactive_content boolean behavior ─────────────────────────
-
-
 class TestExtractInteractiveContentBoolean:
     def test_true_when_ui_present(self, sample_pane_exit_plan: str):
         assert extract_interactive_content(sample_pane_exit_plan) is not None
@@ -475,9 +455,6 @@ class TestExtractInteractiveContentBoolean:
 
     def test_false_for_empty_string(self):
         assert extract_interactive_content("") is None
-
-
-# ── strip_pane_chrome ───────────────────────────────────────────────────
 
 
 class TestStripPaneChrome:
@@ -501,7 +478,6 @@ class TestStripPaneChrome:
         assert strip_pane_chrome(lines) == lines
 
     def test_adaptive_scan_finds_distant_separator(self):
-        # Separator at line 0 with 15 content lines — adaptive scan finds it
         lines = ["─" * 30] + [f"line {i}" for i in range(14)]
         assert strip_pane_chrome(lines) == []
 
@@ -510,9 +486,6 @@ class TestStripPaneChrome:
         chrome = ["─" * 30, "❯", "─" * 30, "  [Opus 4.6] Context: 34%"]
         lines = content + chrome
         assert strip_pane_chrome(lines) == content
-
-
-# ── extract_bash_output ─────────────────────────────────────────────────
 
 
 class TestExtractBashOutput:
@@ -555,9 +528,6 @@ class TestExtractBashOutput:
         result = extract_bash_output(pane, "echo hi")
         assert result is not None
         assert not result.endswith("\n")
-
-
-# ── format_status_display ───────────────────────────────────────────────
 
 
 class TestFormatStatusDisplay:
@@ -618,9 +588,6 @@ class TestFormatStatusDisplay:
         )
 
 
-# ── find_chrome_boundary ──────────────────────────────────────────────
-
-
 class TestFindChromeBoundary:
     def test_empty_lines(self):
         assert find_chrome_boundary([]) is None
@@ -653,11 +620,7 @@ class TestFindChromeBoundary:
             "─" * 30,
             "❯",
         ]
-        # First separator has long content below it, so only second is chrome
         assert find_chrome_boundary(lines) == 2
-
-
-# ── Adaptive terminal size tests ─────────────────────────────────────
 
 
 class TestVariableTerminalSizes:
@@ -700,12 +663,8 @@ class TestVariableTerminalSizes:
         assert strip_pane_chrome(lines) == ["output"]
 
 
-# ── Bottom-up fallback detection ─────────────────────────────────────
-
-
 class TestBottomUpFallback:
     def test_edit_file_title_detected(self):
-        """New-style 'Edit File' prompt without matching top pattern."""
         pane = (
             "  Edit File\n"
             "\n"
@@ -724,7 +683,6 @@ class TestBottomUpFallback:
         assert "Esc to cancel" in result.content
 
     def test_unknown_title_with_action_hint(self):
-        """Completely unknown title still detected by bottom-up."""
         pane = (
             "  Something Never Seen Before\n"
             "\n"
@@ -739,18 +697,12 @@ class TestBottomUpFallback:
         assert "Something Never Seen Before" in result.content
 
     def test_enter_to_confirm_bottom(self):
-        """Bottom-up works with 'Enter to confirm' action hint."""
         pane = "  Pick something:\n\n  Option A\n  Option B\n\n  Enter to confirm\n"
         result = extract_interactive_content(pane)
         assert result is not None
         assert "Pick something" in result.content
 
     def test_section_break_stops_upward_scan(self):
-        """Two blank lines above the UI block stop the upward scan.
-
-        Uses plain options (no ❯) so bottom-up fallback is exercised
-        instead of the SelectionUI catch-all which has context_above=10.
-        """
         pane = (
             "Some earlier output\n"
             "More earlier output\n"
@@ -768,13 +720,11 @@ class TestBottomUpFallback:
         assert "earlier output" not in result.content
 
     def test_no_action_hint_returns_none(self):
-        """Regular output without action hints is not detected."""
         pane = "Some regular output\nMore output\nNo hints here\n"
         result = extract_interactive_content(pane)
         assert result is None
 
     def test_action_hint_too_far_from_bottom(self):
-        """Action hint buried in output (not near bottom) is ignored."""
         lines = [
             "  Esc to cancel",  # action hint
             *[f"  output line {i}" for i in range(10)],  # lots of output after
@@ -785,35 +735,28 @@ class TestBottomUpFallback:
         assert result is None
 
     def test_infers_selection_ui_name(self):
-        """Bottom-up infers SelectionUI when ❯ is present."""
         pane = "  Unknown Title\n  ❯ Option A\n    Option B\n  Esc to cancel\n"
         result = extract_interactive_content(pane)
         assert result is not None
         assert result.name == "SelectionUI"
 
     def test_infers_ask_user_name(self):
-        """Bottom-up infers AskUserQuestion when checkbox chars present."""
         pane = "  Unknown Title\n  ☐ Option A\n  ✔ Option B\n  Enter to select\n"
         result = extract_interactive_content(pane)
         assert result is not None
         assert result.name == "AskUserQuestion"
 
     def test_infers_generic_name(self):
-        """Bottom-up returns InteractiveUI when no cursor/checkbox present."""
         pane = "  Unknown Title\n\n  Some text\n\n  Esc to cancel\n"
         result = extract_interactive_content(pane)
         assert result is not None
         assert result.name == "InteractiveUI"
 
     def test_pattern_match_takes_precedence(self):
-        """Known patterns still match first — bottom-up is only a fallback."""
         pane = "  Do you want to proceed?\n\n  ❯ Yes    No\n\n  Esc to cancel\n"
         result = extract_interactive_content(pane)
         assert result is not None
         assert result.name == "PermissionPrompt"  # not bottom-up
-
-
-# ── extract_interactive_content with list[str] ───────────────────────
 
 
 class TestExtractInteractiveContentWithLines:
@@ -839,11 +782,6 @@ class TestExtractInteractiveContentWithLines:
         assert result_str is not None
         assert result_list is not None
         assert result_str.name == result_list.name
-        # String variant calls .strip() before splitting, so leading whitespace
-        # on the first line may differ — compare the detected pattern name only
-
-
-# ── pyte screen-based parsing ────────────────────────────────────────
 
 
 class TestParseFromScreen:
@@ -906,7 +844,6 @@ class TestParseFromScreen:
         from ccgram.terminal_parser import parse_from_screen
 
         buf = ScreenBuffer(columns=80, rows=5)
-        # Cursor stays at row 0, col 0 — empty screen
         assert parse_from_screen(buf) is None
 
     def test_ansi_stripped_matches_plain_text(self):
@@ -992,9 +929,6 @@ class TestParseStatusFromScreen:
         screen = self._make_screen(ansi)
         screen_result = parse_status_from_screen(screen)
         assert regex_result == screen_result == "Working on task"
-
-
-# ── Remote Control detection ───────────────────────────────────────────
 
 
 class TestDetectRemoteControl:

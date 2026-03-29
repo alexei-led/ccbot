@@ -1,5 +1,3 @@
-"""Tests for topic emoji status updates."""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,7 +30,6 @@ _DEBOUNCE_FOR: dict[str, float] = {
 
 
 def _debounce_for(state: str) -> float:
-    """Return the debounce duration for a given state."""
     return _DEBOUNCE_FOR[state]
 
 
@@ -80,7 +77,6 @@ async def _debounced_update(
     state: str,
     display_name: str,
 ) -> None:
-    """Call update_topic_emoji twice with enough time gap to pass debounce."""
     with patch(_PATCH_MONOTONIC) as mock_monotonic:
         mock_monotonic.return_value = 0.0
         await update_topic_emoji(bot, chat_id, thread_id, state, display_name)
@@ -139,7 +135,6 @@ class TestUpdateTopicEmoji:
     async def test_rapid_toggling_suppressed(self) -> None:
         bot = AsyncMock()
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
-            # Rapid toggling for 10s — never stable long enough to pass debounce
             for i in range(10):
                 mock_monotonic.return_value = float(i)
                 state = "active" if i % 2 == 0 else "idle"
@@ -149,14 +144,12 @@ class TestUpdateTopicEmoji:
     async def test_stable_state_after_flickering(self) -> None:
         bot = AsyncMock()
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
-            # Rapid toggling for 4s — debounce never reached
             for i in range(4):
                 mock_monotonic.return_value = float(i)
                 state = "active" if i % 2 == 0 else "idle"
                 await update_topic_emoji(bot, -100, 42, state, "myproject")
             bot.edit_forum_topic.assert_not_called()
 
-            # Settle on "active" and wait past _debounce_for("active")
             mock_monotonic.return_value = 4.0
             await update_topic_emoji(bot, -100, 42, "active", "myproject")
             mock_monotonic.return_value = 4.0 + _debounce_for("active") + 0.1
@@ -205,16 +198,13 @@ class TestUpdateTopicEmoji:
         bot.edit_forum_topic.assert_not_called()
 
     async def test_active_fires_faster_than_idle(self) -> None:
-        """Active debounce (5s) is shorter than idle debounce (30s)."""
         bot = AsyncMock()
         midpoint = DEBOUNCE_TO_ACTIVE_SECONDS + 0.1
         assert midpoint < DEBOUNCE_TO_IDLE_SECONDS
 
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
-            # Start pending "active" transition
             mock_monotonic.return_value = 0.0
             await update_topic_emoji(bot, -100, 42, "active", "myproject")
-            # After 5.1s — active fires
             mock_monotonic.return_value = midpoint
             await update_topic_emoji(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
@@ -224,7 +214,6 @@ class TestUpdateTopicEmoji:
         )
 
     async def test_idle_does_not_fire_at_active_debounce_time(self) -> None:
-        """Idle requires the longer debounce — doesn't fire at active's threshold."""
         bot = AsyncMock()
         midpoint = DEBOUNCE_TO_ACTIVE_SECONDS + 0.1
         assert midpoint < DEBOUNCE_TO_IDLE_SECONDS
@@ -232,13 +221,11 @@ class TestUpdateTopicEmoji:
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
             mock_monotonic.return_value = 0.0
             await update_topic_emoji(bot, -100, 42, "idle", "myproject")
-            # After 5.1s — NOT enough for idle
             mock_monotonic.return_value = midpoint
             await update_topic_emoji(bot, -100, 42, "idle", "myproject")
         bot.edit_forum_topic.assert_not_called()
 
     async def test_idle_fires_after_full_debounce(self) -> None:
-        """Idle fires after 30s+ of consistent idle state."""
         bot = AsyncMock()
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
             mock_monotonic.return_value = 0.0
@@ -252,10 +239,8 @@ class TestUpdateTopicEmoji:
         )
 
     async def test_brief_pause_during_work_stays_green(self) -> None:
-        """Agent works, pauses briefly, resumes — topic stays green throughout."""
         bot = AsyncMock()
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
-            # Agent starts working — green fires after 5s
             mock_monotonic.return_value = 0.0
             await update_topic_emoji(bot, -100, 42, "active", "myproject")
             mock_monotonic.return_value = DEBOUNCE_TO_ACTIVE_SECONDS + 0.1
@@ -264,7 +249,6 @@ class TestUpdateTopicEmoji:
         bot.edit_forum_topic.reset_mock()
 
         with patch(_PATCH_MONOTONIC) as mock_monotonic:
-            # Brief idle (10s) then active again — idle never fires (needs 30s)
             mock_monotonic.return_value = 10.0
             await update_topic_emoji(bot, -100, 42, "idle", "myproject")
             mock_monotonic.return_value = 20.0
@@ -319,7 +303,6 @@ class TestTopicNamePreservation:
         bot = AsyncMock()
         await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.reset_mock()
-        # Passing emoji-prefixed version should strip to same clean name
         await _debounced_update(bot, -100, 42, "idle", f"{EMOJI_ACTIVE} myproject")
         bot.edit_forum_topic.assert_called_once_with(
             chat_id=-100,
@@ -433,7 +416,6 @@ class TestStatusPollingIntegration:
             mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "myproject")
 
     async def test_startup_window_shows_active_not_idle(self) -> None:
-        """New window with no spinner yet should show active, not idle."""
         with (
             patch("ccgram.handlers.polling_coordinator.tmux_manager") as mock_tm,
             patch("ccgram.handlers.polling_coordinator.session_manager"),

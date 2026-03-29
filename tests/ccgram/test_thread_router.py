@@ -1,5 +1,3 @@
-"""Tests for ThreadRouter pure dict operations."""
-
 import pytest
 
 from ccgram.thread_router import ThreadRouter
@@ -186,7 +184,6 @@ class TestToDictRoundtrip:
             "window_display_names": {},
         }
         router.from_dict(data)
-        # Should keep highest thread_id (2)
         assert router.get_window_for_thread(100, 2) == "@1"
         assert router.get_window_for_thread(100, 1) is None
 

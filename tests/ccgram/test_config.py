@@ -1,5 +1,3 @@
-"""Unit tests for Config — env var loading, validation, and user access."""
-
 import socket
 from pathlib import Path
 

@@ -1,5 +1,3 @@
-"""Tests for message_sender rate limiting and send-with-fallback."""
-
 import asyncio
 from unittest.mock import AsyncMock, patch
 
@@ -80,7 +78,6 @@ class TestSendWithFallback:
         result = await _send_with_fallback(bot, 123, "hello")
         assert result is sent
         bot.send_message.assert_called_once()
-        # Entity-based: should have entities param, no parse_mode
         call_kwargs = bot.send_message.call_args.kwargs
         assert "entities" in call_kwargs
         assert "parse_mode" not in call_kwargs
@@ -93,7 +90,6 @@ class TestSendWithFallback:
         result = await _send_with_fallback(bot, 123, "hello")
         assert result is sent
         assert bot.send_message.call_count == 2
-        # Fallback: no entities, no parse_mode
         fallback_kwargs = bot.send_message.call_args_list[1].kwargs
         assert "parse_mode" not in fallback_kwargs
         assert "entities" not in fallback_kwargs

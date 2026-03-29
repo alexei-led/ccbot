@@ -1,5 +1,3 @@
-"""Tests for bot.py table-driven interactive key dispatch."""
-
 import pytest
 
 from ccgram.handlers.interactive_callbacks import (

@@ -1,5 +1,3 @@
-"""Tests for topic state cleanup."""
-
 from unittest.mock import AsyncMock, patch
 
 from ccgram.handlers.cleanup import clear_topic_state

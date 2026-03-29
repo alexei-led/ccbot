@@ -1,5 +1,3 @@
-"""Tests for SessionManager pure dict operations."""
-
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -90,7 +88,6 @@ class TestResolveWindowForThread:
 
 class TestDisplayNames:
     def test_get_display_name_fallback(self, mgr: SessionManager) -> None:
-        """get_display_name returns window_id when no display name is set."""
         assert mgr.get_display_name("@99") == "@99"
 
     def test_set_and_get_display_name(self, mgr: SessionManager) -> None:
@@ -108,7 +105,6 @@ class TestDisplayNames:
 
     def test_bind_thread_without_name_no_display(self, mgr: SessionManager) -> None:
         mgr.bind_thread(100, 1, "@1")
-        # No display name set, fallback to window_id
         assert mgr.get_display_name("@1") == "@1"
 
 
@@ -436,7 +432,6 @@ class TestGlobFallbackCwdUpdate:
     ) -> None:
         from pathlib import Path
 
-        # Simulate: encoded dir "-data-code-proj" → decoded "/data/code/proj"
         projects_path = tmp_path / "projects"
         encoded_dir = projects_path / "-data-code-proj"
         encoded_dir.mkdir(parents=True)
@@ -449,7 +444,6 @@ class TestGlobFallbackCwdUpdate:
             session_id="session-abc", cwd="/wrong/path"
         )
 
-        # Mock Path.is_dir to return True for the decoded cwd
         _orig_is_dir = Path.is_dir
 
         def _mock_is_dir(self):
@@ -466,8 +460,6 @@ class TestGlobFallbackCwdUpdate:
     async def test_glob_fallback_skips_update_for_nonexistent_decoded_path(
         self, mgr: SessionManager, tmp_path, monkeypatch
     ) -> None:
-        # Use a path with hyphens — decoded cwd won't be a real directory
-        # e.g., -tmp-my-project decodes to /tmp/my/project (doesn't exist)
         projects_path = tmp_path / "projects"
         encoded_dir = projects_path / "-tmp-my-project"
         encoded_dir.mkdir(parents=True)
@@ -481,7 +473,6 @@ class TestGlobFallbackCwdUpdate:
         session = await mgr._get_session_direct("sid-456", "/wrong/path", "@2")
 
         assert session is not None
-        # cwd NOT updated because decoded path doesn't exist as directory
         assert mgr.window_states["@2"].cwd == "/wrong/path"
 
     async def test_glob_fallback_no_update_without_window_id(
@@ -495,11 +486,9 @@ class TestGlobFallbackCwdUpdate:
 
         monkeypatch.setattr("ccgram.session.config.claude_projects_path", projects_path)
 
-        # No window state before the call
         session = await mgr._get_session_direct("sid-123", "/wrong/path")
 
         assert session is not None
-        # No window state created without window_id
         assert not mgr.window_states
 
 
@@ -586,7 +575,6 @@ class TestSyncDisplayNames:
     def test_heals_stale_window_state_when_router_already_correct(
         self, mgr: SessionManager
     ) -> None:
-        # Router already has correct name, but WindowState is stale
         thread_router.window_display_names["@1"] = "new-name"
         mgr.window_states["@1"] = WindowState(window_name="old-name")
         changed = mgr.sync_display_names([("@1", "new-name")])
@@ -883,7 +871,6 @@ class TestAuditState:
 
     def test_orphaned_window(self, mgr: SessionManager) -> None:
         mgr.bind_thread(100, 1, "@1")
-        # @5 is known to ccgram (has window_state) but not bound to any topic
         mgr.window_states["@5"] = WindowState(session_id="s1", cwd="/tmp")
         result = mgr.audit_state(
             live_window_ids={"@1", "@5"},
@@ -896,7 +883,6 @@ class TestAuditState:
 
     def test_orphaned_window_ignores_unknown(self, mgr: SessionManager) -> None:
         mgr.bind_thread(100, 1, "@1")
-        # @5 is live but unknown to ccgram — must NOT be flagged
         result = mgr.audit_state(
             live_window_ids={"@1", "@5"},
             live_windows=[("@1", "proj"), ("@5", "manual-shell")],
@@ -1016,7 +1002,6 @@ class TestResolveStaleIdsPreservesDeadBindings:
         ):
             await mgr.resolve_stale_ids()
 
-        # Dead binding preserved for /restore
         assert mgr.get_window_for_thread(100, 2) == "@2"
         assert "@2" in mgr.window_states
         assert mgr.window_states["@2"].cwd == "/tmp/dead"
@@ -1041,7 +1026,6 @@ class TestResolveStaleIdsPreservesDeadBindings:
         with patch.object(tmux_manager, "list_windows", AsyncMock(return_value=[])):
             await mgr.resolve_stale_ids()
 
-        # State preserved for recovery
         assert "@1" in mgr.window_states
         assert mgr.window_states["@1"].cwd == "/my/project"
         assert mgr.window_states["@1"].provider_name == "codex"

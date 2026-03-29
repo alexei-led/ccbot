@@ -1,5 +1,3 @@
-"""Tests for telegram_sender.split_message."""
-
 import pytest
 
 from ccgram.telegram_sender import split_message

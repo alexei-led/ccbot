@@ -1,5 +1,3 @@
-"""Tests for entity_formatting: Markdown → Telegram entity-based conversion."""
-
 from telegram import MessageEntity
 from telegramify_markdown import utf16_len as _utf16_len
 
@@ -15,7 +13,6 @@ from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
 
 
 def _extract_utf16(text: str, offset: int, length: int) -> str:
-    """Extract a substring using UTF-16 code unit offsets."""
     utf16 = text.encode("utf-16-le")
     return utf16[offset * 2 : (offset + length) * 2].decode("utf-16-le")
 
@@ -29,7 +26,6 @@ class TestConvertToEntities:
     def test_bold(self) -> None:
         text, entities = convert_to_entities("**bold text**")
         assert "bold text" in text
-        # Should have a bold entity
         bold_entities = [e for e in entities if e.type == MessageEntity.BOLD]
         assert len(bold_entities) == 1
         assert (
@@ -93,7 +89,6 @@ class TestConvertToEntities:
             "Some text:\n\n    indented line\n\nMore text"
         )
         assert "indented line" in text
-        # No pre entity for indented text (stripped by _strip_indented_code_blocks)
         pre_entities = [e for e in entities if e.type == MessageEntity.PRE]
         assert len(pre_entities) == 0
 
@@ -109,10 +104,7 @@ class TestConvertToEntities:
         assert text == "Hello 🌍 world"
         bold_entities = [e for e in entities if e.type == MessageEntity.BOLD]
         assert len(bold_entities) == 1
-        # Verify the bold entity points to "world" correctly
-        # 🌍 is 2 UTF-16 code units, so offset must account for it
         ent = bold_entities[0]
-        # Extract using UTF-16 offsets: encode, slice, decode
         utf16 = text.encode("utf-16-le")
         extracted = utf16[ent.offset * 2 : (ent.offset + ent.length) * 2].decode(
             "utf-16-le"
@@ -120,7 +112,6 @@ class TestConvertToEntities:
         assert extracted == "world"
 
     def test_special_chars_no_parse_error(self) -> None:
-        """Entity-based formatting should handle special chars without errors."""
         text, entities = convert_to_entities(
             "_var_name_ and `file-path.txt` and #heading"
         )
@@ -206,9 +197,6 @@ class TestTruncateQuoteText:
 
     def test_partial_line_skipped_when_too_short(self) -> None:
         short_line = "x" * (_MIN_PARTIAL_LINE_LEN - 1)
-        # 37*100 + 44 + 19 + 38 newlines = 3801 > 3800 → triggers truncation
-        # After 37 full lines + "b"*44: total_len=3782; short_line overflows
-        # with remaining=3 < _MIN_PARTIAL_LINE_LEN → partial line skipped
         lines = ["a" * 100] * 37 + ["b" * 44, short_line]
         long_text = "\n".join(lines)
         result, truncated = _truncate_quote_text(long_text)

@@ -1,9 +1,3 @@
-"""Provider-specific tests for Codex and Gemini (JsonlProvider subclasses).
-
-Tests behavior that differs from the generic contract tests: resume syntax,
-builtin command sets, capability flags, and shared JSONL parsing edge cases.
-"""
-
 import json
 import hashlib
 import os
@@ -22,12 +16,8 @@ from ccgram.providers.codex import (
 )
 from ccgram.providers.gemini import GeminiProvider
 
-# ── Pending resolution helper ────────────────────────────────────────────
-
 
 class TestResolvePending:
-    """Unit tests for the shared _resolve_pending helper."""
-
     @pytest.mark.parametrize(
         "pending_value, expected",
         [
@@ -58,8 +48,6 @@ class TestResolvePending:
         assert _resolve_pending(42, pending) == (None, None)
 
 
-# ── Shared hookless-provider tests (parametrized) ────────────────────────
-
 HOOKLESS_PROVIDERS = [CodexProvider, GeminiProvider]
 
 
@@ -84,9 +72,6 @@ class TestHooklessCapabilities:
         assert hookless.make_launch_args(resume_id="session_42")
 
 
-# ── Codex-specific ───────────────────────────────────────────────────────
-
-
 class TestCodexLaunchArgs:
     def test_resume_uses_subcommand(self) -> None:
         codex = CodexProvider()
@@ -97,9 +82,6 @@ class TestCodexLaunchArgs:
         codex = CodexProvider()
         result = codex.make_launch_args(use_continue=True)
         assert result == "resume --last"
-
-
-# ── Gemini-specific ──────────────────────────────────────────────────────
 
 
 class TestGeminiLaunchArgs:
@@ -117,9 +99,6 @@ class TestGeminiLaunchArgs:
         gemini = GeminiProvider()
         result = gemini.make_launch_args(use_continue=True)
         assert result == "--resume latest"
-
-
-# ── Codex transcript parsing ────────────────────────────────────────────
 
 
 class TestCodexTranscriptParsing:
@@ -231,7 +210,6 @@ class TestCodexTranscriptParsing:
         assert len(messages) == 1
         assert messages[0].content_type == "tool_result"
         assert messages[0].tool_use_id == "fc1"
-        # exec_command output always gets stats + expandable quote
         assert "1 lines" in messages[0].text
         assert "fc1" not in pending
 
@@ -322,8 +300,6 @@ class TestCodexTranscriptParsing:
 
 
 class TestFormatCodexToolResult:
-    """Unit tests for _format_codex_tool_result: stats, quotes, and apply_patch."""
-
     @pytest.mark.parametrize(
         "tool_name, text, expect_quote",
         [
@@ -380,8 +356,6 @@ class TestFormatCodexToolResult:
 
 
 class TestCodexCustomToolCall:
-    """Tests for custom_tool_call and custom_tool_call_output parsing."""
-
     def test_apply_patch_counts_update_files(self) -> None:
         codex = CodexProvider()
         entries = [
@@ -482,8 +456,6 @@ class TestCodexCustomToolCall:
 
 
 class TestCustomToolCallOutput:
-    """Tests for custom_tool_call_output parsing and formatting."""
-
     def test_apply_patch_output_extracted(self) -> None:
         codex = CodexProvider()
         entries = [
@@ -588,8 +560,6 @@ class TestCustomToolCallOutput:
 
 
 class TestCodexToolCallIntegration:
-    """Integration tests: full transcript flows through parse_transcript_entries."""
-
     def test_function_call_then_output_shell_formatted(self) -> None:
 
         codex = CodexProvider()
@@ -782,9 +752,6 @@ class TestCodexTerminalStatus:
         assert status is None
 
 
-# ── Gemini transcript parsing ───────────────────────────────────────────
-
-
 class TestGeminiTranscriptParsing:
     def test_parses_gemini_message(self) -> None:
         gemini = GeminiProvider()
@@ -890,8 +857,6 @@ class TestGeminiTranscriptParsing:
 
 
 class TestGeminiTerminalStatus:
-    """Gemini CLI interactive UI detection via parse_terminal_status."""
-
     SHELL_PERMISSION_PANE = (
         "some previous output\n"
         "\n"
@@ -1020,8 +985,6 @@ class TestGeminiTerminalStatus:
 
 
 class TestGeminiPaneTitleStatus:
-    """Gemini CLI pane-title-based state detection."""
-
     def test_working_title_returns_working_status(self) -> None:
         gemini = GeminiProvider()
         status = gemini.parse_terminal_status("some output", pane_title="Working: ✦")
@@ -1109,9 +1072,6 @@ class TestGeminiCommandDiscovery:
         assert discovered.source == "command"
 
 
-# ── JSONL parsing edge cases (extract_content_blocks) ────────────────────
-
-
 class TestParseJsonlLine:
     def test_json_array_returns_none(self) -> None:
         assert parse_jsonl_line("[1, 2, 3]") is None
@@ -1160,9 +1120,6 @@ class TestExtractContentBlocks:
         pending = {"t1": "Read"}
         _, _, result = extract_content_blocks(blocks, pending)
         assert result == {"t1": "Read"}
-
-
-# ── Gemini whole-file transcript reading ─────────────────────────────────
 
 
 _SAMPLE_GEMINI_TRANSCRIPT: dict = {
@@ -1282,11 +1239,9 @@ class TestGeminiMtimeCache:
         f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
         gemini = GeminiProvider()
 
-        # First read populates cache
         entries1, _ = gemini.read_transcript_file(str(f), 0)
         assert len(entries1) == 4
 
-        # Patch json.load to prove second read uses cache, not file
         with patch(
             "ccgram.providers.gemini.json.load",
             side_effect=AssertionError("should not be called"),
@@ -1306,16 +1261,12 @@ class TestGeminiMtimeCache:
         assert len(entries1) == 2
         assert offset1 == 2
 
-        # Overwrite with more messages — size and mtime both change
         data["messages"] = list(_SAMPLE_GEMINI_TRANSCRIPT["messages"])
         f.write_text(json.dumps(data))
 
         entries2, offset2 = gemini.read_transcript_file(str(f), 2)
         assert len(entries2) == 2
         assert offset2 == 4
-
-
-# ── Codex transcript discovery ─────────────────────────────────────────
 
 
 def _write_gemini_session(
@@ -1325,7 +1276,6 @@ def _write_gemini_session(
     session_name: str,
     session_id: str,
 ) -> Path:
-    """Write a minimal Gemini transcript and return its path."""
     chats_dir = tmp_dir / ".gemini" / "tmp" / project_key / "chats"
     chats_dir.mkdir(parents=True, exist_ok=True)
     fpath = chats_dir / f"{session_name}.json"
@@ -1343,7 +1293,6 @@ def _write_gemini_session(
 def _write_codex_session(
     sessions_dir: Path, date_parts: str, name: str, session_id: str, cwd: str
 ) -> Path:
-    """Write a minimal Codex transcript file and return its path."""
     day_dir = sessions_dir / date_parts
     day_dir.mkdir(parents=True, exist_ok=True)
     fpath = day_dir / f"{name}.jsonl"
@@ -1389,12 +1338,10 @@ class TestCodexDiscoverTranscript:
         old = _write_codex_session(
             sessions_dir, "2026/03/01", "old", "uuid-old", "/my/project"
         )
-        # Ensure mtime ordering
         time.sleep(0.05)
         _write_codex_session(
             sessions_dir, "2026/03/02", "new", "uuid-new", "/my/project"
         )
-        # Make old file explicitly older
         os.utime(old, (old.stat().st_mtime - 100, old.stat().st_mtime - 100))
 
         codex = CodexProvider()
@@ -1619,8 +1566,6 @@ class TestHooklessDiscoverTranscriptDefault:
 
 
 class TestDiscoverTranscriptContract:
-    """Contract test: discover_transcript exists on all providers and returns correctly."""
-
     @pytest.mark.parametrize(
         "provider_cls",
         [CodexProvider, GeminiProvider],

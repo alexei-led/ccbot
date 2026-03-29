@@ -1,5 +1,3 @@
-"""Unit tests for tool call batching in message queue."""
-
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,8 +26,6 @@ from ccgram.session import (
     SessionManager,
     WindowState,
 )
-
-# --- format_batch_message tests ---
 
 
 class TestFormatBatchMessage:
@@ -118,9 +114,6 @@ class TestFormatBatchMessage:
         assert "2 subagents" in header
 
 
-# --- _is_batch_eligible tests ---
-
-
 class TestIsBatchEligible:
     @pytest.mark.parametrize("content_type", ["tool_use", "tool_result"])
     def test_tool_types_eligible(self, content_type: str) -> None:
@@ -139,9 +132,6 @@ class TestIsBatchEligible:
     def test_status_clear_not_eligible(self) -> None:
         task = MessageTask(task_type="status_clear", text="clear")
         assert _is_batch_eligible(task) is False
-
-
-# --- Batch data structure tests ---
 
 
 class TestBatchDataStructures:
@@ -167,9 +157,6 @@ class TestBatchDataStructures:
     def test_constants(self) -> None:
         assert BATCH_MAX_ENTRIES == 10
         assert BATCH_MAX_LENGTH == 2800
-
-
-# --- WindowState batch_mode serialization ---
 
 
 class TestWindowStateBatchMode:
@@ -205,9 +192,6 @@ class TestWindowStateBatchMode:
     def test_roundtrip(self, mode: str) -> None:
         ws = WindowState(session_id="s1", cwd="/tmp", batch_mode=mode)
         assert WindowState.from_dict(ws.to_dict()).batch_mode == mode
-
-
-# --- SessionManager batch mode methods ---
 
 
 @pytest.fixture
@@ -260,9 +244,6 @@ class TestSessionManagerBatchMode:
         state = mgr.get_window_state("@0")
         state.batch_mode = "garbage"
         assert mgr.get_batch_mode("@0") == "batched"
-
-
-# --- _process_batch_task tests ---
 
 
 @pytest.fixture(autouse=True)
@@ -432,9 +413,7 @@ class TestProcessBatchTask:
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        # Create a batch with tu1
         await _process_batch_task(bot, 1, _make_tool_use(tool_use_id="tu1"))
-        # Send result for a different tool_use_id
         await _process_batch_task(bot, 1, _make_tool_result(tool_use_id="tu_unknown"))
         mock_flush.assert_awaited_once()
         mock_process.assert_awaited_once()
@@ -455,9 +434,7 @@ class TestProcessBatchTask:
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        # Create batch for @0
         await _process_batch_task(bot, 1, _make_tool_use(window_id="@0"))
-        # New tool_use for @1 should flush @0's batch
         await _process_batch_task(
             bot, 1, _make_tool_use(window_id="@1", tool_use_id="tu2")
         )
@@ -478,14 +455,12 @@ class TestProcessBatchTask:
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        # Fill batch to BATCH_MAX_ENTRIES + 1 (triggers split at BATCH_MAX_ENTRIES)
         for i in range(BATCH_MAX_ENTRIES + 1):
             await _process_batch_task(
                 bot, 1, _make_tool_use(tool_use_id=f"tu{i}", text=f"Tool {i}")
             )
 
         batch = _active_batches[(1, 10)]
-        # Split happened at entry BATCH_MAX_ENTRIES-1, new batch got 2 entries
         assert len(batch.entries) == 2
         assert batch.entries[0].tool_use_id == f"tu{BATCH_MAX_ENTRIES - 1}"
         assert batch.entries[1].tool_use_id == f"tu{BATCH_MAX_ENTRIES}"
@@ -530,9 +505,6 @@ class TestProcessBatchTask:
             bot, 1, _make_tool_use(tool_use_id="tu2", text="Edit b.py")
         )
         bot.edit_message_text.assert_awaited()  # Second tool_use edits
-
-
-# --- _handle_content_task integration tests ---
 
 
 class TestHandleContentTask:
@@ -637,7 +609,6 @@ class TestHandleContentTask:
             parts=["Hello"],
         )
         await _handle_content_task(bot, 1, task, queue, lock)
-        # No flush called since no active batch
         mock_process.assert_awaited_once()
 
     @patch("ccgram.handlers.message_queue.session_manager")
@@ -655,7 +626,6 @@ class TestHandleContentTask:
             window_id=None,
             parts=["Read x"],
         )
-        # Should NOT route to batch (window_id is None)
         with patch(
             "ccgram.handlers.message_queue._process_content_task",
             new_callable=AsyncMock,
@@ -663,9 +633,6 @@ class TestHandleContentTask:
             await _handle_content_task(bot, 1, task, queue, lock)
             mock_process.assert_awaited_once()
             mock_batch.assert_not_awaited()
-
-
-# --- _flush_batch tests ---
 
 
 class TestFlushBatch:
@@ -757,14 +724,9 @@ class TestFlushBatch:
         )
 
         bot = AsyncMock()
-        # First edit (entity) fails, fallback to plain text also fails
         bot.edit_message_text.side_effect = TelegramError("bad markup")
         await _flush_batch(bot, 1, 0)
-        # Should not raise, batch still cleaned up
         assert (1, 0) not in _active_batches
-
-
-# --- Batch isolation tests ---
 
 
 class TestBatchIsolation:
@@ -796,9 +758,6 @@ class TestBatchIsolation:
         assert len(_active_batches[(1, 20)].entries) == 1
 
 
-# --- shutdown_workers test ---
-
-
 class TestShutdownClearsBatches:
     async def test_shutdown_clears_active_batches(self) -> None:
         await shutdown_workers()  # ensure clean state from previous tests
@@ -806,9 +765,6 @@ class TestShutdownClearsBatches:
         _active_batches[(2, 5)] = ToolBatch(window_id="@1", thread_id=5)
         await shutdown_workers()
         assert len(_active_batches) == 0
-
-
-# --- RetryAfter queue behavior ---
 
 
 class TestQueueWorkerRetryAfter:
@@ -838,9 +794,6 @@ class TestQueueWorkerRetryAfter:
             await shutdown_workers()
 
 
-# --- C1 fix: tool_result not silently dropped ---
-
-
 class TestToolResultNotDropped:
     @patch("ccgram.handlers.message_queue.thread_router")
     @patch("ccgram.handlers.message_queue.rate_limit_send_message")
@@ -854,7 +807,6 @@ class TestToolResultNotDropped:
     async def test_tool_result_no_active_batch_falls_through(
         self, mock_process, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
-        """tool_result with no active batch should be sent as standalone."""
         mock_tr.resolve_chat_id.return_value = 42
         bot = AsyncMock()
         task = _make_tool_result(tool_use_id="tu1", text="result text")
@@ -873,25 +825,18 @@ class TestToolResultNotDropped:
     async def test_tool_result_none_tool_use_id_falls_through(
         self, mock_process, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
-        """tool_result with tool_use_id=None should be sent as standalone."""
         mock_tr.resolve_chat_id.return_value = 42
         sent_msg = MagicMock()
         sent_msg.message_id = 100
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        # Create a batch so we can verify the None tool_use_id path
         await _process_batch_task(bot, 1, _make_tool_use(tool_use_id="tu1"))
-        # Now send tool_result with None tool_use_id
         task = _make_tool_result(tool_use_id=None, text="result text")
         await _process_batch_task(bot, 1, task)
         mock_process.assert_awaited_once_with(bot, 1, task)
-        # Existing batch should survive intact
         assert (1, 10) in _active_batches
         assert len(_active_batches[(1, 10)].entries) == 1
-
-
-# --- C2 fix: batch length overflow ---
 
 
 class TestBatchLengthOverflow:
@@ -904,16 +849,12 @@ class TestBatchLengthOverflow:
     async def test_overflow_on_length(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
-        """Batch should split when total_length exceeds BATCH_MAX_LENGTH."""
         mock_tr.resolve_chat_id.return_value = 42
         sent_msg = MagicMock()
         sent_msg.message_id = 100
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        # Each entry 500 chars. BATCH_MAX_LENGTH=2800, so overflow triggers when
-        # total_length > 2800 (after 6th entry: 3000 > 2800). Entries 7 and 8
-        # cause a second split. Final batch has entries from the last split.
         long_text = "x" * 500
         for i in range(8):
             await _process_batch_task(
@@ -922,11 +863,7 @@ class TestBatchLengthOverflow:
 
         batch = _active_batches[(1, 10)]
         assert batch.total_length <= BATCH_MAX_LENGTH
-        # Verify the LENGTH path triggered (not ENTRIES — 8 < BATCH_MAX_ENTRIES=10)
         assert len(batch.entries) < 8
-
-
-# --- W1 fix: topic cleanup clears batches ---
 
 
 class TestTopicCleanupClearsBatch:
@@ -944,16 +881,12 @@ class TestTopicCleanupClearsBatch:
         assert (1, 0) not in _active_batches
 
 
-# --- W2 fix: flush attempts send when telegram_msg_id is None ---
-
-
 class TestFlushSendFallback:
     @patch("ccgram.handlers.message_queue.thread_router")
     @patch("ccgram.handlers.message_queue.rate_limit_send_message")
     async def test_flush_sends_when_no_telegram_msg_id(
         self, mock_send, mock_tr
     ) -> None:
-        """Flush should attempt one send if first send failed (telegram_msg_id=None)."""
         mock_tr.resolve_chat_id.return_value = 42
         _active_batches[(1, 0)] = ToolBatch(
             window_id="@0",
@@ -965,13 +898,9 @@ class TestFlushSendFallback:
         bot = AsyncMock()
         await _flush_batch(bot, 1, 0)
         mock_send.assert_awaited_once()
-        # Verify batch text content was passed to send
         send_args = mock_send.call_args
         assert "Read x" in send_args.args[2]
         assert (1, 0) not in _active_batches
-
-
-# --- Defensive else branch ---
 
 
 class TestDefensiveElseBranch:
@@ -982,7 +911,6 @@ class TestDefensiveElseBranch:
     async def test_unexpected_content_type_routes_to_normal(
         self, mock_process, mock_tr
     ) -> None:
-        """content_type='text' through _process_batch_task should route to normal."""
         mock_tr.resolve_chat_id.return_value = 42
         bot = AsyncMock()
         task = MessageTask(
@@ -994,9 +922,6 @@ class TestDefensiveElseBranch:
         )
         await _process_batch_task(bot, 1, task)
         mock_process.assert_awaited_once_with(bot, 1, task)
-
-
-# --- Different users same thread isolation ---
 
 
 class TestDifferentUsersIsolation:

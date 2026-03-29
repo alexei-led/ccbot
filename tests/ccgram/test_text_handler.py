@@ -1,5 +1,3 @@
-"""Tests for text_handler step functions (TASK-024)."""
-
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -434,7 +432,6 @@ class TestForwardMessage:
 
         await _forward_message("@0", 100, 42, "!ls -la", bot, message)
 
-        # A task should have been created (asyncio.create_task was called)
         from ccgram.handlers.text_handler import _bash_capture_tasks
 
         key = (100, 42)
@@ -504,7 +501,6 @@ class TestBashCaptureCleanup:
             patch(f"{_TH}.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = 999
-            # capture_pane returns None → early return in first iteration
             mock_tm.capture_pane = AsyncMock(return_value=None)
 
             task = asyncio.create_task(
@@ -536,17 +532,11 @@ class TestBashCaptureCleanup:
             _bash_capture_tasks[key] = task
             await asyncio.sleep(0)
             task.cancel()
-            # CancelledError is caught inside _capture_bash_output
             await task
 
         assert key not in _bash_capture_tasks
 
     async def test_identity_check_preserves_replacement_task(self) -> None:
-        """Verify that Task A's finally block does not evict Task B.
-
-        Race scenario: Task A is cancelled, Task B replaces it in the dict
-        before A's finally runs. A's identity check must NOT pop B.
-        """
         from ccgram.handlers.text_handler import (
             _bash_capture_tasks,
             _capture_bash_output,
@@ -568,11 +558,9 @@ class TestBashCaptureCleanup:
             _bash_capture_tasks[key] = task_a
             await asyncio.sleep(0)
 
-            # Simulate _forward_message replacing Task A with Task B
             task_a.cancel()
             _bash_capture_tasks[key] = sentinel  # Task B
 
             await task_a  # A's finally runs
 
-        # Task B must NOT have been evicted
         assert _bash_capture_tasks.get(key) is sentinel

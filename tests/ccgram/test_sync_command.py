@@ -1,5 +1,3 @@
-"""Tests for /sync command — state audit and cleanup."""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -334,7 +332,6 @@ class TestSyncFix:
             ),
             AuditResult(issues=[], total_bindings=0, live_binding_count=0),
         ]
-        # Falls back to user_id — no group chat stored
         mock_tr.resolve_chat_id.return_value = 100
 
         query = MagicMock()
@@ -347,7 +344,6 @@ class TestSyncFix:
         ):
             await handle_sync_fix(query)
             mock_bot.close_forum_topic.assert_not_called()
-            # Still unbinds and cleans up state
             mock_cleanup.assert_called_once_with(100, 42, bot=mock_bot, window_id="@7")
             mock_tr.unbind_thread.assert_called_once_with(100, 42)
 
@@ -417,7 +413,6 @@ class TestDeadTopicDetection:
         mock_tr.resolve_chat_id.return_value = -999
 
         mock_bot = AsyncMock()
-        # send_message succeeds — topic is alive; returns a message to delete
         mock_bot.send_message.return_value = MagicMock(message_id=999)
 
         issues = await _probe_dead_topics(mock_bot)
@@ -437,7 +432,6 @@ class TestDeadTopicDetection:
     async def test_probe_skips_bindings_without_group_chat(self, _patch_deps) -> None:
         _, mock_tr, _, _ = _patch_deps
         mock_tr.iter_thread_bindings.return_value = [(100, 42, "@2")]
-        # resolve_chat_id falls back to user_id — no group chat
         mock_tr.resolve_chat_id.return_value = 100
 
         mock_bot = AsyncMock()
@@ -514,7 +508,6 @@ class TestDeadTopicRecreation:
             count = await _recreate_dead_topics(mock_bot, issues)
             assert count == 0
             mock_tr.unbind_thread.assert_called_once_with(100, 42)
-            # Binding restored on failure so window isn't orphaned
             mock_tr.bind_thread.assert_called_once_with(
                 100, 42, "@2", window_name="proj"
             )
@@ -571,7 +564,6 @@ class TestSyncFixDeadTopic:
             AuditResult(issues=[], total_bindings=1, live_binding_count=1),
             AuditResult(issues=[], total_bindings=1, live_binding_count=1),
         ]
-        # First probe finds dead topic, second probe (post-fix) finds none
         mock_tr.iter_thread_bindings.side_effect = [
             [(100, 42, "@2")],  # pre-audit probe
             [],  # prune_stale_offsets
@@ -587,7 +579,6 @@ class TestSyncFixDeadTopic:
         mock_bot = AsyncMock()
         mock_bot.send_message.side_effect = [
             BadRequest("Message thread not found"),  # pre-audit
-            # post-fix probe: no bindings, so not called
         ]
         query.get_bot.return_value = mock_bot
 

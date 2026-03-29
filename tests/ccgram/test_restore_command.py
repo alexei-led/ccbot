@@ -1,5 +1,3 @@
-"""Tests for /restore command — dead topic auto-recovery."""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,7 +25,6 @@ def _patch_deps():
             return_value=(True, "Created window", "my-project", "@10")
         )
 
-        # Provider mock
         caps = MagicMock()
         caps.name = "claude"
         caps.supports_hook = True
@@ -145,20 +142,16 @@ class TestRestoreCommand:
         with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
             await restore_command(update, context)
 
-            # Unbinds old, clears dead notification
             mock_tr.unbind_thread.assert_called_once_with(100, 42)
             mock_cdn.assert_called_once_with(100, 42)
 
-            # Creates window with --continue
             mock_tm.create_window.assert_called_once()
             call_kwargs = mock_tm.create_window.call_args
             assert call_kwargs[1]["agent_args"] == "--continue"
 
-            # Binds new window
             mock_tr.bind_thread.assert_called_once()
             mock_tr.set_group_chat_id.assert_called_once_with(100, 42, -100999)
 
-            # Success message
             mock_reply.assert_called_once()
             text = mock_reply.call_args[0][1]
             assert "\u2705" in text
@@ -180,5 +173,4 @@ class TestRestoreCommand:
             text = mock_reply.call_args[0][1]
             assert "\u274c" in text
             assert "tmux error" in text
-            # Should not bind on failure
             mock_tr.bind_thread.assert_not_called()

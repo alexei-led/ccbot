@@ -1,5 +1,3 @@
-"""Tests for provider auto-detection from tmux pane commands."""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -50,7 +48,6 @@ class TestDetectProviderFromCommand:
         assert detect_provider_from_command("") == ""
 
     def test_priority_order_first_match(self) -> None:
-        # "claude" is checked first, so "claude-codex" matches "claude"
         assert detect_provider_from_command("claude-codex") == "claude"
 
 

@@ -1,5 +1,3 @@
-"""Tests for Claude Code session tracking hook."""
-
 import io
 import json
 import shlex
@@ -173,7 +171,6 @@ class TestInstallMultipleEvents:
             hook_config = settings["hooks"][event_type][0]["hooks"][0]
             assert hook_config.get("async") is True
 
-        # SessionStart should NOT have async
         session_hook = settings["hooks"]["SessionStart"][0]["hooks"][0]
         assert "async" not in session_hook
 
@@ -185,7 +182,6 @@ class TestInstallMultipleEvents:
         _install_hook()  # Second install
 
         settings = json.loads(settings_file.read_text())
-        # Each event type should have exactly one ccgram hook entry
         for event_type in settings["hooks"]:
             entries = settings["hooks"][event_type]
             ccgram_hooks = [
@@ -206,12 +202,10 @@ class TestUninstallMultipleEvents:
         settings_file = tmp_path / "settings.json"
         monkeypatch.setattr("ccgram.hook._claude_settings_file", lambda: settings_file)
 
-        # Install first
         _install_hook()
         settings = json.loads(settings_file.read_text())
         assert all(get_installed_events(settings).values())
 
-        # Uninstall
         result = _uninstall_hook()
         assert result == 0
 
@@ -399,9 +393,7 @@ class TestHookMainValidation:
                 tmux_pane="%0",
             )
 
-        # Stop events should NOT write session_map
         assert not (tmp_path / "session_map.json").exists()
-        # But SHOULD write to events.jsonl
         events_file = tmp_path / "events.jsonl"
         assert events_file.exists()
         event = json.loads(events_file.read_text().strip())
@@ -557,8 +549,6 @@ class TestUninstallHook:
 
 
 class TestTabDelimitedParsing:
-    """Verify tab-delimited tmux format parsing handles colons in names."""
-
     _VALID_PAYLOAD = {
         "session_id": "550e8400-e29b-41d4-a716-446655440000",
         "cwd": "/tmp/proj",
@@ -619,7 +609,6 @@ class TestTabDelimitedParsing:
 
 class TestHookStatus:
     def _all_events_settings(self) -> dict:
-        """Build settings with ccgram hook installed for all event types."""
         from ccgram.hook import _HOOK_EVENT_TYPES
 
         hooks: dict = {}

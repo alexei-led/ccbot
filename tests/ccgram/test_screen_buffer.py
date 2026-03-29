@@ -1,5 +1,3 @@
-"""Tests for screen_buffer — pyte-based VT100 screen rendering."""
-
 from ccgram.screen_buffer import ScreenBuffer
 
 
@@ -138,8 +136,6 @@ class TestSequentialFeeds:
 
 
 class TestRealWorldCapture:
-    """Test with content resembling real Claude Code terminal output."""
-
     def test_claude_status_with_ansi(self):
         sep = "─" * 30
         raw = (

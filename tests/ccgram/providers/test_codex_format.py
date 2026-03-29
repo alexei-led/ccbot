@@ -1,12 +1,9 @@
-"""Tests for interactive prompt text formatting."""
-
 import pytest
 
 from ccgram.providers.codex_format import format_codex_interactive_prompt
 
 
 def _make_edit_prompt(diff_lines: list[str]) -> str:
-    """Build a minimal edit prompt with given diff lines."""
     return (
         "Do you want to make this edit to foo.py?\n"
         + "\n".join(diff_lines)

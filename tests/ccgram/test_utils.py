@@ -1,5 +1,3 @@
-"""Tests for ccgram.utils: ccgram_dir, atomic_write_json, read_cwd_from_jsonl, read_session_metadata_from_jsonl, log_throttled, assert_sendable, handle_general_topic_message, is_general_topic."""
-
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -498,10 +496,8 @@ class TestHandleGeneralTopicMessage:
         yield
         _general_topic_pin_cache.clear()
 
-    @pytest.mark.asyncio
     async def test_first_message_sends_hint_and_pins(self) -> None:
         bot = AsyncMock()
-        # No existing pinned message
         chat_info = MagicMock()
         chat_info.pinned_message = None
         bot.get_chat = AsyncMock(return_value=chat_info)
@@ -517,7 +513,6 @@ class TestHandleGeneralTopicMessage:
         hint_msg.pin.assert_called_once_with(disable_notification=True)
         assert _general_topic_pin_cache[123] is True
 
-    @pytest.mark.asyncio
     async def test_subsequent_message_reacts_only(self) -> None:
         _general_topic_pin_cache[123] = True
 
@@ -529,7 +524,6 @@ class TestHandleGeneralTopicMessage:
         message.set_reaction.assert_called_once_with("\U0001f914")
         message.reply_text.assert_not_called()
 
-    @pytest.mark.asyncio
     async def test_detects_existing_pinned_bot_message(self) -> None:
         bot = AsyncMock()
         bot.id = 999
@@ -543,12 +537,10 @@ class TestHandleGeneralTopicMessage:
 
         await handle_general_topic_message(bot, message, chat_id=456)
 
-        # Should detect pinned message and react instead of re-pinning
         message.set_reaction.assert_called_once_with("\U0001f914")
         message.reply_text.assert_not_called()
         assert _general_topic_pin_cache[456] is True
 
-    @pytest.mark.asyncio
     async def test_ignores_pinned_message_from_other_bot(self) -> None:
         bot = AsyncMock()
         bot.id = 999
@@ -564,11 +556,9 @@ class TestHandleGeneralTopicMessage:
 
         await handle_general_topic_message(bot, message, chat_id=456)
 
-        # Should send hint since pinned message is from a different bot
         message.reply_text.assert_called_once()
         hint_msg.pin.assert_called_once_with(disable_notification=True)
 
-    @pytest.mark.asyncio
     async def test_pin_failure_does_not_crash_and_caches(self) -> None:
         from telegram.error import TelegramError
 
@@ -582,12 +572,9 @@ class TestHandleGeneralTopicMessage:
         hint_msg.pin = AsyncMock(side_effect=TelegramError("no rights"))
         message.reply_text = AsyncMock(return_value=hint_msg)
 
-        # Should not raise
         await handle_general_topic_message(bot, message, chat_id=789)
-        # Cache should be set even though pin failed (one-shot guarantee)
         assert _general_topic_pin_cache[789] is True
 
-    @pytest.mark.asyncio
     async def test_react_failure_does_not_crash(self) -> None:
         from telegram.error import TelegramError
 
@@ -596,7 +583,6 @@ class TestHandleGeneralTopicMessage:
         message = AsyncMock()
         message.set_reaction = AsyncMock(side_effect=TelegramError("forbidden"))
 
-        # Should not raise
         await handle_general_topic_message(bot, message, chat_id=123)
 
 

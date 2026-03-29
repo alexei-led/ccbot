@@ -1,5 +1,3 @@
-"""Tests for shell output capture and relay."""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -140,9 +138,6 @@ class TestRelayOutputBackticks:
             await _relay_output(bot, -100, 42, "   \n  \n  ")
 
         mock_send.assert_not_called()
-
-
-# ── Passive shell output monitoring tests ──────────────────────────────
 
 
 class TestFindCommandEcho:
@@ -355,7 +350,6 @@ class TestCheckPassiveShellOutput:
             mock_sm.resolve_chat_id.return_value = -100
             await check_passive_shell_output(bot, 1, 42, "@0", pane)
 
-        # Second call with same content — should not relay again
         with (
             patch(
                 f"{_MOD}.rate_limit_send_message", new_callable=AsyncMock
@@ -461,7 +455,6 @@ class TestCheckPassiveShellOutput:
 
     @pytest.mark.asyncio()
     async def test_long_output_with_scrollback(self) -> None:
-        """Command echo scrolled off visible pane — scrollback finds it."""
         from ccgram.handlers.shell_capture import (
             _shell_monitor_state,
             check_passive_shell_output,
@@ -471,9 +464,7 @@ class TestCheckPassiveShellOutput:
         mock_sent = MagicMock()
         mock_sent.message_id = 88
 
-        # Visible pane: only output tail + bare prompt (echo scrolled off)
         visible = "\n".join([f"file{i}.txt" for i in range(20)] + ["ccgram:0❯"])
-        # Scrollback: includes the command echo at the top
         scrollback = "ccgram:0❯ ls -al\n" + visible
 
         with (
@@ -532,7 +523,6 @@ class TestClearShellMonitorState:
 class TestPassiveEdgeCases:
     @pytest.mark.asyncio()
     async def test_same_command_rerun_creates_new_message(self) -> None:
-        """Running `ls` twice should relay both — different echo_index."""
         from ccgram.handlers.shell_capture import (
             _shell_monitor_state,
             check_passive_shell_output,
@@ -544,7 +534,6 @@ class TestPassiveEdgeCases:
         mock_sent2 = MagicMock()
         mock_sent2.message_id = 61
 
-        # First ls at line 0
         pane1 = "ccgram:0❯ ls\nfile.txt\nccgram:0❯"
         with (
             patch(
@@ -564,7 +553,6 @@ class TestPassiveEdgeCases:
 
         assert _shell_monitor_state["@0"].msg_id == 60
 
-        # Second ls — same text but at a different line index (scrolled down)
         pane2 = "ccgram:0❯ ls\nfile.txt\nccgram:0❯ ls\nfile.txt\nccgram:0❯"
         with (
             patch(
@@ -582,12 +570,10 @@ class TestPassiveEdgeCases:
             mock_sm2.resolve_chat_id.return_value = -100
             await check_passive_shell_output(bot, 1, 42, "@0", pane2)
 
-        # Should have reset to a new message (different echo_index)
         assert _shell_monitor_state["@0"].msg_id == 61
 
     @pytest.mark.asyncio()
     async def test_scroll_out_preserves_in_progress(self) -> None:
-        """Marker scrolling out of tail should not reset in-progress state."""
         from ccgram.handlers.shell_capture import (
             _ShellMonitorState,
             _shell_monitor_state,
@@ -596,7 +582,6 @@ class TestPassiveEdgeCases:
 
         bot = AsyncMock(spec=Bot)
 
-        # Simulate in-progress tracking (command was detected earlier)
         _shell_monitor_state["@0"] = _ShellMonitorState(
             last_command_echo="ccgram:0❯ long-cmd",
             last_echo_index=0,
@@ -604,13 +589,11 @@ class TestPassiveEdgeCases:
             last_output="partial",
         )
 
-        # Pane with no markers in tail (scrolled out) — should preserve state
         no_marker_pane = "\n".join([f"output line {i}" for i in range(20)])
         with patch(f"{_MOD}.thread_router") as mock_sm:
             mock_sm.resolve_chat_id.return_value = -100
             await check_passive_shell_output(bot, 1, 42, "@0", no_marker_pane)
 
-        # State should be preserved, not reset
         state = _shell_monitor_state["@0"]
         assert state.last_command_echo == "ccgram:0❯ long-cmd"
         assert state.msg_id == 70
@@ -666,8 +649,6 @@ class TestHasMarkersInTail:
 
 @pytest.mark.usefixtures("_clean_monitor_state")
 class TestPassiveRelayFormatting:
-    """Test that passive output includes the command header."""
-
     @pytest.mark.asyncio()
     async def test_output_includes_command_header(self) -> None:
         from ccgram.handlers.shell_capture import check_passive_shell_output
@@ -1044,9 +1025,6 @@ class TestMaybeSuggestFix:
             )
 
         mock_send.assert_not_called()
-
-
-# ── Wrap-mode tests ──────────────────────────────────────────────────────
 
 
 @pytest.mark.usefixtures("_wrap_mode")

@@ -1,5 +1,3 @@
-"""Tests for dead window detection and recovery UI (TASK-009 + TASK-010)."""
-
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
