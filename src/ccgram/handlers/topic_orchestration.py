@@ -87,7 +87,7 @@ def _collect_target_chats(window_id: str) -> set[int]:
     seen_chats: set[int] = set()
     for user_id, thread_id, _ in thread_router.iter_thread_bindings():
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-        if chat_id != user_id:
+        if isinstance(chat_id, int) and chat_id < 0:
             seen_chats.add(chat_id)
 
     if not seen_chats:
@@ -99,7 +99,7 @@ def _collect_target_chats(window_id: str) -> set[int]:
         if config.group_id:
             seen_chats.add(config.group_id)
             logger.info(
-                "Cold-start: using CCBOT_GROUP_ID=%d for auto-topic (window %s)",
+                "Cold-start: using CCGRAM_GROUP_ID=%d for auto-topic (window %s)",
                 config.group_id,
                 window_id,
             )

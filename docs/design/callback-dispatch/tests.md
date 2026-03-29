@@ -7,8 +7,7 @@
 - **test_register_preserves_function**: Register handler, retrieve from registry. Expected: same function object (decorator is transparent).
 - **test_dispatch_matches_prefix**: Register handler for "dir:", dispatch callback with data="dir:select:/home". Expected: handler called.
 - **test_dispatch_longest_prefix_match**: Register "sc:" and "sc:status:". Dispatch "sc:status:refresh". Expected: "sc:status:" handler called (longest match).
-- **test_dispatch_no_match**: Dispatch callback with data="unknown:foo". Expected: query answered with "unknown" feedback, no handler called.
-- **test_dispatch_noop**: Dispatch callback with data="noop". Expected: `answer_callback_query()` called, no handler invoked.
+- **test_dispatch_no_match**: Dispatch callback with data="unknown:foo". Expected: returns silently (no crash), no handler called.
 - **test_load_handlers_imports_modules**: Call `load_handlers()`. Expected: all callback-bearing handler modules imported (verify via registry population count).
 - **test_load_handlers_idempotent**: Call `load_handlers()` twice. Expected: no duplicate registrations, same handler count.
 
@@ -25,8 +24,8 @@
 - **test_empty_callback_data**: Dispatch callback with data="". Expected: no match, handled gracefully.
 - **test_none_callback_data**: Dispatch callback with data=None. Expected: handled gracefully, no crash.
 - **test_very_long_callback_data**: Dispatch with 64-byte callback data string. Expected: prefix matching works correctly.
-- **test_handler_raises_exception**: Registered handler raises `ValueError`. Expected: exception caught, `answer_callback_query` with error feedback, exception logged.
-- **test_handler_raises_telegram_error**: Handler raises `BadRequest`. Expected: Telegram error handled specifically (not generic catch).
+- **test_handler_raises_exception**: Registered handler raises `ValueError`. Expected: exception propagates to PTB's error handler (dispatch does not catch).
+- **test_handler_raises_telegram_error**: Handler raises `BadRequest`. Expected: exception propagates to PTB's error handler.
 - **test_duplicate_prefix_registration**: Two handlers register for same prefix. Expected: last registration wins (or raises error — design choice).
 
 ## Behavior Tests

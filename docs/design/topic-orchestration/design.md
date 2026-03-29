@@ -32,7 +32,7 @@ This module owns all knowledge that no other module should have:
 - **Direction**: Bot Shell depends on Topic Orchestration
 - **Contract type**: Functional (callback wiring)
 - **What is shared**: New window event handler
-- **Contract definition**: `handle_new_window(bot: Bot, event: NewWindowEvent) -> None` — called by SessionMonitor when a new tmux window is detected
+- **Contract definition**: `handle_new_window(event: NewWindowEvent, bot: Bot) -> None` — called by SessionMonitor when a new tmux window is detected
 
 ### → Thread Router (depends on)
 
