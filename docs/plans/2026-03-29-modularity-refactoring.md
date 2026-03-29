@@ -52,25 +52,19 @@ Each step is independently mergeable. Steps are ordered by increasing blast radi
 
 Design doc: `docs/design/shell-provider/design.md`
 
-#### Task 1: Add PromptMatch dataclass to shell provider
+#### Task 1: Add PromptMatch dataclass and update all consumers (Tasks 1+2 merged)
 
-- [ ] Add `PromptMatch` frozen dataclass to `src/ccgram/providers/shell.py` with fields: `sequence_number: int`, `trailing_text: str`, `exit_code: int`, `raw_line: str`
-- [ ] Update `match_prompt()` return type from `re.Match | None` to `PromptMatch | None`
-- [ ] Update internal parsing: construct `PromptMatch` from regex groups for both wrap and replace modes
-- [ ] Export `PromptMatch` from `providers/shell.py` public API
-- [ ] Update tests in `tests/ccgram/test_shell_provider.py`: verify `match_prompt()` returns `PromptMatch` with correct named fields
-- [ ] Add new tests: `test_prompt_match_frozen`, `test_wrap_mode_bare_prompt`, `test_wrap_mode_with_trailing`, `test_replace_mode_bare_prompt`
-- [ ] Run `make test` — must pass
+Tasks 1 and 2 were merged because changing match_prompt()'s return type immediately breaks shell_capture.py consumers — they cannot be done independently.
 
-#### Task 2: Update shell_capture.py to use PromptMatch
-
-- [ ] Update `from ..providers.shell import match_prompt` to also import `PromptMatch`
-- [ ] Replace all `m.group(1)` with `m.exit_code` and `m.group(2).strip()` with `m.trailing_text.strip()` in `_extract_command_output()` (line ~152-154)
-- [ ] Replace group accesses in `_find_command_echo()` (line ~184-187)
-- [ ] Replace group accesses in `_find_in_progress()` (line ~197)
-- [ ] Replace group accesses in `_command_from_echo()` (line ~472)
-- [ ] Update tests in `tests/ccgram/test_shell_capture.py`: mock `match_prompt` to return `PromptMatch` instances instead of `re.Match` mocks
-- [ ] Run `make check` — must pass (completes Step C2)
+- [x] Add `PromptMatch` frozen dataclass to `src/ccgram/providers/shell.py` with fields: `sequence_number: int`, `trailing_text: str`, `exit_code: int`, `raw_line: str`
+- [x] Update `match_prompt()` return type from `re.Match | None` to `PromptMatch | None`
+- [x] Update internal parsing: construct `PromptMatch` from regex groups for both wrap and replace modes
+- [x] Export `PromptMatch` from `providers/shell.py` public API
+- [x] Update tests in `tests/ccgram/test_shell_provider.py`: verify `match_prompt()` returns `PromptMatch` with correct named fields
+- [x] Add new tests: `test_prompt_match_frozen`, `test_wrap_mode_bare_prompt`, `test_wrap_mode_with_trailing`, `test_replace_mode_bare_prompt`
+- [x] Replace all `m.group(1)` with `m.exit_code` and `m.group(2)` with `m.trailing_text` in `shell_capture.py` (`_extract_command_output`, `_find_command_echo`, `_find_in_progress`, `_command_from_echo`)
+- [x] Replace `m.group(2)` with `m.trailing_text` in `shell_commands.py` (`_cancel_stuck_input`)
+- [x] Run `make check` — all GREEN (fmt + lint + typecheck + test + integration)
 
 ---
 

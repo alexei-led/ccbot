@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ccgram.providers.shell import ShellProvider, detect_pane_shell
+from ccgram.providers.shell import PromptMatch, ShellProvider, detect_pane_shell
 from ccgram.tmux_manager import TmuxWindow
 
 
@@ -323,6 +323,53 @@ class TestGetShellName:
 # ── Wrap-mode tests ──────────────────────────────────────────────────────
 
 
+class TestPromptMatch:
+    def test_prompt_match_frozen(self) -> None:
+        pm = PromptMatch(
+            sequence_number=0, trailing_text="ls", exit_code=0, raw_line="⌘0⌘ ls"
+        )
+        with pytest.raises(AttributeError):
+            pm.exit_code = 1  # type: ignore[misc]
+
+    @pytest.mark.usefixtures("_wrap_mode")
+    def test_wrap_mode_bare_prompt(self) -> None:
+        from ccgram.providers.shell import match_prompt
+
+        m = match_prompt("~/code ❯ ⌘0⌘ ")
+        assert m is not None
+        assert m.sequence_number == 0
+        assert m.exit_code == 0
+        assert m.trailing_text.strip() == ""
+        assert m.raw_line == "~/code ❯ ⌘0⌘ "
+
+    @pytest.mark.usefixtures("_wrap_mode")
+    def test_wrap_mode_with_trailing(self) -> None:
+        from ccgram.providers.shell import match_prompt
+
+        m = match_prompt("~/code ❯ ⌘0⌘ git status")
+        assert m is not None
+        assert m.sequence_number == 0
+        assert m.exit_code == 0
+        assert m.trailing_text == "git status"
+        assert m.raw_line == "~/code ❯ ⌘0⌘ git status"
+
+    def test_replace_mode_bare_prompt(self) -> None:
+        from ccgram.config import config
+        from ccgram.providers.shell import match_prompt
+
+        original = config.prompt_mode
+        config.prompt_mode = "replace"
+        try:
+            m = match_prompt("ccgram:0❯ ")
+            assert m is not None
+            assert m.sequence_number == 0
+            assert m.exit_code == 0
+            assert m.trailing_text.strip() == ""
+            assert m.raw_line == "ccgram:0❯ "
+        finally:
+            config.prompt_mode = original
+
+
 @pytest.mark.usefixtures("_wrap_mode")
 class TestWrapModeRegex:
     def test_match_prompt_finds_wrap_marker(self) -> None:
@@ -330,24 +377,26 @@ class TestWrapModeRegex:
 
         m = match_prompt("~/code main ❯ ⌘0⌘ ls -la")
         assert m is not None
-        assert m.group(1) == "0"
-        assert m.group(2) == "ls -la"
+        assert isinstance(m, PromptMatch)
+        assert m.exit_code == 0
+        assert m.trailing_text == "ls -la"
+        assert m.raw_line == "~/code main ❯ ⌘0⌘ ls -la"
 
     def test_match_prompt_bare_prompt_idle(self) -> None:
         from ccgram.providers.shell import match_prompt
 
         m = match_prompt("~/code main ❯ ⌘0⌘ ")
         assert m is not None
-        assert m.group(1) == "0"
-        assert m.group(2).strip() == ""
+        assert m.exit_code == 0
+        assert m.trailing_text.strip() == ""
 
     def test_match_prompt_nonzero_exit(self) -> None:
         from ccgram.providers.shell import match_prompt
 
         m = match_prompt("~/code main ❯ ⌘127⌘ bad-cmd")
         assert m is not None
-        assert m.group(1) == "127"
-        assert m.group(2) == "bad-cmd"
+        assert m.exit_code == 127
+        assert m.trailing_text == "bad-cmd"
 
     def test_match_prompt_no_marker(self) -> None:
         from ccgram.providers.shell import match_prompt
@@ -359,7 +408,7 @@ class TestWrapModeRegex:
 
         m = match_prompt("⌘0⌘")
         assert m is not None
-        assert m.group(1) == "0"
+        assert m.exit_code == 0
 
 
 @pytest.mark.usefixtures("_wrap_mode")
@@ -500,8 +549,8 @@ class TestMatchPromptModeSwitching:
 
         m = match_prompt("~/code main ❯ ⌘0⌘ ls")
         assert m is not None
-        assert m.group(1) == "0"
-        assert m.group(2) == "ls"
+        assert m.exit_code == 0
+        assert m.trailing_text == "ls"
 
     @pytest.mark.usefixtures("_wrap_mode")
     def test_wrap_mode_matches_marker_at_start(self) -> None:
@@ -509,7 +558,7 @@ class TestMatchPromptModeSwitching:
 
         m = match_prompt("⌘0⌘ ls")
         assert m is not None
-        assert m.group(2) == "ls"
+        assert m.trailing_text == "ls"
 
 
 # ── Setup command content tests ──────────────────────────────────────────

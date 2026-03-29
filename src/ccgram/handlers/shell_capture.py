@@ -149,9 +149,9 @@ def _extract_command_output(current: str) -> _CommandOutput:
     exit_code = None
     for i in range(len(lines) - 1, scan_start - 1, -1):
         m = match_prompt(lines[i])
-        if m and not m.group(2).strip():
+        if m and not m.trailing_text.strip():
             end_idx = i
-            exit_code = int(m.group(1))
+            exit_code = m.exit_code
             break
 
     if end_idx is None:
@@ -161,7 +161,7 @@ def _extract_command_output(current: str) -> _CommandOutput:
     start_idx = None
     for i in range(end_idx - 1, -1, -1):
         m = match_prompt(lines[i])
-        if m and m.group(2).strip():
+        if m and m.trailing_text.strip():
             start_idx = i
             break
 
@@ -181,10 +181,10 @@ def _find_command_echo(lines: list[str]) -> tuple[str, int] | None:
     scan_start = max(0, len(lines) - 10)
     for i in range(len(lines) - 1, scan_start - 1, -1):
         m = match_prompt(lines[i])
-        if m and not m.group(2).strip():
+        if m and not m.trailing_text.strip():
             for j in range(i - 1, -1, -1):
                 mj = match_prompt(lines[j])
-                if mj and mj.group(2).strip():
+                if mj and mj.trailing_text.strip():
                     return (lines[j], j)
             return None
     return None
@@ -194,7 +194,7 @@ def _find_in_progress(lines: list[str]) -> _PassiveOutput | None:
     """Find in-progress command output (no bare prompt at bottom)."""
     for i in range(len(lines) - 1, -1, -1):
         m = match_prompt(lines[i])
-        if m and m.group(2).strip():
+        if m and m.trailing_text.strip():
             output_lines = lines[i + 1 :]
             while output_lines and not output_lines[-1].strip():
                 output_lines.pop()
@@ -469,7 +469,7 @@ def _command_from_echo(echo: str) -> str:
     ``"~/code ⌘0⌘ ls -al"`` → ``"ls -al"`` (wrap mode).
     """
     m = match_prompt(echo)
-    return m.group(2).strip() if m else echo
+    return m.trailing_text.strip() if m else echo
 
 
 async def _relay_passive_output(

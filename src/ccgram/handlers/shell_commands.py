@@ -151,7 +151,7 @@ async def _cancel_stuck_input(window_id: str) -> None:
 
     last = lines[-1]
     m = match_prompt(last)
-    if m and not m.group(2).strip():
+    if m and not m.trailing_text.strip():
         return  # clean bare prompt — all good
 
     # Shell is idle but NOT at a clean prompt → continuation or partial input.
