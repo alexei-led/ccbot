@@ -2,7 +2,7 @@
 
 import pytest
 
-from ccgram.interactive_prompt_formatter import format_codex_interactive_prompt
+from ccgram.providers.codex_format import format_codex_interactive_prompt
 
 
 def _make_edit_prompt(diff_lines: list[str]) -> str:

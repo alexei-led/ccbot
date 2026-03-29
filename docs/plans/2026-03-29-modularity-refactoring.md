@@ -74,12 +74,12 @@ Design doc: `docs/design/codex-provider/design.md`, `docs/design/provider-protoc
 
 #### Task 3: Move Codex-specific modules into providers/
 
-- [ ] Move `src/ccgram/codex_status.py` → `src/ccgram/providers/codex_status.py`
-- [ ] Move `src/ccgram/interactive_prompt_formatter.py` → `src/ccgram/providers/codex_format.py`
-- [ ] Update import in `src/ccgram/providers/codex.py`: change `from ccgram.interactive_prompt_formatter import ...` to `from .codex_format import ...`
-- [ ] Update import in `src/ccgram/bot.py`: change `from .codex_status import ...` to `from .providers.codex_status import ...`
-- [ ] Update test imports in `tests/ccgram/test_codex_status.py` and `tests/ccgram/test_interactive_prompt_formatter.py`
-- [ ] Run `make test` — must pass
+- [x] Move `src/ccgram/codex_status.py` → `src/ccgram/providers/codex_status.py`
+- [x] Move `src/ccgram/interactive_prompt_formatter.py` → `src/ccgram/providers/codex_format.py`
+- [x] Update import in `src/ccgram/providers/codex.py`: change `from ccgram.interactive_prompt_formatter import ...` to `from .codex_format import ...`
+- [x] Update import in `src/ccgram/bot.py`: change `from .codex_status import ...` to `from .providers.codex_status import ...`
+- [x] Update test imports in `tests/ccgram/test_codex_status.py` and `tests/ccgram/test_interactive_prompt_formatter.py`
+- [x] Run `make test` — must pass
 
 #### Task 4: Add optional protocol methods and eliminate name checks
 

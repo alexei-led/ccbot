@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from ccgram.interactive_prompt_formatter import format_codex_interactive_prompt
+from ccgram.providers.codex_format import format_codex_interactive_prompt
 from ccgram.providers._jsonl import JsonlProvider
 from ccgram.providers.base import (
     RESUME_ID_RE,

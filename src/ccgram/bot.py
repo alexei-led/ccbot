@@ -64,7 +64,7 @@ from .providers import (
     should_probe_pane_title_for_provider_detection,
 )
 from .config import config
-from .codex_status import (
+from .providers.codex_status import (
     build_codex_status_snapshot,
     has_codex_assistant_output_since,
 )

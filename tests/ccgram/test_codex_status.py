@@ -2,7 +2,7 @@
 
 import json
 
-from ccgram.codex_status import (
+from ccgram.providers.codex_status import (
     build_codex_status_snapshot,
     has_codex_assistant_output_since,
 )
