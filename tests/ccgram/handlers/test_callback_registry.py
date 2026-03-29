@@ -233,7 +233,17 @@ class TestLoadHandlers:
         load_handlers()
         prefixes = set(_registry.keys())
         assert len(prefixes) > 0
-        for expected in ("db:", "wb:", "aq:", "vc:", "sh:", "hp:", "rec:"):
+        for expected in (
+            "db:",
+            "wb:",
+            "aq:",
+            "vc:",
+            "sh:",
+            "hp:",
+            "rec:",
+            "sess:",
+            "sync:",
+        ):
             assert any(p.startswith(expected) for p in prefixes), (
                 f"expected prefix starting with {expected!r} in registry"
             )
@@ -250,6 +260,8 @@ class TestLoadHandlers:
             "ccgram.handlers.resume_command",
             "ccgram.handlers.voice_callbacks",
             "ccgram.handlers.shell_commands",
+            "ccgram.handlers.sessions_dashboard",
+            "ccgram.handlers.sync_command",
         ]
         for mod in expected_modules:
             assert mod in sys.modules, f"{mod} not imported by load_handlers()"

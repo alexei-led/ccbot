@@ -214,16 +214,16 @@ Design doc: `docs/design/bot-shell/design.md`, `docs/design/callback-dispatch/de
 
 #### Task 12: Wire callback registry into bot.py and remove old dispatch
 
-- [ ] In `bot.py` `create_bot()`: replace `CallbackQueryHandler(callback_handler)` with `CallbackQueryHandler(callback_registry.dispatch)`
-- [ ] Call `callback_registry.load_handlers()` before `create_bot()` returns
-- [ ] Remove the old `callback_handler()` function from `bot.py`
-- [ ] Remove all 47 `CB_*` imports from `bot.py` that were only used in `callback_handler()`
-- [ ] Remove handler function imports from `bot.py` that are now self-registered
-- [ ] Move sessions dashboard inline callback handlers (refresh/new/kill) to `sessions_dashboard.py` with `@register`
-- [ ] Move sync callback handlers to `sync_command.py` with `@register`
-- [ ] Update `tests/ccgram/test_bot_callbacks.py` to test via registry dispatch
-- [ ] Update `tests/ccgram/test_callback_auth.py` to test authorization in registry dispatch
-- [ ] Run `make check` — must pass (completes Step A2)
+- [x] In `bot.py` `create_bot()`: replace `CallbackQueryHandler(callback_handler)` with `CallbackQueryHandler(callback_registry.dispatch)`
+- [x] Call `callback_registry.load_handlers()` before `create_bot()` returns
+- [x] Remove the old `callback_handler()` function from `bot.py`
+- [x] Remove all 47 `CB_*` imports from `bot.py` that were only used in `callback_handler()`
+- [x] Remove handler function imports from `bot.py` that are now self-registered
+- [x] Move sessions dashboard inline callback handlers (refresh/new/kill) to `sessions_dashboard.py` with `@register`
+- [x] Move sync callback handlers to `sync_command.py` with `@register`
+- [x] Update `tests/ccgram/test_bot_callbacks.py` to test via registry dispatch
+- [x] Update `tests/ccgram/test_callback_auth.py` to test authorization in registry dispatch
+- [x] Run `make check` — must pass (completes Step A2)
 
 ---
 

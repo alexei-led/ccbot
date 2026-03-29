@@ -116,7 +116,9 @@ def load_handlers() -> None:
         recovery_callbacks,
         resume_command,
         screenshot_callbacks,
+        sessions_dashboard,
         shell_commands,
+        sync_command,
         voice_callbacks,
         window_callbacks,
     )

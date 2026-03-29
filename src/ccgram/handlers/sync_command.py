@@ -30,6 +30,7 @@ from ..session import AuditIssue, AuditResult, session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from .callback_data import CB_SYNC_DISMISS, CB_SYNC_FIX
+from .callback_registry import register
 from .cleanup import clear_topic_state
 from .message_sender import is_thread_gone, safe_edit, safe_reply
 
@@ -428,3 +429,17 @@ async def handle_sync_dismiss(query: CallbackQuery) -> None:
     """Remove keyboard from sync message."""
     original_text = getattr(query.message, "text", None) if query.message else None
     await safe_edit(query, original_text or "Dismissed", reply_markup=None)
+
+
+@register(CB_SYNC_FIX, CB_SYNC_DISMISS)
+async def _dispatch(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    if query.data == CB_SYNC_FIX:
+        await handle_sync_fix(query)
+        await query.answer("Fixed")
+    elif query.data == CB_SYNC_DISMISS:
+        await handle_sync_dismiss(query)
+        await query.answer("Dismissed")

@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from telegram.ext import CommandHandler, MessageHandler, filters
 
-from ccgram.bot import callback_handler, create_bot
+from ccgram.bot import create_bot
+from ccgram.handlers.callback_registry import dispatch as callback_handler
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -103,7 +104,8 @@ class TestGroupFilterRegistration:
 
 @pytest.fixture(autouse=True)
 def _allow_user():
-    with patch("ccgram.bot.is_user_allowed", return_value=True):
+    with patch("ccgram.handlers.callback_registry.config") as mock_config:
+        mock_config.is_user_allowed.return_value = True
         yield
 
 
@@ -112,29 +114,28 @@ class TestCallbackHandlerGroupFilter:
         update = _make_update(chat_id=-100999)
         ctx = MagicMock()
 
-        with patch("ccgram.bot.config") as mock_config:
+        with patch("ccgram.handlers.callback_registry.config") as mock_config:
             mock_config.group_id = None
-            # Should proceed past group check (MagicMock handles the rest)
+            mock_config.is_user_allowed.return_value = True
             await callback_handler(update, ctx)
 
     async def test_passes_when_group_matches(self) -> None:
         update = _make_update(chat_id=-100999)
         ctx = MagicMock()
 
-        with patch("ccgram.bot.config") as mock_config:
+        with patch("ccgram.handlers.callback_registry.config") as mock_config:
             mock_config.group_id = -100999
+            mock_config.is_user_allowed.return_value = True
             await callback_handler(update, ctx)
-            # Reached past group check — query.data was accessed
 
     async def test_blocked_when_group_mismatches(self) -> None:
         update = _make_update(chat_id=-100888)
         update.callback_query.answer = MagicMock()
         ctx = MagicMock()
 
-        with patch("ccgram.bot.config") as mock_config:
+        with patch("ccgram.handlers.callback_registry.config") as mock_config:
             mock_config.group_id = -100999
             await callback_handler(update, ctx)
-            # Should have returned before accessing callback_query.data
             update.callback_query.answer.assert_not_called()
 
     async def test_blocked_when_no_chat(self) -> None:
@@ -142,7 +143,7 @@ class TestCallbackHandlerGroupFilter:
         update.callback_query.answer = MagicMock()
         ctx = MagicMock()
 
-        with patch("ccgram.bot.config") as mock_config:
+        with patch("ccgram.handlers.callback_registry.config") as mock_config:
             mock_config.group_id = -100999
             await callback_handler(update, ctx)
             update.callback_query.answer.assert_not_called()

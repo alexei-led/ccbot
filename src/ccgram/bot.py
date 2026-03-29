@@ -64,81 +64,19 @@ from .handlers.command_orchestration import (
     setup_menu_refresh_job,
 )
 from .handlers.callback_data import (
-    CB_DIR_CANCEL,
-    CB_DIR_CONFIRM,
-    CB_DIR_FAV,
-    CB_DIR_HOME,
-    CB_DIR_PAGE,
-    CB_DIR_SELECT,
-    CB_DIR_STAR,
-    CB_DIR_UP,
-    CB_MODE_SELECT,
-    CB_PROV_SELECT,
-    CB_HISTORY_NEXT,
-    CB_HISTORY_PREV,
-    CB_KEYS_PREFIX,
     CB_PANE_SCREENSHOT,
-    CB_RECOVERY_BACK,
-    CB_RECOVERY_CANCEL,
-    CB_RECOVERY_CONTINUE,
-    CB_RECOVERY_FRESH,
-    CB_RECOVERY_PICK,
-    CB_RECOVERY_RESUME,
-    CB_RESUME_CANCEL,
-    CB_RESUME_PAGE,
-    CB_RESUME_PICK,
-    CB_SCREENSHOT_REFRESH,
-    CB_SESSIONS_KILL,
-    CB_SESSIONS_KILL_CONFIRM,
-    CB_SESSIONS_NEW,
-    CB_SESSIONS_REFRESH,
-    CB_STATUS_ESC,
-    CB_STATUS_NOTIFY,
-    CB_STATUS_RECALL,
-    CB_STATUS_REMOTE,
-    CB_STATUS_SCREENSHOT,
-    CB_SYNC_DISMISS,
-    CB_SYNC_FIX,
-    CB_TOOLBAR_CTRLC,
-    CB_TOOLBAR_DISMISS,
-    CB_VOICE,
-    CB_SHELL_CANCEL,
-    CB_SHELL_CONFIRM_DANGER,
-    CB_SHELL_EDIT,
-    CB_SHELL_RUN,
-    CB_WIN_BIND,
-    CB_WIN_CANCEL,
-    CB_WIN_NEW,
 )
 from .handlers.callback_helpers import get_thread_id as _get_thread_id
-from .handlers.callback_helpers import user_owns_window as _user_owns_window
-from .handlers.directory_callbacks import handle_directory_callback
-from .handlers.history_callbacks import handle_history_callback
-from .handlers.interactive_callbacks import (
-    handle_interactive_callback,
-    match_interactive_prefix as _match_interactive_prefix,
-)
-from .handlers.recovery_callbacks import handle_recovery_callback
+from .handlers.callback_registry import dispatch as _dispatch_callback
+from .handlers.callback_registry import load_handlers as _load_callback_handlers
 from .handlers.restore_command import restore_command
-from .handlers.resume_command import handle_resume_command_callback, resume_command
-from .handlers.screenshot_callbacks import handle_screenshot_callback
-from .handlers.voice_callbacks import handle_voice_callback
-from .handlers.window_callbacks import handle_window_callback
+from .handlers.resume_command import resume_command
 from .handlers.directory_browser import clear_browse_state
 from .handlers.cleanup import clear_topic_state
 from .handlers.topic_emoji import strip_emoji_prefix, update_stored_topic_name
 from .handlers.history import send_history
-from .handlers.sessions_dashboard import (
-    handle_sessions_kill,
-    handle_sessions_kill_confirm,
-    handle_sessions_refresh,
-    sessions_command,
-)
-from .handlers.sync_command import (
-    handle_sync_dismiss,
-    handle_sync_fix,
-    sync_command,
-)
+from .handlers.sessions_dashboard import sessions_command
+from .handlers.sync_command import sync_command
 from .handlers.upgrade import upgrade_command
 from .handlers.interactive_ui import (
     INTERACTIVE_TOOL_NAMES,
@@ -717,155 +655,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await handle_text_message(update, context)
 
 
-# --- Callback query handler (thin dispatcher) ---
-
-# Callback prefixes that route to dedicated handler modules.
-# Order matters: prefixes checked via startswith must be longest-first
-# to avoid false matches (e.g. CB_SESSIONS_KILL_CONFIRM before CB_SESSIONS_KILL).
-_CB_HISTORY = (CB_HISTORY_PREV, CB_HISTORY_NEXT)
-_CB_DIRECTORY = (
-    CB_DIR_FAV,
-    CB_DIR_STAR,
-    CB_DIR_SELECT,
-    CB_DIR_UP,
-    CB_DIR_HOME,
-    CB_DIR_PAGE,
-    CB_DIR_CONFIRM,
-    CB_PROV_SELECT,
-    CB_MODE_SELECT,
-    CB_DIR_CANCEL,
-)
-_CB_WINDOW = (CB_WIN_BIND, CB_WIN_NEW, CB_WIN_CANCEL)
-_CB_SCREENSHOT = (
-    CB_SCREENSHOT_REFRESH,
-    CB_STATUS_RECALL,
-    CB_STATUS_ESC,
-    CB_STATUS_NOTIFY,
-    CB_STATUS_SCREENSHOT,
-    CB_KEYS_PREFIX,
-    CB_PANE_SCREENSHOT,
-    CB_STATUS_REMOTE,
-    CB_TOOLBAR_CTRLC,
-    CB_TOOLBAR_DISMISS,
-)
-_CB_RECOVERY = (
-    CB_RECOVERY_BACK,
-    CB_RECOVERY_FRESH,
-    CB_RECOVERY_CONTINUE,
-    CB_RECOVERY_RESUME,
-    CB_RECOVERY_PICK,
-    CB_RECOVERY_CANCEL,
-)
-_CB_VOICE = (CB_VOICE,)
-_CB_RESUME = (CB_RESUME_PICK, CB_RESUME_PAGE, CB_RESUME_CANCEL)
-_CB_SHELL = (
-    CB_SHELL_RUN,
-    CB_SHELL_EDIT,
-    CB_SHELL_CANCEL,
-    CB_SHELL_CONFIRM_DANGER,
-)
-
-
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Dispatch callback queries to dedicated handler modules."""
-    # CallbackQueryHandler doesn't support filters= param, so check inline.
-    if config.group_id:
-        chat = update.effective_chat
-        if not chat or chat.id != config.group_id:
-            return
-
-    query = update.callback_query
-    if not query or not query.data:
-        return
-
-    user = update.effective_user
-    if not user or not is_user_allowed(user.id):
-        await query.answer("Not authorized")
-        return
-
-    # Store group chat_id for forum topic message routing
-    if query.message and query.message.chat.type in ("group", "supergroup"):
-        cb_thread_id = _get_thread_id(update)
-        if cb_thread_id is not None:
-            thread_router.set_group_chat_id(
-                user.id, cb_thread_id, query.message.chat.id
-            )
-
-    data = query.data
-
-    # History pagination
-    if data.startswith(_CB_HISTORY):
-        await handle_history_callback(query, user.id, data, update, context)
-
-    # Directory browser
-    elif data.startswith(_CB_DIRECTORY):
-        await handle_directory_callback(query, user.id, data, update, context)
-
-    # Window picker
-    elif data.startswith(_CB_WINDOW):
-        await handle_window_callback(query, user.id, data, update, context)
-
-    # Screenshot / status buttons / quick keys
-    elif data.startswith(_CB_SCREENSHOT):
-        await handle_screenshot_callback(query, user.id, data, update, context)
-
-    # No-op
-    elif data == "noop":
-        await query.answer()
-
-    # Interactive UI (AskUserQuestion / ExitPlanMode navigation)
-    elif _match_interactive_prefix(data):
-        await handle_interactive_callback(query, user.id, data, update, context)
-
-    # Recovery UI
-    elif data.startswith(_CB_RECOVERY):
-        await handle_recovery_callback(query, user.id, data, update, context)
-
-    # Resume command UI
-    elif data.startswith(_CB_RESUME):
-        await handle_resume_command_callback(query, user.id, data, update, context)
-
-    # Sessions dashboard
-    elif data == CB_SESSIONS_REFRESH:
-        await handle_sessions_refresh(query, user.id)
-        await query.answer("Refreshed")
-    elif data == CB_SESSIONS_NEW:
-        await query.answer("Create a new topic to start a session.")
-    elif data.startswith(CB_SESSIONS_KILL_CONFIRM):
-        window_id = data[len(CB_SESSIONS_KILL_CONFIRM) :]
-        if not _user_owns_window(user.id, window_id):
-            await query.answer("Not your session", show_alert=True)
-            return
-        await handle_sessions_kill_confirm(query, user.id, window_id, context.bot)
-        await query.answer("Killed")
-    elif data.startswith(CB_SESSIONS_KILL):
-        window_id = data[len(CB_SESSIONS_KILL) :]
-        if not _user_owns_window(user.id, window_id):
-            await query.answer("Not your session", show_alert=True)
-            return
-        await handle_sessions_kill(query, user.id, window_id)
-        await query.answer()
-
-    # Voice message callbacks
-    elif data.startswith(_CB_VOICE):
-        await handle_voice_callback(update, context)
-
-    # Shell command approval
-    elif data.startswith(_CB_SHELL):
-        from .handlers.shell_commands import handle_shell_callback
-
-        thread_id = _get_thread_id(update)
-        await handle_shell_callback(query, user.id, data, context.bot, thread_id)
-
-    # Sync command
-    elif data == CB_SYNC_FIX:
-        await handle_sync_fix(query)
-        await query.answer("Fixed")
-    elif data == CB_SYNC_DISMISS:
-        await handle_sync_dismiss(query)
-        await query.answer("Dismissed")
-
-
 # --- Streaming response / notifications ---
 
 
@@ -1207,7 +996,8 @@ def create_bot() -> Application:
     application.add_handler(
         CommandHandler("restore", restore_command, filters=_group_filter)
     )
-    application.add_handler(CallbackQueryHandler(callback_handler))
+    _load_callback_handlers()
+    application.add_handler(CallbackQueryHandler(_dispatch_callback))
     # Topic closed event — unbind window (kept alive for rebinding)
     application.add_handler(
         MessageHandler(

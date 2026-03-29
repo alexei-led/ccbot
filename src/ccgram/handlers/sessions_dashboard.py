@@ -35,6 +35,8 @@ from .callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_SCREENSHOT,
 )
+from .callback_helpers import user_owns_window
+from .callback_registry import register
 from .cleanup import clear_topic_state
 from .message_sender import safe_edit, safe_reply
 
@@ -180,3 +182,40 @@ async def handle_sessions_kill_confirm(
     await safe_edit(
         query, f"\U0001f5d1 Killed '{display}'\n\n{text}", reply_markup=keyboard
     )
+
+
+@register(
+    CB_SESSIONS_REFRESH,
+    CB_SESSIONS_NEW,
+    CB_SESSIONS_KILL_CONFIRM,
+    CB_SESSIONS_KILL,
+)
+async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    user = update.effective_user
+    if not user:
+        return
+
+    data = query.data
+
+    if data == CB_SESSIONS_REFRESH:
+        await handle_sessions_refresh(query, user.id)
+        await query.answer("Refreshed")
+    elif data == CB_SESSIONS_NEW:
+        await query.answer("Create a new topic to start a session.")
+    elif data.startswith(CB_SESSIONS_KILL_CONFIRM):
+        window_id = data[len(CB_SESSIONS_KILL_CONFIRM) :]
+        if not user_owns_window(user.id, window_id):
+            await query.answer("Not your session", show_alert=True)
+            return
+        await handle_sessions_kill_confirm(query, user.id, window_id, context.bot)
+        await query.answer("Killed")
+    elif data.startswith(CB_SESSIONS_KILL):
+        window_id = data[len(CB_SESSIONS_KILL) :]
+        if not user_owns_window(user.id, window_id):
+            await query.answer("Not your session", show_alert=True)
+            return
+        await handle_sessions_kill(query, user.id, window_id)
+        await query.answer()
