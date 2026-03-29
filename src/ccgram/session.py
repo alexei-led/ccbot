@@ -2,23 +2,19 @@
 
 Manages the key mappings:
   Window→Session (window_states): which Claude session_id a window holds (keyed by window_id).
-  User→Thread→Window (thread_bindings): topic-to-window bindings (1 topic = 1 window_id).
+  User→Thread→Window: delegated to ThreadRouter (see thread_router.py).
 
 Responsibilities:
   - Persist/load state to ~/.ccgram/state.json.
   - Sync window↔session bindings from session_map.json (written by hook).
   - Resolve window IDs to ClaudeSession objects (JSONL file reading).
   - Track per-user read offsets for unread-message detection.
-  - Manage thread↔window bindings for Telegram topic routing.
+  - Delegate thread↔window routing to ThreadRouter.
   - Send keystrokes to tmux windows and retrieve message history.
-  - Maintain window_id→display name mapping for UI display.
   - Re-resolve stale window IDs on startup (tmux server restart recovery).
 
 Key class: SessionManager (singleton instantiated as `session_manager`).
-Key methods for thread binding access:
-  - resolve_window_for_thread: Get window_id for a user's thread
-  - iter_thread_bindings: Generator for iterating all (user_id, thread_id, window_id)
-  - find_users_for_session: Find all users bound to a session_id
+Thread routing delegation: bind_thread, unbind_thread, get_window_for_thread, etc.
 """
 
 import asyncio
@@ -37,6 +33,7 @@ from .handlers.callback_data import NOTIFICATION_MODES
 from .providers import get_provider_for_window
 from .state_persistence import StatePersistence
 from .tmux_manager import tmux_manager
+from .thread_router import thread_router
 from .utils import atomic_write_json
 from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window_id
 
@@ -198,59 +195,52 @@ class SessionManager:
     All internal keys use window_id (e.g. '@0', '@12') for uniqueness.
     Display names (window_name) are stored separately for UI presentation.
 
+    Thread routing (thread_bindings, display names, group_chat_ids) is
+    delegated to ThreadRouter — see thread_router.py.
+
     window_states: window_id -> WindowState (session_id, cwd, window_name)
     user_window_offsets: user_id -> {window_id -> byte_offset}
-    thread_bindings: user_id -> {thread_id -> window_id}
-    window_display_names: window_id -> window_name (for display)
     """
 
     window_states: dict[str, WindowState] = field(default_factory=dict)
     user_window_offsets: dict[int, dict[str, int]] = field(default_factory=dict)
-    thread_bindings: dict[int, dict[int, str]] = field(default_factory=dict)
-    # group_chat_ids: "user_id:thread_id" -> chat_id (supports multiple groups per user)
-    group_chat_ids: dict[str, int] = field(default_factory=dict)
-    # window_id -> display name (window_name)
-    window_display_names: dict[str, str] = field(default_factory=dict)
     # User directory favorites: user_id -> {"starred": [...], "mru": [...]}
     user_dir_favorites: dict[int, dict[str, list[str]]] = field(default_factory=dict)
-
-    # Reverse index: (user_id, window_id) -> thread_id for O(1) inbound lookups
-    _window_to_thread: dict[tuple[int, str], int] = field(
-        default_factory=dict, repr=False
-    )
 
     # Delegated persistence (not serialized)
     _persistence: StatePersistence = field(default=None, repr=False, init=False)  # type: ignore[assignment]
 
+    # Backward-compat properties for routing data (owned by thread_router)
+    @property
+    def thread_bindings(self) -> dict[int, dict[int, str]]:
+        return thread_router.thread_bindings
+
+    @property
+    def group_chat_ids(self) -> dict[str, int]:
+        return thread_router.group_chat_ids
+
+    @property
+    def window_display_names(self) -> dict[str, str]:
+        return thread_router.window_display_names
+
     def __post_init__(self) -> None:
         self._persistence = StatePersistence(config.state_file, self._serialize_state)
+        thread_router._schedule_save = self._save_state
         self._load_state()
-        self._rebuild_reverse_index()
-
-    def _rebuild_reverse_index(self) -> None:
-        """Rebuild _window_to_thread from thread_bindings."""
-        self._window_to_thread = {}
-        for uid, bindings in self.thread_bindings.items():
-            for tid, wid in bindings.items():
-                self._window_to_thread[(uid, wid)] = tid
 
     def _serialize_state(self) -> dict[str, Any]:
         """Serialize all state to a dict for persistence."""
-        return {
+        result = {
             "window_states": {k: v.to_dict() for k, v in self.window_states.items()},
             "user_window_offsets": {
                 str(uid): offsets for uid, offsets in self.user_window_offsets.items()
             },
-            "thread_bindings": {
-                str(uid): {str(tid): wid for tid, wid in bindings.items()}
-                for uid, bindings in self.thread_bindings.items()
-            },
-            "group_chat_ids": self.group_chat_ids,
-            "window_display_names": self.window_display_names,
             "user_dir_favorites": {
                 str(uid): favs for uid, favs in self.user_dir_favorites.items()
             },
         }
+        result.update(thread_router.to_dict())
+        return result
 
     def _save_state(self) -> None:
         """Schedule debounced save (0.5s delay, resets on each call)."""
@@ -283,36 +273,12 @@ class SessionManager:
             int(uid): offsets
             for uid, offsets in state.get("user_window_offsets", {}).items()
         }
-        self.thread_bindings = {
-            int(uid): {int(tid): wid for tid, wid in bindings.items()}
-            for uid, bindings in state.get("thread_bindings", {}).items()
-        }
-        self.group_chat_ids = state.get("group_chat_ids", {})
-        self.window_display_names = state.get("window_display_names", {})
         self.user_dir_favorites = {
             int(uid): favs for uid, favs in state.get("user_dir_favorites", {}).items()
         }
 
-        # Deduplicate thread bindings: enforce 1 window = 1 thread.
-        # If multiple threads point to the same window, keep only the
-        # highest thread_id (most recently created topic).
-        for _uid, bindings in self.thread_bindings.items():
-            window_threads: dict[str, list[int]] = {}
-            for tid, wid in bindings.items():
-                window_threads.setdefault(wid, []).append(tid)
-            for wid, tids in window_threads.items():
-                if len(tids) > 1:
-                    keep = max(tids)
-                    for tid in tids:
-                        if tid != keep:
-                            del bindings[tid]
-                            logger.warning(
-                                "Startup: removed duplicate binding "
-                                "thread %d -> window %s (keeping %d)",
-                                tid,
-                                wid,
-                                keep,
-                            )
+        # Load routing data into ThreadRouter (handles dedup + reverse index)
+        thread_router.from_dict(state)
 
         # Detect old format: keys that don't look like window IDs
         # Foreign windows (emdash) use qualified IDs — not old format.
@@ -322,7 +288,7 @@ class SessionManager:
                 needs_migration = True
                 break
         if not needs_migration:
-            for bindings in self.thread_bindings.values():
+            for bindings in thread_router.thread_bindings.values():
                 for wid in bindings.values():
                     if not self._is_window_id(wid) and not is_foreign_window(wid):
                         needs_migration = True
@@ -356,13 +322,13 @@ class SessionManager:
         changed = _resolve(
             live,
             self.window_states,
-            self.thread_bindings,
+            thread_router.thread_bindings,
             self.user_window_offsets,
-            self.window_display_names,
+            thread_router.window_display_names,
         )
 
         if changed:
-            self._rebuild_reverse_index()
+            thread_router._rebuild_reverse_index()
             self._save_state()
             logger.info("Startup re-resolution complete")
 
@@ -379,41 +345,29 @@ class SessionManager:
         # Prune orphaned display names (preserve group_chat_ids for post-restart topic creation)
         self.prune_stale_state(live_ids, skip_chat_ids=True)
 
-    # --- Display name management ---
+    # --- Display name management (delegated to thread_router) ---
 
     def get_display_name(self, window_id: str) -> str:
         """Get display name for a window_id, fallback to window_id itself."""
-        return self.window_display_names.get(window_id, window_id)
+        return thread_router.get_display_name(window_id)
 
     def set_display_name(self, window_id: str, window_name: str) -> None:
         """Update display name for a window_id."""
-        if self.window_display_names.get(window_id) != window_name:
-            self.window_display_names[window_id] = window_name
-            # Also update WindowState if it exists
-            ws = self.window_states.get(window_id)
-            if ws:
-                ws.window_name = window_name
-            self._save_state()
+        thread_router.set_display_name(window_id, window_name)
+        # Also update WindowState if it exists
+        ws = self.window_states.get(window_id)
+        if ws:
+            ws.window_name = window_name
 
     def sync_display_names(self, live_windows: list[tuple[str, str]]) -> bool:
-        """Sync display names from live tmux windows. Returns True if changed.
-
-        Saves state internally when changes are detected.
-        """
-        changed = False
-        for window_id, window_name in live_windows:
-            old = self.window_display_names.get(window_id)
-            if old and old != window_name:
-                self.window_display_names[window_id] = window_name
-                ws = self.window_states.get(window_id)
-                if ws:
-                    ws.window_name = window_name
-                changed = True
-                logger.info(
-                    "Synced display name: %s %s → %s", window_id, old, window_name
-                )
+        """Sync display names from live tmux windows. Returns True if changed."""
+        changed = thread_router.sync_display_names(live_windows)
         if changed:
-            self._save_state()
+            # Sync WindowState.window_name for consistency
+            for window_id, window_name in live_windows:
+                ws = self.window_states.get(window_id)
+                if ws and ws.window_name != window_name:
+                    ws.window_name = window_name
         return changed
 
     async def wait_for_session_map_entry(
@@ -464,19 +418,19 @@ class SessionManager:
         """
         # Collect window_ids that are "in use" (bound or have window_states)
         in_use = set(self.window_states.keys())
-        for bindings in self.thread_bindings.values():
+        for bindings in thread_router.thread_bindings.values():
             in_use.update(bindings.values())
 
         # Prune window_display_names for dead windows not in use and not live
         stale_display = [
             wid
-            for wid in self.window_display_names
+            for wid in thread_router.window_display_names
             if wid not in live_window_ids and wid not in in_use
         ]
 
         # Collect all bound thread keys "user_id:thread_id"
         bound_keys: set[str] = set()
-        for user_id, bindings in self.thread_bindings.items():
+        for user_id, bindings in thread_router.thread_bindings.items():
             for thread_id in bindings:
                 bound_keys.add(f"{user_id}:{thread_id}")
 
@@ -484,7 +438,7 @@ class SessionManager:
         stale_chat = (
             []
             if skip_chat_ids
-            else [k for k in self.group_chat_ids if k not in bound_keys]
+            else [k for k in thread_router.group_chat_ids if k not in bound_keys]
         )
 
         # Prune stale byte offsets (independent of display/chat pruning)
@@ -498,12 +452,12 @@ class SessionManager:
             logger.info(
                 "Pruning stale display name: %s (%s)",
                 wid,
-                self.window_display_names[wid],
+                thread_router.window_display_names[wid],
             )
-            del self.window_display_names[wid]
+            del thread_router.window_display_names[wid]
         for key in stale_chat:
             logger.info("Pruning stale group_chat_id: %s", key)
-            del self.group_chat_ids[key]
+            del thread_router.group_chat_ids[key]
 
         self._save_state()
         return True
@@ -591,7 +545,7 @@ class SessionManager:
         bound_window_ids: set[str] = set()
         total_bindings = 0
         live_binding_count = 0
-        for _uid, bindings in self.thread_bindings.items():
+        for _uid, bindings in thread_router.thread_bindings.items():
             for _tid, wid in bindings.items():
                 total_bindings += 1
                 bound_window_ids.add(wid)
@@ -601,7 +555,7 @@ class SessionManager:
         session_map_wids = self._get_session_map_window_ids()
 
         # 1. Ghost bindings (thread → dead window) — fixable (close topic)
-        for uid, bindings in self.thread_bindings.items():
+        for uid, bindings in thread_router.thread_bindings.items():
             for tid, wid in bindings.items():
                 if wid not in live_window_ids:
                     display = self.get_display_name(wid)
@@ -615,9 +569,9 @@ class SessionManager:
 
         # 2. Orphaned display names
         in_use = set(self.window_states.keys()) | bound_window_ids
-        for wid in self.window_display_names:
+        for wid in thread_router.window_display_names:
             if wid not in live_window_ids and wid not in in_use:
-                name = self.window_display_names[wid]
+                name = thread_router.window_display_names[wid]
                 issues.append(
                     AuditIssue(
                         category="orphaned_display_name",
@@ -628,10 +582,10 @@ class SessionManager:
 
         # 3. Orphaned group_chat_ids
         bound_keys: set[str] = set()
-        for user_id, bindings in self.thread_bindings.items():
+        for user_id, bindings in thread_router.thread_bindings.items():
             for thread_id in bindings:
                 bound_keys.add(f"{user_id}:{thread_id}")
-        for key in self.group_chat_ids:
+        for key in thread_router.group_chat_ids:
             if key not in bound_keys:
                 issues.append(
                     AuditIssue(
@@ -672,7 +626,7 @@ class SessionManager:
 
         # 6. Display name drift (stored != tmux)
         for wid, tmux_name in live_windows:
-            stored_name = self.window_display_names.get(wid)
+            stored_name = thread_router.window_display_names.get(wid)
             if stored_name and stored_name != tmux_name:
                 issues.append(
                     AuditIssue(
@@ -730,7 +684,7 @@ class SessionManager:
         """
         session_map_wids = self._get_session_map_window_ids()
         bound_window_ids: set[str] = set()
-        for bindings in self.thread_bindings.values():
+        for bindings in thread_router.thread_bindings.values():
             bound_window_ids.update(bindings.values())
 
         stale = [
@@ -794,11 +748,11 @@ class SessionManager:
         # Initialize display name from session_map only when unknown.
         if (
             new_wname
-            and not self.window_display_names.get(window_id)
+            and not thread_router.window_display_names.get(window_id)
             and not state.window_name
         ):
             state.window_name = new_wname
-            self.window_display_names[window_id] = new_wname
+            thread_router.window_display_names[window_id] = new_wname
             changed = True
         return changed
 
@@ -872,7 +826,7 @@ class SessionManager:
         # never appear in session_map but still need their window state preserved).
         bound_wids = {
             wid
-            for user_bindings in self.thread_bindings.values()
+            for user_bindings in thread_router.thread_bindings.values()
             for wid in user_bindings.values()
             if wid
         }
@@ -1094,15 +1048,7 @@ class SessionManager:
 
     def get_window_for_chat_thread(self, chat_id: int, thread_id: int) -> str | None:
         """Resolve window_id for a specific Telegram chat/thread pair."""
-        for user_id, bindings in self.thread_bindings.items():
-            window_id = bindings.get(thread_id)
-            if not window_id:
-                continue
-            key = f"{user_id}:{thread_id}"
-            resolved_chat = self.group_chat_ids.get(key, user_id)
-            if resolved_chat == chat_id:
-                return window_id
-        return None
+        return thread_router.get_window_for_chat_thread(chat_id, thread_id)
 
     # --- Notification mode ---
 
@@ -1368,171 +1314,73 @@ class SessionManager:
         self.user_window_offsets[user_id][window_id] = offset
         self._save_state()
 
-    # --- Thread binding management ---
+    # --- Thread binding management (delegated to thread_router) ---
 
     def bind_thread(
         self, user_id: int, thread_id: int, window_id: str, window_name: str = ""
     ) -> None:
-        """Bind a Telegram topic thread to a tmux window.
-
-        Enforces 1 topic = 1 window: if another thread is already bound to
-        the same window_id, that stale binding is removed first.
-
-        Args:
-            user_id: Telegram user ID
-            thread_id: Telegram topic thread ID
-            window_id: Tmux window ID (e.g. '@0')
-            window_name: Display name for the window (optional)
-        """
-        if user_id not in self.thread_bindings:
-            self.thread_bindings[user_id] = {}
-
-        # Enforce 1:1 — unbind any OTHER thread pointing to this window
-        stale = [
-            tid
-            for tid, wid in self.thread_bindings[user_id].items()
-            if wid == window_id and tid != thread_id
-        ]
-        for tid in stale:
-            del self.thread_bindings[user_id][tid]
-            logger.info(
-                "Evicted stale binding: thread %d -> window_id %s (replaced by thread %d)",
-                tid,
-                window_id,
-                thread_id,
-            )
-
-        self.thread_bindings[user_id][thread_id] = window_id
-        self._window_to_thread[(user_id, window_id)] = thread_id
-        if window_name:
-            self.window_display_names[window_id] = window_name
-        self._save_state()
-        display = window_name or self.get_display_name(window_id)
-        logger.info(
-            "Bound thread %d -> window_id %s (%s) for user %d",
-            thread_id,
-            window_id,
-            display,
-            user_id,
-        )
+        """Bind a Telegram topic thread to a tmux window."""
+        thread_router.bind_thread(user_id, thread_id, window_id, window_name)
 
     def unbind_thread(self, user_id: int, thread_id: int) -> str | None:
         """Remove a thread binding. Returns the previously bound window_id, or None."""
-        bindings = self.thread_bindings.get(user_id)
-        if not bindings or thread_id not in bindings:
-            return None
-        window_id = bindings.pop(thread_id)
-        self._window_to_thread.pop((user_id, window_id), None)
-        if not bindings:
-            del self.thread_bindings[user_id]
-        logger.info(
-            "Unbound thread %d (was %s) for user %d",
-            thread_id,
-            window_id,
-            user_id,
-        )
-
-        # Clean up group_chat_id for the unbound thread
-        chat_key = f"{user_id}:{thread_id}"
-        self.group_chat_ids.pop(chat_key, None)
-
-        # Remove display name if no other thread still references this window
-        still_bound = any(
-            wid == window_id
-            for user_bindings in self.thread_bindings.values()
-            for wid in user_bindings.values()
-        )
-        if not still_bound and window_id not in self.window_states:
-            self.window_display_names.pop(window_id, None)
-
-        self._save_state()
+        window_id = thread_router.unbind_thread(user_id, thread_id)
+        if window_id:
+            # Clean up display name if nothing references this window anymore
+            still_bound = any(
+                wid == window_id
+                for ub in thread_router.thread_bindings.values()
+                for wid in ub.values()
+            )
+            if not still_bound and window_id not in self.window_states:
+                thread_router.window_display_names.pop(window_id, None)
         return window_id
 
     def get_window_for_thread(self, user_id: int, thread_id: int) -> str | None:
         """Look up the window_id bound to a thread."""
-        bindings = self.thread_bindings.get(user_id)
-        if not bindings:
-            return None
-        return bindings.get(thread_id)
+        return thread_router.get_window_for_thread(user_id, thread_id)
 
     def get_thread_for_window(self, user_id: int, window_id: str) -> int | None:
         """Reverse lookup: get thread_id for a window (O(1) via reverse index)."""
-        return self._window_to_thread.get((user_id, window_id))
+        return thread_router.get_thread_for_window(user_id, window_id)
 
     def get_all_thread_windows(self, user_id: int) -> dict[int, str]:
         """Get all thread bindings for a user."""
-        return dict(self.thread_bindings.get(user_id, {}))
+        return thread_router.get_all_thread_windows(user_id)
 
     def resolve_window_for_thread(
         self,
         user_id: int,
         thread_id: int | None,
     ) -> str | None:
-        """Resolve the tmux window_id for a user's thread.
-
-        Returns None if thread_id is None or the thread is not bound.
-        """
-        if thread_id is None:
-            return None
-        return self.get_window_for_thread(user_id, thread_id)
+        """Resolve the tmux window_id for a user's thread."""
+        return thread_router.resolve_window_for_thread(user_id, thread_id)
 
     def iter_thread_bindings(self) -> Iterator[tuple[int, int, str]]:
-        """Iterate all thread bindings as (user_id, thread_id, window_id).
-
-        Provides encapsulated access to thread_bindings without exposing
-        the internal data structure directly.
-        """
-        for user_id, bindings in self.thread_bindings.items():
-            for thread_id, window_id in bindings.items():
-                yield user_id, thread_id, window_id
+        """Iterate all thread bindings as (user_id, thread_id, window_id)."""
+        return thread_router.iter_thread_bindings()
 
     def find_users_for_session(
         self,
         session_id: str,
     ) -> list[tuple[int, str, int]]:
-        """Find all users whose thread-bound window maps to the given session_id.
-
-        Uses in-memory window_states for O(bindings) lookup with zero I/O.
-        Returns list of (user_id, window_id, thread_id) tuples.
-        """
+        """Find all users whose thread-bound window maps to the given session_id."""
         result: list[tuple[int, str, int]] = []
-        for user_id, thread_id, window_id in self.iter_thread_bindings():
+        for user_id, thread_id, window_id in thread_router.iter_thread_bindings():
             state = self.window_states.get(window_id)
             if state and state.session_id == session_id:
                 result.append((user_id, window_id, thread_id))
         return result
 
-    # --- Group chat ID management ---
+    # --- Group chat ID management (delegated to thread_router) ---
 
     def set_group_chat_id(self, user_id: int, thread_id: int, chat_id: int) -> None:
-        """Store the group chat ID for a user's thread (for forum topic message routing).
-
-        Uses composite key "user_id:thread_id" to support multiple groups per user.
-        """
-        key = f"{user_id}:{thread_id}"
-        if self.group_chat_ids.get(key) != chat_id:
-            self.group_chat_ids[key] = chat_id
-            self._save_state()
-            logger.info(
-                "Stored group chat_id %d for user %d, thread %d",
-                chat_id,
-                user_id,
-                thread_id,
-            )
+        """Store the group chat ID for a user's thread."""
+        thread_router.set_group_chat_id(user_id, thread_id, chat_id)
 
     def resolve_chat_id(self, user_id: int, thread_id: int | None = None) -> int:
-        """Resolve the chat_id for sending messages.
-
-        In forum topics (thread_id is set), returns the stored group chat_id
-        for that specific thread (user_id:thread_id).
-        Falls back to user_id for direct messages or if no group_id stored.
-        """
-        if thread_id is not None:
-            key = f"{user_id}:{thread_id}"
-            group_id = self.group_chat_ids.get(key)
-            if group_id is not None:
-                return group_id
-        return user_id
+        """Resolve the chat_id for sending messages."""
+        return thread_router.resolve_chat_id(user_id, thread_id)
 
     # --- Tmux helpers ---
 

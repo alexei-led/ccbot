@@ -113,18 +113,18 @@ Design doc: `docs/design/thread-router/design.md`, `docs/design/session-state/de
 
 #### Task 6: Extract ThreadRouter class
 
-- [ ] Create `src/ccgram/thread_router.py` with `ThreadRouter` class
-- [ ] Move from `session.py` → `thread_router.py`:
+- [x] Create `src/ccgram/thread_router.py` with `ThreadRouter` class
+- [x] Move from `session.py` → `thread_router.py`:
   - Data: `thread_bindings`, `_window_to_thread`, `group_chat_ids`, `window_display_names`
   - Methods: `bind_thread`, `unbind_thread`, `get_window_for_thread`, `resolve_window_for_thread`, `get_thread_for_window`, `get_all_thread_windows`, `iter_thread_bindings`, `set_group_chat_id`, `resolve_chat_id`, `get_window_for_chat_thread`, `get_display_name`, `set_display_name`, `sync_display_names`, `_rebuild_reverse_index`
-- [ ] Add `to_dict()` / `from_dict()` serialization methods to ThreadRouter
-- [ ] Add `schedule_save` callback parameter to ThreadRouter constructor (called after mutations)
-- [ ] Create module-level singleton `thread_router = ThreadRouter()`
-- [ ] Wire ThreadRouter into SessionManager: `session.py` holds reference, calls `thread_router.to_dict()` on save and `thread_router.from_dict()` on load
-- [ ] Remove moved methods and data from SessionManager (replace with delegation or remove entirely)
-- [ ] Add tests for ThreadRouter in `tests/ccgram/test_thread_router.py`: `test_bind_thread`, `test_unbind_thread`, `test_reverse_index`, `test_to_dict_roundtrip`, `test_resolve_chat_id_fallback`
-- [ ] Update existing tests in `tests/ccgram/test_session.py` to account for extraction
-- [ ] Run `make test` — must pass
+- [x] Add `to_dict()` / `from_dict()` serialization methods to ThreadRouter
+- [x] Add `schedule_save` callback parameter to ThreadRouter constructor (called after mutations)
+- [x] Create module-level singleton `thread_router = ThreadRouter()`
+- [x] Wire ThreadRouter into SessionManager: `session.py` holds reference, calls `thread_router.to_dict()` on save and `thread_router.from_dict()` on load
+- [x] Remove moved methods and data from SessionManager (replace with delegation or remove entirely)
+- [x] Add tests for ThreadRouter in `tests/ccgram/test_thread_router.py`: `test_bind_thread`, `test_unbind_thread`, `test_reverse_index`, `test_to_dict_roundtrip`, `test_resolve_chat_id_fallback`
+- [x] Update existing tests in `tests/ccgram/test_session.py` to account for extraction
+- [x] Run `make test` — must pass
 
 #### Task 7: Update consumer imports (batch 1 — handlers)
 
