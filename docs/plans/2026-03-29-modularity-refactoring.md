@@ -251,15 +251,15 @@ Design doc: `docs/design/polling-subsystem/design.md`
 
 #### Task 14: Create polling coordinator
 
-- [ ] Create `src/ccgram/handlers/polling_coordinator.py` with:
+- [x] Create `src/ccgram/handlers/polling_coordinator.py` with:
   - `status_poll_loop(bot)` — thin async loop (~200 lines)
   - Iterate `thread_router.iter_thread_bindings()`
   - For each binding: delegate to strategies in sequence
   - Error handling with exponential backoff (moved from `status_polling.py`)
   - Display name sync (moved from `status_polling.py`)
-- [ ] Instantiate strategies at module level (or in loop init)
-- [ ] Wire coordinator to use strategy instances
-- [ ] Run `make test` — must pass
+- [x] Instantiate strategies at module level (or in loop init)
+- [x] Wire coordinator to use strategy instances
+- [x] Run `make test` — must pass
 
 #### Task 15: Remove old status_polling.py and finalize
 
