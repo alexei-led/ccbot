@@ -39,10 +39,7 @@ _TOPIC_CREATE_RETRY_BUFFER_SECONDS = 1
 
 def _is_window_already_bound(window_id: str) -> bool:
     """Check if a window is already bound to any topic."""
-    for _, _, bound_wid in thread_router.iter_thread_bindings():
-        if bound_wid == window_id:
-            return True
-    return False
+    return thread_router.has_window(window_id)
 
 
 async def _auto_detect_provider(window_id: str) -> None:

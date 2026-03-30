@@ -262,6 +262,7 @@ class TestNewWindowSyncEdgeCases:
         thread_id = 10
 
         thread_router.thread_bindings = {user_id: {thread_id: window_id}}
+        thread_router._rebuild_reverse_index()
         thread_router.group_chat_ids = {f"{user_id}:{thread_id}": -100100}
 
         bot = AsyncMock()

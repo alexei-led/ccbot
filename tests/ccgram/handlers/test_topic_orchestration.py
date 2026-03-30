@@ -55,22 +55,17 @@ def _make_topic(thread_id: int = 999) -> MagicMock:
 class TestIsWindowAlreadyBound:
     def test_bound_window(self):
         with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
-            mock_router.iter_thread_bindings.return_value = [
-                (1, 100, "@0"),
-                (1, 200, "@5"),
-            ]
+            mock_router.has_window.return_value = True
             assert _is_window_already_bound("@5") is True
 
     def test_unbound_window(self):
         with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
-            mock_router.iter_thread_bindings.return_value = [
-                (1, 100, "@0"),
-            ]
+            mock_router.has_window.return_value = False
             assert _is_window_already_bound("@5") is False
 
     def test_no_bindings(self):
         with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
-            mock_router.iter_thread_bindings.return_value = []
+            mock_router.has_window.return_value = False
             assert _is_window_already_bound("@0") is False
 
 
@@ -229,6 +224,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
             patch("ccgram.handlers.topic_orchestration.config") as mock_config,
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
             mock_config.group_id = -100500
             mock_config.allowed_users = {12345}
@@ -249,6 +245,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
             patch("ccgram.handlers.topic_orchestration.config") as mock_config,
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
             mock_tr.resolve_chat_id.return_value = 12345
             mock_config.group_id = -100500
@@ -272,6 +269,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.config"),
         ):
             bindings = [(100, 5, "@1")]
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.side_effect = [
                 iter(bindings),
                 iter(bindings),
@@ -296,6 +294,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.config"),
         ):
             bindings = [(100, 5, "@1")]
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.side_effect = [
                 iter(bindings),
                 iter(bindings),
@@ -320,6 +319,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
             patch("ccgram.handlers.topic_orchestration.config") as mock_config,
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
             mock_config.group_id = -100500
             mock_config.allowed_users = {12345}
@@ -340,6 +340,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
             patch("ccgram.handlers.topic_orchestration.config") as mock_config,
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
             mock_config.group_id = -100500
             mock_config.allowed_users = {12345}
@@ -361,6 +362,7 @@ class TestHandleNewWindow:
                 side_effect=[100.0, 100.0, 101.0],
             ),
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.side_effect = [
                 iter([]),
                 iter([]),
@@ -394,6 +396,7 @@ class TestHandleNewWindow:
                 side_effect=[100.0, 100.0, 106.0],
             ),
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.side_effect = [
                 iter([]),
                 iter([]),
@@ -423,6 +426,7 @@ class TestHandleNewWindow:
             patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
             patch("ccgram.handlers.topic_orchestration.config") as mock_config,
         ):
+            mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
             mock_tr.group_chat_ids = {"100:5": -100200}
             mock_config.group_id = None

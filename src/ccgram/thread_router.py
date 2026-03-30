@@ -44,8 +44,9 @@ class ThreadRouter:
     )
 
     def __post_init__(self) -> None:
-        # Instance attribute (not a field) — avoids descriptor protocol binding
+        # Instance attributes (not fields) — avoids descriptor protocol binding
         self._schedule_save: Callable[[], None] = lambda: None
+        self._has_window_state: Callable[[str], bool] = lambda _wid: False
 
     def reset(self) -> None:
         """Clear all state.  Used for test isolation."""
@@ -146,6 +147,11 @@ class ThreadRouter:
                 thread_id,
             )
 
+        # Clean up stale reverse index if this thread was previously bound elsewhere
+        old_window = self.thread_bindings[user_id].get(thread_id)
+        if old_window is not None and old_window != window_id:
+            self._window_to_thread.pop((user_id, old_window), None)
+
         self.thread_bindings[user_id][thread_id] = window_id
         self._window_to_thread[(user_id, window_id)] = thread_id
         if window_name:
@@ -185,6 +191,15 @@ class ThreadRouter:
         chat_key = f"{user_id}:{thread_id}"
         self.group_chat_ids.pop(chat_key, None)
 
+        # Clean up orphaned display name if nothing references this window
+        still_bound = any(
+            wid == window_id
+            for ub in self.thread_bindings.values()
+            for wid in ub.values()
+        )
+        if not still_bound and not self._has_window_state(window_id):
+            self.window_display_names.pop(window_id, None)
+
         self._schedule_save()
         return window_id
 
@@ -215,6 +230,10 @@ class ThreadRouter:
         if thread_id is None:
             return None
         return self.get_window_for_thread(user_id, thread_id)
+
+    def has_window(self, window_id: str) -> bool:
+        """Check if any user has a binding to this window_id."""
+        return any(wid == window_id for (_, wid) in self._window_to_thread)
 
     def iter_thread_bindings(self) -> Iterator[tuple[int, int, str]]:
         """Iterate all thread bindings as (user_id, thread_id, window_id)."""

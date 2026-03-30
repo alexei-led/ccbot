@@ -226,6 +226,7 @@ class SessionManager:
     def __post_init__(self) -> None:
         self._persistence = StatePersistence(config.state_file, self._serialize_state)
         thread_router._schedule_save = self._save_state
+        thread_router._has_window_state = lambda wid: wid in self.window_states
         self._load_state()
 
     def _serialize_state(self) -> dict[str, Any]:
@@ -1330,18 +1331,11 @@ class SessionManager:
         thread_router.bind_thread(user_id, thread_id, window_id, window_name)
 
     def unbind_thread(self, user_id: int, thread_id: int) -> str | None:
-        """Remove a thread binding. Returns the previously bound window_id, or None."""
-        window_id = thread_router.unbind_thread(user_id, thread_id)
-        if window_id:
-            # Clean up display name if nothing references this window anymore
-            still_bound = any(
-                wid == window_id
-                for ub in thread_router.thread_bindings.values()
-                for wid in ub.values()
-            )
-            if not still_bound and window_id not in self.window_states:
-                thread_router.window_display_names.pop(window_id, None)
-        return window_id
+        """Remove a thread binding. Returns the previously bound window_id, or None.
+
+        Display name cleanup is handled by thread_router.unbind_thread().
+        """
+        return thread_router.unbind_thread(user_id, thread_id)
 
     def get_window_for_thread(self, user_id: int, thread_id: int) -> str | None:
         """Look up the window_id bound to a thread."""
