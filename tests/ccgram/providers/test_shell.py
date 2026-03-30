@@ -451,8 +451,8 @@ class TestWrapModeSetup:
         await setup_shell_prompt("@0")
 
         cmd = mock_tmux.send_keys.call_args_list[1][0][1]
-        assert "functions --copy fish_prompt __ccgram_orig_prompt" in cmd
-        assert "functions --query __ccgram_orig_prompt" in cmd
+        assert "builtin functions --copy fish_prompt __ccgram_orig_prompt" in cmd
+        assert "builtin functions --query __ccgram_orig_prompt" in cmd
         assert "__ccgram_orig_prompt" in cmd
         assert "⌘%d⌘" in cmd
         assert "set_color brblack" in cmd
@@ -540,7 +540,7 @@ class TestWrapSetupCommands:
             ("fish", "__ccgram_orig_prompt"),
             ("fish", "set_color brblack"),
             ("fish", "or function __ccgram_orig_prompt"),
-            ("fish", "functions --query __ccgram_orig_prompt"),
+            ("fish", "builtin functions --query __ccgram_orig_prompt"),
             ("bash", "PROMPT_COMMAND"),
             ("bash", "⌘\\${__ccgram_x}⌘"),
             ("bash", "type __ccgram_sc"),

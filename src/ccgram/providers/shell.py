@@ -158,9 +158,11 @@ def _wrap_setup_commands(shell: str) -> str:
     # Uses set_color instead of raw ANSI — avoids escape mangling via send_keys.
     # Guard: skip if __ccgram_orig_prompt already exists (idempotent).
     # Embedded clear hides the setup command from the user.
+    # Use `builtin functions` to avoid false errors from fish plugins
+    # (e.g. abbr_tips runs argparse on any command starting with "functions").
     fish = (
-        "functions --query __ccgram_orig_prompt; or begin; "
-        "functions --copy fish_prompt __ccgram_orig_prompt 2>/dev/null; "
+        "builtin functions --query __ccgram_orig_prompt; or begin; "
+        "builtin functions --copy fish_prompt __ccgram_orig_prompt 2>/dev/null; "
         "or function __ccgram_orig_prompt; end; "
         "function fish_prompt; "
         "set -l __s $status; "
