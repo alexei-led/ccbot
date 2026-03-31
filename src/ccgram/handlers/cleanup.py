@@ -34,7 +34,7 @@ def _clear_window_state(window_id: str, user_id: int, thread_id: int) -> None:
     from ..tmux_manager import clear_vim_state
     from ..window_resolver import is_foreign_window
     from .hook_events import clear_subagents
-    from .msg_broker import clear_delivery_state
+    from .msg_delivery import clear_delivery_state
     from .polling_strategies import clear_pane_alerts, clear_window_poll_state
     from .shell_capture import clear_shell_monitor_state
 

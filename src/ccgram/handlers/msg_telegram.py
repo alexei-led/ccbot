@@ -334,7 +334,7 @@ async def _handle_loop_alert(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Handle [Pause Messaging] / [Allow 5 more] button presses."""
-    from .msg_broker import delivery_strategy
+    from .msg_delivery import delivery_strategy
 
     query = update.callback_query
     if not query or not query.data:

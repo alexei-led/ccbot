@@ -7,21 +7,23 @@ import pytest
 from ccgram.handlers.msg_broker import (
     BROKER_CYCLE_INTERVAL,
     SWEEP_INTERVAL,
-    DeliveryState,
-    MessageDeliveryStrategy,
     _INJECTION_CHAR_LIMIT,
-    _LOOP_THRESHOLD,
-    _RATE_WINDOW_SECONDS,
     _collect_eligible,
-    _pair_key,
     broker_delivery_cycle,
-    clear_delivery_state,
     delivery_strategy,
     format_file_reference,
     format_injection_text,
     merge_injection_texts,
     reset_delivery_state,
     write_delivery_file,
+)
+from ccgram.handlers.msg_delivery import (
+    DeliveryState,
+    MessageDeliveryStrategy,
+    _LOOP_THRESHOLD,
+    _RATE_WINDOW_SECONDS,
+    _pair_key,
+    clear_delivery_state,
 )
 from ccgram.mailbox import Mailbox
 

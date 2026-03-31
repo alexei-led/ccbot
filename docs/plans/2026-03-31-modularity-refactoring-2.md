@@ -151,21 +151,21 @@ Design doc: `docs/design/message-delivery/design.md`
 
 `msg_broker.py` owns `MessageDeliveryStrategy` and `delivery_strategy` singleton. `msg_telegram.py` (line 338) does `from .msg_broker import delivery_strategy` — creating a circular dependency (both defer imports to function scope). Extracting the strategy to a standalone module breaks the cycle.
 
-- [ ] create `handlers/msg_delivery.py` — move from `msg_broker.py`:
+- [x] create `handlers/msg_delivery.py` — move from `msg_broker.py`:
   - `DeliveryState` dataclass (line ~30-50 of msg_broker)
   - `MessageDeliveryStrategy` class with all methods (`check_rate_limit`, `check_loop`, `pause_peer`, `allow_more`, `record_delivery`, `record_exchange`, `is_paused`, `get_state`, `_states` dict)
   - `delivery_strategy = MessageDeliveryStrategy()` singleton
   - `clear_delivery_state(qualified_id)` function
   - `reset_delivery_state()` function (for testing)
-- [ ] `handlers/msg_broker.py`: remove moved code; add re-exports for backward compatibility:
+- [x] `handlers/msg_broker.py`: remove moved code; add re-exports for backward compatibility:
   ```python
   from .msg_delivery import delivery_strategy, DeliveryState, clear_delivery_state, reset_delivery_state
   ```
-- [ ] `handlers/msg_telegram.py` (line 338): change `from .msg_broker import delivery_strategy` → `from .msg_delivery import delivery_strategy`
-- [ ] `handlers/cleanup.py`: change `from .msg_broker import clear_delivery_state` → `from .msg_delivery import clear_delivery_state`
-- [ ] verify singleton identity in test: `assert msg_broker.delivery_strategy is msg_delivery.delivery_strategy`
-- [ ] write tests for `msg_delivery.py`: `test_delivery_state_lifecycle`, `test_clear_removes_entry`, `test_reset_clears_all`
-- [ ] `make check` — must pass
+- [x] `handlers/msg_telegram.py` (line 338): change `from .msg_broker import delivery_strategy` → `from .msg_delivery import delivery_strategy`
+- [x] `handlers/cleanup.py`: change `from .msg_broker import clear_delivery_state` → `from .msg_delivery import clear_delivery_state`
+- [x] verify singleton identity in test: `assert msg_broker.delivery_strategy is msg_delivery.delivery_strategy`
+- [x] write tests for `msg_delivery.py`: `test_delivery_state_lifecycle`, `test_clear_removes_entry`, `test_reset_clears_all`
+- [x] `make check` — must pass
 
 ---
 
