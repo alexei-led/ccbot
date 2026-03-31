@@ -22,7 +22,7 @@ import json
 import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, Self, runtime_checkable
+from typing import TYPE_CHECKING, Any, Self
 
 import aiofiles
 
@@ -121,53 +121,6 @@ def export_window_info() -> dict[str, "WindowInfo"]:
                 external=ws_data.get("external", False),
             )
     return result
-
-
-# --- Protocol interfaces for typed contracts ---
-# These define the subset of SessionManager used by each consumer category.
-# Additive only — no consumer changes required; protocols document the API
-# surface that each module group relies on.
-
-
-@runtime_checkable
-class WindowStateStore(Protocol):
-    """Read/write access to per-window persistent state."""
-
-    def get_window_state(self, window_id: str) -> "WindowState": ...
-    def get_display_name(self, window_id: str) -> str: ...
-    def get_session_id_for_window(self, window_id: str) -> str | None: ...
-    def clear_window_session(self, window_id: str) -> None: ...
-
-
-@runtime_checkable
-class SessionIO(Protocol):
-    """Send input to agent windows and read message history."""
-
-    async def send_to_window(
-        self, window_id: str, text: str, *, raw: bool = False
-    ) -> tuple[bool, str]: ...
-
-    async def resolve_session_for_window(
-        self, window_id: str
-    ) -> "ClaudeSession | None": ...
-
-    async def get_recent_messages(
-        self, window_id: str, *, start_byte: int = 0, end_byte: int | None = None
-    ) -> tuple[list[dict], int]: ...
-
-
-@runtime_checkable
-class WindowModeConfig(Protocol):
-    """Per-window mode getters/setters/cyclers (approval, notification, batch)."""
-
-    def get_approval_mode(self, window_id: str) -> str: ...
-    def set_window_approval_mode(self, window_id: str, mode: str) -> None: ...
-    def get_notification_mode(self, window_id: str) -> str: ...
-    def set_notification_mode(self, window_id: str, mode: str) -> None: ...
-    def cycle_notification_mode(self, window_id: str) -> str: ...
-    def get_batch_mode(self, window_id: str) -> str: ...
-    def set_batch_mode(self, window_id: str, mode: str) -> None: ...
-    def cycle_batch_mode(self, window_id: str) -> str: ...
 
 
 @dataclass

@@ -291,6 +291,8 @@ def send_cmd(
     file_path: str | None,
 ) -> None:
     """Send a message to a peer window."""
+    if ":" not in to:
+        to = f"{_infer_tmux_session()}:{to}"
     my_id = _get_my_window_id()
     mailbox = Mailbox(_get_mailbox_dir())
     rate_limit = _get_msg_rate_limit()

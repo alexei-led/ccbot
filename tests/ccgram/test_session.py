@@ -1084,21 +1084,3 @@ class TestExportWindowInfo:
         (state_dir / "state.json").write_text("{ invalid json")
         monkeypatch.setattr("ccgram.utils.ccgram_dir", lambda: state_dir)
         assert export_window_info() == {}
-
-
-class TestProtocolsSatisfied:
-    def test_session_manager_is_window_state_store(self) -> None:
-        from ccgram.session import SessionManager, WindowStateStore
-
-        assert isinstance(SessionManager, type)
-        assert issubclass(SessionManager, WindowStateStore)
-
-    def test_session_manager_is_window_mode_config(self) -> None:
-        from ccgram.session import SessionManager, WindowModeConfig
-
-        assert issubclass(SessionManager, WindowModeConfig)
-
-    def test_session_manager_is_session_io(self) -> None:
-        from ccgram.session import SessionIO, SessionManager
-
-        assert issubclass(SessionManager, SessionIO)

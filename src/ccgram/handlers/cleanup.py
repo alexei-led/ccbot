@@ -80,7 +80,6 @@ async def clear_topic_state(
 
         mb = Mailbox(config.mailbox_dir)
         if qualified_id is not None:
-            mb.sweep(qualified_id)
             mb.clear_inbox(qualified_id)
 
     await clear_interactive_msg(user_id, bot, thread_id)
