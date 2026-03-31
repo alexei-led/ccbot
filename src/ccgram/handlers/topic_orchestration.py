@@ -37,6 +37,11 @@ _topic_create_retry_until: dict[int, float] = {}
 _TOPIC_CREATE_RETRY_BUFFER_SECONDS = 1
 
 
+def clear_topic_create_retry(chat_id: int) -> None:
+    """Clear topic creation retry backoff for this chat (called on topic cleanup)."""
+    _topic_create_retry_until.pop(chat_id, None)
+
+
 def _is_window_already_bound(window_id: str) -> bool:
     """Check if a window is already bound to any topic."""
     return thread_router.has_window(window_id)

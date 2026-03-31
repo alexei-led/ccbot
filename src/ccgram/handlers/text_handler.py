@@ -54,7 +54,7 @@ _BASH_OUTPUT_LIMIT = 3800
 _bash_capture_tasks: dict[tuple[int, int], asyncio.Task[None]] = {}
 
 
-def _cancel_bash_capture(user_id: int, thread_id: int) -> None:
+def cancel_bash_capture(user_id: int, thread_id: int) -> None:
     """Cancel any running bash capture for this topic."""
     key = (user_id, thread_id)
     task = _bash_capture_tasks.pop(key, None)
@@ -320,7 +320,7 @@ async def _forward_message(
     await enqueue_status_update(bot, user_id, window_id, None, thread_id)
 
     # Cancel any running bash capture — new message pushes pane content down
-    _cancel_bash_capture(user_id, thread_id)
+    cancel_bash_capture(user_id, thread_id)
 
     clear_probe_failures(window_id)
 

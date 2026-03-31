@@ -24,6 +24,42 @@ from .topic_emoji import clear_topic_emoji_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, VOICE_PENDING
 
 
+def _clear_window_state(window_id: str, user_id: int, thread_id: int) -> None:
+    """Clear all state keyed by window_id or qualified_id."""
+    from ..config import config
+    from ..mailbox import Mailbox
+    from ..msg_discovery import clear_declared
+    from ..providers.process_detection import clear_detection_cache
+    from ..spawn_request import clear_spawn_state
+    from ..tmux_manager import clear_vim_state
+    from ..window_resolver import is_foreign_window
+    from .hook_events import clear_subagents
+    from .msg_broker import clear_delivery_state
+    from .polling_strategies import clear_pane_alerts, clear_window_poll_state
+    from .shell_capture import clear_shell_monitor_state
+
+    clear_vim_state(window_id)
+    clear_window_poll_state(window_id)
+    clear_pane_alerts(window_id)
+    log_throttle_reset(f"topic-probe:{window_id}")
+    log_throttle_reset(f"status-update:{user_id}:{thread_id}")
+    clear_subagents(window_id)
+    clear_shell_monitor_state(window_id)
+    clear_detection_cache(window_id)
+
+    qualified_id = (
+        window_id
+        if is_foreign_window(window_id)
+        else f"{config.tmux_session_name}:{window_id}"
+    )
+    mb = Mailbox(config.mailbox_dir)
+    mb.sweep(qualified_id)
+    mb.clear_inbox(qualified_id)
+    clear_declared(qualified_id)
+    clear_delivery_state(qualified_id)
+    clear_spawn_state(qualified_id)
+
+
 async def clear_topic_state(
     user_id: int,
     thread_id: int,
@@ -55,47 +91,12 @@ async def clear_topic_state(
     clear_batch_for_topic(user_id, thread_id)
 
     # Clear poll state (lazy import to avoid circular dep)
-    from .polling_strategies import (
-        clear_dead_notification,
-        clear_pane_alerts,
-        clear_topic_poll_state,
-        clear_window_poll_state,
-    )
+    from .polling_strategies import clear_dead_notification, clear_topic_poll_state
 
     clear_dead_notification(user_id, thread_id)
     clear_topic_poll_state(user_id, thread_id)
     if window_id:
-        from ..tmux_manager import clear_vim_state
-
-        clear_vim_state(window_id)
-        clear_window_poll_state(window_id)
-        clear_pane_alerts(window_id)
-        log_throttle_reset(f"topic-probe:{window_id}")
-        log_throttle_reset(f"status-update:{user_id}:{thread_id}")
-        from .hook_events import clear_subagents
-
-        clear_subagents(window_id)
-
-        # Clear mailbox and delivery state for this window
-        from ..config import config
-        from ..mailbox import Mailbox
-        from ..msg_discovery import clear_declared
-        from ..window_resolver import is_foreign_window
-        from .msg_broker import clear_delivery_state
-
-        if is_foreign_window(window_id):
-            qualified_id = window_id
-        else:
-            qualified_id = f"{config.tmux_session_name}:{window_id}"
-        mb = Mailbox(config.mailbox_dir)
-        mb.sweep(qualified_id)
-        mb.clear_inbox(qualified_id)
-        clear_declared(qualified_id)
-        clear_delivery_state(qualified_id)
-
-        from ..spawn_request import clear_spawn_state
-
-        clear_spawn_state(qualified_id)
+        _clear_window_state(window_id, user_id, thread_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)
@@ -106,21 +107,24 @@ async def clear_topic_state(
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     clear_topic_emoji_state(chat_id, thread_id)
 
-    # Clear command history for this topic
+    # Clear command history, bash capture, shell pending, send cooldowns
     from .command_history import clear_history
+    from .interactive_ui import clear_send_cooldowns
+    from .shell_commands import clear_shell_pending
+    from .text_handler import cancel_bash_capture
 
     clear_history(user_id, thread_id)
-
-    # Clear shell provider state (capture tasks + pending commands + passive monitor)
-    from .shell_capture import clear_shell_monitor_state
-    from .shell_commands import clear_shell_pending
-
+    cancel_bash_capture(user_id, thread_id)
     clear_shell_pending(chat_id, thread_id)
-    if window_id:
-        clear_shell_monitor_state(window_id)
-        from ..providers.process_detection import clear_detection_cache
+    clear_send_cooldowns(user_id, thread_id)
 
-        clear_detection_cache(window_id)
+    # Clear per-chat state (topic creation retry, disabled emoji chats)
+    if chat_id:
+        from .topic_emoji import clear_disabled_chat
+        from .topic_orchestration import clear_topic_create_retry
+
+        clear_topic_create_retry(chat_id)
+        clear_disabled_chat(chat_id)
 
     # Clear pending thread state from user_data
     if user_data is not None and user_data.get(PENDING_THREAD_ID) == thread_id:

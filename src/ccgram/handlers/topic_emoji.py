@@ -248,6 +248,16 @@ def clear_topic_emoji_state(chat_id: int, thread_id: int) -> None:
     _topic_names.pop(key, None)
 
 
+_MAX_DISABLED_CHATS = 1000
+
+
+def clear_disabled_chat(chat_id: int) -> None:
+    """Remove a chat from the disabled set (called on topic cleanup)."""
+    _disabled_chats.discard(chat_id)
+    if len(_disabled_chats) > _MAX_DISABLED_CHATS:
+        _disabled_chats.clear()
+
+
 def reset_all_state() -> None:
     """Reset all tracking state (for testing)."""
     _topic_states.clear()

@@ -62,6 +62,11 @@ _SEND_RETRY_INTERVAL = 5.0  # seconds between retries for failed sends
 _DEAD_TOPIC_RETRY_INTERVAL = 60.0  # longer backoff when topic is deleted
 
 
+def clear_send_cooldowns(user_id: int, thread_id: int) -> None:
+    """Clear send cooldown for this topic (called on topic cleanup)."""
+    _send_cooldowns.pop((user_id, thread_id or 0), None)
+
+
 def get_interactive_window(user_id: int, thread_id: int | None = None) -> str | None:
     """Get the window_id for user's interactive mode."""
     return _interactive_mode.get((user_id, thread_id or 0))
