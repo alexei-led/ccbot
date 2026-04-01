@@ -185,6 +185,42 @@ class TestSyncCommand:
             mock_sm.audit_state.assert_called_once()
             assert "2 topics bound" in mock_reply.call_args[0][1]
 
+    async def test_reconciles_live_topic_names_before_reporting(
+        self, _patch_deps
+    ) -> None:
+        mock_sm, mock_tr, mock_tm, _ = _patch_deps
+        mock_sm.audit_state.return_value = AuditResult(
+            issues=[], total_bindings=1, live_binding_count=1
+        )
+        mock_tm.list_windows.return_value = [
+            MagicMock(window_id="@7", window_name="ccgram-codex")
+        ]
+        mock_tr.iter_thread_bindings.return_value = [(100, 42, "@7")]
+        mock_tr.resolve_chat_id.return_value = -999
+        mock_tr.get_display_name.return_value = "ccgram-codex"
+
+        update = MagicMock()
+        update.effective_user = MagicMock(id=100)
+        update.message = AsyncMock()
+        bot = AsyncMock()
+        bot.send_message.return_value = MagicMock(message_id=999)
+        update.get_bot.return_value = bot
+
+        with (
+            patch("ccgram.handlers.sync_command.safe_reply"),
+            patch(
+                "ccgram.handlers.sync_command.sync_topic_name",
+                new_callable=AsyncMock,
+            ) as mock_sync_topic_name,
+        ):
+            await sync_command(update, MagicMock())
+            mock_sync_topic_name.assert_called_once_with(
+                bot,
+                -999,
+                42,
+                "ccgram-codex",
+            )
+
 
 class TestSyncFix:
     async def test_fix_runs_cleanup_and_re_audits(self, _patch_deps) -> None:
@@ -567,6 +603,7 @@ class TestSyncFixDeadTopic:
         mock_tr.iter_thread_bindings.side_effect = [
             [(100, 42, "@2")],  # pre-audit probe
             [],  # prune_stale_offsets
+            [],  # live topic-name reconciliation
             [],  # post-fix probe (already unbound)
         ]
         mock_tr.resolve_chat_id.return_value = -999

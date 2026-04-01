@@ -31,7 +31,7 @@ from telegram.ext import ContextTypes
 from ..screenshot import text_to_image
 from ..session import session_manager
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import (
     CB_KEYS_PREFIX,
     CB_PANE_SCREENSHOT,
@@ -204,7 +204,7 @@ async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) 
         await query.answer("\U0001f4e1 Remote Control active")
     else:
         display = thread_router.get_display_name(window_id)
-        await session_manager.send_to_window(window_id, f"/remote-control {display}")
+        await send_to_window(window_id, f"/remote-control {display}")
         await query.answer("\U0001f4e1 Activating\u2026")
 
 
@@ -358,7 +358,7 @@ async def _handle_status_recall(
     from ..providers import get_provider_for_window
 
     provider = get_provider_for_window(window_id)
-    if provider.capabilities.name == "shell":
+    if not provider.capabilities.supports_mailbox_delivery:
         from .shell_commands import handle_shell_message
 
         await handle_shell_message(
@@ -367,7 +367,7 @@ async def _handle_status_recall(
         await query.answer("\u21a9 Recalled")
         return
 
-    ok, err = await session_manager.send_to_window(window_id, command)
+    ok, err = await send_to_window(window_id, command)
     if not ok:
         await query.answer(err or "Failed to send command", show_alert=True)
         return

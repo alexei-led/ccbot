@@ -7,11 +7,11 @@ import pytest
 from telegram import Bot
 from telegram.error import BadRequest
 
-from ccgram.handlers.periodic_tasks import (
-    _check_autoclose_timers,
-    _check_unbound_window_ttl,
-    _probe_topic_existence,
-    _prune_stale_state,
+from ccgram.handlers.topic_lifecycle import (
+    check_autoclose_timers,
+    check_unbound_window_ttl,
+    probe_topic_existence,
+    prune_stale_state,
 )
 from ccgram.handlers.polling_coordinator import (
     _BACKOFF_MAX,
@@ -40,7 +40,7 @@ class TestCheckAutocloseTimers:
     @pytest.mark.asyncio
     async def test_no_topics_is_noop(self):
         bot = AsyncMock(spec=Bot)
-        await _check_autoclose_timers(bot)
+        await check_autoclose_timers(bot)
         bot.delete_forum_topic.assert_not_called()
 
     @pytest.mark.asyncio
@@ -52,17 +52,17 @@ class TestCheckAutocloseTimers:
             user_id, thread_id, "done", time.monotonic() - 99999
         )
         with (
-            patch("ccgram.handlers.periodic_tasks.config") as mock_config,
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_router,
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.periodic_tasks.clear_topic_state",
+                "ccgram.handlers.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ),
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.resolve_chat_id.return_value = 42
             mock_router.get_window_for_thread.return_value = "@0"
-            await _check_autoclose_timers(bot)
+            await check_autoclose_timers(bot)
         bot.delete_forum_topic.assert_called_once()
 
     @pytest.mark.asyncio
@@ -72,18 +72,18 @@ class TestCheckAutocloseTimers:
         lifecycle_strategy.start_autoclose_timer(
             user_id, thread_id, "done", time.monotonic()
         )
-        with patch("ccgram.handlers.periodic_tasks.config") as mock_config:
+        with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
             mock_config.autoclose_done_minutes = 60
-            await _check_autoclose_timers(bot)
+            await check_autoclose_timers(bot)
         bot.delete_forum_topic.assert_not_called()
 
 
 class TestCheckUnboundWindowTtl:
     @pytest.mark.asyncio
     async def test_no_timeout_is_noop(self):
-        with patch("ccgram.handlers.periodic_tasks.config") as mock_config:
+        with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
             mock_config.autoclose_done_minutes = 0
-            await _check_unbound_window_ttl([])
+            await check_unbound_window_ttl([])
 
     @pytest.mark.asyncio
     async def test_bound_window_timer_cleared(self):
@@ -91,12 +91,12 @@ class TestCheckUnboundWindowTtl:
         ws.unbound_timer = time.monotonic() - 100
         mock_window = MagicMock(window_id="@0", window_name="test")
         with (
-            patch("ccgram.handlers.periodic_tasks.config") as mock_config,
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_router,
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
-            await _check_unbound_window_ttl([mock_window])
+            await check_unbound_window_ttl([mock_window])
         assert ws.unbound_timer is None
 
 
@@ -135,8 +135,8 @@ class TestPruneStaleState:
     @pytest.mark.asyncio
     async def test_syncs_display_names(self):
         mock_window = MagicMock(window_id="@0", window_name="test")
-        with patch("ccgram.handlers.periodic_tasks.session_manager") as mock_sm:
-            await _prune_stale_state([mock_window])
+        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
+            await prune_stale_state([mock_window])
             mock_sm.sync_display_names.assert_called_once_with([("@0", "test")])
             mock_sm.prune_stale_state.assert_called_once_with({"@0"})
 
@@ -149,10 +149,10 @@ class TestProbeTopicExistence:
             side_effect=BadRequest("Topic_id_invalid")
         )
         with (
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_router,
-            patch("ccgram.handlers.periodic_tasks.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
+            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.periodic_tasks.clear_topic_state",
+                "ccgram.handlers.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ),
         ):
@@ -162,7 +162,7 @@ class TestProbeTopicExistence:
                 return_value=MagicMock(window_id="@0")
             )
             mock_tmux.kill_window = AsyncMock()
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
             mock_router.unbind_thread.assert_called_once_with(1, 100)
 
     @pytest.mark.asyncio
@@ -170,9 +170,9 @@ class TestProbeTopicExistence:
         bot = AsyncMock(spec=Bot)
         ws = terminal_strategy.get_state("@0")
         ws.probe_failures = 999
-        with patch("ccgram.handlers.periodic_tasks.thread_router") as mock_router:
+        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router:
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
         bot.unpin_all_forum_topic_messages.assert_not_called()
 
 

@@ -92,16 +92,20 @@ class TestHandleShellMessage:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.clear_probe_failures"),
-            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.session_manager"),
             patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
         ):
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             await handle_shell_message(bot, 1, 42, "@0", "!ls -la", message)
 
-            mock_sm.send_to_window.assert_called_once_with("@0", "ls -la", raw=True)
+            mock_send.assert_called_once_with("@0", "ls -la", raw=True)
             mock_mark.assert_called_once_with("@0", "ls -la", 1, 42)
 
     async def test_bang_with_space_strips_leading_space(self) -> None:
@@ -111,13 +115,17 @@ class TestHandleShellMessage:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.clear_probe_failures"),
-            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.session_manager"),
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
         ):
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             await handle_shell_message(bot, 1, 42, "@0", "! ls", message)
 
-            mock_sm.send_to_window.assert_called_once_with("@0", "ls", raw=True)
+            mock_send.assert_called_once_with("@0", "ls", raw=True)
 
     async def test_bare_bang_is_ignored(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -141,15 +149,17 @@ class TestHandleShellMessage:
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=None),
-            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.session_manager"),
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
         ):
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             await handle_shell_message(bot, 1, 42, "@0", "find . -name foo", message)
 
-            mock_sm.send_to_window.assert_called_once_with(
-                "@0", "find . -name foo", raw=True
-            )
+            mock_send.assert_called_once_with("@0", "find . -name foo", raw=True)
 
     async def test_no_bang_with_llm_calls_completer(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -298,15 +308,19 @@ class TestHandleShellCallback:
         bot = AsyncMock(spec=Bot)
 
         with (
-            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.session_manager"),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             _shell_pending[(-100, 42)] = ("ls -la", 1)
@@ -314,7 +328,7 @@ class TestHandleShellCallback:
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
             query.answer.assert_called_once()
-            mock_sm.send_to_window.assert_called_once_with("@0", "ls -la", raw=True)
+            mock_send.assert_called_once_with("@0", "ls -la", raw=True)
             mock_mark.assert_called_once_with("@0", "ls -la", 1, 42)
             assert _shell_pending.get((-100, 42)) is None
 
@@ -454,23 +468,25 @@ class TestHandleShellCallback:
         bot = AsyncMock(spec=Bot)
 
         with (
-            patch(f"{_MOD}.session_manager") as mock_sm,
+            patch(f"{_MOD}.session_manager"),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             _shell_pending[(-100, 42)] = ("rm -rf /tmp/test", 1)
 
             await handle_shell_callback(
                 query, 1, f"{CB_SHELL_CONFIRM_DANGER}@0", bot, 42
             )
 
-            mock_sm.send_to_window.assert_called_once_with(
-                "@0", "rm -rf /tmp/test", raw=True
-            )
+            mock_send.assert_called_once_with("@0", "rm -rf /tmp/test", raw=True)
             assert _shell_pending.get((-100, 42)) is None
 
 

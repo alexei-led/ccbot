@@ -12,6 +12,7 @@ import time
 
 import pytest
 
+from ccgram.claude_task_state import get_claude_task_snapshot
 from ccgram.session_monitor import SessionMonitor
 
 pytestmark = pytest.mark.integration
@@ -27,6 +28,54 @@ def _make_assistant_entry(text, *, session_id=TEST_SESSION_ID, cwd="/tmp/test"):
         "cwd": cwd,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
     }
+
+
+def _make_task_create_entry(
+    task_id: str,
+    subject: str,
+    *,
+    tool_id: str = "tool-1",
+    session_id=TEST_SESSION_ID,
+    cwd="/tmp/test",
+):
+    return [
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tool_id,
+                        "name": "TaskCreate",
+                        "input": {
+                            "subject": subject,
+                            "description": "",
+                            "activeForm": "",
+                        },
+                    }
+                ]
+            },
+            "sessionId": session_id,
+            "cwd": cwd,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        },
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": f"Task #{task_id} created successfully",
+                    }
+                ]
+            },
+            "toolUseResult": {"task": {"id": task_id, "subject": subject}},
+            "sessionId": session_id,
+            "cwd": cwd,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        },
+    ]
 
 
 def _write_jsonl(path, entries):
@@ -91,6 +140,23 @@ async def test_new_session_initializes_offset(
     assert tracked.last_byte_offset > 0
 
 
+async def test_new_session_seeds_claude_task_snapshot(
+    state_dir, session_map_with_transcript
+) -> None:
+    transcript = state_dir / "transcript.jsonl"
+    _write_jsonl(transcript, _make_task_create_entry("1", "Review architecture"))
+    session_map = session_map_with_transcript(transcript)
+
+    monitor = _make_monitor(state_dir)
+    current = {"@0": session_map["ccgram:@0"]}
+    assert await monitor.check_for_updates(current) == []
+
+    snapshot = get_claude_task_snapshot("@0")
+    assert snapshot is not None
+    assert snapshot.total_count == 1
+    assert snapshot.items[0].subject == "Review architecture"
+
+
 async def test_incremental_read_picks_up_new_messages(
     state_dir, session_map_with_transcript
 ) -> None:
@@ -134,7 +200,7 @@ async def test_file_truncation_resets_offset(
 
 async def test_session_change_cleanup(state_dir, session_map_with_transcript) -> None:
     transcript = state_dir / "transcript.jsonl"
-    _write_jsonl(transcript, [_make_assistant_entry("init")])
+    _write_jsonl(transcript, _make_task_create_entry("1", "Old task"))
     session_map_with_transcript(transcript)
 
     monitor = _make_monitor(state_dir)
@@ -147,6 +213,7 @@ async def test_session_change_cleanup(state_dir, session_map_with_transcript) ->
     }
     await monitor.check_for_updates(old_map)
     assert monitor.state.get_session(TEST_SESSION_ID) is not None
+    assert get_claude_task_snapshot("@0") is not None
 
     monitor._last_session_map = old_map
 
@@ -164,3 +231,4 @@ async def test_session_change_cleanup(state_dir, session_map_with_transcript) ->
     await monitor._detect_and_cleanup_changes()
 
     assert monitor.state.get_session(TEST_SESSION_ID) is None
+    assert get_claude_task_snapshot("@0") is None

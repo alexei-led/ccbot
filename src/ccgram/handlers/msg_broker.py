@@ -216,8 +216,8 @@ async def broker_delivery_cycle(
             qualified_id = f"{tmux_session}:{window_id}"
 
         provider = get_provider_for_window(window_id)
-        if provider.capabilities.name == "shell":
-            await _notify_shell_pending(bot, mailbox, qualified_id)
+        if not provider.capabilities.supports_mailbox_delivery:
+            await _deliver_to_shell_topic(bot, mailbox, qualified_id)
             continue
 
         # Hook-enabled providers get delivery via Stop event (hook_events.py).
@@ -251,10 +251,6 @@ async def broker_delivery_cycle(
             )
             await _notify_delivered(bot, qualified_id, to_deliver, mailbox)
             await _notify_senders(bot, qualified_id, to_deliver)
-
-    # Process pending spawn requests
-    if bot is not None:
-        await _process_spawn_requests(bot)
 
     return delivered_count
 
@@ -315,13 +311,14 @@ async def _notify_loop(bot: "Bot | None", window_a: str, window_b: str) -> None:
         logger.debug("Failed to send loop alert", window_a=window_a, window_b=window_b)
 
 
-async def _notify_shell_pending(
+async def _deliver_to_shell_topic(
     bot: "Bot | None", mailbox: "Mailbox", qualified_id: str
 ) -> None:
-    """Notify shell topics about pending messages (if bot available).
+    """Deliver messages to shell topics via Telegram notification.
 
-    Marks messages as delivered after first notification to prevent
-    repeated notifications every broker cycle.
+    For shell windows there is no agent to receive send_keys, so the
+    Telegram notification IS the delivery. Marks messages as delivered
+    after notification to prevent repeated deliveries every broker cycle.
     """
     if bot is None:
         return
@@ -339,31 +336,3 @@ async def _notify_shell_pending(
                 logger.debug(
                     "Failed to send shell pending notification", window=qualified_id
                 )
-
-
-async def _process_spawn_requests(bot: "Bot") -> None:
-    """Scan for file-based spawn requests and post approval keyboards or auto-approve."""
-    from ..spawn_request import pop_pending, scan_spawn_requests
-    from .msg_spawn import (
-        handle_spawn_approval,
-        post_spawn_approval_keyboard,
-    )
-
-    from ..config import config
-
-    new_requests = scan_spawn_requests(spawn_timeout=config.msg_spawn_timeout)
-    for req in new_requests:
-        try:
-            if req.auto or config.msg_auto_spawn:
-                await handle_spawn_approval(
-                    req.id, bot, spawn_timeout=config.msg_spawn_timeout
-                )
-            else:
-                posted = await post_spawn_approval_keyboard(
-                    bot, req.requester_window, req
-                )
-                if not posted:
-                    pop_pending(req.id)
-        except OSError, TelegramError:
-            pop_pending(req.id)
-            logger.debug("Failed to process spawn request", request_id=req.id)

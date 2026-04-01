@@ -5,11 +5,10 @@ import re
 import pytest
 
 from ccgram.handlers.callback_data import (
-    NOTIFICATION_MODES,
     NOTIFY_MODE_ICONS,
     NOTIFY_MODE_LABELS,
 )
-from ccgram.session import SessionManager, WindowState
+from ccgram.session import NOTIFICATION_MODES, SessionManager, WindowState
 
 
 @pytest.fixture

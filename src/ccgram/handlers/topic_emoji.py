@@ -70,8 +70,8 @@ _topic_names: dict[tuple[int, int], str] = {}
 _disabled_chats: set[int] = set()
 
 
-def _resolve_topic_name(key: tuple[int, int], display_name: str) -> str:
-    """Return the clean topic name, updating the cache when the name changes.
+def _resolve_topic_name(key: tuple[int, int], display_name: str) -> tuple[str, bool]:
+    """Return the clean topic name and whether it changed.
 
     On first call, strips emoji and stores the clean name. On subsequent calls,
     if the incoming display_name (stripped) differs from the stored name,
@@ -81,12 +81,106 @@ def _resolve_topic_name(key: tuple[int, int], display_name: str) -> str:
     cached = _topic_names.get(key)
     if cached is None:
         _topic_names[key] = clean
-        return clean
+        return clean, True
     if cached != clean:
         _topic_names[key] = clean
-        # Invalidate state so next update_topic_emoji re-applies emoji with new name
-        _topic_states.pop(key, None)
-    return _topic_names[key]
+        return clean, True
+    return cached, False
+
+
+def _should_apply_update(
+    key: tuple[int, int],
+    state: str,
+    state_token: tuple[str, str, bool],
+    *,
+    name_changed: bool,
+    now: float,
+) -> bool:
+    """Return True when the topic rename should be sent to Telegram."""
+    if _topic_states.get(key) == state_token:
+        _pending_transitions.pop(key, None)
+        return name_changed
+
+    pending = _pending_transitions.get(key)
+    if pending is None or pending[0] != state:
+        _pending_transitions[key] = (state, now)
+        return False
+
+    debounce = _DEBOUNCE_BY_STATE.get(state, DEBOUNCE_TO_IDLE_SECONDS)
+    if now - pending[1] < debounce:
+        return False
+
+    _pending_transitions.pop(key, None)
+    return True
+
+
+def _compose_topic_name(
+    clean_name: str,
+    *,
+    state: str = "",
+    approval_mode: str = "normal",
+    rc_active: bool = False,
+) -> str:
+    """Build the full Telegram topic title from state badges and clean name."""
+    parts: list[str] = []
+    emoji = {
+        "active": EMOJI_ACTIVE,
+        "idle": EMOJI_IDLE,
+        "done": EMOJI_DONE,
+        "dead": EMOJI_DEAD,
+    }.get(state, "")
+    if emoji:
+        parts.append(emoji)
+    if rc_active:
+        parts.append(EMOJI_RC)
+    if approval_mode == "yolo":
+        parts.append(EMOJI_YOLO)
+    parts.append(clean_name)
+    return " ".join(parts)
+
+
+async def _edit_topic_name(
+    bot: Bot,
+    chat_id: int,
+    thread_id: int,
+    key: tuple[int, int],
+    new_name: str,
+    *,
+    state_token: tuple[str, str, bool] | None = None,
+    state: str = "",
+) -> None:
+    """Apply a topic name update with shared Telegram error handling."""
+    try:
+        await bot.edit_forum_topic(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            name=new_name,
+        )
+        if state_token is not None:
+            _topic_states[key] = state_token
+        logger.debug(
+            "Updated topic emoji: chat=%d thread=%d state=%s name='%s'",
+            chat_id,
+            thread_id,
+            state or "sync",
+            new_name,
+        )
+    except BadRequest as e:
+        if "Not enough rights" in e.message:
+            _disabled_chats.add(chat_id)
+            logger.info(
+                "Topic emoji disabled for chat %d: insufficient permissions",
+                chat_id,
+            )
+        elif (
+            "topic_not_modified" in e.message.lower() or "Topic_id_invalid" in e.message
+        ):
+            if state_token is not None:
+                _topic_states[key] = state_token
+        else:
+            logger.debug("Failed to update topic emoji: %s", e)
+    except TelegramError:
+        pass
 
 
 def _resolve_approval_mode(chat_id: int, thread_id: int) -> str:
@@ -115,9 +209,45 @@ def _resolve_rc_mode(chat_id: int, thread_id: int) -> bool:
 def format_topic_name_for_mode(display_name: str, approval_mode: str) -> str:
     """Format a topic display name with a positive mode badge."""
     clean_name = strip_emoji_prefix(display_name)
-    if approval_mode == "yolo":
-        return f"{EMOJI_YOLO} {clean_name}"
-    return clean_name
+    return _compose_topic_name(clean_name, approval_mode=approval_mode)
+
+
+async def sync_topic_name(
+    bot: Bot,
+    chat_id: int,
+    thread_id: int,
+    display_name: str,
+) -> None:
+    """Force a topic title refresh to the current clean tmux name.
+
+    Preserves the last known lifecycle emoji when it is cached so `/sync`
+    can repair stale titles without waiting for a later state transition.
+    """
+    if chat_id in _disabled_chats:
+        return
+
+    key = (chat_id, thread_id)
+    clean_name, _ = _resolve_topic_name(key, display_name)
+    approval_mode = _resolve_approval_mode(chat_id, thread_id)
+    rc_active = _resolve_rc_mode(chat_id, thread_id)
+    cached = _topic_states.get(key)
+    state = cached[0] if cached else ""
+    state_token = (state, approval_mode, rc_active) if cached else None
+    new_name = _compose_topic_name(
+        clean_name,
+        state=state,
+        approval_mode=approval_mode,
+        rc_active=rc_active,
+    )
+    await _edit_topic_name(
+        bot,
+        chat_id,
+        thread_id,
+        key,
+        new_name,
+        state_token=state_token,
+        state=state,
+    )
 
 
 async def update_topic_emoji(
@@ -144,15 +274,11 @@ async def update_topic_emoji(
         return
 
     key = (chat_id, thread_id)
+    clean_name, name_changed = _resolve_topic_name(key, display_name)
 
     approval_mode = _resolve_approval_mode(chat_id, thread_id)
     rc_active = _resolve_rc_mode(chat_id, thread_id)
     state_token = (state, approval_mode, rc_active)
-
-    # Already in this state/mode — no transition needed
-    if _topic_states.get(key) == state_token:
-        _pending_transitions.pop(key, None)
-        return
 
     emoji = {
         "active": EMOJI_ACTIVE,
@@ -164,57 +290,31 @@ async def update_topic_emoji(
     if not emoji:
         return
 
-    # Debounce: require the new state to be stable before applying
     now = time.monotonic()
-    pending = _pending_transitions.get(key)
-    if pending is None or pending[0] != state:
-        # New or changed desired state — start debounce timer
-        _pending_transitions[key] = (state, now)
+    if not _should_apply_update(
+        key,
+        state,
+        state_token,
+        name_changed=name_changed,
+        now=now,
+    ):
         return
 
-    debounce = _DEBOUNCE_BY_STATE.get(state, DEBOUNCE_TO_IDLE_SECONDS)
-    if now - pending[1] < debounce:
-        # Not stable long enough yet
-        return
-
-    # Debounce passed — execute the transition
-    _pending_transitions.pop(key, None)
-
-    clean_name = _resolve_topic_name(key, display_name)
-    rc_prefix = f"{EMOJI_RC} " if rc_active else ""
-    mode_prefix = f"{EMOJI_YOLO} " if approval_mode == "yolo" else ""
-    new_name = f"{emoji} {rc_prefix}{mode_prefix}{clean_name}"
-
-    try:
-        await bot.edit_forum_topic(
-            chat_id=chat_id,
-            message_thread_id=thread_id,
-            name=new_name,
-        )
-        _topic_states[key] = state_token
-        logger.debug(
-            "Updated topic emoji: chat=%d thread=%d state=%s name='%s'",
-            chat_id,
-            thread_id,
-            state,
-            new_name,
-        )
-    except BadRequest as e:
-        if "Not enough rights" in e.message:
-            _disabled_chats.add(chat_id)
-            logger.info(
-                "Topic emoji disabled for chat %d: insufficient permissions",
-                chat_id,
-            )
-        elif (
-            "topic_not_modified" in e.message.lower() or "Topic_id_invalid" in e.message
-        ):
-            # Expected no-ops: already correct name or invalid topic
-            _topic_states[key] = state_token
-        else:
-            logger.debug("Failed to update topic emoji: %s", e)
-    except TelegramError:
-        pass
+    new_name = _compose_topic_name(
+        clean_name,
+        state=state,
+        approval_mode=approval_mode,
+        rc_active=rc_active,
+    )
+    await _edit_topic_name(
+        bot,
+        chat_id,
+        thread_id,
+        key,
+        new_name,
+        state_token=state_token,
+        state=state,
+    )
 
 
 def strip_emoji_prefix(name: str) -> str:

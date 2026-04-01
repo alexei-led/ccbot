@@ -49,9 +49,14 @@ class TestRawCommandFlow:
         with (
             patch(f"{_MOD_CMD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD_CMD}.clear_probe_failures"),
-            patch(f"{_MOD_CMD}.session_manager") as mock_sm,
+            patch(f"{_MOD_CMD}.session_manager"),
             patch(f"{_MOD_CMD}.thread_router") as mock_tr,
             patch(f"{_MOD_CMD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD_CMD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch(
                 "ccgram.providers.shell.has_prompt_marker",
                 new_callable=AsyncMock,
@@ -62,7 +67,6 @@ class TestRawCommandFlow:
             ) as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = TEST_CHAT_ID
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
 
@@ -70,9 +74,7 @@ class TestRawCommandFlow:
                 bot, TEST_USER_ID, TEST_THREAD_ID, TEST_WINDOW_ID, "!ls -la", message
             )
 
-            mock_sm.send_to_window.assert_called_once_with(
-                TEST_WINDOW_ID, "ls -la", raw=True
-            )
+            mock_send.assert_called_once_with(TEST_WINDOW_ID, "ls -la", raw=True)
             mock_mark.assert_called_once_with(
                 TEST_WINDOW_ID, "ls -la", TEST_USER_ID, TEST_THREAD_ID
             )
@@ -219,14 +221,18 @@ class TestLlmCommandFlow:
             patch(f"{_MOD_CMD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD_CMD}.clear_probe_failures"),
             patch(f"{_MOD_CMD}.get_completer", return_value=None),
-            patch(f"{_MOD_CMD}.session_manager") as mock_sm,
+            patch(f"{_MOD_CMD}.session_manager"),
             patch(f"{_MOD_CMD}.thread_router") as mock_tr,
+            patch(
+                f"{_MOD_CMD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
             patch(
                 "ccgram.handlers.shell_capture.mark_telegram_command",
             ) as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = TEST_CHAT_ID
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
 
             await handle_shell_message(
                 bot,
@@ -237,7 +243,7 @@ class TestLlmCommandFlow:
                 message,
             )
 
-            mock_sm.send_to_window.assert_called_once_with(
+            mock_send.assert_called_once_with(
                 TEST_WINDOW_ID, "find . -name foo", raw=True
             )
             mock_mark.assert_called_once()

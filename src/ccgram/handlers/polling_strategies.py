@@ -222,6 +222,35 @@ class TerminalStatusStrategy:
         for ws in self._states.values():
             ws.unbound_timer = None
 
+    def cancel_startup_timer(self, window_id: str) -> None:
+        """Clear startup grace period without touching has_seen_status."""
+        ws = self._states.get(window_id)
+        if ws:
+            ws.startup_time = None
+
+    def begin_startup_timer(self, window_id: str, now: float) -> None:
+        """Record the moment a window's startup grace period begins."""
+        self.get_state(window_id).startup_time = now
+
+    def update_pane_count_cache(self, window_id: str, count: int) -> None:
+        """Record freshly-fetched pane count with TTL expiry."""
+        self.get_state(window_id).pane_count_cache = (
+            count,
+            time.monotonic() + PANE_COUNT_TTL,
+        )
+
+    def check_seen_status(self, window_id: str) -> bool:
+        """Return True if this window has received at least one status update."""
+        ws = self._states.get(window_id)
+        return ws.has_seen_status if ws else False
+
+    def get_rendered_text(self, window_id: str, fallback: str) -> str:
+        """Return last rendered text if available, otherwise fallback."""
+        ws = self._states.get(window_id)
+        if ws and ws.last_rendered_text is not None:
+            return ws.last_rendered_text
+        return fallback
+
     def is_recently_active(self, window_id: str, last_activity: float | None) -> bool:
         """Check if recent transcript activity indicates an active agent.
 
@@ -490,6 +519,10 @@ class TopicLifecycleStrategy:
     def reset_seen_status_state(self) -> None:
         """Reset all startup status tracking (for testing)."""
         self._terminal.reset_all_seen_status()
+
+    def record_typing_sent(self, user_id: int, thread_id: int) -> None:
+        """Stamp the current time as the last typing indicator sent."""
+        self.get_state(user_id, thread_id).last_typing_sent = time.monotonic()
 
     def is_typing_throttled(self, user_id: int, thread_id: int) -> bool:
         """Check if typing indicator was sent too recently."""

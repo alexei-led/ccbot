@@ -8,10 +8,10 @@ from telegram.error import BadRequest, TelegramError
 
 from conftest import make_mock_provider
 
-from ccgram.handlers.periodic_tasks import (
-    _check_autoclose_timers,
-    _probe_topic_existence,
-    _prune_stale_state,
+from ccgram.handlers.topic_lifecycle import (
+    check_autoclose_timers,
+    probe_topic_existence,
+    prune_stale_state,
 )
 from ccgram.handlers.polling_coordinator import (
     _check_transcript_activity,
@@ -114,16 +114,16 @@ class TestAutocloseTimers:
         _start_autoclose_timer(1, 42, state, 0.0)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.periodic_tasks.config") as mock_config,
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr,
-            patch("ccgram.handlers.periodic_tasks.time") as mock_time,
-            patch("ccgram.handlers.periodic_tasks.clear_topic_state"),
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
+            patch("ccgram.handlers.topic_lifecycle.clear_topic_state"),
         ):
             mock_config.autoclose_done_minutes = 30
             mock_config.autoclose_dead_minutes = minutes
             mock_time.monotonic.return_value = elapsed
             mock_tr.resolve_chat_id.return_value = -100
-            await _check_autoclose_timers(bot)
+            await check_autoclose_timers(bot)
         bot.delete_forum_topic.assert_called_once_with(
             chat_id=-100, message_thread_id=42
         )
@@ -134,13 +134,13 @@ class TestAutocloseTimers:
         _start_autoclose_timer(1, 42, "done", 0.0)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.periodic_tasks.config") as mock_config,
-            patch("ccgram.handlers.periodic_tasks.time") as mock_time,
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
         ):
             mock_config.autoclose_done_minutes = 30
             mock_config.autoclose_dead_minutes = 10
             mock_time.monotonic.return_value = 29 * 60
-            await _check_autoclose_timers(bot)
+            await check_autoclose_timers(bot)
         bot.close_forum_topic.assert_not_called()
         assert _has_autoclose(1, 42)
 
@@ -148,13 +148,13 @@ class TestAutocloseTimers:
         _start_autoclose_timer(1, 42, "done", 0.0)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.periodic_tasks.config") as mock_config,
-            patch("ccgram.handlers.periodic_tasks.time") as mock_time,
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
         ):
             mock_config.autoclose_done_minutes = 0
             mock_config.autoclose_dead_minutes = 0
             mock_time.monotonic.return_value = 999999
-            await _check_autoclose_timers(bot)
+            await check_autoclose_timers(bot)
         bot.close_forum_topic.assert_not_called()
 
     async def test_check_telegram_error_handled(self) -> None:
@@ -162,15 +162,15 @@ class TestAutocloseTimers:
         bot = AsyncMock(spec=Bot)
         bot.close_forum_topic.side_effect = TelegramError("fail")
         with (
-            patch("ccgram.handlers.periodic_tasks.config") as mock_config,
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr,
-            patch("ccgram.handlers.periodic_tasks.time") as mock_time,
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
         ):
             mock_config.autoclose_done_minutes = 30
             mock_config.autoclose_dead_minutes = 10
             mock_time.monotonic.return_value = 30 * 60 + 1
             mock_tr.resolve_chat_id.return_value = -100
-            await _check_autoclose_timers(bot)
+            await check_autoclose_timers(bot)
         assert not _has_autoclose(1, 42)
 
 
@@ -741,18 +741,18 @@ class TestProbeFailures:
     async def test_probe_skips_suspended_windows(self) -> None:
         terminal_strategy.get_state("@5").probe_failures = MAX_PROBE_FAILURES
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
         bot.unpin_all_forum_topic_messages.assert_not_called()
 
     async def test_probe_success_resets_counter(self) -> None:
         terminal_strategy.get_state("@5").probe_failures = 2
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_tr.resolve_chat_id.return_value = -100
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
         assert (
             _window_poll_state.get("@5") is None
             or _window_poll_state["@5"].probe_failures == 0
@@ -771,20 +771,20 @@ class TestProbeFailures:
     async def test_probe_error_increments_counter(self, exc: TelegramError) -> None:
         bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = exc
-        with patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_tr.resolve_chat_id.return_value = -100
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
         assert _window_poll_state["@5"].probe_failures == 1
 
     async def test_probe_suspends_after_max_failures(self) -> None:
         bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = TelegramError("Timed out")
-        with patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_tr.resolve_chat_id.return_value = -100
             for _ in range(MAX_PROBE_FAILURES + 1):
-                await _probe_topic_existence(bot)
+                await probe_topic_existence(bot)
         assert bot.unpin_all_forum_topic_messages.call_count == MAX_PROBE_FAILURES
         assert _window_poll_state["@5"].probe_failures == MAX_PROBE_FAILURES
 
@@ -802,10 +802,10 @@ class TestProbeFailures:
         mock_window = MagicMock()
         mock_window.window_id = "@5"
         with (
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr,
-            patch("ccgram.handlers.periodic_tasks.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.periodic_tasks.clear_topic_state",
+                "ccgram.handlers.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ) as mock_cleanup,
         ):
@@ -815,7 +815,7 @@ class TestProbeFailures:
                 return_value=mock_window if window_alive else None
             )
             mock_tm.kill_window = AsyncMock()
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
         if window_alive:
             mock_tm.kill_window.assert_called_once_with("@5")
         else:
@@ -833,18 +833,18 @@ class TestPruneStaleStatePolling:
         mock_win = MagicMock()
         mock_win.window_id = "@1"
         mock_win.window_name = "proj"
-        with patch("ccgram.handlers.periodic_tasks.session_manager") as mock_sm:
+        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
             mock_sm.sync_display_names.return_value = False
             mock_sm.prune_stale_state.return_value = False
-            await _prune_stale_state([mock_win])
+            await prune_stale_state([mock_win])
         mock_sm.sync_display_names.assert_called_once_with([("@1", "proj")])
         mock_sm.prune_stale_state.assert_called_once_with({"@1"})
 
     async def test_empty_window_list(self) -> None:
-        with patch("ccgram.handlers.periodic_tasks.session_manager") as mock_sm:
+        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
             mock_sm.sync_display_names.return_value = False
             mock_sm.prune_stale_state.return_value = False
-            await _prune_stale_state([])
+            await prune_stale_state([])
         mock_sm.sync_display_names.assert_called_once_with([])
         mock_sm.prune_stale_state.assert_called_once_with(set())
 
@@ -1708,10 +1708,10 @@ class TestDeadWindowNotification:
         mock_window = MagicMock()
         mock_window.window_id = "@5"
         with (
-            patch("ccgram.handlers.periodic_tasks.thread_router") as mock_tr,
-            patch("ccgram.handlers.periodic_tasks.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.periodic_tasks.clear_topic_state",
+                "ccgram.handlers.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ) as mock_cleanup,
         ):
@@ -1719,7 +1719,7 @@ class TestDeadWindowNotification:
             mock_tr.resolve_chat_id.return_value = -100
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.kill_window = AsyncMock()
-            await _probe_topic_existence(bot)
+            await probe_topic_existence(bot)
 
         mock_tm.kill_window.assert_called_once_with("@5")
         mock_cleanup.assert_called_once_with(1, 42, bot, window_id="@5")

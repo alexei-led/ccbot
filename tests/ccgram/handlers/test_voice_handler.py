@@ -352,19 +352,19 @@ class TestHandleVoiceMessage:
 
 
 class TestHandleVoiceCallback:
-    @patch(f"{_VC}.session_manager")
+    @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_VC}.thread_router")
     @patch(f"{_VC}.get_thread_id")
     async def test_send_success(
         self,
         mock_get_thread_id: MagicMock,
         mock_thread_router: MagicMock,
-        mock_session_manager: MagicMock,
+        mock_send_to_window: AsyncMock,
     ) -> None:
         from ccgram.handlers import voice_callbacks
 
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
-        mock_session_manager.send_to_window = AsyncMock(return_value=(True, None))
+        mock_send_to_window.return_value = (True, None)
         mock_get_thread_id.return_value = 42
 
         update = MagicMock()
@@ -377,26 +377,26 @@ class TestHandleVoiceCallback:
 
         await voice_callbacks.handle_voice_callback(update, context)
 
-        mock_session_manager.send_to_window.assert_called_once_with("@0", "hello")
+        mock_send_to_window.assert_called_once_with("@0", "hello")
         update.callback_query.message.delete.assert_called_once()
         update.callback_query.answer.assert_called_once_with("✓ Sent")
         assert (999, 42) not in context.user_data.get(VOICE_PENDING, {})
 
-    @patch(f"{_VC}.session_manager")
+    @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_VC}.thread_router")
     @patch(f"{_VC}.get_thread_id")
     async def test_send_success_delete_fails(
         self,
         mock_get_thread_id: MagicMock,
         mock_thread_router: MagicMock,
-        mock_session_manager: MagicMock,
+        mock_send_to_window: AsyncMock,
     ) -> None:
         from telegram.error import TelegramError
 
         from ccgram.handlers import voice_callbacks
 
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
-        mock_session_manager.send_to_window = AsyncMock(return_value=(True, None))
+        mock_send_to_window.return_value = (True, None)
         mock_get_thread_id.return_value = 42
 
         update = MagicMock()
@@ -414,11 +414,8 @@ class TestHandleVoiceCallback:
 
         update.callback_query.answer.assert_called_once_with("✓ Sent")
 
-    @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.get_thread_id")
-    async def test_drop(
-        self, mock_get_thread_id: MagicMock, mock_session_manager: MagicMock
-    ) -> None:
+    async def test_drop(self, mock_get_thread_id: MagicMock) -> None:
         from ccgram.handlers import voice_callbacks
 
         mock_get_thread_id.return_value = 42
@@ -437,11 +434,8 @@ class TestHandleVoiceCallback:
         assert (999, 42) not in context.user_data.get(VOICE_PENDING, {})
         update.callback_query.answer.assert_called_once_with("Discarded")
 
-    @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.get_thread_id")
-    async def test_drop_delete_fails(
-        self, mock_get_thread_id: MagicMock, mock_session_manager: MagicMock
-    ) -> None:
+    async def test_drop_delete_fails(self, mock_get_thread_id: MagicMock) -> None:
         from telegram.error import TelegramError
 
         from ccgram.handlers import voice_callbacks
@@ -463,11 +457,8 @@ class TestHandleVoiceCallback:
 
         update.callback_query.answer.assert_called_once_with("Discarded")
 
-    @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.get_thread_id")
-    async def test_drop_no_pending_entry(
-        self, mock_get_thread_id: MagicMock, mock_session_manager: MagicMock
-    ) -> None:
+    async def test_drop_no_pending_entry(self, mock_get_thread_id: MagicMock) -> None:
         from ccgram.handlers import voice_callbacks
 
         mock_get_thread_id.return_value = 42
@@ -535,21 +526,21 @@ class TestHandleVoiceCallback:
             pytest.param("window not found", id="window_not_found"),
         ],
     )
-    @patch(f"{_VC}.session_manager")
+    @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_VC}.thread_router")
     @patch(f"{_VC}.get_thread_id")
     async def test_send_failure_preserves_pending(
         self,
         mock_get_thread_id: MagicMock,
         mock_thread_router: MagicMock,
-        mock_session_manager: MagicMock,
+        mock_send_to_window: AsyncMock,
         error_msg: str,
     ) -> None:
         from ccgram.handlers import voice_callbacks
 
         mock_get_thread_id.return_value = 42
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
-        mock_session_manager.send_to_window = AsyncMock(return_value=(False, error_msg))
+        mock_send_to_window.return_value = (False, error_msg)
 
         update = MagicMock()
         update.callback_query = _make_callback_query("vc:send:42", message_id=42)
@@ -582,16 +573,16 @@ class TestHandleVoiceCallback:
         update.callback_query.answer.assert_called_once_with("Invalid callback data")
 
     @patch(f"{_VC}.ack_reaction", new_callable=AsyncMock)
+    @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_VC}.get_provider_for_window")
-    @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.thread_router")
     @patch(f"{_VC}.get_thread_id")
     async def test_send_shell_provider_routes_through_llm(
         self,
         mock_get_thread_id: MagicMock,
         mock_thread_router: MagicMock,
-        mock_session_manager: MagicMock,
         mock_get_provider: MagicMock,
+        mock_send_to_window: AsyncMock,
         mock_ack: AsyncMock,
     ) -> None:
         from ccgram.handlers import voice_callbacks
@@ -601,6 +592,7 @@ class TestHandleVoiceCallback:
 
         mock_provider = MagicMock()
         mock_provider.capabilities.name = "shell"
+        mock_provider.capabilities.supports_mailbox_delivery = False
         mock_get_provider.return_value = mock_provider
 
         update = MagicMock()
@@ -625,21 +617,21 @@ class TestHandleVoiceCallback:
                 "list files",
             )
 
-        mock_session_manager.send_to_window.assert_not_called()
+        mock_send_to_window.assert_not_called()
         update.callback_query.message.delete.assert_called_once()
         update.callback_query.answer.assert_called_once_with("✓ Sent")
         mock_ack.assert_called_once()
 
+    @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_VC}.get_provider_for_window")
-    @patch(f"{_VC}.session_manager")
     @patch(f"{_VC}.thread_router")
     @patch(f"{_VC}.get_thread_id")
     async def test_send_shell_provider_error_preserves_pending(
         self,
         mock_get_thread_id: MagicMock,
         mock_thread_router: MagicMock,
-        mock_session_manager: MagicMock,
         mock_get_provider: MagicMock,
+        mock_send_to_window: AsyncMock,
     ) -> None:
         from ccgram.handlers import voice_callbacks
 
@@ -648,6 +640,7 @@ class TestHandleVoiceCallback:
 
         mock_provider = MagicMock()
         mock_provider.capabilities.name = "shell"
+        mock_provider.capabilities.supports_mailbox_delivery = False
         mock_get_provider.return_value = mock_provider
 
         update = MagicMock()
@@ -665,12 +658,11 @@ class TestHandleVoiceCallback:
         ):
             await voice_callbacks.handle_voice_callback(update, context)
 
-        # Text restored to pending store
         assert context.user_data[VOICE_PENDING][(999, 42)] == "list files"
         update.callback_query.answer.assert_called_once_with(
             "❌ Failed to send", show_alert=True
         )
-        mock_session_manager.send_to_window.assert_not_called()
+        mock_send_to_window.assert_not_called()
 
     async def test_inaccessible_message(self) -> None:
         from ccgram.handlers import voice_callbacks

@@ -1090,3 +1090,29 @@ class TmuxManager:
 
 # Global instance with default session name
 tmux_manager = TmuxManager()
+
+
+async def send_to_window(
+    window_id: str, text: str, *, raw: bool = False
+) -> tuple[bool, str]:
+    """Send text to a tmux window by ID.
+
+    Returns (success, message). Looks up the display name for logging, then
+    delegates to tmux_manager.find_window_by_id + send_keys.
+    """
+    from .thread_router import thread_router
+
+    display = thread_router.get_display_name(window_id)
+    logger.debug(
+        "send_to_window: window_id=%s (%s), text_len=%d",
+        window_id,
+        display,
+        len(text),
+    )
+    window = await tmux_manager.find_window_by_id(window_id)
+    if not window:
+        return False, "Window not found (may have been closed)"
+    success = await tmux_manager.send_keys(window.window_id, text, raw=raw)
+    if success:
+        return True, f"Sent to {display}"
+    return False, "Failed to send keys"

@@ -31,7 +31,7 @@ async def test_status_recall_sends_selected_history_command() -> None:
             return_value=["/status", "/clear"],
         ),
         patch(
-            "ccgram.handlers.screenshot_callbacks.session_manager.send_to_window",
+            "ccgram.handlers.screenshot_callbacks.send_to_window",
             new_callable=AsyncMock,
             return_value=(True, ""),
         ) as mock_send,
@@ -61,7 +61,7 @@ async def test_status_recall_rejects_stale_topic_binding() -> None:
             return_value="@9",
         ),
         patch(
-            "ccgram.handlers.screenshot_callbacks.session_manager.send_to_window",
+            "ccgram.handlers.screenshot_callbacks.send_to_window",
             new_callable=AsyncMock,
         ) as mock_send,
     ):
@@ -89,7 +89,7 @@ async def test_status_recall_handles_missing_history_entry() -> None:
         ),
         patch("ccgram.handlers.command_history.get_history", return_value=["/status"]),
         patch(
-            "ccgram.handlers.screenshot_callbacks.session_manager.send_to_window",
+            "ccgram.handlers.screenshot_callbacks.send_to_window",
             new_callable=AsyncMock,
         ) as mock_send,
     ):

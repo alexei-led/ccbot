@@ -33,6 +33,7 @@ from .callback_data import CB_SYNC_DISMISS, CB_SYNC_FIX
 from .callback_registry import register
 from .cleanup import clear_topic_state
 from .message_sender import is_thread_gone, safe_edit, safe_reply
+from .topic_emoji import sync_topic_name
 
 logger = structlog.get_logger()
 
@@ -73,8 +74,28 @@ def _issue_summary_lines(audit: AuditResult) -> list[str]:
             for cat, count in category_counts.items()
         ]
     if audit.total_bindings > 0:
-        return ["\u2713 No orphaned entries", "\u2713 Display names in sync"]
+        return ["\u2713 No orphaned entries", "\u2713 Tmux display cache in sync"]
     return []
+
+
+async def _sync_live_topic_names(bot: Bot, live_ids: set[str] | None = None) -> None:
+    """Best-effort reconciliation of bound live topic titles."""
+    if live_ids is None:
+        all_windows = await tmux_manager.list_windows()
+        live_ids = {w.window_id for w in all_windows}
+
+    for user_id, thread_id, window_id in thread_router.iter_thread_bindings():
+        if window_id not in live_ids:
+            continue
+        chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+        if chat_id == user_id:
+            continue
+        await sync_topic_name(
+            bot,
+            chat_id,
+            thread_id,
+            thread_router.get_display_name(window_id),
+        )
 
 
 def _format_report(
@@ -368,9 +389,11 @@ async def sync_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
         await safe_reply(update.message, "You are not authorized to use this bot.")
         return
 
+    bot = update.get_bot()
+    await _sync_live_topic_names(bot)
     audit = await _run_audit()
     # Probe Telegram topics for live bindings (async, needs bot)
-    dead_issues = await _probe_dead_topics(update.get_bot())
+    dead_issues = await _probe_dead_topics(bot)
     audit.issues.extend(dead_issues)
     text, keyboard = _format_report(audit)
     await safe_reply(update.message, text, reply_markup=keyboard)
@@ -402,6 +425,8 @@ async def handle_sync_fix(query: CallbackQuery) -> None:
         session_manager.prune_stale_offsets(live_ids | bound_ids | state_ids)
     except OSError:
         logger.exception("Error during sync fix operations")
+
+    await _sync_live_topic_names(bot, live_ids)
 
     # Enforcement: close ghost topics, recreate dead topics, adopt orphans
     closed_count = await _close_ghost_topics(bot, pre_audit.issues)

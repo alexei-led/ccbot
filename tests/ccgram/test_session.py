@@ -4,14 +4,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ccgram.session import APPROVAL_MODES, SessionManager, WindowState
+from ccgram.session import SessionManager
 from ccgram.thread_router import thread_router
 from ccgram.user_preferences import user_preferences
+from ccgram.window_state_store import APPROVAL_MODES, WindowState, window_store
 
 
 @pytest.fixture
 def mgr(monkeypatch) -> SessionManager:
     thread_router.reset()
+    window_store.window_states.clear()
     monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
     monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
     return SessionManager()
@@ -424,7 +426,7 @@ class TestGlobFallbackCwdUpdate:
         from ccgram.providers.claude import ClaudeProvider
 
         monkeypatch.setattr(
-            "ccgram.session.get_provider_for_window",
+            "ccgram.session_resolver.get_provider_for_window",
             lambda _wid: ClaudeProvider(),
         )
 
@@ -701,7 +703,7 @@ class TestResolveSessionForWindow:
             provider_name="gemini",
         )
         monkeypatch.setattr(
-            "ccgram.session.get_provider_for_window",
+            "ccgram.session_resolver.get_provider_for_window",
             lambda _wid: SimpleNamespace(
                 capabilities=SimpleNamespace(supports_hook=False)
             ),
@@ -724,7 +726,7 @@ class TestResolveSessionForWindow:
             provider_name="codex",
         )
         monkeypatch.setattr(
-            "ccgram.session.get_provider_for_window",
+            "ccgram.session_resolver.get_provider_for_window",
             lambda _wid: SimpleNamespace(
                 capabilities=SimpleNamespace(supports_hook=False)
             ),
@@ -750,7 +752,7 @@ class TestResolveSessionForWindow:
             provider_name="claude",
         )
         monkeypatch.setattr(
-            "ccgram.session.get_provider_for_window",
+            "ccgram.session_resolver.get_provider_for_window",
             lambda _wid: SimpleNamespace(
                 capabilities=SimpleNamespace(supports_hook=True)
             ),
@@ -1041,7 +1043,7 @@ class TestResolveStaleIdsPreservesDeadBindings:
 
 class TestExportWindowInfo:
     def test_returns_dict(self, tmp_path, monkeypatch) -> None:
-        from ccgram.session import export_window_info
+        from ccgram.msg_discovery import export_window_info
 
         state_dir = tmp_path / "ccgram"
         state_dir.mkdir()
@@ -1069,7 +1071,7 @@ class TestExportWindowInfo:
         assert result["@0"].external is False
 
     def test_empty_state(self, tmp_path, monkeypatch) -> None:
-        from ccgram.session import export_window_info
+        from ccgram.msg_discovery import export_window_info
 
         state_dir = tmp_path / "empty"
         state_dir.mkdir()
@@ -1077,7 +1079,7 @@ class TestExportWindowInfo:
         assert export_window_info() == {}
 
     def test_malformed_json(self, tmp_path, monkeypatch) -> None:
-        from ccgram.session import export_window_info
+        from ccgram.msg_discovery import export_window_info
 
         state_dir = tmp_path / "ccgram"
         state_dir.mkdir()

@@ -121,7 +121,7 @@ def _build_message_context(my_id: str) -> dict[str, str]:
 
 def _load_window_states() -> dict[str, WindowInfo]:
     """Load window states from state.json."""
-    from .session import export_window_info
+    from .msg_discovery import export_window_info
 
     return export_window_info()
 

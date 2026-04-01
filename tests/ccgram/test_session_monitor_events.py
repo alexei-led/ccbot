@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ccgram.handlers.hook_events import HookEvent
+from ccgram.providers.base import HookEvent
 from ccgram.session_monitor import SessionMonitor
 
 

@@ -23,6 +23,7 @@ from telegram import Bot
 from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
+from ..claude_task_state import claude_task_state
 from ..providers import get_provider_for_window
 from ..providers.base import StatusUpdate
 from ..session import session_manager
@@ -46,7 +47,6 @@ from .message_queue import (
 from .message_sender import rate_limit_send_message
 from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 from .polling_strategies import (
-    PANE_COUNT_TTL,
     interactive_strategy,
     is_shell_prompt,
     lifecycle_strategy,
@@ -83,8 +83,7 @@ async def _send_typing_throttled(bot: Bot, user_id: int, thread_id: int | None) 
         return
     if lifecycle_strategy.is_typing_throttled(user_id, thread_id):
         return
-    ts = lifecycle_strategy.get_state(user_id, thread_id)
-    ts.last_typing_sent = time.monotonic()
+    lifecycle_strategy.record_typing_sent(user_id, thread_id)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     with contextlib.suppress(TelegramError):
         await bot.send_chat_action(
@@ -136,10 +135,10 @@ async def _transition_to_idle(
     notif_mode: str,
 ) -> None:
     """Transition a window to idle state (emoji, autoclose, typing, status)."""
-    terminal_strategy.get_state(window_id).startup_time = None
+    terminal_strategy.cancel_startup_timer(window_id)
     await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
     lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
-    lifecycle_strategy.get_state(user_id, thread_id).last_typing_sent = None
+    lifecycle_strategy.clear_typing_state(user_id, thread_id)
     if notif_mode not in ("muted", "errors_only"):
         from .callback_data import IDLE_STATUS_TEXT
 
@@ -163,6 +162,7 @@ async def _handle_no_status(
     is_active = _check_transcript_activity(window_id)
 
     if is_active:
+        claude_task_state.clear_wait_header(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
         if thread_id is not None:
             chat_id = thread_router.resolve_chat_id(user_id, thread_id)
@@ -176,10 +176,9 @@ async def _handle_no_status(
 
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     display = thread_router.get_display_name(window_id)
-    ws = terminal_strategy.get_state(window_id)
 
     if is_shell_prompt(pane_current_command):
-        ws.startup_time = None
+        terminal_strategy.cancel_startup_timer(window_id)
         state = session_manager.get_window_state(window_id)
         raw_provider = getattr(state, "provider_name", "")
         provider_name = raw_provider.lower() if isinstance(raw_provider, str) else ""
@@ -192,14 +191,14 @@ async def _handle_no_status(
 
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)
         lifecycle_strategy.start_autoclose_timer(user_id, thread_id, "done", now)
-        lifecycle_strategy.get_state(user_id, thread_id).last_typing_sent = None
+        lifecycle_strategy.clear_typing_state(user_id, thread_id)
         await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
-    elif ws.has_seen_status:
+    elif terminal_strategy.check_seen_status(window_id):
         await _transition_to_idle(
             bot, user_id, window_id, thread_id, chat_id, display, notif_mode
         )
-    elif ws.startup_time is None:
-        ws.startup_time = now
+    elif terminal_strategy.get_state(window_id).startup_time is None:
+        terminal_strategy.begin_startup_timer(window_id, now)
         await _send_typing_throttled(bot, user_id, thread_id)
         await update_topic_emoji(bot, chat_id, thread_id, "active", display)
         lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
@@ -229,8 +228,7 @@ async def _scan_window_panes(
 
     now = time.monotonic()
     panes = await tmux_manager.list_panes(window_id)
-    ws = terminal_strategy.get_state(window_id)
-    ws.pane_count_cache = (len(panes), now + PANE_COUNT_TTL)
+    terminal_strategy.update_pane_count_cache(window_id, len(panes))
     live_pane_ids = {p.pane_id for p in panes}
 
     interactive_strategy.prune_stale_pane_alerts(window_id, live_pane_ids)
@@ -301,10 +299,7 @@ async def _check_interactive_only(
     )
 
     if status is None:
-        ws = terminal_strategy.get_state(window_id)
-        clean_text = (
-            ws.last_rendered_text if ws.last_rendered_text is not None else pane_text
-        )
+        clean_text = terminal_strategy.get_rendered_text(window_id, pane_text)
         provider = get_provider_for_window(window_id)
         pane_title = ""
         if provider.capabilities.uses_pane_title:
@@ -443,15 +438,12 @@ async def update_status_message(
     # Passive vim INSERT mode tracking
     from ..tmux_manager import _has_insert_indicator, notify_vim_insert_seen
 
-    ws = terminal_strategy.get_state(window_id)
-    vim_text = ws.last_rendered_text if ws.last_rendered_text is not None else pane_text
+    vim_text = terminal_strategy.get_rendered_text(window_id, pane_text)
     if _has_insert_indicator(vim_text):
         notify_vim_insert_seen(w.window_id)
 
     if status is None:
-        clean_text = (
-            ws.last_rendered_text if ws.last_rendered_text is not None else pane_text
-        )
+        clean_text = terminal_strategy.get_rendered_text(window_id, pane_text)
         provider = get_provider_for_window(window_id)
         pane_title = ""
         if provider.capabilities.uses_pane_title:
@@ -475,6 +467,7 @@ async def update_status_message(
     notif_mode = session_manager.get_notification_mode(window_id)
 
     if status_line:
+        claude_task_state.clear_wait_header(window_id)
         terminal_strategy.mark_seen_status(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):

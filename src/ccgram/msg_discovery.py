@@ -46,6 +46,36 @@ class PeerInfo:
     external: bool
 
 
+def export_window_info() -> dict[str, WindowInfo]:
+    """CLI-safe snapshot of window states. Reads state.json from disk.
+
+    Returns {window_id: WindowInfo} without requiring a bot token or
+    SessionManager initialization. Used by ``ccgram msg`` CLI commands.
+    Uses ccgram_dir() so callers can patch the directory for testing.
+    """
+    import json
+
+    from .utils import ccgram_dir
+
+    state_file = ccgram_dir() / "state.json"
+    if not state_file.exists():
+        return {}
+    try:
+        data = json.loads(state_file.read_text())
+    except json.JSONDecodeError, OSError:
+        return {}
+    result: dict[str, WindowInfo] = {}
+    for window_id, ws_data in data.get("window_states", {}).items():
+        if isinstance(ws_data, dict):
+            result[window_id] = WindowInfo(
+                cwd=ws_data.get("cwd", ""),
+                window_name=ws_data.get("window_name", ""),
+                provider_name=ws_data.get("provider_name", ""),
+                external=ws_data.get("external", False),
+            )
+    return result
+
+
 def _default_declared_path() -> Path:
     from .config import config
 

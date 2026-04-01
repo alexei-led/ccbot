@@ -23,6 +23,7 @@ from typing import Any
 import aiofiles
 from telegram.error import TelegramError
 
+from .claude_task_state import claude_task_state
 from .config import config
 from .monitor_state import MonitorState, TrackedSession
 from .providers import (
@@ -138,7 +139,7 @@ class SessionMonitor:
             Callable[[NewWindowEvent], Awaitable[None]] | None
         ) = None
         # Hook event callback (byte offset persisted in self.state.events_offset)
-        from .handlers.hook_events import HookEvent
+        from .providers.base import HookEvent
 
         self._hook_event_callback: Callable[[HookEvent], Awaitable[None]] | None = None
         # Per-session pending tool_use state carried across poll cycles
@@ -187,7 +188,7 @@ class SessionMonitor:
         if not events_file.exists():
             return
 
-        from .handlers.hook_events import HookEvent
+        from .providers.base import HookEvent
 
         offset_before = self.state.events_offset
         try:
@@ -482,6 +483,8 @@ class SessionMonitor:
             )
             self.state.update_session(tracked)
             self._file_mtimes[session_id] = current_mtime
+            if provider.capabilities.name == "claude" and window_id:
+                await self._seed_claude_task_state(window_id, session_id, file_path)
             logger.debug("Started tracking session: %s", session_id)
             return
 
@@ -513,6 +516,9 @@ class SessionMonitor:
             self._last_activity[session_id] = time.monotonic()
 
         # Parse new entries using the shared logic, carrying over pending tools
+        if provider.capabilities.name == "claude" and window_id:
+            claude_task_state.apply_entries(window_id, session_id, new_entries)
+
         carry = self._pending_tools.get(session_id, {})
         # Get cwd from session_map for path shortening in tool summaries
         session_cwd: str | None = None
@@ -547,6 +553,24 @@ class SessionMonitor:
             )
 
         self.state.update_session(tracked)
+
+    async def _seed_claude_task_state(
+        self, window_id: str, session_id: str, file_path: Path
+    ) -> None:
+        """Build a Claude task snapshot from the full transcript once per session."""
+        entries: list[dict[str, Any]] = []
+        provider = registry.get("claude")
+        try:
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                async for line in f:
+                    data = provider.parse_transcript_line(line)
+                    if data:
+                        entries.append(data)
+        except OSError:
+            logger.exception("Error seeding Claude task state from %s", file_path)
+            return
+
+        claude_task_state.rebuild_from_entries(window_id, session_id, entries)
 
     async def check_for_updates(
         self, current_map: dict[str, dict[str, str]]
@@ -681,6 +705,7 @@ class SessionMonitor:
                     new_details["session_id"],
                 )
                 sessions_to_remove.add(old_details["session_id"])
+                claude_task_state.clear_window(window_id)
 
         # Check for deleted windows (window in old map but not in current)
         old_windows = set(self._last_session_map.keys())
@@ -695,6 +720,7 @@ class SessionMonitor:
                 old_sid,
             )
             sessions_to_remove.add(old_sid)
+            claude_task_state.clear_window(window_id)
 
         # Perform cleanup
         if sessions_to_remove:

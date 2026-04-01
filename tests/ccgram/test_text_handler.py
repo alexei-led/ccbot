@@ -316,6 +316,7 @@ class TestShellProviderRouting:
 
         provider = MagicMock()
         provider.capabilities.name = "shell"
+        provider.capabilities.supports_mailbox_delivery = False
         mock_get_provider.return_value = provider
 
         with patch(
@@ -392,23 +393,29 @@ class TestShellProviderRouting:
 
 
 class TestForwardMessage:
+    @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
     @patch(f"{_TH}.session_manager")
-    async def test_sends_to_window(self, mock_sm: MagicMock) -> None:
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
+    async def test_sends_to_window(
+        self, mock_sm: MagicMock, mock_send: AsyncMock
+    ) -> None:
         bot = AsyncMock()
         message = AsyncMock()
 
         with patch(f"{_TH}.get_interactive_window", return_value=None):
             await _forward_message("@0", 100, 42, "hello", bot, message)
 
-        mock_sm.send_to_window.assert_called_once_with("@0", "hello")
+        mock_send.assert_called_once_with("@0", "hello")
 
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(
+        f"{_TH}.send_to_window",
+        new_callable=AsyncMock,
+        return_value=(False, "Window not found"),
+    )
     @patch(f"{_TH}.session_manager")
     async def test_send_failure_replies_error(
-        self, mock_sm: MagicMock, mock_reply: AsyncMock
+        self, mock_sm: MagicMock, _mock_send: AsyncMock, mock_reply: AsyncMock
     ) -> None:
-        mock_sm.send_to_window = AsyncMock(return_value=(False, "Window not found"))
         bot = AsyncMock()
         message = AsyncMock()
 
@@ -419,14 +426,15 @@ class TestForwardMessage:
 
     @patch(f"{_TH}.get_interactive_window", return_value=None)
     @patch(f"{_TH}._capture_bash_output")
+    @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
     @patch(f"{_TH}.session_manager")
     async def test_bash_capture_for_bang_command(
         self,
         mock_sm: MagicMock,
+        _mock_send: AsyncMock,
         mock_capture: MagicMock,
         _mock_interactive: MagicMock,
     ) -> None:
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
         bot = AsyncMock()
         message = AsyncMock()
 
@@ -442,11 +450,11 @@ class TestForwardMessage:
             await task
 
     @patch(f"{_TH}.get_interactive_window", return_value=None)
+    @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
     @patch(f"{_TH}.session_manager")
     async def test_cancels_existing_bash_capture(
-        self, mock_sm: MagicMock, _mock_interactive: MagicMock
+        self, mock_sm: MagicMock, _mock_send: AsyncMock, _mock_interactive: MagicMock
     ) -> None:
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
         bot = AsyncMock()
         message = AsyncMock()
 
@@ -463,14 +471,15 @@ class TestForwardMessage:
 
     @patch(f"{_TH}.handle_interactive_ui", new_callable=AsyncMock)
     @patch(f"{_TH}.get_interactive_window", return_value="@0")
+    @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
     @patch(f"{_TH}.session_manager")
     async def test_refreshes_interactive_ui(
         self,
         mock_sm: MagicMock,
+        _mock_send: AsyncMock,
         _mock_get_iw: MagicMock,
         mock_handle_ui: AsyncMock,
     ) -> None:
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
         bot = AsyncMock()
         message = AsyncMock()
 

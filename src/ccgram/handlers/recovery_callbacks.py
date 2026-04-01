@@ -24,7 +24,7 @@ from ..config import config
 from ..providers import get_provider, get_provider_for_window, resolve_launch_command
 from ..session import session_manager
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import read_session_metadata_from_jsonl
 from .callback_data import (
     CB_RECOVERY_BACK,
@@ -402,9 +402,7 @@ async def _create_and_bind_window(
     )
     _clear_recovery_state(context.user_data)
     if pending_text:
-        send_ok, send_msg = await session_manager.send_to_window(
-            created_wid, pending_text
-        )
+        send_ok, send_msg = await send_to_window(created_wid, pending_text)
         if not send_ok:
             logger.warning("Failed to forward pending text: %s", send_msg)
             await safe_send(

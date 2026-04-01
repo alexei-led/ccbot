@@ -38,7 +38,7 @@ from ..providers import (
 )
 from ..session import session_manager
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import task_done_callback
 from .callback_helpers import get_thread_id as _get_thread_id
 from .message_sender import safe_reply
@@ -547,10 +547,10 @@ async def forward_command_handler(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Forward any non-bot command as a slash command to the topic provider session."""
-    from ..bot import is_user_allowed
+    from ..config import config
 
     user = update.effective_user
-    if not user or not is_user_allowed(user.id):
+    if not user or not config.is_user_allowed(user.id):
         return
     if not update.message:
         return
@@ -621,7 +621,7 @@ async def forward_command_handler(
     from .polling_strategies import clear_probe_failures
 
     clear_probe_failures(window_id)
-    success, error_msg = await session_manager.send_to_window(window_id, cc_slash)
+    success, error_msg = await send_to_window(window_id, cc_slash)
     if not success:
         await safe_reply(update.message, f"\u274c {error_msg}")
         return

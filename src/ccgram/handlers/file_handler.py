@@ -21,6 +21,7 @@ from telegram.ext import ContextTypes
 
 from ..config import config
 from ..session import session_manager
+from ..tmux_manager import send_to_window
 from ..thread_router import thread_router
 from .callback_helpers import get_thread_id
 from .message_sender import ack_reaction, safe_reply
@@ -212,7 +213,7 @@ async def _upload_and_notify(
     if caption:
         claude_msg += f"\n\nUser note: {_sanitize_caption(caption)}"
 
-    success, err = await session_manager.send_to_window(window_id, claude_msg)
+    success, err = await send_to_window(window_id, claude_msg)
     if success:
         await ack_reaction(message.get_bot(), message.chat.id, message.message_id)
         await safe_reply(message, f"{success_emoji} Uploaded `{rel_path}`")

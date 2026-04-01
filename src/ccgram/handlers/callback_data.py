@@ -73,8 +73,7 @@ CB_RESUME_PICK = "res:p:"  # res:p:<index> (session selection)
 CB_RESUME_PAGE = "res:pg:"  # res:pg:<page> (pagination)
 CB_RESUME_CANCEL = "res:x"  # cancel resume browser
 
-# Notification mode metadata (single source of truth)
-NOTIFICATION_MODES: tuple[str, ...] = ("all", "errors_only", "muted")
+# Notification mode UI metadata (canonical mode list lives in session.py)
 NOTIFY_MODE_ICONS: dict[str, str] = {
     "all": "\U0001f514",
     "errors_only": "\u26a0\ufe0f",

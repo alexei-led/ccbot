@@ -866,7 +866,8 @@ async def post_init(application: Application) -> None:
     monitor.set_new_window_callback(new_window_callback)
 
     # Wire hook event dispatcher for structured Claude Code events
-    from ccgram.handlers.hook_events import HookEvent, dispatch_hook_event
+    from ccgram.providers.base import HookEvent
+    from ccgram.handlers.hook_events import dispatch_hook_event
 
     async def hook_event_callback(event: HookEvent) -> None:
         await dispatch_hook_event(event, application.bot)

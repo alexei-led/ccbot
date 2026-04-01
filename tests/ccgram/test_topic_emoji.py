@@ -17,6 +17,7 @@ from ccgram.handlers.topic_emoji import (
     clear_topic_emoji_state,
     format_topic_name_for_mode,
     reset_all_state,
+    sync_topic_name,
     strip_emoji_prefix,
     update_topic_emoji,
 )
@@ -122,6 +123,20 @@ class TestUpdateTopicEmoji:
         bot.edit_forum_topic.reset_mock()
         await _debounced_update(bot, -100, 42, "idle", "myproject")
         bot.edit_forum_topic.assert_called_once()
+
+    async def test_updates_name_immediately_when_state_is_unchanged(self) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "idle", "fish")
+        bot.edit_forum_topic.reset_mock()
+
+        with patch(_PATCH_MONOTONIC, return_value=0.0):
+            await update_topic_emoji(bot, -100, 42, "idle", "bun")
+
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_IDLE} bun",
+        )
 
     async def test_strips_existing_prefix(self) -> None:
         bot = AsyncMock()
@@ -331,6 +346,28 @@ class TestClearTopicEmojiState:
         clear_topic_emoji_state(-100, 42)
         await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once()
+
+
+class TestSyncTopicName:
+    async def test_preserves_cached_state_while_refreshing_clean_name(self) -> None:
+        from ccgram.handlers.topic_emoji import _topic_states
+
+        bot = AsyncMock()
+        _topic_states[(-100, 42)] = ("idle", "normal", False)
+        with (
+            patch(
+                "ccgram.handlers.topic_emoji._resolve_approval_mode",
+                return_value="normal",
+            ),
+            patch("ccgram.handlers.topic_emoji._resolve_rc_mode", return_value=False),
+        ):
+            await sync_topic_name(bot, -100, 42, "ccgram-codex")
+
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_IDLE} ccgram-codex",
+        )
 
     async def test_clear_resets_pending_transition(self) -> None:
         bot = AsyncMock()

@@ -115,13 +115,17 @@ class TestBindWindowCallback:
             ),
             patch("ccgram.handlers.window_callbacks.safe_edit"),
             patch("ccgram.handlers.window_callbacks.format_topic_name_for_mode"),
+            patch(
+                "ccgram.handlers.window_callbacks.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, "ok"),
+            ) as mock_send,
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_sm.get_approval_mode.return_value = "normal"
-            mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
             await handle_window_callback(query, 100, f"{CB_WIN_BIND}0", update, context)
 
-            mock_sm.send_to_window.assert_called_once_with("@5", "hello agent")
+            mock_send.assert_called_once_with("@5", "hello agent")
             assert PENDING_THREAD_TEXT not in context.user_data
 
 
@@ -314,19 +318,23 @@ class TestForwardPendingText:
 
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_callbacks.session_manager"),
             patch(
                 "ccgram.handlers.shell_commands.handle_shell_message",
                 new_callable=AsyncMock,
             ) as mock_shell,
+            patch(
+                "ccgram.handlers.window_callbacks.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as mock_send,
         ):
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             await _forward_pending_text(
                 bot, 1, 42, "@5", "list files", "shell", is_existing_window=True
             )
 
         mock_shell.assert_not_awaited()
-        mock_sm.send_to_window.assert_called_once_with("@5", "list files")
+        mock_send.assert_called_once_with("@5", "list files")
 
     async def test_new_shell_window_routes_through_handler(self) -> None:
         from ccgram.handlers.window_callbacks import _forward_pending_text

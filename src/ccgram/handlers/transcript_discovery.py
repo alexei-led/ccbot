@@ -82,7 +82,7 @@ def _resolve_providers_to_try(
 
     if state.provider_name:
         provider = get_provider_for_window(window_id)
-        if provider.capabilities.name == "shell":
+        if not provider.capabilities.supports_mailbox_delivery:
             return []
         return [(provider.capabilities.name, provider)]
 

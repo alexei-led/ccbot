@@ -94,6 +94,20 @@ class DiscoveredCommand:
     source: Literal["builtin", "skill", "command"]
 
 
+# ── Hook events ─────────────────────────────────────────────────────────
+
+
+@dataclass
+class HookEvent:
+    """A structured event from the hook event log."""
+
+    event_type: str  # "Notification", "Stop", etc.
+    window_key: str  # "ccgram:@0"
+    session_id: str
+    data: dict[str, Any]
+    timestamp: float
+
+
 # ── Capabilities ─────────────────────────────────────────────────────────
 
 
@@ -120,6 +134,9 @@ class ProviderCapabilities:
     # the configured command sources (currently ~/.claude skills/commands).
     supports_user_command_discovery: bool = False
     supports_status_snapshot: bool = False
+    supports_mailbox_delivery: bool = (
+        True  # False for shell (no agent to receive send_keys)
+    )
 
 
 # ── Provider protocol ────────────────────────────────────────────────────

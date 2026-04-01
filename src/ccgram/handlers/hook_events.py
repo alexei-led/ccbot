@@ -9,11 +9,11 @@ Key function: dispatch_hook_event().
 """
 
 import structlog
-from dataclasses import dataclass
-from typing import Any
 
 from telegram import Bot
 
+from ..claude_task_state import claude_task_state, classify_wait_message
+from ..providers.base import HookEvent
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
@@ -21,17 +21,6 @@ from ..topic_state_registry import topic_state
 logger = structlog.get_logger()
 
 _WINDOW_KEY_PARTS = 2
-
-
-@dataclass
-class HookEvent:
-    """A structured event from the hook event log."""
-
-    event_type: str  # "Notification", "Stop", etc.
-    window_key: str  # "ccgram:@0"
-    session_id: str
-    data: dict[str, Any]
-    timestamp: float
 
 
 def _resolve_users_for_window_key(
@@ -58,10 +47,12 @@ def _resolve_users_for_window_key(
 async def _handle_notification(event: HookEvent, bot: Bot) -> None:
     """Handle a Notification event — render interactive UI."""
     from .interactive_ui import (
+        clear_interactive_mode,
         get_interactive_window,
         handle_interactive_ui,
         set_interactive_mode,
     )
+    from .message_queue import enqueue_status_update
 
     users = _resolve_users_for_window_key(event.window_key)
     if not users:
@@ -76,8 +67,15 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
         tool_name,
         event.window_key,
     )
+    wait_header = classify_wait_message(event.data.get("message", ""))
 
     for user_id, thread_id, window_id in users:
+        if wait_header:
+            claude_task_state.set_wait_header(window_id, wait_header)
+            await enqueue_status_update(
+                bot, user_id, window_id, None, thread_id=thread_id
+            )
+
         # Skip if already in interactive mode for this window
         existing = get_interactive_window(user_id, thread_id)
         if existing == window_id:
@@ -98,21 +96,19 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
 
         handled = await handle_interactive_ui(bot, user_id, window_id, thread_id)
         if not handled:
-            from .interactive_ui import clear_interactive_mode
-
             clear_interactive_mode(user_id, thread_id)
 
 
 async def _handle_stop(event: HookEvent, bot: Bot) -> None:
-    """Handle a Stop event — transition directly to idle.
+    """Handle a Stop event — transition status directly to idle.
 
-    Edits the status message in-place to "Ready" (dedup catches identical
-    text) and sets the topic emoji to idle without an intermediate active
-    flicker.  Muted/errors_only windows get their status cleared instead.
+    Topic emoji remains poller-owned. Hook-driven idle flips can fight the
+    transcript/activity heuristic and cause active/idle rename churn on quiet
+    topics, so Stop only updates the status bubble and broker delivery state.
+    Muted/errors_only windows get their status cleared instead.
     """
     from .callback_data import IDLE_STATUS_TEXT
     from .message_queue import enqueue_status_update
-    from .topic_emoji import update_topic_emoji
 
     users = _resolve_users_for_window_key(event.window_key)
     if not users:
@@ -126,9 +122,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     )
 
     for user_id, thread_id, window_id in users:
-        chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-        display = thread_router.get_display_name(window_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+        claude_task_state.clear_wait_header(window_id)
         notif_mode = session_manager.get_notification_mode(window_id)
         status_text = (
             None if notif_mode in ("muted", "errors_only") else IDLE_STATUS_TEXT
@@ -309,6 +303,7 @@ async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
     # Clear session association and subagent tracking so next launch starts fresh
     if users:
         window_id = users[0][2]
+        claude_task_state.clear_window(window_id)
         session_manager.clear_window_session(window_id)
         clear_subagents(window_id)
 
@@ -338,6 +333,21 @@ async def _handle_task_completed(event: HookEvent, bot: Bot) -> None:
     )
 
     for user_id, thread_id, window_id in users:
+        task_id = event.data.get("task_id", "")
+        tracked = False
+        if task_id:
+            tracked = claude_task_state.mark_task_completed(
+                window_id,
+                event.session_id,
+                task_id,
+                subject=task_subject,
+            )
+        if tracked or claude_task_state.has_snapshot(window_id):
+            await enqueue_status_update(
+                bot, user_id, window_id, None, thread_id=thread_id
+            )
+            continue
+
         text = f"\u2705 Task completed: {task_subject}"
         if teammate_name:
             text += f" (by '{teammate_name}')"

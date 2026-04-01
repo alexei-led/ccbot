@@ -17,7 +17,7 @@ from telegram.ext import ContextTypes
 
 from ..session import session_manager
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import CB_WIN_BIND, CB_WIN_CANCEL, CB_WIN_NEW
 from .callback_helpers import get_thread_id
 from .directory_browser import (
@@ -132,7 +132,7 @@ async def _forward_pending_text(
         # For non-shell providers or existing shell windows, send raw text.
         # Existing shell windows skip handle_shell_message to avoid
         # _ensure_prompt_marker racing with the offer keyboard just shown.
-        send_ok, send_msg = await session_manager.send_to_window(window_id, text)
+        send_ok, send_msg = await send_to_window(window_id, text)
         if not send_ok:
             logger.warning("Failed to forward pending text: %s", send_msg)
             await safe_send(

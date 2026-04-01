@@ -7,7 +7,7 @@ behaviors are covered by unit tests in test_session_monitor_events.py.
 
 import pytest
 
-from ccgram.handlers.hook_events import HookEvent
+from ccgram.providers.base import HookEvent
 from ccgram.session_monitor import SessionMonitor
 
 pytestmark = pytest.mark.integration

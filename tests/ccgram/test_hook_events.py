@@ -4,6 +4,7 @@ import pytest
 
 from telegram import Bot
 
+from ccgram.claude_task_state import claude_task_state
 from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
 
 from ccgram.handlers.hook_events import (
@@ -129,21 +130,15 @@ class TestDispatchHookEvent:
 
 
 class TestHandleStop:
-    async def test_transitions_to_idle(self, monkeypatch) -> None:
+    async def test_updates_status_without_touching_topic_emoji(
+        self, monkeypatch
+    ) -> None:
         monkeypatch.setattr(
             "ccgram.handlers.hook_events.thread_router.iter_thread_bindings",
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
         with (
-            patch(
-                "ccgram.handlers.hook_events.thread_router.resolve_chat_id",
-                return_value=-100,
-            ),
-            patch(
-                "ccgram.handlers.hook_events.thread_router.get_display_name",
-                return_value="project",
-            ),
             patch(
                 "ccgram.handlers.hook_events.session_manager.get_notification_mode",
                 return_value="all",
@@ -156,7 +151,7 @@ class TestHandleStop:
             event = _make_event(event_type="Stop", data={"stop_reason": "done"})
             await dispatch_hook_event(event, bot)
 
-            mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "project")
+            mock_emoji.assert_not_called()
             mock_enqueue.assert_called_once_with(
                 bot, 100, "@0", IDLE_STATUS_TEXT, thread_id=42
             )
@@ -170,18 +165,10 @@ class TestHandleStop:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.hook_events.thread_router.resolve_chat_id",
-                return_value=-100,
-            ),
-            patch(
-                "ccgram.handlers.hook_events.thread_router.get_display_name",
-                return_value="project",
-            ),
-            patch(
                 "ccgram.handlers.hook_events.session_manager.get_notification_mode",
                 return_value=mode,
             ),
-            patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
+            patch("ccgram.handlers.topic_emoji.update_topic_emoji") as mock_emoji,
             patch(
                 "ccgram.handlers.message_queue.enqueue_status_update"
             ) as mock_enqueue,
@@ -189,6 +176,7 @@ class TestHandleStop:
             event = _make_event(event_type="Stop", data={"stop_reason": "done"})
             await dispatch_hook_event(event, bot)
 
+            mock_emoji.assert_not_called()
             mock_enqueue.assert_called_once_with(bot, 100, "@0", None, thread_id=42)
 
     async def test_stop_no_users_skips(self, monkeypatch) -> None:
@@ -278,6 +266,40 @@ class TestHandleNotification:
             event = _make_event(event_type="Notification")
             await dispatch_hook_event(event, bot)
             mock_clear.assert_called_once_with(100, 42)
+
+    async def test_sets_wait_header_from_notification_message(
+        self, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            "ccgram.handlers.hook_events.thread_router.iter_thread_bindings",
+            lambda: iter([(100, 42, "@0")]),
+        )
+        bot = AsyncMock(spec=Bot)
+        with (
+            patch(
+                "ccgram.handlers.interactive_ui.get_interactive_window",
+                return_value=None,
+            ),
+            patch("ccgram.handlers.interactive_ui.set_interactive_mode"),
+            patch(
+                "ccgram.handlers.interactive_ui.handle_interactive_ui",
+                return_value=False,
+            ),
+            patch("ccgram.handlers.interactive_ui.clear_interactive_mode"),
+            patch(
+                "ccgram.handlers.message_queue.enqueue_status_update",
+                new_callable=AsyncMock,
+            ) as mock_enqueue,
+            patch("asyncio.sleep"),
+        ):
+            event = _make_event(
+                event_type="Notification",
+                data={"message": "Claude needs your permission to use Bash"},
+            )
+            await dispatch_hook_event(event, bot)
+
+            assert claude_task_state.get_wait_header("@0") == "Approval needed: Bash"
+            mock_enqueue.assert_awaited_once_with(bot, 100, "@0", None, thread_id=42)
 
 
 class TestHandleSubagentStart:
@@ -546,6 +568,64 @@ class TestHandleTaskCompleted:
             assert "\u2705 Task completed: deploy" in text
             assert "(by " not in text
 
+    async def test_tracked_task_refreshes_task_status(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "ccgram.handlers.hook_events.thread_router.iter_thread_bindings",
+            lambda: iter([(100, 42, "@0")]),
+        )
+        claude_task_state.apply_entries(
+            "@0",
+            "session-1",
+            [
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "tool-1",
+                                "name": "TaskCreate",
+                                "input": {
+                                    "subject": "Write tests",
+                                    "description": "",
+                                    "activeForm": "",
+                                },
+                            }
+                        ]
+                    },
+                },
+                {
+                    "type": "user",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "tool-1",
+                                "content": "Task #1 created successfully",
+                            }
+                        ]
+                    },
+                    "toolUseResult": {"task": {"id": "1", "subject": "Write tests"}},
+                },
+            ],
+        )
+        bot = AsyncMock(spec=Bot)
+        with patch(
+            "ccgram.handlers.message_queue.enqueue_status_update",
+            new_callable=AsyncMock,
+        ) as mock_enqueue:
+            event = _make_event(
+                event_type="TaskCompleted",
+                session_id="session-1",
+                data={"task_id": "1", "task_subject": "Write tests"},
+            )
+            await dispatch_hook_event(event, bot)
+
+            snapshot = claude_task_state.get_snapshot("@0")
+            assert snapshot is not None
+            assert snapshot.done_count == 1
+            mock_enqueue.assert_awaited_once_with(bot, 100, "@0", None, thread_id=42)
+
 
 class TestHandleStopFailure:
     async def test_sends_error_alert(self, monkeypatch) -> None:
@@ -621,6 +701,57 @@ class TestHandleSessionEnd:
             mock_emoji.assert_called_once_with(bot, -100, 42, "done", "project")
             mock_enqueue.assert_called_once_with(bot, 100, "@0", None, thread_id=42)
             mock_clear_session.assert_called_once_with("@0")
+
+    async def test_clears_claude_task_state(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "ccgram.handlers.hook_events.thread_router.iter_thread_bindings",
+            lambda: iter([(100, 42, "@0")]),
+        )
+        claude_task_state.apply_entries(
+            "@0",
+            "session-1",
+            [
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "todo-1",
+                                "name": "TodoWrite",
+                                "input": {
+                                    "todos": [
+                                        {
+                                            "content": "Review changes",
+                                            "status": "completed",
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                }
+            ],
+        )
+        bot = AsyncMock(spec=Bot)
+        with (
+            patch(
+                "ccgram.handlers.hook_events.thread_router.resolve_chat_id",
+                return_value=-100,
+            ),
+            patch(
+                "ccgram.handlers.hook_events.thread_router.get_display_name",
+                return_value="project",
+            ),
+            patch("ccgram.handlers.hook_events.session_manager.clear_window_session"),
+            patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
+            patch("ccgram.handlers.message_queue.enqueue_status_update"),
+            patch("ccgram.handlers.polling_strategies.clear_seen_status"),
+        ):
+            event = _make_event(event_type="SessionEnd", data={"reason": "clear"})
+            await dispatch_hook_event(event, bot)
+
+        assert claude_task_state.get_snapshot("@0") is None
 
     async def test_clears_subagents_on_session_end(self, monkeypatch) -> None:
         monkeypatch.setattr(

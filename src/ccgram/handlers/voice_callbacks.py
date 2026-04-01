@@ -13,7 +13,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..providers import get_provider_for_window
-from ..session import session_manager
+from ..tmux_manager import send_to_window
 from ..thread_router import thread_router
 from .callback_data import CB_VOICE
 from .callback_helpers import get_thread_id
@@ -83,7 +83,7 @@ async def _handle_send(
 
     # Shell provider: route through LLM for NL→command generation
     provider = get_provider_for_window(window_id)
-    if provider.capabilities.name == "shell" and thread_id is not None:
+    if not provider.capabilities.supports_mailbox_delivery and thread_id is not None:
         from .shell_commands import handle_shell_message
 
         try:
@@ -103,7 +103,7 @@ async def _handle_send(
         await query.answer("✓ Sent")
         return
 
-    success, err = await session_manager.send_to_window(window_id, pending_text)
+    success, err = await send_to_window(window_id, pending_text)
 
     if success:
         await ack_reaction(msg.get_bot(), msg.chat.id, message_id)

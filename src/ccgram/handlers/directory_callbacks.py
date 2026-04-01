@@ -27,7 +27,7 @@ from ..providers import registry as provider_registry
 from ..session import session_manager
 from ..user_preferences import user_preferences
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import (
     CB_DIR_CANCEL,
     CB_DIR_CONFIRM,
@@ -594,10 +594,7 @@ async def _create_window_and_bind(
                 pending_text,
             )
         else:
-            send_ok, send_msg = await session_manager.send_to_window(
-                created_wid,
-                pending_text,
-            )
+            send_ok, send_msg = await send_to_window(created_wid, pending_text)
             if not send_ok:
                 logger.warning("Failed to forward pending text: %s", send_msg)
                 await safe_send(

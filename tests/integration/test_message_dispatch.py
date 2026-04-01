@@ -165,7 +165,7 @@ async def test_unknown_command_forwarded(app) -> None:
             return_value=MagicMock(window_id="@0"),
         ),
         patch(
-            "ccgram.bot.session_manager.send_to_window",
+            "ccgram.handlers.command_orchestration.send_to_window",
             new_callable=AsyncMock,
             return_value=(True, "Sent"),
         ),

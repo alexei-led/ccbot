@@ -277,6 +277,7 @@ class TestHandleModeSelect:
 
     @patch("ccgram.providers.resolve_launch_command")
     @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
+    @patch("ccgram.handlers.directory_callbacks.send_to_window", new_callable=AsyncMock)
     @patch("ccgram.handlers.directory_callbacks.session_manager")
     @patch("ccgram.handlers.directory_callbacks.tmux_manager")
     @patch("ccgram.handlers.directory_callbacks.provider_registry")
@@ -287,6 +288,7 @@ class TestHandleModeSelect:
         mock_registry: MagicMock,
         mock_tmux: MagicMock,
         mock_sm: MagicMock,
+        mock_send_to_window: AsyncMock,
         mock_edit: AsyncMock,
         mock_resolve_launch: MagicMock,
     ) -> None:
@@ -302,7 +304,7 @@ class TestHandleModeSelect:
         mock_tmux.stamp_pane_title = AsyncMock()
         mock_tr.get_window_for_thread.return_value = None
         mock_tr.resolve_chat_id.return_value = 123
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
+        mock_send_to_window.return_value = (True, "ok")
         mock_sm.get_window_state.return_value = MagicMock()
 
         user_data = {
@@ -318,5 +320,5 @@ class TestHandleModeSelect:
             query, 100, f"{CB_MODE_SELECT}claude:normal", update, context
         )
 
-        mock_sm.send_to_window.assert_called_once_with("@1", "hello world")
+        mock_send_to_window.assert_called_once_with("@1", "hello world")
         assert PENDING_THREAD_TEXT not in user_data

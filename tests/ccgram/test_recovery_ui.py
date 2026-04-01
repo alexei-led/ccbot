@@ -495,6 +495,7 @@ class TestRecoveryFreshCallback:
         )
         mock_tr.set_group_chat_id.assert_called_once_with(100, 42, -100999)
 
+    @patch(f"{_RC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.session_manager")
@@ -507,13 +508,14 @@ class TestRecoveryFreshCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
         mock_tr: MagicMock,
+        mock_send_to_window: AsyncMock,
     ) -> None:
         mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
         mock_sm.wait_for_session_map_entry = AsyncMock()
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
+        mock_send_to_window.return_value = (True, "ok")
         mock_tr.resolve_chat_id.return_value = -100999
 
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@0")
@@ -525,7 +527,7 @@ class TestRecoveryFreshCallback:
             mock_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        mock_sm.send_to_window.assert_called_once_with("@5", "hello")
+        mock_send_to_window.assert_called_once_with("@5", "hello")
         assert PENDING_THREAD_TEXT not in user_data
         assert PENDING_THREAD_ID not in user_data
         assert RECOVERY_WINDOW_ID not in user_data
@@ -630,6 +632,7 @@ class TestRecoveryContinueCallback:
             100, 42, "@5", window_name="project"
         )
 
+    @patch(f"{_RC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.session_manager")
@@ -642,13 +645,14 @@ class TestRecoveryContinueCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
         mock_tr: MagicMock,
+        mock_send_to_window: AsyncMock,
     ) -> None:
         mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
         mock_sm.wait_for_session_map_entry = AsyncMock()
-        mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
+        mock_send_to_window.return_value = (True, "ok")
         mock_tr.resolve_chat_id.return_value = -100999
 
         update = _make_callback_update(data=f"{CB_RECOVERY_CONTINUE}@0")
@@ -660,7 +664,7 @@ class TestRecoveryContinueCallback:
             mock_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        mock_sm.send_to_window.assert_called_once_with("@5", "my message")
+        mock_send_to_window.assert_called_once_with("@5", "my message")
         assert PENDING_THREAD_TEXT not in user_data
 
     @patch(f"{_RC}.tmux_manager")

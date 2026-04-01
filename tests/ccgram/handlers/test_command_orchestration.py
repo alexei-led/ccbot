@@ -48,7 +48,7 @@ def _make_context() -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def _allow_user():
-    with patch("ccgram.bot.is_user_allowed", return_value=True):
+    with patch("ccgram.config.Config.is_user_allowed", return_value=True):
         yield
 
 
@@ -61,7 +61,6 @@ class TestForwardCommandResolution:
         self.mock_tr.set_group_chat_id = MagicMock()
 
         self.mock_sm = MagicMock()
-        self.mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
         self.mock_sm.get_window_state.return_value = SimpleNamespace(
             transcript_path="",
             session_id="sess-1",
@@ -88,6 +87,11 @@ class TestForwardCommandResolution:
             patch(
                 "ccgram.handlers.command_orchestration.session_manager", self.mock_sm
             ),
+            patch(
+                "ccgram.handlers.command_orchestration.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ) as self.mock_send_to_window,
             patch("ccgram.handlers.command_orchestration.tmux_manager", self.mock_tm),
             patch(
                 "ccgram.handlers.command_orchestration.get_provider_for_window",
@@ -137,45 +141,43 @@ class TestForwardCommandResolution:
         update = _make_update(text="/clear")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/clear")
+        self.mock_send_to_window.assert_called_once_with("@1", "/clear")
 
     async def test_builtin_with_args(self) -> None:
         update = _make_update(text="/compact focus on auth")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with(
-            "@1", "/compact focus on auth"
-        )
+        self.mock_send_to_window.assert_called_once_with("@1", "/compact focus on auth")
 
     async def test_skill_name_resolved(self) -> None:
         update = _make_update(text="/committing_code")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/committing-code")
+        self.mock_send_to_window.assert_called_once_with("@1", "/committing-code")
 
     async def test_custom_command_resolved(self) -> None:
         update = _make_update(text="/spec_work")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/spec:work")
+        self.mock_send_to_window.assert_called_once_with("@1", "/spec:work")
 
     async def test_custom_command_with_args(self) -> None:
         update = _make_update(text="/spec_new task auth")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/spec:new task auth")
+        self.mock_send_to_window.assert_called_once_with("@1", "/spec:new task auth")
 
     async def test_leading_slash_mapping_not_double_prefixed(self) -> None:
         update = _make_update(text="/status")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/status")
+        self.mock_send_to_window.assert_called_once_with("@1", "/status")
 
     async def test_unknown_command_forwarded_as_is(self) -> None:
         update = _make_update(text="/unknown_thing")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/unknown_thing")
+        self.mock_send_to_window.assert_called_once_with("@1", "/unknown_thing")
 
     async def test_known_other_provider_command_is_rejected(self) -> None:
         with patch(
@@ -185,7 +187,7 @@ class TestForwardCommandResolution:
             update = _make_update(text="/cost")
             await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_not_called()
+        self.mock_send_to_window.assert_not_called()
         reply_text = update.message.reply_text.call_args[0][0]
         assert "not supported" in reply_text
         assert "/commands" in reply_text
@@ -194,13 +196,13 @@ class TestForwardCommandResolution:
         update = _make_update(text="/clear@mybot")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/clear")
+        self.mock_send_to_window.assert_called_once_with("@1", "/clear")
 
     async def test_botname_mention_stripped_with_args(self) -> None:
         update = _make_update(text="/compact@mybot some args")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/compact some args")
+        self.mock_send_to_window.assert_called_once_with("@1", "/compact some args")
 
     async def test_confirmation_message_shows_resolved_name(self) -> None:
         update = _make_update(text="/committing_code")
@@ -252,7 +254,7 @@ class TestForwardCommandResolution:
         update = _make_update(text="/clear")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_not_called()
+        self.mock_send_to_window.assert_not_called()
         reply_text = update.message.reply_text.call_args[0][0]
         assert "No session" in reply_text
 
@@ -262,12 +264,12 @@ class TestForwardCommandResolution:
         update = _make_update(text="/clear")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_not_called()
+        self.mock_send_to_window.assert_not_called()
         reply_text = update.message.reply_text.call_args[0][0]
         assert "no longer exists" in reply_text
 
     async def test_send_failure(self) -> None:
-        self.mock_sm.send_to_window = AsyncMock(return_value=(False, "Connection lost"))
+        self.mock_send_to_window.return_value = (False, "Connection lost")
 
         update = _make_update(text="/clear")
         await forward_command_handler(update, _make_context())
@@ -277,7 +279,7 @@ class TestForwardCommandResolution:
 
     async def test_unauthorized_user(self) -> None:
         with (
-            patch("ccgram.bot.is_user_allowed", return_value=False),
+            patch("ccgram.config.Config.is_user_allowed", return_value=False),
             patch(
                 "ccgram.handlers.command_orchestration._build_provider_command_metadata"
             ) as mock_metadata,
@@ -286,7 +288,7 @@ class TestForwardCommandResolution:
             await forward_command_handler(update, _make_context())
 
         mock_metadata.assert_not_called()
-        self.mock_sm.send_to_window.assert_not_called()
+        self.mock_send_to_window.assert_not_called()
 
     async def test_no_message(self) -> None:
         update = _make_update(text="/clear")
@@ -294,7 +296,7 @@ class TestForwardCommandResolution:
 
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_not_called()
+        self.mock_send_to_window.assert_not_called()
 
     async def test_status_snapshot_sends_reply(self) -> None:
         self.mock_sm.get_window_state.return_value = SimpleNamespace(
@@ -319,7 +321,7 @@ class TestForwardCommandResolution:
             update = _make_update(text="/status")
             await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/status")
+        self.mock_send_to_window.assert_called_once_with("@1", "/status")
         codex_provider.build_status_snapshot.assert_called_once_with(
             "/tmp/codex.jsonl",
             display_name="project",
@@ -346,7 +348,7 @@ class TestForwardCommandResolution:
             update = _make_update(text="/status")
             await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/status")
+        self.mock_send_to_window.assert_called_once_with("@1", "/status")
         claude_provider.build_status_snapshot.assert_not_called()
         assert update.message.reply_text.call_count == 1
 
@@ -385,7 +387,7 @@ class TestForwardCommandResolution:
             update = _make_update(text="/status")
             await forward_command_handler(update, _make_context())
 
-        self.mock_sm.send_to_window.assert_called_once_with("@1", "/status")
+        self.mock_send_to_window.assert_called_once_with("@1", "/status")
         codex_provider.build_status_snapshot.assert_not_called()
         assert update.message.reply_text.call_count == 1
 

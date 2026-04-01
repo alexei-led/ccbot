@@ -32,7 +32,7 @@ from ..llm import get_completer
 from ..llm import CommandResult
 from ..session import session_manager
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import (
     CB_SHELL_CANCEL,
     CB_SHELL_CONFIRM_DANGER,
@@ -261,9 +261,7 @@ async def _execute_raw_command(
     """Send a raw command to the shell and start output capture."""
     await _cancel_stuck_input(window_id)
 
-    success, err_message = await session_manager.send_to_window(
-        window_id, command, raw=True
-    )
+    success, err_message = await send_to_window(window_id, command, raw=True)
     if not success:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         await safe_send(

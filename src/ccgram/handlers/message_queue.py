@@ -26,6 +26,7 @@ from telegram.error import RetryAfter, TelegramError
 
 import contextlib
 
+from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
@@ -540,7 +541,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                             bkey = (user_id, thread_id)
                             if bkey in _active_batches:
                                 await _flush_batch(bot, user_id, thread_id)
-                            await _do_clear_status_message(bot, user_id, thread_id)
+                            await _process_status_clear_task(bot, user_id, task)
                         break
                     except RetryAfter as e:
                         retry_secs = min(
@@ -693,9 +694,55 @@ def _get_idle_history(
     from .callback_data import IDLE_STATUS_TEXT
     from .command_history import get_history
 
-    if status_text != IDLE_STATUS_TEXT:
+    first_line = status_text.split("\n", 1)[0]
+    if first_line != IDLE_STATUS_TEXT:
         return None
     return get_history(user_id, thread_id_or_0, limit=2) or None
+
+
+def _format_claude_task_status(window_id: str, base_text: str | None) -> str | None:
+    """Compose Claude wait/task state into the status bubble text."""
+    snapshot = get_claude_task_snapshot(window_id)
+    wait_header = get_claude_wait_header(window_id)
+    if snapshot is None and not wait_header:
+        return base_text
+
+    lines: list[str] = []
+    header = wait_header or base_text
+    if header:
+        lines.append(header)
+
+    if snapshot is not None:
+        lines.append(
+            f"{snapshot.total_count} tasks ({snapshot.done_count} done, {snapshot.open_count} open)"
+        )
+        visible_items = snapshot.items[:8]
+        for item in visible_items:
+            if item.status == "completed":
+                glyph = "✔"
+            elif item.status == "in_progress":
+                glyph = "◔"
+            else:
+                glyph = "◻"
+
+            label = (
+                item.active_form
+                if item.status == "in_progress" and item.active_form
+                else item.subject
+            )
+            if item.owner:
+                label = f"{label} ({item.owner})"
+            line = f"{glyph} #{item.task_id} {label}".rstrip()
+            if item.blocked_by:
+                blocked = ", ".join(f"#{task_id}" for task_id in item.blocked_by)
+                line = f"{line} blocked by {blocked}"
+            lines.append(line)
+
+        hidden_count = snapshot.total_count - len(visible_items)
+        if hidden_count > 0:
+            lines.append(f"+{hidden_count} more")
+
+    return "\n".join(lines) if lines else base_text
 
 
 async def _process_status_update_task(
@@ -706,7 +753,7 @@ async def _process_status_update_task(
     thread_id = task.thread_id or 0
     skey = (user_id, thread_id)
     # task.text must be pre-formatted (display_label from StatusUpdate, not raw terminal text)
-    status_text = task.text or ""
+    status_text = _format_claude_task_status(window_id, task.text)
 
     if not status_text:
         # No status text means clear status
@@ -753,6 +800,17 @@ async def _process_status_update_task(
     else:
         # No existing status message, send new
         await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)
+
+
+async def _process_status_clear_task(bot: Bot, user_id: int, task: MessageTask) -> None:
+    """Delete or re-render a status message after a clear request."""
+    thread_id = task.thread_id or 0
+    window_id = task.window_id or ""
+    status_text = _format_claude_task_status(window_id, None)
+    if status_text and window_id:
+        await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)
+        return
+    await _do_clear_status_message(bot, user_id, thread_id)
 
 
 async def _do_send_status_message(
@@ -862,7 +920,11 @@ async def enqueue_status_update(
             thread_id=thread_id,
         )
     else:
-        task = MessageTask(task_type="status_clear", thread_id=thread_id)
+        task = MessageTask(
+            task_type="status_clear",
+            window_id=window_id,
+            thread_id=thread_id,
+        )
 
     queue.put_nowait(task)
 
