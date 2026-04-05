@@ -183,7 +183,7 @@ def _wrap_setup_commands(shell: str) -> str:
     # \\? in the glob escapes ? to match literal (zsh expands %? at render time).
     zsh = (
         '[[ "$PROMPT" == *⌘%\\?⌘* ]] || { '
-        'PROMPT="${PROMPT}%{\\033[2m%}⌘%?⌘%{\\033[0m%} "; '
+        "PROMPT+=$'%{\\e[2m%}⌘%?⌘%{\\e[0m%} '; "
         "clear; }"
     )
     # tcsh/csh: append marker to existing prompt (no dim support).

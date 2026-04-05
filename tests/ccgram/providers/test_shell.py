@@ -409,7 +409,7 @@ class TestWrapModeSetup:
         [
             ("fish", "__ccgram_orig_prompt"),
             ("bash", "PROMPT_COMMAND"),
-            ("zsh", "PROMPT="),
+            ("zsh", "PROMPT+="),
             ("tcsh", "set prompt"),
         ],
         ids=["fish-wrap", "bash-wrap", "zsh-wrap", "tcsh-wrap"],
@@ -575,6 +575,14 @@ class TestWrapSetupCommands:
         from ccgram.providers.shell import _wrap_setup_commands
 
         assert expected in _wrap_setup_commands(shell)
+
+    def test_zsh_wrap_command_uses_real_escape_sequence(self) -> None:
+        from ccgram.providers.shell import _wrap_setup_commands
+
+        cmd = _wrap_setup_commands("zsh")
+        assert "$'%{\\e[2m%}⌘%?⌘%{\\e[0m%} '" in cmd
+        assert "\\033[2m" not in cmd
+        assert "\\033[0m" not in cmd
 
     def test_unknown_shell_falls_back_to_posix(self) -> None:
         from ccgram.providers.shell import _wrap_setup_commands
