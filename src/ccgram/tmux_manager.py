@@ -1073,6 +1073,12 @@ class TmuxManager:
                         f"export CCGRAM_WINDOW_ID={shlex.quote(qualified_id)}",
                         enter=True,
                     )
+                    # Disable interactive editors — Telegram users can't see
+                    # tmux popups or terminal overlays opened by plugins
+                    pane.send_keys(
+                        "export EDITOR=true VISUAL=true",
+                        enter=True,
+                    )
 
                 if not (start_agent and launch_command):
                     window.set_option("automatic-rename", "off")
