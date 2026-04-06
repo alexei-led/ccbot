@@ -587,8 +587,7 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
     from .live_view import _active_views
 
     if any(
-        v.message_id == getattr(query.message, "message_id", None)
-        for v in _active_views.values()
+        k[0] == user_id and v.window_id == window_id for k, v in _active_views.items()
     ):
         return
 
