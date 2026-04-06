@@ -29,6 +29,8 @@ from .callback_data import CB_KEYS_PREFIX, CB_LIVE_STOP
 
 logger = structlog.get_logger()
 
+LIVE_VIEW_TICK_INTERVAL = 5.0  # seconds
+
 
 @dataclass
 class LiveViewState:
@@ -41,7 +43,7 @@ class LiveViewState:
     window_id: str
     pane_id: str | None = None
     last_hash: str = ""
-    last_edit_time: float = field(default_factory=time.monotonic)
+    next_edit_after: float = 0.0
     start_time: float = field(default_factory=time.monotonic)
 
 
@@ -105,11 +107,11 @@ def _clear_live_view(user_id: int, thread_id: int) -> None:
     _active_views.pop((user_id, thread_id), None)
 
 
-async def tick_live_views(bot: Bot, *, timeout: int = 300) -> None:
+async def tick_live_views(bot: Bot) -> None:
     """Refresh all active live views. Called from periodic_tasks."""
     from ..config import config
 
-    effective_timeout = config.live_view_timeout if config else timeout
+    effective_timeout = config.live_view_timeout
     now = time.monotonic()
 
     for key in list(_active_views):
@@ -126,14 +128,14 @@ async def _tick_one_view(
     now: float,
     timeout: int,
 ) -> None:
-    """Refresh a single live view. Extracted for complexity budget."""
+    """Refresh a single live view."""
     try:
         if now - view.start_time > timeout:
             _active_views.pop(key, None)
             await _edit_caption(bot, view, "Live view ended (timeout)")
             return
 
-        if view.last_edit_time > now:
+        if now < view.next_edit_after:
             return
 
         window = await tmux_manager.find_window_by_id(view.window_id)
@@ -150,12 +152,13 @@ async def _tick_one_view(
         if h == view.last_hash:
             return
 
-        png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
-        ts = time.strftime("%H:%M:%S")
-
         from .message_sender import rate_limit_send
 
         await rate_limit_send(view.chat_id)
+
+        png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
+        ts = time.strftime("%H:%M:%S")
+
         keyboard = build_live_keyboard(view.window_id, pane_id=view.pane_id)
         await bot.edit_message_media(
             chat_id=view.chat_id,
@@ -167,15 +170,14 @@ async def _tick_one_view(
             reply_markup=keyboard,
         )
         view.last_hash = h
-        view.last_edit_time = now
+        view.next_edit_after = now + LIVE_VIEW_TICK_INTERVAL
 
     except RetryAfter as exc:
-        wait = (
-            float(exc.retry_after)
-            if isinstance(exc.retry_after, int)
-            else exc.retry_after.total_seconds()
-        )
-        view.last_edit_time = now + wait
+        from datetime import timedelta
+
+        ra = exc.retry_after
+        wait = ra.total_seconds() if isinstance(ra, timedelta) else float(ra)
+        view.next_edit_after = now + wait
         logger.info("live_view_retry_after", key=key, wait=wait)
     except TelegramError as exc:
         logger.warning("live_view_tick_error", key=key, error=str(exc))

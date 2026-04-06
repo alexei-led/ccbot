@@ -297,7 +297,7 @@ class TestTickLiveViews:
         view.start_time = time.monotonic() - 999
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
-        await tick_live_views(bot, timeout=1)
+        await tick_live_views(bot)
         assert not is_live(1, 42)
 
     async def test_auto_stop_on_dead_window(self):
@@ -401,7 +401,7 @@ class TestTickLiveViews:
         view.start_time = time.monotonic() - 999
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
-        await tick_live_views(bot, timeout=1)
+        await tick_live_views(bot)
         bot.edit_message_caption.assert_awaited_once()
         call_kwargs = bot.edit_message_caption.call_args.kwargs
         assert "timeout" in call_kwargs["caption"]
@@ -425,11 +425,11 @@ class TestTickLiveViews:
             mock_tmux.capture_pane = AsyncMock(return_value="new text")
             await tick_live_views(bot)
         assert is_live(1, 42)
-        assert view.last_edit_time > time.monotonic()
+        assert view.next_edit_after > time.monotonic()
 
     async def test_backoff_skips_tick(self):
         view = _make_view(last_hash="old")
-        view.last_edit_time = time.monotonic() + 999
+        view.next_edit_after = time.monotonic() + 999
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
         with patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux:
@@ -536,6 +536,28 @@ class TestHandleLiveStart:
         query.answer.assert_awaited()
         assert "not found" in query.answer.call_args.args[0].lower()
 
+    async def test_rejects_empty_capture(self):
+        query, update = _make_query()
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=42,
+            ),
+            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
+        ):
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            mock_tmux.capture_pane = AsyncMock(return_value=None)
+            await _handle_live_start(query, 1, f"{CB_LIVE_START}@0", update)
+        query.answer.assert_awaited()
+        assert "capture" in query.answer.call_args.args[0].lower()
+        assert not is_live(1, 42)
+
     async def test_success_starts_live_view(self):
         query, update = _make_query()
         with (
@@ -583,6 +605,39 @@ class TestHandleLiveStop:
             "text", query.answer.call_args.args[0]
         )
 
+    async def test_rejects_no_thread(self):
+        query, update = _make_query()
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=None,
+            ),
+        ):
+            await _handle_live_stop(query, 1, f"{CB_LIVE_STOP}@0", update)
+        query.answer.assert_awaited()
+        assert "topic" in query.answer.call_args.args[0].lower()
+
+    async def test_stop_when_not_active(self):
+        assert not is_live(1, 42)
+        query, update = _make_query()
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=42,
+            ),
+        ):
+            await _handle_live_stop(query, 1, f"{CB_LIVE_STOP}@0", update)
+        query.answer.assert_awaited()
+        assert "Stopped" in query.answer.call_args.args[0]
+
     async def test_success_stops_live_view(self):
         start_live_view(_make_view())
         assert is_live(1, 42)
@@ -599,6 +654,7 @@ class TestHandleLiveStop:
         ):
             await _handle_live_stop(query, 1, f"{CB_LIVE_STOP}@0", update)
         assert not is_live(1, 42)
-        query.edit_message_reply_markup.assert_awaited_once()
+        query.edit_message_caption.assert_awaited_once()
+        assert "Screenshot" in query.edit_message_caption.call_args.kwargs["caption"]
         query.answer.assert_awaited()
         assert "Stopped" in query.answer.call_args.args[0]

@@ -171,7 +171,9 @@ async def _handle_live_start(
         await query.answer("Failed to start live view", show_alert=True)
         return
 
-    assert query.message is not None
+    if query.message is None:
+        await query.answer("Failed to start live view", show_alert=True)
+        return
     start_live_view(
         LiveViewState(
             chat_id=chat_id,
@@ -205,7 +207,7 @@ async def _handle_live_stop(
     stop_live_view(user_id, thread_id)
     keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
     with contextlib.suppress(TelegramError):
-        await query.edit_message_reply_markup(reply_markup=keyboard)
+        await query.edit_message_caption(caption="Screenshot", reply_markup=keyboard)
     await query.answer("\u23f9 Stopped")
 
 

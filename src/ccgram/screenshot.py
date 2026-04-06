@@ -343,7 +343,7 @@ async def text_to_image(
 
         buf = io.BytesIO()
         if live_mode:
-            img = img.quantize(colors=32)
+            img = img.quantize(colors=64)
             img.save(buf, format="PNG", optimize=True, compress_level=9)
         else:
             img.save(buf, format="PNG")
