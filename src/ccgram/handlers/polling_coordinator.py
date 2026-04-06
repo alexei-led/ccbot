@@ -511,7 +511,7 @@ async def update_status_message(
 async def status_poll_loop(bot: Bot) -> None:
     """Background task to poll terminal status for all thread-bound windows."""
     logger.info("Status polling started (interval: %ss)", STATUS_POLL_INTERVAL)
-    timers = {"topic_check": 0.0, "broker": 0.0, "sweep": 0.0}
+    timers = {"topic_check": 0.0, "broker": 0.0, "sweep": 0.0, "live_view": 0.0}
     _error_streak = 0
     while True:
         try:

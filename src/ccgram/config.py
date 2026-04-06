@@ -166,6 +166,7 @@ class Config:
             ) from e
 
         self._init_messaging()
+        self._init_live_view()
 
         # Auto-close stale topics (minutes; 0 = disabled)
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
@@ -191,6 +192,10 @@ class Config:
         self.msg_spawn_timeout: int = _parse_int_env("CCGRAM_MSG_SPAWN_TIMEOUT", 300)
         self.msg_spawn_rate: int = _parse_int_env("CCGRAM_MSG_SPAWN_RATE", 3)
         self.msg_rate_limit: int = _parse_int_env("CCGRAM_MSG_RATE_LIMIT", 10)
+
+    def _init_live_view(self) -> None:
+        self.live_view_interval: int = _parse_int_env("CCGRAM_LIVE_VIEW_INTERVAL", 5)
+        self.live_view_timeout: int = _parse_int_env("CCGRAM_LIVE_VIEW_TIMEOUT", 300)
 
     def is_user_allowed(self, user_id: int) -> bool:
         """Check if a user is in the allowed list."""

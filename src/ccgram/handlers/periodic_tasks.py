@@ -37,6 +37,7 @@ logger = structlog.get_logger()
 # ── Timing constants ──────────────────────────────────────────────────────
 
 TOPIC_CHECK_INTERVAL = 60.0  # seconds
+LIVE_VIEW_TICK_INTERVAL = 5.0  # seconds
 
 
 # ── Broker integration ────────────────────────────────────────────────────
@@ -111,6 +112,12 @@ async def run_periodic_tasks(
 ) -> None:
     """Run time-gated periodic tasks (topic check, broker, sweep)."""
     now = time.monotonic()
+    if now - timers.get("live_view", 0.0) >= LIVE_VIEW_TICK_INTERVAL:
+        timers["live_view"] = now
+        from .live_view import tick_live_views
+
+        await tick_live_views(bot)
+
     if now - timers["topic_check"] >= TOPIC_CHECK_INTERVAL:
         timers["topic_check"] = now
         await prune_stale_state(all_windows)

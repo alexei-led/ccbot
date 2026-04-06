@@ -112,5 +112,10 @@ CB_SHELL_RUN = "sh:run:"  # sh:run:<window_id>
 CB_SHELL_EDIT = "sh:edt:"  # sh:edt:<window_id>
 CB_SHELL_CANCEL = "sh:x:"  # sh:x:<window_id>
 CB_SHELL_CONFIRM_DANGER = "sh:dng:"  # sh:dng:<window_id> (dangerous confirm)
+
+# Live view (auto-refreshing screenshot)
+CB_LIVE_START = "lv:go:"  # lv:go:<target> (window_id or window_id:pane_id)
+CB_LIVE_STOP = "lv:stop:"  # lv:stop:<target>
+
 # Idle status sentinel (shared between status_polling and message_queue)
 IDLE_STATUS_TEXT = "\u2713 Ready"
