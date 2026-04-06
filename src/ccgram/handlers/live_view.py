@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from telegram.error import TelegramError
+from telegram.error import RetryAfter, TelegramError
 
 from ..screenshot import text_to_image
 from ..tmux_manager import tmux_manager
@@ -116,52 +116,79 @@ async def tick_live_views(bot: Bot, *, timeout: int = 300) -> None:
         view = _active_views.get(key)
         if view is None:
             continue
+        await _tick_one_view(bot, key, view, now, effective_timeout)
 
-        try:
-            if now - view.start_time > effective_timeout:
-                _active_views.pop(key, None)
-                await _edit_caption(bot, view, "Live view ended (timeout)")
-                continue
 
-            window = await tmux_manager.find_window_by_id(view.window_id)
-            if window is None:
-                _active_views.pop(key, None)
-                await _edit_caption(bot, view, "Live view ended (window closed)")
-                continue
-
-            if view.pane_id:
-                text = await tmux_manager.capture_pane_by_id(
-                    view.pane_id, with_ansi=True, window_id=view.window_id
-                )
-            else:
-                text = await tmux_manager.capture_pane(window.window_id, with_ansi=True)
-
-            if not text:
-                continue
-
-            h = content_hash(text)
-            if h == view.last_hash:
-                continue
-
-            png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
-            ts = time.strftime("%H:%M:%S")
-
-            keyboard = build_live_keyboard(view.window_id, pane_id=view.pane_id)
-            await bot.edit_message_media(
-                chat_id=view.chat_id,
-                message_id=view.message_id,
-                media=InputMediaPhoto(
-                    media=io.BytesIO(png_bytes),
-                    caption=f"Live \u00b7 {ts}",
-                ),
-                reply_markup=keyboard,
-            )
-            view.last_hash = h
-            view.last_edit_time = now
-
-        except TelegramError as exc:
-            logger.warning("live_view_tick_error", key=key, error=str(exc))
+async def _tick_one_view(
+    bot: Bot,
+    key: tuple[int, int],
+    view: LiveViewState,
+    now: float,
+    timeout: int,
+) -> None:
+    """Refresh a single live view. Extracted for complexity budget."""
+    try:
+        if now - view.start_time > timeout:
             _active_views.pop(key, None)
+            await _edit_caption(bot, view, "Live view ended (timeout)")
+            return
+
+        if view.last_edit_time > now:
+            return
+
+        window = await tmux_manager.find_window_by_id(view.window_id)
+        if window is None:
+            _active_views.pop(key, None)
+            await _edit_caption(bot, view, "Live view ended (window closed)")
+            return
+
+        text = await _capture_pane(view, window.window_id)
+        if not text:
+            return
+
+        h = content_hash(text)
+        if h == view.last_hash:
+            return
+
+        png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
+        ts = time.strftime("%H:%M:%S")
+
+        from .message_sender import rate_limit_send
+
+        await rate_limit_send(view.chat_id)
+        keyboard = build_live_keyboard(view.window_id, pane_id=view.pane_id)
+        await bot.edit_message_media(
+            chat_id=view.chat_id,
+            message_id=view.message_id,
+            media=InputMediaPhoto(
+                media=io.BytesIO(png_bytes),
+                caption=f"Live \u00b7 {ts}",
+            ),
+            reply_markup=keyboard,
+        )
+        view.last_hash = h
+        view.last_edit_time = now
+
+    except RetryAfter as exc:
+        wait = (
+            float(exc.retry_after)
+            if isinstance(exc.retry_after, int)
+            else exc.retry_after.total_seconds()
+        )
+        view.last_edit_time = now + wait
+        logger.info("live_view_retry_after", key=key, wait=wait)
+    except TelegramError as exc:
+        logger.warning("live_view_tick_error", key=key, error=str(exc))
+        _active_views.pop(key, None)
+
+
+async def _capture_pane(view: LiveViewState, window_id: str) -> str | None:
+    """Capture pane text for a live view."""
+    if view.pane_id:
+        return await tmux_manager.capture_pane_by_id(
+            view.pane_id, with_ansi=True, window_id=view.window_id
+        )
+    return await tmux_manager.capture_pane(window_id, with_ansi=True)
 
 
 async def _edit_caption(bot: Bot, view: LiveViewState, text: str) -> None:

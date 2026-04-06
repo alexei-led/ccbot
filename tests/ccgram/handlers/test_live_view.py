@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from telegram import Bot
-from telegram.error import TelegramError
+from telegram.error import RetryAfter, TelegramError
 
 from ccgram.handlers.callback_data import (
     CB_KEYS_PREFIX,
@@ -405,6 +405,40 @@ class TestTickLiveViews:
         bot.edit_message_caption.assert_awaited_once()
         call_kwargs = bot.edit_message_caption.call_args.kwargs
         assert "timeout" in call_kwargs["caption"]
+
+    async def test_retry_after_pauses_view(self):
+        view = _make_view(last_hash="old")
+        start_live_view(view)
+        bot = AsyncMock(spec=Bot)
+        bot.edit_message_media = AsyncMock(side_effect=RetryAfter(30))
+        with (
+            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.live_view.text_to_image",
+                new_callable=AsyncMock,
+                return_value=b"PNG",
+            ),
+        ):
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            mock_tmux.capture_pane = AsyncMock(return_value="new text")
+            await tick_live_views(bot)
+        assert is_live(1, 42)
+        assert view.last_edit_time > time.monotonic()
+
+    async def test_backoff_skips_tick(self):
+        view = _make_view(last_hash="old")
+        view.last_edit_time = time.monotonic() + 999
+        start_live_view(view)
+        bot = AsyncMock(spec=Bot)
+        with patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux:
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            await tick_live_views(bot)
+        bot.edit_message_media.assert_not_awaited()
+        assert is_live(1, 42)
 
     async def test_dead_window_edits_caption(self):
         view = _make_view()
