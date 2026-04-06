@@ -29,8 +29,6 @@ from .callback_data import CB_KEYS_PREFIX, CB_LIVE_STOP
 
 logger = structlog.get_logger()
 
-LIVE_VIEW_TICK_INTERVAL = 5.0  # seconds
-
 
 @dataclass
 class LiveViewState:
@@ -112,13 +110,14 @@ async def tick_live_views(bot: Bot) -> None:
     from ..config import config
 
     effective_timeout = config.live_view_timeout
+    interval = config.live_view_interval
     now = time.monotonic()
 
     for key in list(_active_views):
         view = _active_views.get(key)
         if view is None:
             continue
-        await _tick_one_view(bot, key, view, now, effective_timeout)
+        await _tick_one_view(bot, key, view, now, effective_timeout, interval)
 
 
 async def _tick_one_view(
@@ -127,6 +126,7 @@ async def _tick_one_view(
     view: LiveViewState,
     now: float,
     timeout: int,
+    interval: int,
 ) -> None:
     """Refresh a single live view."""
     try:
@@ -170,7 +170,7 @@ async def _tick_one_view(
             reply_markup=keyboard,
         )
         view.last_hash = h
-        view.next_edit_after = now + LIVE_VIEW_TICK_INTERVAL
+        view.next_edit_after = now + interval
 
     except RetryAfter as exc:
         from datetime import timedelta

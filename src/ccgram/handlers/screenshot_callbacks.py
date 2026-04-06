@@ -583,6 +583,15 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
         )
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
+    # During live view, skip the refresh — next tick handles it
+    from .live_view import _active_views
+
+    if any(
+        v.message_id == getattr(query.message, "message_id", None)
+        for v in _active_views.values()
+    ):
+        return
+
     # Refresh screenshot after key press
     await asyncio.sleep(0.5)
     if pane_id:
