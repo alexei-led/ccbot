@@ -197,7 +197,9 @@ class Config:
         self.live_view_interval: int = max(
             1, _parse_int_env("CCGRAM_LIVE_VIEW_INTERVAL", 5)
         )
-        self.live_view_timeout: int = _parse_int_env("CCGRAM_LIVE_VIEW_TIMEOUT", 300)
+        self.live_view_timeout: int = max(
+            1, _parse_int_env("CCGRAM_LIVE_VIEW_TIMEOUT", 300)
+        )
 
     def is_user_allowed(self, user_id: int) -> bool:
         """Check if a user is in the allowed list."""

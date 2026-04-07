@@ -203,6 +203,16 @@ class TestLiveViewConfig:
         cfg = Config()
         assert cfg.live_view_timeout == 600
 
+    def test_live_view_interval_zero_clamped_to_one(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "0")
+        cfg = Config()
+        assert cfg.live_view_interval == 1
+
+    def test_live_view_timeout_zero_clamped_to_one(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "0")
+        cfg = Config()
+        assert cfg.live_view_timeout == 1
+
     def test_live_view_interval_invalid(self, monkeypatch):
         monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "not-a-number")
         with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_INTERVAL"):

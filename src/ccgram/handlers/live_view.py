@@ -1,7 +1,7 @@
 """Live terminal view — auto-refreshing screenshot via editMessageMedia.
 
 Manages active live view sessions: one per topic (user_id, thread_id).
-The tick function is called from the polling loop every LIVE_VIEW_TICK_INTERVAL
+The tick function is called from the polling loop every config.live_view_interval
 seconds. Each tick captures the pane, hashes the content, and edits the
 Telegram message only when the terminal has changed.
 
@@ -27,6 +27,7 @@ from ..screenshot import text_to_image
 from ..tmux_manager import tmux_manager
 from ..topic_state_registry import topic_state
 from .callback_data import CB_KEYS_PREFIX, CB_LIVE_STOP
+from .message_sender import rate_limit_send
 
 logger = structlog.get_logger()
 
@@ -157,8 +158,6 @@ async def _tick_one_view(
 
         png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
         ts = time.strftime("%H:%M:%S")
-
-        from .message_sender import rate_limit_send
 
         await rate_limit_send(view.chat_id)
 
