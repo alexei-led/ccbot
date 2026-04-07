@@ -252,7 +252,6 @@ class TestBuildToolbarKeyboard:
 # ── Tick function ────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
 class TestTickLiveViews:
     async def test_skip_when_hash_unchanged(self):
         view = _make_view(last_hash=content_hash("same text"))
@@ -455,7 +454,6 @@ class TestTickLiveViews:
 # ── _edit_caption ────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
 class TestEditCaption:
     async def test_edits_caption_with_keyboard(self):
         view = _make_view()
@@ -488,7 +486,6 @@ def _make_query(
     return query, update
 
 
-@pytest.mark.asyncio
 class TestHandleLiveStart:
     async def test_rejects_non_owner(self):
         query, update = _make_query()
@@ -590,8 +587,41 @@ class TestHandleLiveStart:
         assert view.window_id == "@0"
         assert view.last_hash == content_hash("terminal text")
 
+    async def test_success_with_pane_id(self):
+        query, update = _make_query()
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=42,
+            ),
+            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.screenshot_callbacks.text_to_image",
+                new_callable=AsyncMock,
+                return_value=b"PNG",
+            ),
+            patch("ccgram.handlers.screenshot_callbacks.thread_router") as mock_router,
+        ):
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            mock_tmux.capture_pane_by_id = AsyncMock(return_value="pane text")
+            mock_router.resolve_chat_id.return_value = 100
+            await _handle_live_start(query, 1, f"{CB_LIVE_START}@0:%3", update)
+        mock_tmux.capture_pane_by_id.assert_awaited_once_with(
+            "%3", with_ansi=True, window_id="@0"
+        )
+        query.edit_message_media.assert_awaited_once()
+        assert is_live(1, 42)
+        view = get_live_view(1, 42)
+        assert view is not None
+        assert view.pane_id == "%3"
 
-@pytest.mark.asyncio
+
 class TestHandleLiveStop:
     async def test_rejects_non_owner(self):
         query, update = _make_query()
