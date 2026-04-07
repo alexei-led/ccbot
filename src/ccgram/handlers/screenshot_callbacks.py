@@ -2,6 +2,8 @@
 
 Handles inline keyboard callbacks for screenshot UI and status message buttons:
   - CB_SCREENSHOT_REFRESH: Refresh an existing screenshot
+  - CB_LIVE_START: Start auto-refreshing live terminal view
+  - CB_LIVE_STOP: Stop live view and revert to screenshot keyboard
   - CB_STATUS_RECALL: Send one of the two recent commands from status row
   - CB_STATUS_ESC: Send Escape key from status message
   - CB_STATUS_SCREENSHOT: Take a screenshot from status message
@@ -131,7 +133,13 @@ async def _handle_live_start(
         await query.answer("Use in a topic", show_alert=True)
         return
 
-    from .live_view import is_live
+    from .live_view import (
+        LiveViewState,
+        build_live_keyboard,
+        content_hash,
+        is_live,
+        start_live_view,
+    )
 
     if is_live(user_id, thread_id):
         await query.answer("Already live")
@@ -152,16 +160,9 @@ async def _handle_live_start(
         await query.answer("Failed to capture pane", show_alert=True)
         return
 
-    from .live_view import (
-        LiveViewState,
-        build_live_keyboard,
-        content_hash,
-        start_live_view,
-    )
-
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
     keyboard = build_live_keyboard(window_id, pane_id=pane_id)
-    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
 
     try:
         await query.edit_message_media(
@@ -176,7 +177,9 @@ async def _handle_live_start(
         await query.answer("Failed to start live view", show_alert=True)
         return
 
-    assert query.message is not None
+    if query.message is None:
+        await query.answer("Message lost")
+        return
     start_live_view(
         LiveViewState(
             chat_id=chat_id,
@@ -350,6 +353,7 @@ async def handle_screenshot_callback(
         CB_STATUS_RECALL: _handle_status_recall,
         CB_STATUS_SCREENSHOT: _handle_status_screenshot,
         CB_PANE_SCREENSHOT: _handle_pane_screenshot,
+        CB_KEYS_PREFIX: _handle_keys,
     }
     for prefix, handler in with_update.items():
         if data.startswith(prefix):
@@ -363,7 +367,6 @@ async def handle_screenshot_callback(
         CB_STATUS_NOTIFY: _handle_notify_toggle,
         CB_STATUS_REMOTE: _handle_remote_control,
         CB_TOOLBAR_CTRLC: _handle_toolbar_ctrlc,
-        CB_KEYS_PREFIX: _handle_keys,
     }
     for prefix, handler in without_update.items():
         if data.startswith(prefix):
@@ -550,7 +553,9 @@ def _parse_target(target: str) -> tuple[str, str | None]:
     return target, None
 
 
-async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
+async def _handle_keys(
+    query: CallbackQuery, user_id: int, data: str, update: Update
+) -> None:
     """Handle CB_KEYS_PREFIX: send a quick key from screenshot keyboard."""
     rest = data[len(CB_KEYS_PREFIX) :]
     colon_idx = rest.find(":")
@@ -589,8 +594,8 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
     # During live view, skip the refresh — next tick handles it
     from .live_view import get_live_view
 
-    thread_id = getattr(query.message, "message_thread_id", None)
-    if thread_id and get_live_view(user_id, thread_id) is not None:
+    thread_id = get_thread_id(update)
+    if thread_id is not None and get_live_view(user_id, thread_id) is not None:
         return
 
     # Refresh screenshot after key press

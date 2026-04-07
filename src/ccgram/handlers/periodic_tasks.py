@@ -1,11 +1,11 @@
 """Periodic task orchestration for the polling subsystem.
 
 Orchestrates time-gated tasks within the poll loop: message broker delivery,
-mailbox sweep, spawn request processing, topic lifecycle management, and
-state pruning.
+mailbox sweep, spawn request processing, topic lifecycle management, live view
+ticking, and state pruning.
 
 Key components:
-  - run_periodic_tasks: time-gated broker, sweep, and topic check
+  - run_periodic_tasks: time-gated broker, sweep, live view tick, and topic check
   - run_lifecycle_tasks: per-tick autoclose and unbound window management
   - run_broker_cycle: message broker delivery (also called from hook_events)
 """

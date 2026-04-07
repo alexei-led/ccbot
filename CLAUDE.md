@@ -137,6 +137,15 @@ Supported LLM providers: `openai`, `xai`, `deepseek`, `anthropic`, `groq`, `olla
 
 The LLM is also used for **completion summaries**: when an agent finishes (Stop hook), ccgram asynchronously calls the LLM to produce a single-line summary of what was accomplished, then edits the Ready message in-place. This is non-blocking — the static Ready message appears immediately, and the LLM enhancement arrives ~1-2s later. When no LLM is configured, the static enriched Ready (with task checklist and last status) is still shown.
 
+### Live View Configuration
+
+| Setting           | Env Var                     | Default   |
+| ----------------- | --------------------------- | --------- |
+| Refresh interval  | `CCGRAM_LIVE_VIEW_INTERVAL` | `5` (s)   |
+| Auto-stop timeout | `CCGRAM_LIVE_VIEW_TIMEOUT`  | `300` (s) |
+
+Both values are clamped to a minimum of 1. Live view auto-refreshes terminal screenshots via `editMessageMedia` at the configured interval, and auto-stops after the timeout.
+
 ### Migration Notes
 
 Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccgram hook --install`) is Claude-specific and skipped for other providers.
