@@ -253,6 +253,11 @@ class TestBuildToolbarKeyboard:
 
 
 class TestTickLiveViews:
+    @pytest.fixture(autouse=True)
+    def _patch_rate_limit(self):
+        with patch("ccgram.handlers.live_view.rate_limit_send", new_callable=AsyncMock):
+            yield
+
     async def test_skip_when_hash_unchanged(self):
         view = _make_view(last_hash=content_hash("same text"))
         start_live_view(view)

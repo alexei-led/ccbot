@@ -131,6 +131,12 @@ async def _handle_live_start(
         await query.answer("Use in a topic", show_alert=True)
         return
 
+    from .live_view import is_live
+
+    if is_live(user_id, thread_id):
+        await query.answer("Already live")
+        return
+
     w = await tmux_manager.find_window_by_id(window_id)
     if not w:
         await query.answer("Window not found", show_alert=True)
@@ -581,11 +587,10 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
     # During live view, skip the refresh — next tick handles it
-    from .live_view import _active_views
+    from .live_view import get_live_view
 
-    if any(
-        k[0] == user_id and v.window_id == window_id for k, v in _active_views.items()
-    ):
+    thread_id = getattr(query.message, "message_thread_id", None)
+    if thread_id and get_live_view(user_id, thread_id) is not None:
         return
 
     # Refresh screenshot after key press

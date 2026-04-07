@@ -217,3 +217,8 @@ class TestLiveViewConfig:
         monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "not-a-number")
         with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_INTERVAL"):
             Config()
+
+    def test_live_view_timeout_invalid(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "not-a-number")
+        with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_TIMEOUT"):
+            Config()

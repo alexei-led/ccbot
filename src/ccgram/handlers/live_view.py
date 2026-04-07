@@ -115,10 +115,7 @@ async def tick_live_views(bot: Bot) -> None:
     interval = config.live_view_interval
     now = time.monotonic()
 
-    for key in list(_active_views):
-        view = _active_views.get(key)
-        if view is None:
-            continue
+    for key, view in list(_active_views.items()):
         await _tick_one_view(bot, key, view, now, effective_timeout, interval)
 
 
@@ -171,12 +168,12 @@ async def _tick_one_view(
             ),
             reply_markup=keyboard,
         )
-        view.next_edit_after = now + interval
+        view.next_edit_after = time.monotonic() + interval
 
     except RetryAfter as exc:
         ra = exc.retry_after
         wait = ra.total_seconds() if isinstance(ra, timedelta) else float(ra)
-        view.next_edit_after = now + wait
+        view.next_edit_after = time.monotonic() + wait
         logger.info("live_view_retry_after", key=key, wait=wait)
     except TelegramError as exc:
         logger.warning("live_view_tick_error", key=key, error=str(exc))
