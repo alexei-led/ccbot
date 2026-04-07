@@ -194,7 +194,9 @@ class Config:
         self.msg_rate_limit: int = _parse_int_env("CCGRAM_MSG_RATE_LIMIT", 10)
 
     def _init_live_view(self) -> None:
-        self.live_view_interval: int = _parse_int_env("CCGRAM_LIVE_VIEW_INTERVAL", 5)
+        self.live_view_interval: int = max(
+            1, _parse_int_env("CCGRAM_LIVE_VIEW_INTERVAL", 5)
+        )
         self.live_view_timeout: int = _parse_int_env("CCGRAM_LIVE_VIEW_TIMEOUT", 300)
 
     def is_user_allowed(self, user_id: int) -> bool:

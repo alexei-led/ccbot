@@ -25,6 +25,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaDocument,
+    InputMediaPhoto,
     Update,
 )
 from telegram.error import TelegramError
@@ -156,8 +157,6 @@ async def _handle_live_start(
     keyboard = build_live_keyboard(window_id, pane_id=pane_id)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
 
-    from telegram import InputMediaPhoto
-
     try:
         await query.edit_message_media(
             media=InputMediaPhoto(
@@ -171,9 +170,7 @@ async def _handle_live_start(
         await query.answer("Failed to start live view", show_alert=True)
         return
 
-    if query.message is None:
-        await query.answer("Failed to start live view", show_alert=True)
-        return
+    assert query.message is not None
     start_live_view(
         LiveViewState(
             chat_id=chat_id,

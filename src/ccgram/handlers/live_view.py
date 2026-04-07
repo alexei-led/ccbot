@@ -17,6 +17,7 @@ import hashlib
 import io
 import time
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
@@ -152,12 +153,14 @@ async def _tick_one_view(
         if h == view.last_hash:
             return
 
-        from .message_sender import rate_limit_send
-
-        await rate_limit_send(view.chat_id)
+        view.last_hash = h  # pre-commit to prevent double-render race
 
         png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
         ts = time.strftime("%H:%M:%S")
+
+        from .message_sender import rate_limit_send
+
+        await rate_limit_send(view.chat_id)
 
         keyboard = build_live_keyboard(view.window_id, pane_id=view.pane_id)
         await bot.edit_message_media(
@@ -169,12 +172,9 @@ async def _tick_one_view(
             ),
             reply_markup=keyboard,
         )
-        view.last_hash = h
         view.next_edit_after = now + interval
 
     except RetryAfter as exc:
-        from datetime import timedelta
-
         ra = exc.retry_after
         wait = ra.total_seconds() if isinstance(ra, timedelta) else float(ra)
         view.next_edit_after = now + wait
