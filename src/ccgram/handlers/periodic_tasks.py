@@ -113,7 +113,7 @@ async def run_periodic_tasks(
     """Run time-gated periodic tasks (topic check, broker, sweep)."""
     now = time.monotonic()
 
-    if now - timers.get("live_view", 0.0) >= config.live_view_interval:
+    if now - timers["live_view"] >= config.live_view_interval:
         timers["live_view"] = now
         await tick_live_views(bot)
 

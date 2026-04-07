@@ -431,6 +431,7 @@ class TestTickLiveViews:
             await tick_live_views(bot)
         assert is_live(1, 42)
         assert view.next_edit_after > time.monotonic()
+        assert view.last_hash == "old"
 
     async def test_backoff_skips_tick(self):
         view = _make_view(last_hash="old")
@@ -504,6 +505,24 @@ class TestHandleLiveStart:
         assert "Not your session" in query.answer.call_args.kwargs.get(
             "text", query.answer.call_args.args[0]
         )
+
+    async def test_rejects_already_live(self):
+        view = _make_view(user_id=1, thread_id=42)
+        start_live_view(view)
+        query, update = _make_query()
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=42,
+            ),
+        ):
+            await _handle_live_start(query, 1, f"{CB_LIVE_START}@0", update)
+        query.answer.assert_awaited_once()
+        assert "already" in query.answer.call_args.args[0].lower()
 
     async def test_rejects_no_thread(self):
         query, update = _make_query()

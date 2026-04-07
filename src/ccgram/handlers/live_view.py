@@ -23,6 +23,7 @@ import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.error import RetryAfter, TelegramError
 
+from ..config import config
 from ..screenshot import text_to_image
 from ..tmux_manager import tmux_manager
 from ..topic_state_registry import topic_state
@@ -109,7 +110,6 @@ def _clear_live_view(user_id: int, thread_id: int) -> None:
 
 async def tick_live_views(bot: Bot) -> None:
     """Refresh all active live views. Called from periodic_tasks."""
-    from ..config import config
 
     effective_timeout = config.live_view_timeout
     interval = config.live_view_interval
@@ -151,8 +151,6 @@ async def _tick_one_view(
         if h == view.last_hash:
             return
 
-        view.last_hash = h  # pre-commit to prevent double-render race
-
         png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
         ts = time.strftime("%H:%M:%S")
 
@@ -168,6 +166,7 @@ async def _tick_one_view(
             ),
             reply_markup=keyboard,
         )
+        view.last_hash = h
         view.next_edit_after = time.monotonic() + interval
 
     except RetryAfter as exc:
