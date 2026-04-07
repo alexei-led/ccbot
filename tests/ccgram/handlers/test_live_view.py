@@ -1,4 +1,5 @@
 import time
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -693,3 +694,109 @@ class TestHandleLiveStop:
         assert "Screenshot" in query.edit_message_caption.call_args.kwargs["caption"]
         query.answer.assert_awaited()
         assert "Stopped" in query.answer.call_args.args[0]
+
+
+# ── _handle_keys live view guard ────────────────────────────────────────
+
+
+class TestHandleKeysLiveGuard:
+    async def test_skips_refresh_when_live_view_active(self):
+        from ccgram.handlers.screenshot_callbacks import _handle_keys
+
+        start_live_view(_make_view(user_id=1, thread_id=42))
+        query = AsyncMock()
+        query.message = MagicMock(message_id=200, message_thread_id=42)
+        update = MagicMock()
+        update.callback_query = query
+        update.message = None
+
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=42,
+            ),
+            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.screenshot_callbacks.text_to_image",
+                new_callable=AsyncMock,
+            ) as mock_img,
+        ):
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            mock_tmux.send_keys = AsyncMock()
+            await _handle_keys(query, 1, f"{CB_KEYS_PREFIX}ent:@0", update)
+        mock_img.assert_not_awaited()
+
+    async def test_refreshes_when_no_live_view(self):
+        from ccgram.handlers.screenshot_callbacks import _handle_keys
+
+        assert not is_live(1, 42)
+        query = AsyncMock()
+        query.message = MagicMock(message_id=200, message_thread_id=42)
+        update = MagicMock()
+        update.callback_query = query
+        update.message = None
+
+        with (
+            patch(
+                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                return_value=42,
+            ),
+            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.screenshot_callbacks.text_to_image",
+                new_callable=AsyncMock,
+                return_value=b"PNG",
+            ) as mock_img,
+            patch("ccgram.handlers.screenshot_callbacks.asyncio") as mock_asyncio,
+        ):
+            mock_asyncio.sleep = AsyncMock()
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            mock_tmux.send_keys = AsyncMock()
+            mock_tmux.capture_pane = AsyncMock(return_value="terminal text")
+            await _handle_keys(query, 1, f"{CB_KEYS_PREFIX}ent:@0", update)
+        mock_img.assert_awaited_once()
+
+
+# ── RetryAfter timedelta branch ─────────────────────────────────────────
+
+
+class TestRetryAfterTimedelta:
+    @pytest.fixture(autouse=True)
+    def _patch_rate_limit(self):
+        with patch("ccgram.handlers.live_view.rate_limit_send", new_callable=AsyncMock):
+            yield
+
+    async def test_retry_after_timedelta_pauses_view(self):
+        view = _make_view(last_hash="old")
+        start_live_view(view)
+        bot = AsyncMock(spec=Bot)
+        bot.edit_message_media = AsyncMock(
+            side_effect=RetryAfter(timedelta(seconds=30))
+        )
+        with (
+            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.live_view.text_to_image",
+                new_callable=AsyncMock,
+                return_value=b"PNG",
+            ),
+        ):
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(window_id="@0")
+            )
+            mock_tmux.capture_pane = AsyncMock(return_value="new text")
+            await tick_live_views(bot)
+        assert is_live(1, 42)
+        assert view.next_edit_after > time.monotonic()
