@@ -55,3 +55,13 @@ async def test_live_mode_with_ansi_colors():
     img = Image.open(io.BytesIO(png))
     assert img.format == "PNG"
     assert img.mode == "P"
+
+
+async def test_live_mode_palette_size():
+    png = await text_to_image(SAMPLE_TEXT, with_ansi=False, live_mode=True)
+    img = Image.open(io.BytesIO(png))
+    assert img.mode == "P"
+    palette = img.getpalette()
+    assert palette is not None
+    unique_colors = len(set(zip(palette[::3], palette[1::3], palette[2::3])))
+    assert unique_colors <= 32

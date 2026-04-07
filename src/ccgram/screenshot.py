@@ -95,13 +95,19 @@ class StyledSegment:
     font_tier: int
 
 
+_font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
+
+
 def _load_font(path: Path, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load a TrueType/OpenType font, falling back to Pillow default."""
-    try:
-        return ImageFont.truetype(str(path), size)
-    except OSError:
-        logger.warning("Failed to load font %s, using Pillow default", path)
-        return ImageFont.load_default()
+    """Load a TrueType/OpenType font, falling back to Pillow default. Results are cached."""
+    key = (str(path), size)
+    if key not in _font_cache:
+        try:
+            _font_cache[key] = ImageFont.truetype(str(path), size)
+        except OSError:
+            logger.warning("Failed to load font %s, using Pillow default", path)
+            _font_cache[key] = ImageFont.load_default()
+    return _font_cache[key]
 
 
 def _font_tier(ch: str) -> int:
@@ -343,7 +349,7 @@ async def text_to_image(
 
         buf = io.BytesIO()
         if live_mode:
-            img = img.quantize(colors=64)
+            img = img.quantize(colors=32)
             img.save(buf, format="PNG", optimize=True, compress_level=9)
         else:
             img.save(buf, format="PNG")
