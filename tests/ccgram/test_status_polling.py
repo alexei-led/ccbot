@@ -173,6 +173,32 @@ class TestAutocloseTimers:
             await check_autoclose_timers(bot)
         assert not _has_autoclose(1, 42)
 
+    async def test_check_treats_missing_topic_as_removed(self) -> None:
+        _start_autoclose_timer(1, 42, "done", 0.0)
+        bot = AsyncMock(spec=Bot)
+        bot.delete_forum_topic.side_effect = BadRequest("Topic_id_invalid")
+        with (
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
+            patch(
+                "ccgram.handlers.topic_lifecycle.clear_topic_state",
+                new_callable=AsyncMock,
+            ) as mock_clear,
+        ):
+            mock_config.autoclose_done_minutes = 30
+            mock_config.autoclose_dead_minutes = 10
+            mock_time.monotonic.return_value = 30 * 60 + 1
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tr.get_window_for_thread.return_value = "@0"
+
+            await check_autoclose_timers(bot)
+
+        bot.close_forum_topic.assert_not_called()
+        mock_tr.unbind_thread.assert_called_once_with(1, 42)
+        mock_clear.assert_awaited_once()
+        assert not _has_autoclose(1, 42)
+
 
 class TestTranscriptActivityHeuristic:
     def test_active_when_recent_transcript(self) -> None:

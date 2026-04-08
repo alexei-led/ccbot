@@ -21,6 +21,7 @@ from ..tmux_manager import tmux_manager
 from ..utils import log_throttled
 from ..window_resolver import is_foreign_window
 from .cleanup import clear_topic_state
+from .message_sender import is_thread_gone
 from .polling_strategies import (
     clear_window_poll_state,
     lifecycle_strategy,
@@ -69,12 +70,22 @@ async def _close_expired_topic(bot: Bot, user_id: int, thread_id: int) -> None:
     try:
         await bot.delete_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
         removed = True
-    except TelegramError:
-        try:
-            await bot.close_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
+    except TelegramError as e:
+        if is_thread_gone(e):
             removed = True
-        except TelegramError as e:
-            logger.debug("autoclose_failed", thread_id=thread_id, error=str(e))
+        else:
+            try:
+                await bot.close_forum_topic(
+                    chat_id=chat_id, message_thread_id=thread_id
+                )
+                removed = True
+            except TelegramError as close_err:
+                if is_thread_gone(close_err):
+                    removed = True
+                else:
+                    logger.debug(
+                        "autoclose_failed", thread_id=thread_id, error=str(close_err)
+                    )
     if removed:
         lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
         logger.info(
