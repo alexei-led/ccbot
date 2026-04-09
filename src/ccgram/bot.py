@@ -116,6 +116,9 @@ _ERROR_KEYWORDS_RE = re.compile(
 
 # Max label length for /recall command buttons (wider than status bar buttons)
 _RECALL_LABEL_MAX = 40
+# Minimum length for thinking content to be forwarded to Telegram.
+# Shorter thinking blocks (e.g. bare "(thinking)") are noise and get skipped.
+_MIN_THINKING_LENGTH = 20
 # Session monitor instance
 session_monitor: SessionMonitor | None = None
 
@@ -714,6 +717,14 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:
             if notif_mode == "errors_only" and not _ERROR_KEYWORDS_RE.search(
                 msg.text or ""
             ):
+                continue
+
+        # Skip trivial thinking messages — "(thinking)" or very short thinking
+        # blocks carry no useful reasoning content. Only forward thinking with
+        # substantial text (>= 20 chars after stripping).
+        if msg.content_type == "thinking":
+            stripped = (msg.text or "").strip()
+            if len(stripped) < _MIN_THINKING_LENGTH:
                 continue
 
         # Handle interactive tools specially - capture terminal and send UI

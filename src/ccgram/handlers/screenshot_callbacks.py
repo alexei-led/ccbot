@@ -57,6 +57,9 @@ from .callback_registry import register
 
 logger = structlog.get_logger()
 
+_KEY_REFRESH_DELAY = 0.3  # seconds — debounce window for rapid key taps
+_pending_key_refreshes: dict[tuple[int, str], asyncio.Task[None]] = {}
+
 # key_id -> (tmux_key, enter, literal)
 KEYS_SEND_MAP: dict[str, tuple[str, bool, bool]] = {
     "up": ("Up", False, False),
@@ -598,25 +601,48 @@ async def _handle_keys(
     if thread_id is not None and get_live_view(user_id, thread_id) is not None:
         return
 
-    # Refresh screenshot after key press
-    await asyncio.sleep(0.5)
-    if pane_id:
-        text = await tmux_manager.capture_pane_by_id(
-            pane_id, with_ansi=True, window_id=window_id
-        )
-    else:
-        text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
-    if text:
-        png_bytes = await text_to_image(text, with_ansi=True)
-        keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
-        with contextlib.suppress(TelegramError):
-            await query.edit_message_media(
-                media=InputMediaDocument(
-                    media=io.BytesIO(png_bytes),
-                    filename="screenshot.png",
-                ),
-                reply_markup=keyboard,
+    _schedule_key_refresh(user_id, target, query, window_id, pane_id)
+
+
+def _schedule_key_refresh(
+    user_id: int,
+    target: str,
+    query: CallbackQuery,
+    window_id: str,
+    pane_id: str | None,
+) -> None:
+    """Schedule a debounced screenshot refresh after a key press.
+
+    Cancels any pending refresh for the same target so rapid key taps
+    (e.g. Down Down Down) only render the final terminal state.
+    """
+    refresh_key = (user_id, target)
+    prev = _pending_key_refreshes.pop(refresh_key, None)
+    if prev and not prev.done():
+        prev.cancel()
+
+    async def _do_refresh() -> None:
+        await asyncio.sleep(_KEY_REFRESH_DELAY)
+        if pane_id:
+            text = await tmux_manager.capture_pane_by_id(
+                pane_id, with_ansi=True, window_id=window_id
             )
+        else:
+            text = await tmux_manager.capture_pane(window_id, with_ansi=True)
+        if text:
+            png_bytes = await text_to_image(text, with_ansi=True)
+            keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
+            with contextlib.suppress(TelegramError):
+                await query.edit_message_media(
+                    media=InputMediaDocument(
+                        media=io.BytesIO(png_bytes),
+                        filename="screenshot.png",
+                    ),
+                    reply_markup=keyboard,
+                )
+        _pending_key_refreshes.pop(refresh_key, None)
+
+    _pending_key_refreshes[refresh_key] = asyncio.create_task(_do_refresh())
 
 
 # --- Registry dispatch entry point ---

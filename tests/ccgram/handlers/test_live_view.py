@@ -776,15 +776,17 @@ class TestHandleKeysLiveGuard:
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ) as mock_img,
-            patch("ccgram.handlers.screenshot_callbacks.asyncio") as mock_asyncio,
+            patch("ccgram.handlers.screenshot_callbacks._KEY_REFRESH_DELAY", 0),
         ):
-            mock_asyncio.sleep = AsyncMock()
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
             )
             mock_tmux.send_keys = AsyncMock()
             mock_tmux.capture_pane = AsyncMock(return_value="terminal text")
             await _handle_keys(query, 1, f"{CB_KEYS_PREFIX}ent:@0", update)
+            import asyncio
+
+            await asyncio.sleep(0.05)
         mock_img.assert_awaited_once()
 
 

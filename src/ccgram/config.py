@@ -100,7 +100,12 @@ class Config:
             else Path.home() / ".claude"
         )
         self.claude_projects_path = self.claude_config_dir / "projects"
-        self.monitor_poll_interval = float(os.getenv("MONITOR_POLL_INTERVAL", "2.0"))
+        self.monitor_poll_interval = max(
+            0.5, float(os.getenv("MONITOR_POLL_INTERVAL", "1.0"))
+        )
+        self.status_poll_interval = max(
+            0.5, float(os.getenv("CCGRAM_STATUS_POLL_INTERVAL", "1.0"))
+        )
 
         # Multi-instance support
         group_id_str = _env_with_fallback("CCGRAM_GROUP_ID", "CCBOT_GROUP_ID")
@@ -169,8 +174,10 @@ class Config:
         self._init_live_view()
 
         # Auto-close stale topics (minutes; 0 = disabled)
-        self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
-        self.autoclose_dead_minutes = int(os.getenv("AUTOCLOSE_DEAD_MINUTES", "10"))
+        self.autoclose_done_minutes, self.autoclose_dead_minutes = (
+            int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30")),
+            int(os.getenv("AUTOCLOSE_DEAD_MINUTES", "10")),
+        )
 
         logger.debug(
             "Config initialized: dir=%s, token=%s..., allowed_users=%d, "

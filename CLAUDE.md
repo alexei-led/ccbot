@@ -42,7 +42,7 @@ ccgram --autoclose-dead 0              # Disable auto-close for dead sessions
 - **Hook-based session tracking** — Claude Code hooks (SessionStart, Notification, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted) write to `session_map.json` and `events.jsonl`; monitor polls both to detect session changes, refresh Claude task lists in Telegram, and deliver instant event notifications. Missing hooks are detected at startup with an actionable warning.
 - **Shell provider chat-first design** — text sent to a shell topic goes through the LLM for NL→command generation by default; prefix with `!` to send a raw command directly. When no LLM is configured, all text is forwarded as raw commands. Two prompt modes for output isolation and exit code detection: **wrap** (default) appends a small `⌘N⌘` marker after the user's existing prompt, preserving Tide/Starship/Powerlevel10k/etc.; **replace** replaces the entire prompt with `{prefix}:N❯` (legacy, opt-in via `CCGRAM_PROMPT_MODE=replace`). Two setup paths: **Auto-setup** (explicit shell topic creation via directory browser) configures the marker immediately without asking. **Ask flow** (external window bind or runtime provider switch to shell) shows an inline keyboard [Set up] / [Skip]; Skip is respected for the session (lazy recovery won't override). On provider switch away from shell and back, a fresh offer is shown. If marker is lost mid-session (`exec bash`, profile reload), it is lazily restored on the next command send (unless user chose Skip). Marker setup is session-scoped (PS1/PROMPT override) — never modifies shell config files.
 - **Message queue per user** — FIFO ordering, message merging (3800 char limit), tool_use/tool_result pairing.
-- **Rate limiting** — 1.1s minimum interval between messages per user via `rate_limit_send()`.
+- **Rate limiting** — 0.5s minimum interval between messages per user via `rate_limit_send()`. PTB's AIORateLimiter provides additional flood protection.
 
 ## Code Conventions
 
@@ -135,16 +135,18 @@ The LLM is used for two features: (1) **shell command generation** — translate
 
 Supported LLM providers: `openai`, `xai`, `deepseek`, `anthropic`, `groq`, `ollama`. API key resolution: `CCGRAM_LLM_API_KEY` > provider-specific env var (e.g. `XAI_API_KEY`) > `OPENAI_API_KEY` (universal fallback). When `CCGRAM_LLM_PROVIDER` is unset, the shell provider skips NL→command generation and forwards all input as raw commands. Set temperature to `0` for deterministic output with cheap/fast models.
 
-The LLM is also used for **completion summaries**: when an agent finishes (Stop hook), ccgram asynchronously calls the LLM to produce a single-line summary of what was accomplished, then edits the Ready message in-place. This is non-blocking — the static Ready message appears immediately, and the LLM enhancement arrives ~1-2s later. When no LLM is configured, the static enriched Ready (with task checklist and last status) is still shown.
+The LLM is also used for **completion summaries**: when an agent finishes (Stop hook), ccgram waits up to 3s for the LLM to produce a single-line summary, then sends a single "Done — {summary}" status message. When no LLM is configured or the LLM times out, the static enriched Ready (with task checklist and last status) is shown instead.
 
 ### Live View Configuration
 
-| Setting           | Env Var                     | Default   |
-| ----------------- | --------------------------- | --------- |
-| Refresh interval  | `CCGRAM_LIVE_VIEW_INTERVAL` | `5` (s)   |
-| Auto-stop timeout | `CCGRAM_LIVE_VIEW_TIMEOUT`  | `300` (s) |
+| Setting           | Env Var                       | Default   |
+| ----------------- | ----------------------------- | --------- |
+| Refresh interval  | `CCGRAM_LIVE_VIEW_INTERVAL`   | `5` (s)   |
+| Auto-stop timeout | `CCGRAM_LIVE_VIEW_TIMEOUT`    | `300` (s) |
+| Monitor poll      | `MONITOR_POLL_INTERVAL`       | `1.0` (s) |
+| Status poll       | `CCGRAM_STATUS_POLL_INTERVAL` | `1.0` (s) |
 
-Both values are clamped to a minimum of 1. Live view auto-refreshes terminal screenshots via `editMessageMedia` at the configured interval, and auto-stops after the timeout.
+Live view and poll intervals are clamped to a minimum of 0.5s (live view: 1s). Live view auto-refreshes terminal screenshots via `editMessageMedia` at the configured interval, and auto-stops after the timeout.
 
 ### Migration Notes
 

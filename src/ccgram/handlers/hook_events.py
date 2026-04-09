@@ -8,8 +8,6 @@ of relying solely on terminal scraping.
 Key function: dispatch_hook_event().
 """
 
-from collections.abc import Sequence
-
 import structlog
 
 from telegram import Bot
@@ -101,36 +99,18 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
             clear_interactive_mode(user_id, thread_id)
 
 
-async def _enhance_with_llm_summary(
-    bot: Bot,
-    users: Sequence[tuple[int, int | None, str]],
-    window_id: str,
-    transcript_path: str,
-    num_turns: int,
-) -> None:
-    """Async enhancement: replace Ready header with LLM summary via status queue."""
+_LLM_SUMMARY_TIMEOUT = 3.0  # seconds to wait for LLM summary before sending plain Ready
+
+
+async def _get_llm_summary(transcript_path: str) -> str | None:
+    """Try to get an LLM summary, returning None on failure."""
     try:
         from ..llm.summarizer import summarize_completion
 
-        summary = await summarize_completion(transcript_path)
-        if not summary:
-            return
-
-        from .message_queue import enqueue_status_update
-
-        enhanced = claude_task_state.format_completion_text(
-            window_id, num_turns=num_turns
-        )
-        enhanced = enhanced.replace("\u2713 Ready", f"\u2713 Done \u2014 {summary}", 1)
-
-        for user_id, thread_id, _window_id in users:
-            notif_mode = session_manager.get_notification_mode(window_id)
-            if notif_mode not in ("muted", "errors_only"):
-                await enqueue_status_update(
-                    bot, user_id, window_id, enhanced, thread_id=thread_id
-                )
+        return await summarize_completion(transcript_path)
     except RuntimeError, OSError, ValueError:
-        logger.debug("LLM summary enhancement failed", exc_info=True)
+        logger.debug("LLM summary failed", exc_info=True)
+        return None
 
 
 async def _handle_stop(event: HookEvent, bot: Bot) -> None:
@@ -155,6 +135,27 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     )
 
     num_turns = event.data.get("num_turns", 0)
+
+    # Try LLM summary with timeout to avoid flicker (send once, not twice).
+    # If LLM is available and responds within timeout, include summary in the
+    # initial status message. Otherwise fall back to plain Ready.
+    first_window_id = users[0][2]
+    summary: str | None = None
+    if first_window_id:
+        transcript_path = session_manager.get_window_state(
+            first_window_id
+        ).transcript_path
+        if transcript_path:
+            import asyncio
+
+            try:
+                summary = await asyncio.wait_for(
+                    _get_llm_summary(transcript_path),
+                    timeout=_LLM_SUMMARY_TIMEOUT,
+                )
+            except TimeoutError:
+                logger.debug("LLM summary timed out after %ss", _LLM_SUMMARY_TIMEOUT)
+
     for user_id, thread_id, window_id in users:
         claude_task_state.clear_wait_header(window_id)
         notif_mode = session_manager.get_notification_mode(window_id)
@@ -164,6 +165,10 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
             status_text = claude_task_state.format_completion_text(
                 window_id, num_turns=num_turns
             )
+            if summary and status_text:
+                status_text = status_text.replace(
+                    "\u2713 Ready", f"\u2713 Done \u2014 {summary}", 1
+                )
         await enqueue_status_update(
             bot, user_id, window_id, status_text, thread_id=thread_id
         )
@@ -172,21 +177,6 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     from .periodic_tasks import run_broker_cycle
 
     await run_broker_cycle(bot, idle_windows=frozenset({event.window_key}))
-
-    # Fire async LLM summary enhancement (non-blocking)
-    first_window_id = users[0][2]
-    if first_window_id:
-        transcript_path = session_manager.get_window_state(
-            first_window_id
-        ).transcript_path
-        if transcript_path:
-            import asyncio
-
-            asyncio.create_task(
-                _enhance_with_llm_summary(
-                    bot, users, first_window_id, transcript_path, num_turns
-                )
-            )
 
 
 # Track active subagents per window: window_id -> {subagent_id -> name}
@@ -219,10 +209,8 @@ def clear_subagents(window_id: str) -> None:
     _active_subagents.pop(window_id, None)
 
 
-async def _handle_subagent_start(event: HookEvent, bot: Bot) -> None:
-    """Handle SubagentStart — track active subagent and notify."""
-    from .message_queue import enqueue_status_update
-
+async def _handle_subagent_start(event: HookEvent, _bot: Bot) -> None:
+    """Handle SubagentStart — track active subagent count and name."""
     users = _resolve_users_for_window_key(event.window_key)
     if not users:
         return
@@ -245,20 +233,13 @@ async def _handle_subagent_start(event: HookEvent, bot: Bot) -> None:
         name,
     )
 
-    for user_id, thread_id, _ in users:
-        await enqueue_status_update(
-            bot,
-            user_id,
-            window_id,
-            f"\U0001f916 Subagent started: {name}",
-            thread_id=thread_id,
-        )
+    # No immediate status update — the polling loop (1s) already appends
+    # subagent count/names to the status bubble via get_subagent_names().
+    # Sending status on every start/stop caused 6-10 rapid edits per task.
 
 
-async def _handle_subagent_stop(event: HookEvent, bot: Bot) -> None:
-    """Handle SubagentStop — remove subagent from tracking and notify."""
-    from .message_queue import enqueue_status_update
-
+async def _handle_subagent_stop(event: HookEvent, _bot: Bot) -> None:
+    """Handle SubagentStop — remove subagent from tracking."""
     users = _resolve_users_for_window_key(event.window_key)
     if not users:
         return
@@ -280,14 +261,7 @@ async def _handle_subagent_stop(event: HookEvent, bot: Bot) -> None:
         name,
     )
 
-    for user_id, thread_id, _ in users:
-        await enqueue_status_update(
-            bot,
-            user_id,
-            window_id,
-            f"\U0001f916 Subagent done: {name}",
-            thread_id=thread_id,
-        )
+    # No immediate status update — polling loop shows updated count within 1s.
 
 
 async def _handle_teammate_idle(event: HookEvent, bot: Bot) -> None:

@@ -222,3 +222,34 @@ class TestLiveViewConfig:
         monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "not-a-number")
         with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_TIMEOUT"):
             Config()
+
+
+@pytest.mark.usefixtures("_base_env")
+class TestPollingConfig:
+    def test_monitor_poll_interval_default(self):
+        cfg = Config()
+        assert cfg.monitor_poll_interval == 1.0
+
+    def test_monitor_poll_interval_override(self, monkeypatch):
+        monkeypatch.setenv("MONITOR_POLL_INTERVAL", "0.8")
+        cfg = Config()
+        assert cfg.monitor_poll_interval == 0.8
+
+    def test_monitor_poll_interval_clamped_to_min(self, monkeypatch):
+        monkeypatch.setenv("MONITOR_POLL_INTERVAL", "0.1")
+        cfg = Config()
+        assert cfg.monitor_poll_interval == 0.5
+
+    def test_status_poll_interval_default(self):
+        cfg = Config()
+        assert cfg.status_poll_interval == 1.0
+
+    def test_status_poll_interval_override(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_STATUS_POLL_INTERVAL", "2.0")
+        cfg = Config()
+        assert cfg.status_poll_interval == 2.0
+
+    def test_status_poll_interval_clamped_to_min(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_STATUS_POLL_INTERVAL", "0.2")
+        cfg = Config()
+        assert cfg.status_poll_interval == 0.5

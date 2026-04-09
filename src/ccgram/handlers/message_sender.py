@@ -52,7 +52,7 @@ def _retry_after_seconds(exc: RetryAfter) -> int:
 # Rate limiting: last send time per chat to avoid Telegram flood control
 _last_send_time: dict[int, float] = {}
 _rate_limit_locks: dict[int, asyncio.Lock] = {}
-MESSAGE_SEND_INTERVAL = 1.1  # seconds between messages to same chat
+MESSAGE_SEND_INTERVAL = 0.5  # seconds between messages to same chat
 
 
 async def rate_limit_send(chat_id: int) -> None:

@@ -698,6 +698,14 @@ async def _handle_content_task(
     return merge_count
 
 
+def _is_ghost_window_task_at_enqueue(window_id: str) -> bool:
+    """Return True if the window is no longer bound to any topic."""
+    if window_id and not thread_router.has_window(window_id):
+        logger.debug("Skipping enqueue for unbound window %s", window_id)
+        return True
+    return False
+
+
 async def _message_queue_worker(bot: Bot, user_id: int) -> None:
     """Process message tasks for a user sequentially."""
     queue = _message_queues[user_id]
@@ -1084,6 +1092,8 @@ async def enqueue_content_message(
     thread_id: int | None = None,
 ) -> None:
     """Enqueue a content message task."""
+    if _is_ghost_window_task_at_enqueue(window_id):
+        return
     queue = get_or_create_queue(bot, user_id)
 
     task = MessageTask(

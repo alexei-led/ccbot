@@ -10,6 +10,7 @@ from ccgram.entity_formatting import (
 )
 from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
 from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
+from ccgram.providers.base import _EXPANDABLE_QUOTE_MAX_CHARS, format_expandable_quote
 
 
 def _extract_utf16(text: str, offset: int, length: int) -> str:
@@ -256,3 +257,24 @@ class TestStripIndentedCodeBlocks:
         assert "    keep" in result
         assert "    strip" not in result
         assert "strip this" in result
+
+
+class TestExpandableQuoteTruncation:
+    def test_short_text_passes_through(self):
+        text = "short content"
+        result = format_expandable_quote(text)
+        assert result == f"{EXP_START}{text}{EXP_END}"
+
+    def test_long_text_truncated(self):
+        text = "x" * (_EXPANDABLE_QUOTE_MAX_CHARS + 500)
+        result = format_expandable_quote(text)
+        assert EXP_START in result
+        assert EXP_END in result
+        inner = result.removeprefix(EXP_START).removesuffix(EXP_END)
+        assert "truncated" in inner
+        assert str(len(text)) in inner
+
+    def test_exact_limit_not_truncated(self):
+        text = "x" * _EXPANDABLE_QUOTE_MAX_CHARS
+        result = format_expandable_quote(text)
+        assert "truncated" not in result

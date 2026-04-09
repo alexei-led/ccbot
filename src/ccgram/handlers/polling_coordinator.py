@@ -63,7 +63,9 @@ logger = structlog.get_logger()
 
 # ── Timing constants ──────────────────────────────────────────────────────
 
-STATUS_POLL_INTERVAL = 1.0  # seconds
+STATUS_POLL_INTERVAL: float = (
+    1.0  # overridden by config.status_poll_interval at startup
+)
 
 
 # Exponential backoff bounds for loop errors (seconds)
@@ -510,6 +512,10 @@ async def update_status_message(
 
 async def status_poll_loop(bot: Bot) -> None:
     """Background task to poll terminal status for all thread-bound windows."""
+    global STATUS_POLL_INTERVAL  # noqa: PLW0603
+    from ..config import config as _cfg
+
+    STATUS_POLL_INTERVAL = _cfg.status_poll_interval
     logger.info("Status polling started (interval: %ss)", STATUS_POLL_INTERVAL)
     timers = {"topic_check": 0.0, "broker": 0.0, "sweep": 0.0, "live_view": 0.0}
     _error_streak = 0
