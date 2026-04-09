@@ -622,25 +622,31 @@ def _schedule_key_refresh(
         prev.cancel()
 
     async def _do_refresh() -> None:
-        await asyncio.sleep(_KEY_REFRESH_DELAY)
-        if pane_id:
-            text = await tmux_manager.capture_pane_by_id(
-                pane_id, with_ansi=True, window_id=window_id
-            )
-        else:
-            text = await tmux_manager.capture_pane(window_id, with_ansi=True)
-        if text:
-            png_bytes = await text_to_image(text, with_ansi=True)
-            keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
-            with contextlib.suppress(TelegramError):
-                await query.edit_message_media(
-                    media=InputMediaDocument(
-                        media=io.BytesIO(png_bytes),
-                        filename="screenshot.png",
-                    ),
-                    reply_markup=keyboard,
+        try:
+            await asyncio.sleep(_KEY_REFRESH_DELAY)
+            if pane_id:
+                text = await tmux_manager.capture_pane_by_id(
+                    pane_id, with_ansi=True, window_id=window_id
                 )
-        _pending_key_refreshes.pop(refresh_key, None)
+            else:
+                text = await tmux_manager.capture_pane(window_id, with_ansi=True)
+            if text:
+                png_bytes = await text_to_image(text, with_ansi=True)
+                keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
+                with contextlib.suppress(TelegramError):
+                    await query.edit_message_media(
+                        media=InputMediaDocument(
+                            media=io.BytesIO(png_bytes),
+                            filename="screenshot.png",
+                        ),
+                        reply_markup=keyboard,
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("debounced screenshot refresh failed")
+        finally:
+            _pending_key_refreshes.pop(refresh_key, None)
 
     _pending_key_refreshes[refresh_key] = asyncio.create_task(_do_refresh())
 

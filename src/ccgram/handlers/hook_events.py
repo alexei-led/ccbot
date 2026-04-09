@@ -99,7 +99,7 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
             clear_interactive_mode(user_id, thread_id)
 
 
-_LLM_SUMMARY_TIMEOUT = 3.0  # seconds to wait for LLM summary before sending plain Ready
+_LLM_SUMMARY_TIMEOUT = 3.0  # seconds to wait for LLM summary before falling back to the standard completion text
 
 
 async def _get_llm_summary(transcript_path: str) -> str | None:
