@@ -5,12 +5,23 @@ Provides utilities for the /send Telegram command:
   - _find_files: glob/exact/substring file search with security filtering
   - _list_directory: directory listing with security filtering and sorting
   - _format_file_label: human-readable inline keyboard button labels
+  - build_file_browser: build paginated inline keyboard for directory browsing
+  - build_search_results: build inline keyboard for search result selection
 """
 
 import structlog
 from pathlib import Path
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from ..config import config
+from .callback_data import (
+    CB_SEND_CANCEL,
+    CB_SEND_DIR,
+    CB_SEND_FILE,
+    CB_SEND_PAGE,
+    CB_SEND_UP,
+)
 from .send_security import is_excluded_dir, validate_sendable
 
 logger = structlog.get_logger()
@@ -19,6 +30,7 @@ _IMAGE_EXTENSIONS: frozenset[str] = frozenset(
     {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 )
 _ITEMS_PER_PAGE = 8
+_BUTTONS_PER_ROW = 2
 _KB = 1024
 _MB = 1024 * 1024
 
@@ -137,3 +149,100 @@ def _format_file_label(path: Path, cwd: Path) -> str:
         label = rel + suffix
 
     return label
+
+
+def _make_item_button(item: Path, idx: int, cwd: Path) -> InlineKeyboardButton:
+    """Return a single InlineKeyboardButton for *item* at position *idx*."""
+    if item.is_dir():
+        return InlineKeyboardButton(
+            f"📁 {item.name}", callback_data=f"{CB_SEND_DIR}{idx}"
+        )
+    label = _format_file_label(item, cwd)
+    icon = "🖼️" if _is_image(item) else "📄"
+    return InlineKeyboardButton(f"{icon} {label}", callback_data=f"{CB_SEND_FILE}{idx}")
+
+
+def _pack_into_rows(
+    buttons_flat: list[InlineKeyboardButton],
+) -> list[list[InlineKeyboardButton]]:
+    """Pack a flat list of buttons into rows of _BUTTONS_PER_ROW."""
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for btn in buttons_flat:
+        row.append(btn)
+        if len(row) == _BUTTONS_PER_ROW:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return rows
+
+
+def build_file_browser(
+    current_path: Path,
+    cwd: Path,
+    page: int,
+) -> tuple[str, InlineKeyboardMarkup, list[Path]]:
+    """Build a paginated inline keyboard for browsing files under *cwd*.
+
+    Returns (display_text, markup, items) where *items* is the full list of
+    Path objects (dirs first, then files) used to resolve button indices.
+    """
+    dirs, files = _list_directory(current_path, cwd)
+    items: list[Path] = dirs + files
+
+    total_pages = max(1, (len(items) + _ITEMS_PER_PAGE - 1) // _ITEMS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * _ITEMS_PER_PAGE
+    page_items = items[start : start + _ITEMS_PER_PAGE]
+
+    flat = [_make_item_button(item, items.index(item), cwd) for item in page_items]
+    buttons = _pack_into_rows(flat)
+
+    if total_pages > 1:
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(
+                InlineKeyboardButton("◀", callback_data=f"{CB_SEND_PAGE}{page - 1}")
+            )
+        nav.append(
+            InlineKeyboardButton(f"{page + 1}/{total_pages}", callback_data="noop")
+        )
+        if page < total_pages - 1:
+            nav.append(
+                InlineKeyboardButton("▶", callback_data=f"{CB_SEND_PAGE}{page + 1}")
+            )
+        buttons.append(nav)
+
+    parent_row: list[InlineKeyboardButton] = []
+    if current_path != cwd:
+        parent_row.append(InlineKeyboardButton("📁 ..", callback_data=CB_SEND_UP))
+    parent_row.append(InlineKeyboardButton("✖ Cancel", callback_data=CB_SEND_CANCEL))
+    buttons.append(parent_row)
+
+    try:
+        display_path = (
+            str(current_path.relative_to(cwd)) if current_path != cwd else "."
+        )
+    except ValueError:
+        display_path = current_path.name
+
+    return f"📂 {display_path}", InlineKeyboardMarkup(buttons), items
+
+
+def build_search_results(
+    matches: list[Path],
+    cwd: Path,
+) -> tuple[str, InlineKeyboardMarkup, list[Path]]:
+    """Build an inline keyboard for selecting a file from search results.
+
+    Shows up to ``_ITEMS_PER_PAGE * 3`` matches with no pagination or parent nav.
+    Returns (display_text, markup, matches).
+    """
+    shown = matches[: _ITEMS_PER_PAGE * 3]
+
+    flat = [_make_item_button(path, idx, cwd) for idx, path in enumerate(shown)]
+    buttons = _pack_into_rows(flat)
+    buttons.append([InlineKeyboardButton("✖ Cancel", callback_data=CB_SEND_CANCEL)])
+
+    return f"🔍 {len(matches)} file(s) found", InlineKeyboardMarkup(buttons), shown

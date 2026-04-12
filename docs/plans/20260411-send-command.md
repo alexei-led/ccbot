@@ -210,13 +210,13 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 - Modify: `src/ccgram/handlers/callback_data.py`
 - Modify: `src/ccgram/handlers/user_state.py`
 
-- [ ] Add callback constants: `CB_SEND_FILE = "sf:f:"`, `CB_SEND_DIR = "sf:d:"`, `CB_SEND_PAGE = "sf:pg:"`, `CB_SEND_UP = "sf:up"`, `CB_SEND_CANCEL = "sf:x"`
-- [ ] Add user_state keys: `SEND_PATH_KEY`, `SEND_PAGE_KEY`, `SEND_ITEMS_KEY`, `SEND_WINDOW_ID_KEY`, `SEND_CWD_KEY`
-- [ ] Implement `build_file_browser(current_path: Path, cwd: Path, page: int) -> tuple[str, InlineKeyboardMarkup, list[Path]]` — 2-per-row layout with `📁` dirs and `📄`/`🖼️` files, `_ITEMS_PER_PAGE` pagination, `◀ N/M ▶` row, parent row (disabled text at CWD root), cancel button. Return items list for caching
-- [ ] Implement `build_search_results(matches: list[Path], cwd: Path) -> tuple[str, InlineKeyboardMarkup, list[Path]]` — same layout, mtime-sorted, file labels with size
-- [ ] Add tests for `build_file_browser` (pagination math, empty dir, mixed dirs+files, parent disabled at root, parent enabled below, button labels, callback data format)
-- [ ] Add tests for `build_search_results` (single page, multi-page, empty list)
-- [ ] Run `make test` — must pass before Task 5
+- [x] Add callback constants: `CB_SEND_FILE = "sf:f:"`, `CB_SEND_DIR = "sf:d:"`, `CB_SEND_PAGE = "sf:pg:"`, `CB_SEND_UP = "sf:up"`, `CB_SEND_CANCEL = "sf:x"`
+- [x] Add user_state keys: `SEND_PATH_KEY`, `SEND_PAGE_KEY`, `SEND_ITEMS_KEY`, `SEND_WINDOW_ID_KEY`, `SEND_CWD_KEY`
+- [x] Implement `build_file_browser(current_path: Path, cwd: Path, page: int) -> tuple[str, InlineKeyboardMarkup, list[Path]]` — 2-per-row layout with `📁` dirs and `📄`/`🖼️` files, `_ITEMS_PER_PAGE` pagination, `◀ N/M ▶` row, parent row (disabled text at CWD root), cancel button. Return items list for caching
+- [x] Implement `build_search_results(matches: list[Path], cwd: Path) -> tuple[str, InlineKeyboardMarkup, list[Path]]` — same layout, mtime-sorted, file labels with size
+- [x] Add tests for `build_file_browser` (pagination math, empty dir, mixed dirs+files, parent disabled at root, parent enabled below, button labels, callback data format)
+- [x] Add tests for `build_search_results` (single page, multi-page, empty list)
+- [x] Run `make test` — must pass before Task 5
 
 ### Task 5: /send command handler and file upload
 

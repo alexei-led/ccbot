@@ -7,11 +7,22 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ccgram.config import config
+from telegram import InlineKeyboardMarkup
+
+from ccgram.handlers.callback_data import (
+    CB_SEND_CANCEL,
+    CB_SEND_DIR,
+    CB_SEND_FILE,
+    CB_SEND_PAGE,
+    CB_SEND_UP,
+)
 from ccgram.handlers.send_command import (
     _find_files,
     _format_file_label,
     _is_image,
     _list_directory,
+    build_file_browser,
+    build_search_results,
 )
 
 
@@ -286,3 +297,157 @@ class TestFormatFileLabel:
         other.write_bytes(b"x" * 10)
         label = _format_file_label(other, tmp_path)
         assert "other.txt" in label
+
+
+class TestBuildFileBrowser:
+    def test_returns_tuple_of_text_markup_items(self, tmp_path: Path) -> None:
+        sub = tmp_path / "subdir"
+        sub.mkdir()
+        f = tmp_path / "file.txt"
+        f.write_bytes(b"hello")
+        text, markup, items = build_file_browser(tmp_path, tmp_path, 0)
+        assert isinstance(text, str)
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert isinstance(items, list)
+        assert all(isinstance(p, Path) for p in items)
+
+    def test_text_contains_path_indicator(self, tmp_path: Path) -> None:
+        text, _, _ = build_file_browser(tmp_path, tmp_path, 0)
+        assert "📂" in text
+
+    def test_dirs_before_files_in_items(self, tmp_path: Path) -> None:
+        d = tmp_path / "adir"
+        d.mkdir()
+        f = tmp_path / "zfile.txt"
+        f.write_bytes(b"x")
+        _, _, items = build_file_browser(tmp_path, tmp_path, 0)
+        dir_indices = [i for i, p in enumerate(items) if p.is_dir()]
+        file_indices = [i for i, p in enumerate(items) if p.is_file()]
+        assert max(dir_indices) < min(file_indices)
+
+    def test_dir_buttons_use_cb_send_dir_prefix(self, tmp_path: Path) -> None:
+        d = tmp_path / "mydir"
+        d.mkdir()
+        _, markup, _ = build_file_browser(tmp_path, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert any(isinstance(cb, str) and cb.startswith(CB_SEND_DIR) for cb in all_cb)
+
+    def test_file_buttons_use_cb_send_file_prefix(self, tmp_path: Path) -> None:
+        f = tmp_path / "report.txt"
+        f.write_bytes(b"data")
+        _, markup, _ = build_file_browser(tmp_path, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert any(isinstance(cb, str) and cb.startswith(CB_SEND_FILE) for cb in all_cb)
+
+    def test_item_count_matches_dirs_plus_files(self, tmp_path: Path) -> None:
+        (tmp_path / "d1").mkdir()
+        (tmp_path / "d2").mkdir()
+        (tmp_path / "f1.txt").write_bytes(b"a")
+        (tmp_path / "f2.txt").write_bytes(b"b")
+        _, _, items = build_file_browser(tmp_path, tmp_path, 0)
+        assert len(items) == 4
+
+    def test_pagination_page0_and_page1_differ(self, tmp_path: Path) -> None:
+        for i in range(12):
+            (tmp_path / f"file{i:02d}.txt").write_bytes(b"x")
+        _, markup0, _ = build_file_browser(tmp_path, tmp_path, 0)
+        _, markup1, _ = build_file_browser(tmp_path, tmp_path, 1)
+        cb0 = {btn.callback_data for row in markup0.inline_keyboard for btn in row}
+        cb1 = {btn.callback_data for row in markup1.inline_keyboard for btn in row}
+        file_cb0 = {
+            cb for cb in cb0 if isinstance(cb, str) and cb.startswith(CB_SEND_FILE)
+        }
+        file_cb1 = {
+            cb for cb in cb1 if isinstance(cb, str) and cb.startswith(CB_SEND_FILE)
+        }
+        assert file_cb0 != file_cb1
+
+    def test_pagination_indicators_present_when_multipage(self, tmp_path: Path) -> None:
+        for i in range(12):
+            (tmp_path / f"file{i:02d}.txt").write_bytes(b"x")
+        _, markup, _ = build_file_browser(tmp_path, tmp_path, 0)
+        all_text = [btn.text for row in markup.inline_keyboard for btn in row]
+        assert any("/" in t for t in all_text)
+
+    def test_no_pagination_when_few_items(self, tmp_path: Path) -> None:
+        (tmp_path / "only.txt").write_bytes(b"x")
+        _, markup, _ = build_file_browser(tmp_path, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert not any(
+            isinstance(cb, str) and cb.startswith(CB_SEND_PAGE) for cb in all_cb
+        )
+
+    def test_parent_button_present_when_not_at_cwd(self, tmp_path: Path) -> None:
+        sub = tmp_path / "subdir"
+        sub.mkdir()
+        _, markup, _ = build_file_browser(sub, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_UP in all_cb
+
+    def test_parent_button_absent_when_at_cwd(self, tmp_path: Path) -> None:
+        _, markup, _ = build_file_browser(tmp_path, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_UP not in all_cb
+
+    def test_cancel_button_always_present(self, tmp_path: Path) -> None:
+        _, markup, _ = build_file_browser(tmp_path, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_CANCEL in all_cb
+
+    def test_cancel_present_in_subdirectory(self, tmp_path: Path) -> None:
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        _, markup, _ = build_file_browser(sub, tmp_path, 0)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_CANCEL in all_cb
+
+    def test_empty_directory(self, tmp_path: Path) -> None:
+        text, markup, items = build_file_browser(tmp_path, tmp_path, 0)
+        assert items == []
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_CANCEL in all_cb
+
+
+class TestBuildSearchResults:
+    def test_file_buttons_use_cb_send_file_prefix(self, tmp_path: Path) -> None:
+        f1 = tmp_path / "alpha.txt"
+        f2 = tmp_path / "beta.txt"
+        f1.write_bytes(b"a")
+        f2.write_bytes(b"b")
+        _, markup, _ = build_search_results([f1, f2], tmp_path)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        file_cbs = [
+            cb for cb in all_cb if isinstance(cb, str) and cb.startswith(CB_SEND_FILE)
+        ]
+        assert len(file_cbs) == 2
+
+    def test_cancel_button_present(self, tmp_path: Path) -> None:
+        f = tmp_path / "report.txt"
+        f.write_bytes(b"x")
+        _, markup, _ = build_search_results([f], tmp_path)
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_CANCEL in all_cb
+
+    def test_returns_shown_subset(self, tmp_path: Path) -> None:
+        paths = []
+        for i in range(30):
+            p = tmp_path / f"f{i:02d}.txt"
+            p.write_bytes(b"x")
+            paths.append(p)
+        _, _, shown = build_search_results(paths, tmp_path)
+        assert len(shown) == 24  # _ITEMS_PER_PAGE * 3 = 8 * 3
+
+    def test_empty_list(self, tmp_path: Path) -> None:
+        text, markup, shown = build_search_results([], tmp_path)
+        assert shown == []
+        all_cb = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert CB_SEND_CANCEL in all_cb
+        assert not any(
+            isinstance(cb, str) and cb.startswith(CB_SEND_FILE) for cb in all_cb
+        )
+
+    def test_text_shows_match_count(self, tmp_path: Path) -> None:
+        f = tmp_path / "x.txt"
+        f.write_bytes(b"x")
+        text, _, _ = build_search_results([f], tmp_path)
+        assert "1" in text

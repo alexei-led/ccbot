@@ -12,3 +12,9 @@ RESUME_SESSIONS = "_resume_sessions"
 VOICE_PENDING = (
     "_voice_pending"  # dict[tuple[int, int], str]: (chat_id, msg_id) → transcribed text
 )
+
+SEND_PATH_KEY = "send_path"
+SEND_PAGE_KEY = "send_page"
+SEND_ITEMS_KEY = "send_items"
+SEND_WINDOW_ID_KEY = "send_window_id"
+SEND_CWD_KEY = "send_cwd"
