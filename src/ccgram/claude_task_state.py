@@ -13,6 +13,10 @@ from typing import Any
 
 from .topic_state_registry import topic_state
 
+# Idle status sentinel — lives here (core) rather than in handlers/callback_data
+# to avoid a core → handler layer violation.
+IDLE_STATUS_TEXT = "\u2713 Ready"
+
 _WAITING_INPUT = "Waiting for input"
 _PLAN_APPROVAL = "Plan approval needed"
 
@@ -174,8 +178,6 @@ class ClaudeTaskStateStore:
             Falls back to ``"✓ Ready\\nLast: <status> · N turns"`` when no
             task checklist, or bare ``"✓ Ready"`` when nothing available.
         """
-        from .handlers.callback_data import IDLE_STATUS_TEXT
-
         snapshot = self.get_snapshot(window_id)
         last_status = self.get_last_status(window_id)
 
