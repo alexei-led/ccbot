@@ -30,7 +30,7 @@ from .callback_data import (
     CB_SEND_UP,
 )
 from .callback_helpers import get_thread_id
-from .message_sender import safe_reply
+from .message_sender import safe_reply, safe_send
 from .send_security import is_excluded_dir, validate_sendable
 from .user_state import (
     SEND_CWD_KEY,
@@ -320,6 +320,22 @@ def _cache_browser_state(
     user_data[SEND_PAGE_KEY] = 0
     user_data[SEND_ITEMS_KEY] = items
     user_data[SEND_WINDOW_ID_KEY] = window_id
+
+
+async def open_file_browser(
+    bot: Bot,
+    chat_id: int,
+    thread_id: int | None,
+    user_data: dict,
+    window_id: str,
+    cwd: Path,
+) -> None:
+    """Open the /send file browser — public entry point for the toolbar Send button."""
+    text, markup, items = build_file_browser(cwd, cwd, 0)
+    _cache_browser_state(user_data, cwd, items, window_id)
+    await safe_send(
+        bot, chat_id, text, message_thread_id=thread_id, reply_markup=markup
+    )
 
 
 async def _upload_with_feedback(
