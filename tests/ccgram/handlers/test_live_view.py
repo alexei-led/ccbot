@@ -28,8 +28,8 @@ from ccgram.handlers.screenshot_callbacks import (
     _handle_live_start,
     _handle_live_stop,
     build_screenshot_keyboard,
-    build_toolbar_keyboard,
 )
+from ccgram.handlers.toolbar_callbacks import build_toolbar_keyboard
 
 
 @pytest.fixture(autouse=True)

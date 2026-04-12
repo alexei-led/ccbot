@@ -562,7 +562,7 @@ async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    from .handlers.screenshot_callbacks import build_toolbar_keyboard
+    from .handlers.toolbar_callbacks import build_toolbar_keyboard
 
     ws = session_manager.get_window_state(window_id)
     provider_name = ws.provider_name if ws and ws.provider_name else "claude"
