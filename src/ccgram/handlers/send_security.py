@@ -1,0 +1,229 @@
+"""Security validation for the /send command — multi-layer access control.
+
+Ensures only safe, non-sensitive files within the session's CWD can be sent to
+Telegram. The pipeline applies checks in order: path containment, hidden files,
+secret patterns, gitleaks rules, gitignore, state-file protection, size limit,
+and file-type validation.
+
+Key function: validate_sendable(path, cwd) -> str | None
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import re
+import subprocess
+import tomllib
+from pathlib import Path
+
+_SECRET_PATTERNS: list[str] = [
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.jks",
+    "*.keystore",
+    "*credential*",
+    "*secret*",
+    "*.token",
+    ".env",
+    ".env.*",
+]
+
+_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        ".cache",
+        ".npm",
+        ".yarn",
+        "target",
+        ".gradle",
+    }
+)
+
+_TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024  # 50 MB
+
+
+def is_path_contained(path: Path, root: Path) -> bool:
+    """Return True if *path* resolves to a location within *root*."""
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except OSError, ValueError:
+        return False
+
+
+def is_hidden(path: Path, root: Path) -> bool:
+    """Return True if any path component relative to *root* starts with '.'."""
+    try:
+        rel = path.resolve().relative_to(root.resolve())
+    except OSError, ValueError:
+        return False
+    return any(part.startswith(".") for part in rel.parts)
+
+
+def matches_secret_pattern(path: Path) -> str | None:
+    """Return the matching secret pattern if path.name matches, else None."""
+    name = path.name.lower()
+    for pattern in _SECRET_PATTERNS:
+        if fnmatch.fnmatch(name, pattern):
+            return pattern
+    return None
+
+
+def is_gitignored(path: Path, cwd: Path) -> bool:
+    """Return True if *path* is ignored according to git or a local .gitignore.
+
+    Primary: `git check-ignore -q <path>` subprocess. On any error (not a git
+    repo, git not found, timeout), falls back to pathspec: walks from path's
+    parent up to cwd collecting .gitignore files, builds a PathSpec, and
+    matches. Returns False if both strategies fail.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", str(path)],
+            cwd=cwd,
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired:
+        pass
+
+    # Pathspec fallback — walk from path up to cwd collecting .gitignore rules
+    try:
+        import pathspec  # noqa: PLC0415 — lazy import for optional fallback
+
+        lines: list[str] = []
+        current = path.parent
+        cwd_resolved = cwd.resolve()
+        while True:
+            gitignore = current / ".gitignore"
+            if gitignore.is_file():
+                lines.extend(
+                    gitignore.read_text(encoding="utf-8", errors="replace").splitlines()
+                )
+            if current.resolve() == cwd_resolved:
+                break
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+
+        if not lines:
+            return False
+
+        spec = pathspec.PathSpec.from_lines("gitwildmatch", lines)
+        try:
+            rel = path.relative_to(cwd)
+        except ValueError:
+            return False
+        return spec.match_file(str(rel))
+    except Exception:  # noqa: BLE001 — last-resort fallback
+        return False
+
+
+def check_gitleaks_rules(path: Path, cwd: Path) -> str | None:
+    """Return a rule id/description if *path* matches any gitleaks path rule, else None.
+
+    Loads `.gitleaks.toml` from *cwd* if present, iterates `[[rules]]`, and
+    applies each rule's `path` regex against the path relative to *cwd*.
+    Returns the rule's `id` field (or `"gitleaks rule"` if absent) on first
+    match. Returns None if no match or if the file is absent/unparseable.
+    """
+    toml_path = cwd / ".gitleaks.toml"
+    if not toml_path.is_file():
+        return None
+
+    try:
+        with toml_path.open("rb") as fh:
+            config = tomllib.load(fh)
+    except Exception:  # noqa: BLE001
+        return None
+
+    try:
+        relative_path = str(path.relative_to(cwd))
+    except ValueError:
+        relative_path = str(path)
+
+    for rule in config.get("rules", []):
+        rule_path = rule.get("path")
+        if not rule_path:
+            continue
+        try:
+            if re.search(rule_path, relative_path):
+                return rule.get("id", "gitleaks rule")
+        except re.error:
+            continue
+
+    return None
+
+
+def _check_size_and_type(path: Path) -> str | None:
+    """Return an error string if the file fails size or type checks, else None."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "Not a regular file"
+    if size > _TELEGRAM_FILE_LIMIT:
+        size_mb = size / (1024 * 1024)
+        return f"File too large: {size_mb:.0f} MB (limit: 50 MB)"
+    if not path.is_file():
+        return "Not a regular file"
+    return None
+
+
+def validate_sendable(path: Path, cwd: Path) -> str | None:
+    """Run the full security pipeline for *path* relative to *cwd*.
+
+    Returns a human-readable error string on the first failed check, or None
+    if the file is safe to send.
+
+    Pipeline order:
+    1. Path containment (traversal)
+    2. Hidden file/dir check
+    3. Secret pattern match
+    4. Gitleaks rule match
+    5. Gitignore check
+    6. State-file protection (assert_sendable from utils)
+    7. File size limit + regular-file check
+    """
+    if not is_path_contained(path, cwd):
+        return "File is outside project directory"
+
+    if is_hidden(path, cwd):
+        return "Hidden files cannot be sent"
+
+    pattern = matches_secret_pattern(path)
+    if pattern is not None:
+        return f"File appears to contain credentials — denied ({pattern})"
+
+    rule_id = check_gitleaks_rules(path, cwd)
+    if rule_id is not None:
+        return f"File denied by gitleaks rule: {rule_id}"
+
+    if is_gitignored(path, cwd):
+        return "File is gitignored"
+
+    from ..utils import assert_sendable  # noqa: PLC0415
+
+    try:
+        assert_sendable(path)
+    except ValueError as exc:
+        return str(exc)
+
+    return _check_size_and_type(path)
+
+
+def is_excluded_dir(name: str) -> bool:
+    """Return True if *name* is a directory that should never be listed or searched."""
+    return name in _EXCLUDED_DIRS or name.startswith(".")
