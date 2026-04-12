@@ -65,7 +65,7 @@ async def app():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     application = Application.builder().token(token).build()
 
-    from ccgram.bot import topic_edited_handler
+    from ccgram.handlers.topic_lifecycle import topic_edited_handler
     from ccgram.handlers.sync_command import sync_command
     from telegram.ext import CommandHandler, MessageHandler, filters
 

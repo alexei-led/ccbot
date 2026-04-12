@@ -14,6 +14,9 @@ import structlog
 from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 
+from telegram import Update
+from telegram.ext import ContextTypes
+
 from ..config import config
 from ..session import session_manager
 from ..thread_router import thread_router
@@ -208,3 +211,106 @@ async def probe_topic_existence(bot: Bot) -> None:
                         wid,
                         e,
                     )
+
+
+# ------------------------------------------------------------------
+# Telegram topic event handlers (moved from bot.py)
+# ------------------------------------------------------------------
+
+
+async def topic_closed_handler(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle topic closure — unbind thread but keep the tmux window alive.
+
+    The window becomes "unbound" and is available for rebinding via the window
+    picker when a new topic is created. Unbound windows are auto-killed after
+    the configured TTL (autoclose_done_minutes) by the status polling loop.
+    """
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+
+    from .callback_helpers import get_thread_id
+
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        return
+
+    window_id = thread_router.get_window_for_thread(user.id, thread_id)
+    if window_id:
+        display = thread_router.get_display_name(window_id)
+        await clear_topic_state(
+            user.id,
+            thread_id,
+            context.bot,
+            context.user_data,
+            window_id=window_id,
+            window_dead=False,
+        )
+        thread_router.unbind_thread(user.id, thread_id)
+        logger.info(
+            "Topic closed: window %s unbound (kept alive for rebinding, user=%d, thread=%d)",
+            display,
+            user.id,
+            thread_id,
+        )
+    else:
+        logger.debug(
+            "Topic closed: no binding (user=%d, thread=%d)", user.id, thread_id
+        )
+
+
+async def topic_edited_handler(
+    update: Update, _context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle topic rename — sync new name to tmux window and emoji cache.
+
+    Ignores icon-only edits (name is None) and emoji-only changes from the bot
+    itself (clean name unchanged after stripping prefixes).
+    """
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+    if not update.message or not update.message.forum_topic_edited:
+        return
+
+    new_name = update.message.forum_topic_edited.name
+    if not new_name:
+        return
+
+    from .callback_helpers import get_thread_id
+    from .topic_emoji import strip_emoji_prefix, update_stored_topic_name
+
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id is None:
+        return
+
+    window_id = thread_router.get_window_for_chat_thread(chat_id, thread_id)
+    if not window_id:
+        logger.debug("Topic edited: no binding (thread=%d)", thread_id)
+        return
+
+    clean_name = strip_emoji_prefix(new_name)
+
+    current_display = thread_router.get_display_name(window_id)
+    if current_display and strip_emoji_prefix(current_display) == clean_name:
+        logger.debug(
+            "Topic edited: name unchanged after strip, skipping (thread=%d)", thread_id
+        )
+        return
+
+    renamed = await tmux_manager.rename_window(window_id, clean_name)
+    if renamed:
+        session_manager.set_display_name(window_id, clean_name)
+        update_stored_topic_name(chat_id, thread_id, clean_name)
+        logger.info(
+            "Topic renamed: window %s → %r (thread=%d)",
+            window_id,
+            clean_name,
+            thread_id,
+        )

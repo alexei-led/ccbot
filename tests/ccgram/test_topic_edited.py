@@ -27,14 +27,14 @@ def _make_update(
     return update
 
 
-_PATCH_ALLOWED = patch("ccgram.bot.is_user_allowed", return_value=True)
+_PATCH_ALLOWED = patch("ccgram.config.Config.is_user_allowed", return_value=True)
 
 
 class TestTopicEditedHandler:
     @_PATCH_ALLOWED
-    @patch("ccgram.bot.tmux_manager")
-    @patch("ccgram.bot.session_manager")
-    @patch("ccgram.bot.thread_router")
+    @patch("ccgram.handlers.topic_lifecycle.tmux_manager")
+    @patch("ccgram.handlers.topic_lifecycle.session_manager")
+    @patch("ccgram.handlers.topic_lifecycle.thread_router")
     async def test_renames_tmux_window(
         self,
         mock_tr: MagicMock,
@@ -42,7 +42,7 @@ class TestTopicEditedHandler:
         mock_tm: MagicMock,
         _allowed: MagicMock,
     ) -> None:
-        from ccgram.bot import topic_edited_handler
+        from ccgram.handlers.topic_lifecycle import topic_edited_handler
 
         mock_tr.get_window_for_chat_thread.return_value = "@0"
         mock_tr.get_display_name.return_value = "old-name"
@@ -55,12 +55,12 @@ class TestTopicEditedHandler:
         mock_sm.set_display_name.assert_called_once_with("@0", "new-name")
 
     @_PATCH_ALLOWED
-    @patch("ccgram.bot.tmux_manager")
-    @patch("ccgram.bot.thread_router")
+    @patch("ccgram.handlers.topic_lifecycle.tmux_manager")
+    @patch("ccgram.handlers.topic_lifecycle.thread_router")
     async def test_ignores_emoji_only_change(
         self, mock_tr: MagicMock, mock_tm: MagicMock, _allowed: MagicMock
     ) -> None:
-        from ccgram.bot import topic_edited_handler
+        from ccgram.handlers.topic_lifecycle import topic_edited_handler
 
         mock_tr.get_window_for_chat_thread.return_value = "@0"
         mock_tr.get_display_name.return_value = "myproject"
@@ -72,12 +72,12 @@ class TestTopicEditedHandler:
 
         mock_tm.rename_window.assert_not_called()
 
-    @patch("ccgram.bot.tmux_manager")
-    @patch("ccgram.bot.thread_router")
+    @patch("ccgram.handlers.topic_lifecycle.tmux_manager")
+    @patch("ccgram.handlers.topic_lifecycle.thread_router")
     async def test_ignores_icon_only_edit(
         self, mock_tr: MagicMock, mock_tm: MagicMock
     ) -> None:
-        from ccgram.bot import topic_edited_handler
+        from ccgram.handlers.topic_lifecycle import topic_edited_handler
 
         mock_tm.rename_window = AsyncMock()
 
@@ -88,12 +88,12 @@ class TestTopicEditedHandler:
         mock_tm.rename_window.assert_not_called()
 
     @_PATCH_ALLOWED
-    @patch("ccgram.bot.tmux_manager")
-    @patch("ccgram.bot.thread_router")
+    @patch("ccgram.handlers.topic_lifecycle.tmux_manager")
+    @patch("ccgram.handlers.topic_lifecycle.thread_router")
     async def test_ignores_unbound_topic(
         self, mock_tr: MagicMock, mock_tm: MagicMock, _allowed: MagicMock
     ) -> None:
-        from ccgram.bot import topic_edited_handler
+        from ccgram.handlers.topic_lifecycle import topic_edited_handler
 
         mock_tr.get_window_for_chat_thread.return_value = None
         mock_tm.rename_window = AsyncMock()
@@ -104,12 +104,12 @@ class TestTopicEditedHandler:
         mock_tm.rename_window.assert_not_called()
 
     @_PATCH_ALLOWED
-    @patch("ccgram.bot.tmux_manager")
-    @patch("ccgram.bot.thread_router")
+    @patch("ccgram.handlers.topic_lifecycle.tmux_manager")
+    @patch("ccgram.handlers.topic_lifecycle.thread_router")
     async def test_updates_emoji_cache(
         self, mock_tr: MagicMock, mock_tm: MagicMock, _allowed: MagicMock
     ) -> None:
-        from ccgram.bot import topic_edited_handler
+        from ccgram.handlers.topic_lifecycle import topic_edited_handler
         from ccgram.handlers.topic_emoji import _topic_names
 
         _topic_names[(-100, 42)] = "old-name"
@@ -123,12 +123,12 @@ class TestTopicEditedHandler:
         assert _topic_names[(-100, 42)] == "new-name"
 
     @_PATCH_ALLOWED
-    @patch("ccgram.bot.tmux_manager")
-    @patch("ccgram.bot.thread_router")
+    @patch("ccgram.handlers.topic_lifecycle.tmux_manager")
+    @patch("ccgram.handlers.topic_lifecycle.thread_router")
     async def test_caches_unchanged_when_rename_fails(
         self, mock_tr: MagicMock, mock_tm: MagicMock, _allowed: MagicMock
     ) -> None:
-        from ccgram.bot import topic_edited_handler
+        from ccgram.handlers.topic_lifecycle import topic_edited_handler
         from ccgram.handlers.topic_emoji import _topic_names
 
         _topic_names[(-100, 42)] = "old-name"
