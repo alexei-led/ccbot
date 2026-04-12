@@ -50,6 +50,7 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_LABELS,
 )
+from ..topic_state_registry import topic_state
 from .callback_helpers import get_thread_id, user_owns_window
 from .callback_registry import register
 
@@ -57,6 +58,21 @@ logger = structlog.get_logger()
 
 _KEY_REFRESH_DELAY = 0.3  # seconds — debounce window for rapid key taps
 _pending_key_refreshes: dict[tuple[int, str], asyncio.Task[None]] = {}
+
+
+@topic_state.register("window")
+def _clear_key_refreshes(window_id: str) -> None:
+    """Cancel in-flight debounced key-refresh tasks for a closing window."""
+    stale = [
+        k
+        for k in _pending_key_refreshes
+        if k[1] == window_id or k[1].startswith(f"{window_id}:%")
+    ]
+    for k in stale:
+        task = _pending_key_refreshes.pop(k, None)
+        if task and not task.done():
+            task.cancel()
+
 
 # key_id -> (tmux_key, enter, literal)
 KEYS_SEND_MAP: dict[str, tuple[str, bool, bool]] = {
