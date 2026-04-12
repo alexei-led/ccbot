@@ -103,8 +103,7 @@ class SessionResolver:
                     state.cwd,
                     decoded_cwd,
                 )
-                state.cwd = decoded_cwd
-                window_store._schedule_save()
+                window_store.update_cwd(window_id, decoded_cwd)
         return file_path
 
     async def _read_session_summary(
@@ -192,9 +191,7 @@ class SessionResolver:
             state.session_id,
             state.cwd,
         )
-        state.session_id = ""
-        state.cwd = ""
-        window_store._schedule_save()
+        window_store.clear_session_fields(window_id)
         return None
 
     def find_users_for_session(

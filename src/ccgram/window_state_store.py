@@ -140,6 +140,19 @@ class WindowStateStore:
             self.window_states[window_id] = WindowState()
         return self.window_states[window_id]
 
+    def update_cwd(self, window_id: str, cwd: str) -> None:
+        """Update CWD for a window and schedule persistence."""
+        if window_id in self.window_states:
+            self.window_states[window_id].cwd = cwd
+            self._schedule_save()
+
+    def clear_session_fields(self, window_id: str) -> None:
+        """Clear session_id and cwd for a window (session file gone)."""
+        if window_id in self.window_states:
+            self.window_states[window_id].session_id = ""
+            self.window_states[window_id].cwd = ""
+            self._schedule_save()
+
     def clear_window_session(self, window_id: str) -> None:
         """Clear session association for a window (e.g., after /clear command)."""
         state = self.get_window_state(window_id)

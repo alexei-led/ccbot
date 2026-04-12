@@ -489,11 +489,11 @@ class SessionMapSync:
             changed = True
         if (
             new_wname
-            and not thread_router.window_display_names.get(window_id)
+            and thread_router.get_display_name(window_id) == window_id
             and not state.window_name
         ):
             state.window_name = new_wname
-            thread_router.window_display_names[window_id] = new_wname
+            thread_router.set_display_name(window_id, new_wname)
             changed = True
         return changed
 
