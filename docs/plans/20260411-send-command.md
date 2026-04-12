@@ -284,11 +284,11 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 - Modify: `src/ccgram/bot.py` (import + add_handler for /send)
 - Modify: `src/ccgram/handlers/callback_registry.py` (ensure send_callbacks loaded)
 
-- [ ] Add import of `send_command` in `bot.py`
-- [ ] Add `application.add_handler(CommandHandler("send", send_command, filters=_group_filter))`
-- [ ] Ensure `send_callbacks` is imported in `callback_registry.py`'s `load_handlers()` list
-- [ ] Write integration test: dispatch `/send` Update through real PTB Application with `_do_post` patch, verify handler reached
-- [ ] Write integration test: dispatch `/toolbar` Update, verify provider-specific keyboard returned
+- [x] Add import of `send_command` in `bot.py`
+- [x] Add `application.add_handler(CommandHandler("send", send_command, filters=_group_filter))`
+- [x] Ensure `send_callbacks` is imported in `callback_registry.py`'s `load_handlers()` list
+- [x] Write integration test: dispatch `/send` Update through real PTB Application with `_do_post` patch, verify handler reached
+- [x] Write integration test: dispatch `/toolbar` Update, verify provider-specific keyboard returned
 - [ ] Run `make check` (fmt + lint + typecheck + test)
 
 ### Task 9: Verify acceptance criteria

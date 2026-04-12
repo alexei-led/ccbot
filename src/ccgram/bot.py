@@ -72,6 +72,7 @@ from .handlers.callback_registry import dispatch as _dispatch_callback
 from .handlers.callback_registry import load_handlers as _load_callback_handlers
 from .handlers.restore_command import restore_command
 from .handlers.resume_command import resume_command
+from .handlers.send_command import send_command
 from .handlers.directory_browser import clear_browse_state
 from .handlers.cleanup import clear_topic_state
 from .handlers.topic_emoji import strip_emoji_prefix, update_stored_topic_name
@@ -1027,6 +1028,7 @@ def create_bot() -> Application:
     application.add_handler(
         CommandHandler("toolbar", toolbar_command, filters=_group_filter)
     )
+    application.add_handler(CommandHandler("send", send_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("verbose", verbose_command, filters=_group_filter)
     )
