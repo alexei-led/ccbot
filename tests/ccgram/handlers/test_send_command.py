@@ -451,3 +451,225 @@ class TestBuildSearchResults:
         f.write_bytes(b"x")
         text, _, _ = build_search_results([f], tmp_path)
         assert "1" in text
+
+
+# ---------------------------------------------------------------------------
+# Helpers for _upload_file and send_command tests
+# ---------------------------------------------------------------------------
+
+from unittest.mock import AsyncMock, MagicMock  # noqa: E402 (appended)
+
+import pytest  # noqa: E402
+from telegram.error import TelegramError  # noqa: E402
+
+from ccgram.handlers.send_command import _upload_file, send_command  # noqa: E402
+from ccgram.handlers.user_state import (  # noqa: E402
+    SEND_CWD_KEY,
+    SEND_ITEMS_KEY,
+    SEND_PAGE_KEY,
+    SEND_PATH_KEY,
+    SEND_WINDOW_ID_KEY,
+)
+
+
+def _make_update(
+    user_id: int = 1, thread_id: int = 42, text: str = "/send"
+) -> MagicMock:
+    update = MagicMock()
+    update.effective_user = MagicMock(id=user_id)
+    msg = AsyncMock()
+    msg.text = text
+    msg.message_thread_id = thread_id
+    msg.chat_id = -100123
+    update.message = msg
+    update.callback_query = None
+    return update
+
+
+def _make_context(user_data: dict | None = None) -> MagicMock:
+    ctx = MagicMock()
+    ctx.user_data = {} if user_data is None else user_data
+    ctx.bot = AsyncMock()
+    return ctx
+
+
+class TestUploadFile:
+    async def test_image_calls_send_photo(self, tmp_path: Path) -> None:
+        f = tmp_path / "photo.png"
+        f.write_bytes(b"imgdata")
+        bot = AsyncMock()
+        await _upload_file(bot, chat_id=-100, thread_id=5, path=f)
+        bot.send_photo.assert_awaited_once()
+        call_kwargs = bot.send_photo.call_args.kwargs
+        assert call_kwargs["chat_id"] == -100
+        assert call_kwargs["message_thread_id"] == 5
+        assert call_kwargs["filename"] == "photo.png"
+
+    async def test_non_image_calls_send_document(self, tmp_path: Path) -> None:
+        f = tmp_path / "report.pdf"
+        f.write_bytes(b"pdfdata")
+        bot = AsyncMock()
+        await _upload_file(bot, chat_id=-100, thread_id=5, path=f)
+        bot.send_document.assert_awaited_once()
+        call_kwargs = bot.send_document.call_args.kwargs
+        assert call_kwargs["filename"] == "report.pdf"
+
+    async def test_telegram_error_is_reraised(self, tmp_path: Path) -> None:
+        f = tmp_path / "file.txt"
+        f.write_bytes(b"data")
+        bot = AsyncMock()
+        bot.send_document.side_effect = TelegramError("flood")
+        with pytest.raises(TelegramError):
+            await _upload_file(bot, chat_id=-100, thread_id=5, path=f)
+
+    async def test_jpg_calls_send_photo(self, tmp_path: Path) -> None:
+        f = tmp_path / "img.jpg"
+        f.write_bytes(b"jpgdata")
+        bot = AsyncMock()
+        await _upload_file(bot, chat_id=-100, thread_id=5, path=f)
+        bot.send_photo.assert_awaited_once()
+        bot.send_document.assert_not_awaited()
+
+
+class TestSendCommand:
+    @pytest.fixture(autouse=True)
+    def _patches(self):
+        with (
+            patch("ccgram.config.Config.is_user_allowed", return_value=True),
+            patch("ccgram.handlers.send_command.thread_router") as mock_tr,
+            patch("ccgram.handlers.send_command.session_manager") as mock_sm,
+        ):
+            self.mock_tr = mock_tr
+            self.mock_sm = mock_sm
+            mock_tr.resolve_window_for_thread.return_value = "@1"
+            mock_tr.resolve_chat_id.return_value = -100123
+            ws = MagicMock()
+            ws.cwd = None  # overridden per test
+            mock_sm.get_window_state.return_value = ws
+            self.ws = ws
+            yield
+
+    async def test_no_message_returns_early(self) -> None:
+        update = MagicMock()
+        update.message = None
+        ctx = _make_context()
+        await send_command(update, ctx)
+        ctx.bot.send_document.assert_not_awaited()
+
+    async def test_unauthorized_user(self) -> None:
+        with patch("ccgram.config.Config.is_user_allowed", return_value=False):
+            update = _make_update()
+            ctx = _make_context()
+            await send_command(update, ctx)
+            assert SEND_WINDOW_ID_KEY not in ctx.user_data
+
+    async def test_not_in_topic(self) -> None:
+        update = _make_update(thread_id=1)
+        ctx = _make_context()
+        await send_command(update, ctx)
+
+    async def test_no_window_bound(self) -> None:
+        self.mock_tr.resolve_window_for_thread.return_value = None
+        update = _make_update()
+        ctx = _make_context()
+        await send_command(update, ctx)
+
+    async def test_cwd_unavailable(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path / "nonexistent")
+        update = _make_update()
+        ctx = _make_context()
+        await send_command(update, ctx)
+
+    async def test_no_args_builds_browser(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        (tmp_path / "file.txt").write_bytes(b"x")
+        update = _make_update(text="/send")
+        ctx = _make_context()
+        with patch("ccgram.handlers.send_command.validate_sendable", return_value=None):
+            await send_command(update, ctx)
+        assert ctx.user_data[SEND_PATH_KEY] == str(tmp_path)
+        assert ctx.user_data[SEND_CWD_KEY] == str(tmp_path)
+        assert ctx.user_data[SEND_PAGE_KEY] == 0
+        assert ctx.user_data[SEND_WINDOW_ID_KEY] == "@1"
+        assert isinstance(ctx.user_data[SEND_ITEMS_KEY], list)
+
+    async def test_glob_single_match_uploads(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        f = tmp_path / "report.txt"
+        f.write_bytes(b"data")
+        update = _make_update(text="/send *.txt")
+        ctx = _make_context()
+        with (
+            patch("ccgram.handlers.send_command.validate_sendable", return_value=None),
+            patch(
+                "ccgram.handlers.send_command._upload_file", new_callable=AsyncMock
+            ) as mock_up,
+        ):
+            await send_command(update, ctx)
+        mock_up.assert_awaited_once_with(ctx.bot, -100123, 42, f)
+
+    async def test_glob_multiple_matches_shows_keyboard(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        for i in range(3):
+            (tmp_path / f"file{i}.txt").write_bytes(b"x")
+        update = _make_update(text="/send *.txt")
+        ctx = _make_context()
+        with patch("ccgram.handlers.send_command.validate_sendable", return_value=None):
+            await send_command(update, ctx)
+        assert ctx.user_data[SEND_ITEMS_KEY] is not None
+        assert len(ctx.user_data[SEND_ITEMS_KEY]) == 3
+
+    async def test_glob_no_match_sends_error(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        update = _make_update(text="/send *.xyz")
+        ctx = _make_context()
+        with patch("ccgram.handlers.send_command.validate_sendable", return_value=None):
+            await send_command(update, ctx)
+
+    async def test_exact_path_uploads(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        f = tmp_path / "exact.txt"
+        f.write_bytes(b"data")
+        update = _make_update(text="/send exact.txt")
+        ctx = _make_context()
+        with (
+            patch("ccgram.handlers.send_command.validate_sendable", return_value=None),
+            patch(
+                "ccgram.handlers.send_command._upload_file", new_callable=AsyncMock
+            ) as mock_up,
+        ):
+            await send_command(update, ctx)
+        mock_up.assert_awaited_once_with(ctx.bot, -100123, 42, f)
+
+    async def test_exact_path_denied_by_security(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        f = tmp_path / "secret.key"
+        f.write_bytes(b"key")
+        update = _make_update(text="/send secret.key")
+        ctx = _make_context()
+        with (
+            patch(
+                "ccgram.handlers.send_command.validate_sendable",
+                return_value="File appears to contain credentials",
+            ),
+            patch(
+                "ccgram.handlers.send_command._upload_file", new_callable=AsyncMock
+            ) as mock_up,
+        ):
+            await send_command(update, ctx)
+        mock_up.assert_not_awaited()
+
+    async def test_text_pattern_falls_back_to_find_files(self, tmp_path: Path) -> None:
+        self.ws.cwd = str(tmp_path)
+        f = tmp_path / "my_report_2024.txt"
+        f.write_bytes(b"data")
+        update = _make_update(text="/send report")
+        ctx = _make_context()
+        with (
+            patch("ccgram.handlers.send_command.validate_sendable", return_value=None),
+            patch(
+                "ccgram.handlers.send_command._upload_file", new_callable=AsyncMock
+            ) as mock_up,
+        ):
+            await send_command(update, ctx)
+        mock_up.assert_awaited_once()

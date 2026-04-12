@@ -7,14 +7,21 @@ Provides utilities for the /send Telegram command:
   - _format_file_label: human-readable inline keyboard button labels
   - build_file_browser: build paginated inline keyboard for directory browsing
   - build_search_results: build inline keyboard for search result selection
+  - _upload_file: send a file to Telegram (photo or document)
+  - send_command: handle the /send command
 """
 
 import structlog
 from pathlib import Path
 
+from telegram import Bot, Update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
+from telegram.ext import ContextTypes
 
 from ..config import config
+from ..session import session_manager
+from ..thread_router import thread_router
 from .callback_data import (
     CB_SEND_CANCEL,
     CB_SEND_DIR,
@@ -22,7 +29,16 @@ from .callback_data import (
     CB_SEND_PAGE,
     CB_SEND_UP,
 )
+from .callback_helpers import get_thread_id
+from .message_sender import safe_reply
 from .send_security import is_excluded_dir, validate_sendable
+from .user_state import (
+    SEND_CWD_KEY,
+    SEND_ITEMS_KEY,
+    SEND_PAGE_KEY,
+    SEND_PATH_KEY,
+    SEND_WINDOW_ID_KEY,
+)
 
 logger = structlog.get_logger()
 
@@ -246,3 +262,129 @@ def build_search_results(
     buttons.append([InlineKeyboardButton("✖ Cancel", callback_data=CB_SEND_CANCEL)])
 
     return f"🔍 {len(matches)} file(s) found", InlineKeyboardMarkup(buttons), shown
+
+
+async def _upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> None:
+    """Send *path* to the given Telegram chat/thread as photo or document."""
+    try:
+        with path.open("rb") as fh:
+            if _is_image(path):
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=fh,
+                    filename=path.name,
+                    message_thread_id=thread_id,
+                )
+            else:
+                await bot.send_document(
+                    chat_id=chat_id,
+                    document=fh,
+                    filename=path.name,
+                    message_thread_id=thread_id,
+                )
+    except TelegramError:
+        logger.exception("Failed to upload file", path=str(path))
+        raise
+
+
+def _cache_browser_state(
+    user_data: dict,
+    cwd: Path,
+    items: list[Path],
+    window_id: str,
+) -> None:
+    """Persist browser/search state into PTB user_data for callback handlers."""
+    user_data[SEND_PATH_KEY] = str(cwd)
+    user_data[SEND_CWD_KEY] = str(cwd)
+    user_data[SEND_PAGE_KEY] = 0
+    user_data[SEND_ITEMS_KEY] = items
+    user_data[SEND_WINDOW_ID_KEY] = window_id
+
+
+async def _dispatch_search(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    cwd: Path,
+    pattern: str,
+    chat_id: int,
+    thread_id: int,
+    window_id: str,
+) -> None:
+    """Handle glob/substring search dispatch for send_command."""
+    assert context.user_data is not None
+
+    is_glob = "*" in pattern or "?" in pattern
+
+    if not is_glob:
+        exact = cwd / pattern
+        if exact.exists() and exact.is_file():
+            error = validate_sendable(exact, cwd)
+            if error:
+                await safe_reply(update.message, f"Cannot send: {error}")  # type: ignore[arg-type]
+                return
+            await _upload_file(context.bot, chat_id, thread_id, exact)
+            return
+
+    matches = _find_files(cwd, pattern)
+    if not matches:
+        await safe_reply(update.message, f"No files found matching: {pattern}")  # type: ignore[arg-type]
+        return
+    if len(matches) == 1:
+        await _upload_file(context.bot, chat_id, thread_id, matches[0])
+        return
+
+    display_text, markup, shown = build_search_results(matches, cwd)
+    _cache_browser_state(context.user_data, cwd, shown, window_id)
+    await safe_reply(update.message, display_text, reply_markup=markup)  # type: ignore[arg-type]
+
+
+async def send_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /send — search for and upload a file from the session's CWD to Telegram.
+
+    Dispatch modes:
+    - No args: show paginated file browser at CWD root.
+    - Glob pattern (contains * or ?): search with _find_files; upload if single match,
+      show search results keyboard if multiple, error if none.
+    - Text: try exact path first; if exists and passes security, upload directly.
+      Otherwise fall back to _find_files substring search.
+    """
+    if not update.message:
+        return
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        await safe_reply(update.message, "Not authorized.")
+        return
+
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        await safe_reply(update.message, "Use this command inside a topic.")
+        return
+
+    window_id = thread_router.resolve_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(update.message, "No session bound to this topic.")
+        return
+
+    ws = session_manager.get_window_state(window_id)
+    cwd = Path(ws.cwd) if ws.cwd else None
+    if not cwd or not cwd.is_dir():
+        await safe_reply(update.message, "Working directory not available.")
+        return
+
+    assert context.user_data is not None
+
+    text = update.message.text or ""
+    parts = text.split(maxsplit=1)
+    pattern = parts[1].strip() if len(parts) > 1 else ""
+
+    chat_id: int = (
+        thread_router.resolve_chat_id(user.id, thread_id) or update.message.chat_id
+    )
+
+    if not pattern:
+        display_text, markup, items = build_file_browser(cwd, cwd, 0)
+        _cache_browser_state(context.user_data, cwd, items, window_id)
+        await safe_reply(update.message, display_text, reply_markup=markup)
+        return
+
+    await _dispatch_search(update, context, cwd, pattern, chat_id, thread_id, window_id)

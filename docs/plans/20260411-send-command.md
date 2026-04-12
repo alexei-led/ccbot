@@ -224,14 +224,14 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 
 - Modify: `src/ccgram/handlers/send_command.py` (add handler + upload)
 
-- [ ] Implement `_upload_file(bot, chat_id: int, thread_id: int, path: Path) -> None` — `send_photo` for `_is_image`, `send_document` for rest, `filename=path.name`, catch `TelegramError` and re-raise with user message
-- [ ] Implement `send_command(update, context)` — guards: `update.message` → `is_user_allowed` → `get_thread_id` → `resolve_window_for_thread` → `get_window_state.cwd` exists as dir
-- [ ] No args dispatch: `build_file_browser(cwd, cwd, 0)`, cache items + state keys in `user_data`, reply with keyboard
-- [ ] Glob dispatch (pattern has `*` or `?`): `_find_files(cwd, pattern)` → single match: `validate_sendable` + upload → multiple: `build_search_results` + keyboard → zero: error with pattern
-- [ ] Text dispatch: resolve `cwd / text` → if exists and `validate_sendable` OK: upload → else `_find_files(cwd, text)` → same single/multiple/zero handling → if still zero: "File not found: {text}"
-- [ ] Add tests for `_upload_file` (image → send_photo called, non-image → send_document, TelegramError handling)
-- [ ] Add tests for `send_command` — no args → browser reply, glob → search, exact path → upload, unbound topic error, auth error, CWD gone error, traversal error, secret file error, too-large error, not-found error
-- [ ] Run `make test` — must pass before Task 6
+- [x] Implement `_upload_file(bot, chat_id: int, thread_id: int, path: Path) -> None` — `send_photo` for `_is_image`, `send_document` for rest, `filename=path.name`, catch `TelegramError` and re-raise with user message
+- [x] Implement `send_command(update, context)` — guards: `update.message` → `is_user_allowed` → `get_thread_id` → `resolve_window_for_thread` → `get_window_state.cwd` exists as dir
+- [x] No args dispatch: `build_file_browser(cwd, cwd, 0)`, cache items + state keys in `user_data`, reply with keyboard
+- [x] Glob dispatch (pattern has `*` or `?`): `_find_files(cwd, pattern)` → single match: `validate_sendable` + upload → multiple: `build_search_results` + keyboard → zero: error with pattern
+- [x] Text dispatch: resolve `cwd / text` → if exists and `validate_sendable` OK: upload → else `_find_files(cwd, text)` → same single/multiple/zero handling → if still zero: "File not found: {text}"
+- [x] Add tests for `_upload_file` (image → send_photo called, non-image → send_document, TelegramError handling)
+- [x] Add tests for `send_command` — no args → browser reply, glob → search, exact path → upload, unbound topic error, auth error, CWD gone error, traversal error, secret file error, too-large error, not-found error
+- [x] Run `make test` — must pass before Task 6
 
 ### Task 6: File browser callbacks
 
