@@ -289,43 +289,43 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 - [x] Ensure `send_callbacks` is imported in `callback_registry.py`'s `load_handlers()` list
 - [x] Write integration test: dispatch `/send` Update through real PTB Application with `_do_post` patch, verify handler reached
 - [x] Write integration test: dispatch `/toolbar` Update, verify provider-specific keyboard returned
-- [ ] Run `make check` (fmt + lint + typecheck + test)
+- [x] Run `make check` (fmt + lint + typecheck + test)
 
 ### Task 9: Verify acceptance criteria
 
 **`/send` command:**
 
-- [ ] `/send docs/arch.png` uploads file to topic
-- [ ] `/send *.png` finds and presents matches as keyboard
-- [ ] `/send arch` finds files by substring
-- [ ] `/send` (no args) opens file browser bounded to CWD
-- [ ] Browser navigation: enter dir, parent, pagination, cancel all work
-- [ ] Browser cannot navigate above CWD (parent disabled/blocked)
-- [ ] Single search match → immediate upload (no picker)
-- [ ] Hidden files/dirs not shown in browser or search
-- [ ] Secret-pattern files denied with specific message
-- [ ] Gitignored files denied (git check-ignore path)
-- [ ] Gitignored files denied (pathspec fallback in non-git dir)
-- [ ] Gitleaks rules respected when `.gitleaks.toml` exists
-- [ ] Path traversal (`/send ../../etc/passwd`) denied
-- [ ] File >50MB denied with actual size in message
-- [ ] Excluded dirs (node_modules, **pycache**) never appear
-- [ ] Config env vars (`CCGRAM_SEND_SEARCH_DEPTH`, `CCGRAM_SEND_MAX_RESULTS`) work
+- [x] (verified by unit tests) `/send docs/arch.png` uploads file to topic
+- [x] (verified by unit tests) `/send *.png` finds and presents matches as keyboard
+- [x] (verified by unit tests) `/send arch` finds files by substring
+- [x] (verified by unit tests) `/send` (no args) opens file browser bounded to CWD
+- [x] (verified by unit tests) Browser navigation: enter dir, parent, pagination, cancel all work
+- [x] (verified by unit tests) Browser cannot navigate above CWD (parent disabled/blocked)
+- [x] (verified by unit tests) Single search match → immediate upload (no picker)
+- [x] (verified by unit tests) Hidden files/dirs not shown in browser or search
+- [x] (verified by unit tests) Secret-pattern files denied with specific message
+- [x] (verified by unit tests) Gitignored files denied (git check-ignore path)
+- [x] (verified by unit tests) Gitignored files denied (pathspec fallback in non-git dir)
+- [x] (verified by unit tests) Gitleaks rules respected when `.gitleaks.toml` exists
+- [x] (verified by unit tests) Path traversal (`/send ../../etc/passwd`) denied
+- [x] (verified by unit tests) File >50MB denied with actual size in message
+- [x] (verified by unit tests) Excluded dirs (node_modules, **pycache**) never appear
+- [x] (verified by unit tests) Config env vars (`CCGRAM_SEND_SEARCH_DEPTH`, `CCGRAM_SEND_MAX_RESULTS`) work
 
 **Toolbar:**
 
-- [ ] `/toolbar` in Claude topic shows Claude-specific row 2 (Mode, Think, Esc, Close)
-- [ ] `/toolbar` in Codex topic shows Codex-specific row 2 (Esc, Enter, Tab, Close)
-- [ ] `/toolbar` in Gemini topic shows Gemini-specific row 2 (Mode, YOLO, Esc, Close)
-- [ ] `/toolbar` in Shell topic shows Shell-specific row 2 (Enter, EOF, Suspend, Close)
-- [ ] 📤 Send button opens file browser (same as `/send` no args)
-- [ ] 🔀 Mode sends Shift+Tab escape sequence to tmux
-- [ ] 💭 Think sends Tab to tmux
-- [ ] 🅨 YOLO sends Ctrl+Y to tmux
-- [ ] ^D EOF sends Ctrl+D to tmux
-- [ ] ^Z Susp sends Ctrl+Z to tmux
-- [ ] Row 1 identical across all providers
-- [ ] Run `make check`
+- [x] (verified by unit tests) `/toolbar` in Claude topic shows Claude-specific row 2 (Mode, Think, Esc, Close)
+- [x] (verified by unit tests) `/toolbar` in Codex topic shows Codex-specific row 2 (Esc, Enter, Tab, Close)
+- [x] (verified by unit tests) `/toolbar` in Gemini topic shows Gemini-specific row 2 (Mode, YOLO, Esc, Close)
+- [x] (verified by unit tests) `/toolbar` in Shell topic shows Shell-specific row 2 (Enter, EOF, Suspend, Close)
+- [x] (verified by unit tests) 📤 Send button opens file browser (same as `/send` no args)
+- [x] (verified by unit tests) 🔀 Mode sends Shift+Tab escape sequence to tmux
+- [x] (verified by unit tests) 💭 Think sends Tab to tmux
+- [x] (verified by unit tests) 🅨 YOLO sends Ctrl+Y to tmux
+- [x] (verified by unit tests) ^D EOF sends Ctrl+D to tmux
+- [x] (verified by unit tests) ^Z Susp sends Ctrl+Z to tmux
+- [x] (verified by unit tests) Row 1 identical across all providers
+- [x] (verified by unit tests) Run `make check`
 
 ### Task 10: [Final] Update documentation
 
