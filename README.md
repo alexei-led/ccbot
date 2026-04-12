@@ -77,7 +77,8 @@ Each Telegram Forum topic binds to one tmux window. Messages you type are sent a
 - **Multi-pane support** — auto-detects blocked panes in agent teams, surfaces prompts as alerts; `/panes` for overview
 - **Terminal screenshots** — capture the current pane (or any specific pane) as a PNG image
 - **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
-- **Action toolbar** (`/toolbar`) — persistent inline buttons for RC, Screenshot, Live, Esc, Notify, Ctrl-C
+- **File delivery** (`/send`) — send workspace files to Telegram: exact path (`/send docs/arch.png`), glob (`/send *.png`), substring search (`/send arch`), or interactive browser (`/send`). Project-scoped with security filtering (hidden files, credentials, gitignored, >50 MB denied)
+- **Action toolbar** (`/toolbar`) — provider-specific inline buttons. Universal row: Screenshot, Ctrl-C, Live, Send. Provider row varies: Claude (Mode, Think, Esc), Codex (Esc, Enter, Tab), Gemini (Mode, YOLO, Esc), Shell (Enter, EOF, Suspend)
 - **Remote Control** — 📡 topic badge when RC is active; one-tap activation from status keyboard
 
 ### Real-Time Monitoring
@@ -240,6 +241,8 @@ Open your Telegram group, create a new topic, send a message — a directory bro
 | `CCGRAM_WHISPER_PROVIDER`   | _(disabled)_      | Whisper provider for voice transcription (`openai`, `groq`) |
 | `CCGRAM_LIVE_VIEW_INTERVAL` | `5`               | Live view refresh interval in seconds                       |
 | `CCGRAM_LIVE_VIEW_TIMEOUT`  | `300`             | Live view auto-stop timeout in seconds                      |
+| `CCGRAM_SEND_SEARCH_DEPTH`  | `5`               | Max directory depth for `/send` file search                 |
+| `CCGRAM_SEND_MAX_RESULTS`   | `50`              | Max file results returned by `/send` search                 |
 | `AUTOCLOSE_DONE_MINUTES`    | `30`              | Auto-close completed topics after N minutes                 |
 | `AUTOCLOSE_DEAD_MINUTES`    | `10`              | Auto-close dead sessions after N minutes                    |
 

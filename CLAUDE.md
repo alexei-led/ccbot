@@ -33,6 +33,20 @@ ccgram --autoclose-done 0              # Disable auto-close for done topics
 ccgram --autoclose-dead 0              # Disable auto-close for dead sessions
 ```
 
+Bot commands (in Telegram topics):
+
+```
+/send [pattern]   Send workspace file to Telegram (exact path, glob, or browse)
+/toolbar          Show provider-specific inline action toolbar
+/history          Browse paginated message history
+/sessions         Active sessions dashboard
+/restore          Recover a dead topic
+/resume           Scan past sessions and pick one to resume
+/panes            List panes with per-pane screenshot buttons
+/sync             Sync window state with tmux
+/upgrade          Upgrade ccgram via uv and restart
+```
+
 ## Core Design Constraints
 
 - **1 Topic = 1 Window = 1 Session** — all internal routing keyed by tmux window ID (`@0`, `@12`), not window name. Window names kept as display names. Same directory can have multiple windows.
@@ -147,6 +161,43 @@ The LLM is also used for **completion summaries**: when an agent finishes (Stop 
 | Status poll       | `CCGRAM_STATUS_POLL_INTERVAL` | `1.0` (s) |
 
 Live view and poll intervals are clamped to a minimum of 0.5s (live view: 1s). Live view auto-refreshes terminal screenshots via `editMessageMedia` at the configured interval, and auto-stops after the timeout.
+
+### /send Command — File Delivery
+
+Send workspace files to Telegram. Three modes in one command:
+
+```
+/send docs/arch.png   # Exact path → immediate upload
+/send *.png           # Glob → find matches, pick if multiple
+/send arch            # Substring → search, pick if multiple
+/send                 # No args → interactive file browser at CWD
+```
+
+**Security model** — project-scoped, deny-by-default:
+
+- Path containment: resolved path must stay within window CWD (blocks `../` traversal, symlink escape)
+- Hidden files/dirs: anything starting with `.` is denied
+- Secret patterns: `*.pem`, `*.key`, `*.p12`, `*credential*`, `*secret*`, `.env` etc.
+- Gitleaks: if `.gitleaks.toml` exists, path regexes from `[[rules]]` are enforced
+- Gitignored: `git check-ignore -q` primary, `pathspec` library fallback for non-git repos
+- Size limit: 50 MB (Telegram bot API cap)
+- Excluded dirs: `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, etc. — never shown in browser or search
+
+| Setting      | Env Var                    | Default |
+| ------------ | -------------------------- | ------- |
+| Search depth | `CCGRAM_SEND_SEARCH_DEPTH` | `5`     |
+| Max results  | `CCGRAM_SEND_MAX_RESULTS`  | `50`    |
+
+### Toolbar — Provider-Specific
+
+`/toolbar` shows an inline keyboard with 2 rows of 4 buttons. Row 1 is universal, row 2 is provider-specific:
+
+| Row           | Claude                                    | Codex                          | Gemini                          | Shell                             |
+| ------------- | ----------------------------------------- | ------------------------------ | ------------------------------- | --------------------------------- |
+| 1 (universal) | 📷 Screenshot, ⏹ Ctrl-C, 📺 Live, 📤 Send | ← same                         | ← same                          | ← same                            |
+| 2 (provider)  | 🔀 Mode, 💭 Think, ⎋ Esc, ✖ Close         | ⎋ Esc, ⏎ Enter, ⇥ Tab, ✖ Close | 🔀 Mode, 🅨 YOLO, ⎋ Esc, ✖ Close | ⏎ Enter, ^D EOF, ^Z Susp, ✖ Close |
+
+Key actions: **Mode** sends `Shift+Tab` (cycles permission mode in Claude/Gemini), **Think** sends `Tab` (toggles extended thinking), **YOLO** sends `Ctrl+Y` (toggles auto-approval in Gemini), **EOF** sends `Ctrl+D`, **Susp** sends `Ctrl+Z`. The **Send** button opens the `/send` file browser. Provider is resolved from `WindowState.provider_name`.
 
 ### Migration Notes
 
