@@ -16,6 +16,10 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import structlog
+
+logger = structlog.get_logger()
+
 _SECRET_PATTERNS: list[str] = [
     "*.pem",
     "*.key",
@@ -110,7 +114,8 @@ def _gitignored_by_pathspec(path: Path, cwd: Path) -> bool:
         except ValueError:
             return False
         return spec.match_file(str(rel))
-    except Exception:  # noqa: BLE001 — last-resort fallback
+    except Exception as exc:  # noqa: BLE001 — last-resort fallback
+        logger.debug("pathspec_fallback_error", error=str(exc), path=str(path))
         return False
 
 
@@ -155,7 +160,8 @@ def check_gitleaks_rules(path: Path, cwd: Path) -> str | None:
     try:
         with toml_path.open("rb") as fh:
             config = tomllib.load(fh)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("gitleaks_toml_parse_error", error=str(exc), cwd=str(cwd))
         return None
 
     try:

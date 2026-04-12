@@ -322,6 +322,20 @@ def _cache_browser_state(
     user_data[SEND_WINDOW_ID_KEY] = window_id
 
 
+async def _upload_with_feedback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    thread_id: int,
+    path: Path,
+) -> None:
+    """Upload *path*, replying with a human-readable error on TelegramError."""
+    try:
+        await _upload_file(context.bot, chat_id, thread_id, path)
+    except TelegramError as exc:
+        await safe_reply(update.message, f"Upload failed: {exc}")  # type: ignore[arg-type]
+
+
 async def _dispatch_search(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -339,18 +353,25 @@ async def _dispatch_search(
     if not is_glob:
         exact = cwd / pattern
         if exact.exists() and exact.is_file():
-            rel = exact.resolve().relative_to(cwd.resolve())
+            error = validate_sendable(exact, cwd)
+            if error:
+                await safe_reply(update.message, f"Cannot send: {error}")  # type: ignore[arg-type]
+                return
+            try:
+                rel = exact.resolve().relative_to(cwd.resolve())
+            except ValueError:
+                await safe_reply(
+                    update.message,  # type: ignore[arg-type]
+                    "Cannot send: file is outside project directory",
+                )
+                return
             if any(is_excluded_dir(part) for part in rel.parts[:-1]):
                 await safe_reply(
                     update.message,  # type: ignore[arg-type]
                     "Cannot send: file is in an excluded directory",
                 )
                 return
-            error = validate_sendable(exact, cwd)
-            if error:
-                await safe_reply(update.message, f"Cannot send: {error}")  # type: ignore[arg-type]
-                return
-            await _upload_file(context.bot, chat_id, thread_id, exact)
+            await _upload_with_feedback(update, context, chat_id, thread_id, exact)
             return
 
     matches = _find_files(cwd, pattern)
@@ -362,7 +383,7 @@ async def _dispatch_search(
         if error:
             await safe_reply(update.message, f"Cannot send: {error}")  # type: ignore[arg-type]
             return
-        await _upload_file(context.bot, chat_id, thread_id, matches[0])
+        await _upload_with_feedback(update, context, chat_id, thread_id, matches[0])
         return
 
     display_text, markup, shown = build_search_results(matches, cwd, query=pattern)

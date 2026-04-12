@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from ccgram.handlers.screenshot_callbacks import (
     _send_toolbar_key,
@@ -114,3 +114,64 @@ class TestSendToolbarKey:
         query = AsyncMock()
         await _send_toolbar_key(query, 123, "tb:eof:@0", "tb:eof:", "C-d", "^D")
         mock_tmux.send_keys.assert_not_called()
+
+
+class TestHandleToolbarSend:
+    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=False)
+    async def test_not_owner_rejected(self, _mock_owns):
+        query = AsyncMock()
+        query.data = "tb:send:@0"
+        update = MagicMock()
+        context = MagicMock()
+        context.user_data = {}
+        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_send
+
+        await _handle_toolbar_send(query, 123, "tb:send:@0", update, context)
+        query.answer.assert_awaited_once_with("Not your session", show_alert=True)
+
+    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
+    @patch("ccgram.handlers.screenshot_callbacks.session_manager")
+    async def test_no_cwd_shows_error(self, mock_sm, _mock_owns):
+        mock_sm.get_window_state.return_value = None
+        query = AsyncMock()
+        update = MagicMock()
+        context = MagicMock()
+        context.user_data = {}
+        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_send
+
+        await _handle_toolbar_send(query, 123, "tb:send:@0", update, context)
+        query.answer.assert_awaited_once_with(
+            "Working directory not available", show_alert=True
+        )
+
+    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
+    @patch("ccgram.handlers.screenshot_callbacks.thread_router")
+    @patch("ccgram.handlers.screenshot_callbacks.session_manager")
+    @patch("ccgram.handlers.screenshot_callbacks.safe_send", new_callable=AsyncMock)
+    @patch("ccgram.handlers.screenshot_callbacks.build_file_browser")
+    async def test_opens_file_browser(
+        self, mock_browser, mock_safe_send, mock_sm, mock_router, _mock_owns, tmp_path
+    ):
+        ws = MagicMock()
+        ws.cwd = str(tmp_path)
+        mock_sm.get_window_state.return_value = ws
+        mock_router.resolve_chat_id.return_value = 999
+        mock_browser.return_value = ("Browse files", MagicMock(), [tmp_path / "a.txt"])
+
+        query = AsyncMock()
+        update = MagicMock()
+        update.effective_message.message_thread_id = 42
+        context = MagicMock()
+        context.user_data = {}
+        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_send
+
+        with patch(
+            "ccgram.handlers.screenshot_callbacks.get_thread_id", return_value=42
+        ):
+            await _handle_toolbar_send(query, 123, "tb:send:@0", update, context)
+
+        mock_safe_send.assert_awaited_once()
+        call_kwargs = mock_safe_send.call_args
+        assert call_kwargs[0][1] == 999
+        assert call_kwargs[1]["message_thread_id"] == 42
+        query.answer.assert_awaited_once_with()

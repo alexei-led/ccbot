@@ -73,6 +73,7 @@ from .callback_data import (
     CB_TOOLBAR_YOLO,
     NOTIFY_MODE_LABELS,
 )
+from .message_sender import safe_send
 from .callback_helpers import get_thread_id, user_owns_window
 from .callback_registry import register
 
@@ -244,13 +245,17 @@ async def _handle_live_stop(
 # Map toolbar key prefixes to (tmux_key, toast_text, literal)
 _TOOLBAR_KEY_MAP: dict[str, tuple[str, str, bool]] = {
     CB_TOOLBAR_MODE: ("\x1b[Z", "\U0001f500 Mode cycled", True),
-    CB_TOOLBAR_THINK: ("Tab", "\U0001f4ad Think toggled", False),
+    CB_TOOLBAR_THINK: (
+        "Tab",
+        "\U0001f4ad Think toggled",
+        False,
+    ),  # Tab = toggle extended thinking (Claude)
     CB_TOOLBAR_YOLO: ("C-y", "\U0001f1fe YOLO toggled", False),
     CB_TOOLBAR_EOF: ("C-d", "^D Sent", False),
     CB_TOOLBAR_SUSPEND: ("C-z", "^Z Sent", False),
     CB_TOOLBAR_ESC: ("Escape", "\u238b Esc", False),
     CB_TOOLBAR_ENTER: ("Enter", "\u23ce Enter", False),
-    CB_TOOLBAR_TAB: ("Tab", "\u21e5 Tab", False),
+    CB_TOOLBAR_TAB: ("Tab", "\u21e5 Tab", False),  # Tab = literal Tab key (Codex row2)
 }
 
 # Provider-specific row-2 button definitions: (label, CB prefix or None=dismiss)
@@ -431,11 +436,12 @@ async def _handle_toolbar_send(
     if chat_id is None:
         await query.answer("Use in a topic", show_alert=True)
         return
-    await query.get_bot().send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_markup=markup,
+    await safe_send(
+        query.get_bot(),
+        chat_id,
+        text,
         message_thread_id=thread_id,
+        reply_markup=markup,
     )
     _cache_browser_state(context.user_data, cwd, items, window_id)
     await query.answer()
@@ -462,7 +468,6 @@ async def _send_toolbar_key(
             w.window_id, tmux_key, enter=False, literal=literal
         )
         await query.answer(toast)
-        await query.answer("\u21e5 Tab")
     else:
         await query.answer("Window not found", show_alert=True)
 
