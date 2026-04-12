@@ -240,17 +240,17 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 - Create: `src/ccgram/handlers/send_callbacks.py`
 - Create: `tests/ccgram/handlers/test_send_callbacks.py`
 
-- [ ] Create `send_callbacks.py` with module docstring, imports, logger
-- [ ] Implement `_clear_send_state(context)` — pop all `SEND_*` keys from `user_data`
-- [ ] Handle `CB_SEND_FILE`: index from callback data → look up in cached `SEND_ITEMS_KEY` → `validate_sendable` → `_upload_file` → `_clear_send_state` → `query.answer("Sent")` → delete browser message
-- [ ] Handle `CB_SEND_DIR`: index → look up dir → verify `is_path_contained(dir, cwd)` → `build_file_browser(dir, cwd, 0)` → update cache → `edit_message_text` with new keyboard
-- [ ] Handle `CB_SEND_PAGE`: parse page number → `build_file_browser(current_path, cwd, page)` → update cache → edit message
-- [ ] Handle `CB_SEND_UP`: if `current_path == cwd` → `query.answer("Already at project root")` → return. Else `current_path.parent` → rebuild browser
-- [ ] Handle `CB_SEND_CANCEL`: `_clear_send_state` → delete message or edit to "Cancelled"
-- [ ] Stale guard: check `SEND_WINDOW_ID_KEY` matches `thread_router.resolve_window_for_thread` for current topic
-- [ ] Register via `@register(CB_SEND_FILE, CB_SEND_DIR, CB_SEND_PAGE, CB_SEND_UP, CB_SEND_CANCEL)`
-- [ ] Write tests: file select → validate + upload + cleanup, dir navigate → rebuild, page → rebuild, parent clamped at CWD, cancel → cleanup, stale guard rejects, denied file → error answer not upload, index out of bounds → error
-- [ ] Run `make test` — must pass before Task 7
+- [x] Create `send_callbacks.py` with module docstring, imports, logger
+- [x] Implement `_clear_send_state(context)` — pop all `SEND_*` keys from `user_data`
+- [x] Handle `CB_SEND_FILE`: index from callback data → look up in cached `SEND_ITEMS_KEY` → `validate_sendable` → `_upload_file` → `_clear_send_state` → `query.answer("Sent")` → delete browser message
+- [x] Handle `CB_SEND_DIR`: index → look up dir → verify `is_path_contained(dir, cwd)` → `build_file_browser(dir, cwd, 0)` → update cache → `edit_message_text` with new keyboard
+- [x] Handle `CB_SEND_PAGE`: parse page number → `build_file_browser(current_path, cwd, page)` → update cache → edit message
+- [x] Handle `CB_SEND_UP`: if `current_path == cwd` → `query.answer("Already at project root")` → return. Else `current_path.parent` → rebuild browser
+- [x] Handle `CB_SEND_CANCEL`: `_clear_send_state` → delete message or edit to "Cancelled"
+- [x] Stale guard: check `SEND_WINDOW_ID_KEY` matches `thread_router.resolve_window_for_thread` for current topic
+- [x] Register via `@register(CB_SEND_FILE, CB_SEND_DIR, CB_SEND_PAGE, CB_SEND_UP, CB_SEND_CANCEL)`
+- [x] Write tests: file select → validate + upload + cleanup, dir navigate → rebuild, page → rebuild, parent clamped at CWD, cancel → cleanup, stale guard rejects, denied file → error answer not upload, index out of bounds → error
+- [x] Run `make test` — must pass before Task 7
 
 ### Task 7: Provider-specific toolbar
 
