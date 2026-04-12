@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import time
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -144,8 +144,9 @@ class TestFindFiles:
 
     def test_sorted_by_mtime_desc(self, tmp_path: Path) -> None:
         old = self._make_file(tmp_path / "old.txt")
-        time.sleep(0.05)
         new = self._make_file(tmp_path / "new.txt")
+        os.utime(old, (1000, 1000))
+        os.utime(new, (2000, 2000))
         with patch("ccgram.handlers.send_command.validate_sendable", return_value=None):
             results = _find_files(tmp_path, "*.txt")
         assert results[0] == new

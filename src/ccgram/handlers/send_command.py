@@ -89,7 +89,9 @@ def _find_files(cwd: Path, pattern: str) -> list[Path]:
     else:
         exact = cwd / pattern
         if exact.exists() and validate_sendable(exact, cwd) is None:
-            return [exact]
+            rel = exact.resolve().relative_to(cwd.resolve())
+            if not any(is_excluded_dir(part) for part in rel.parts[:-1]):
+                return [exact]
         candidates = list(cwd.rglob(f"*{pattern}*"))
 
     depth_limit = config.send_search_depth
@@ -223,7 +225,9 @@ def build_file_browser(
     start = page * _ITEMS_PER_PAGE
     page_items = items[start : start + _ITEMS_PER_PAGE]
 
-    flat = [_make_item_button(item, items.index(item), cwd) for item in page_items]
+    flat = [
+        _make_item_button(item, start + i, cwd) for i, item in enumerate(page_items)
+    ]
     buttons = _pack_into_rows(flat)
 
     if total_pages > 1:
@@ -275,7 +279,7 @@ def build_search_results(
 
     count = len(matches)
     cap = _ITEMS_PER_PAGE * 3
-    header = f"🔍 {count}+ results" if count >= cap else f"🔍 {count} result(s)"
+    header = f"🔍 {cap}+ results" if count > cap else f"🔍 {count} result(s)"
     if query:
         header += f" for '{query}'"
     return header, InlineKeyboardMarkup(buttons), shown
@@ -335,6 +339,13 @@ async def _dispatch_search(
     if not is_glob:
         exact = cwd / pattern
         if exact.exists() and exact.is_file():
+            rel = exact.resolve().relative_to(cwd.resolve())
+            if any(is_excluded_dir(part) for part in rel.parts[:-1]):
+                await safe_reply(
+                    update.message,  # type: ignore[arg-type]
+                    "Cannot send: file is in an excluded directory",
+                )
+                return
             error = validate_sendable(exact, cwd)
             if error:
                 await safe_reply(update.message, f"Cannot send: {error}")  # type: ignore[arg-type]

@@ -104,7 +104,7 @@ def _gitignored_by_pathspec(path: Path, cwd: Path) -> bool:
         if not lines:
             return False
 
-        spec = pathspec.PathSpec.from_lines("gitwildmatch", lines)
+        spec = pathspec.PathSpec.from_lines("gitignore", lines)
         try:
             rel = path.relative_to(cwd)
         except ValueError:
@@ -181,7 +181,7 @@ def _check_size_and_type(path: Path) -> str | None:
     try:
         size = path.stat().st_size
     except OSError:
-        return "Not a regular file"
+        return "File not accessible"
     if size > _TELEGRAM_FILE_LIMIT:
         size_mb = size / (1024 * 1024)
         return f"File too large: {size_mb:.0f} MB (limit: 50 MB)"

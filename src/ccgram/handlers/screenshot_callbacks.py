@@ -42,7 +42,10 @@ from telegram import (
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from pathlib import Path
+
 from ..screenshot import text_to_image
+from .send_command import _cache_browser_state, build_file_browser
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
@@ -59,6 +62,15 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     CB_TOOLBAR_CTRLC,
     CB_TOOLBAR_DISMISS,
+    CB_TOOLBAR_ENTER,
+    CB_TOOLBAR_EOF,
+    CB_TOOLBAR_ESC,
+    CB_TOOLBAR_MODE,
+    CB_TOOLBAR_SEND,
+    CB_TOOLBAR_SUSPEND,
+    CB_TOOLBAR_TAB,
+    CB_TOOLBAR_THINK,
+    CB_TOOLBAR_YOLO,
     NOTIFY_MODE_LABELS,
 )
 from .callback_helpers import get_thread_id, user_owns_window
@@ -229,17 +241,17 @@ async def _handle_live_stop(
     await query.answer("\u23f9 Stopped")
 
 
-from .callback_data import (  # noqa: E402  (grouped with runtime imports below)
-    CB_TOOLBAR_ENTER,
-    CB_TOOLBAR_EOF,
-    CB_TOOLBAR_ESC,
-    CB_TOOLBAR_MODE,
-    CB_TOOLBAR_SEND,
-    CB_TOOLBAR_SUSPEND,
-    CB_TOOLBAR_TAB,
-    CB_TOOLBAR_THINK,
-    CB_TOOLBAR_YOLO,
-)
+# Map toolbar key prefixes to (tmux_key, toast_text, literal)
+_TOOLBAR_KEY_MAP: dict[str, tuple[str, str, bool]] = {
+    CB_TOOLBAR_MODE: ("\x1b[Z", "\U0001f500 Mode cycled", True),
+    CB_TOOLBAR_THINK: ("Tab", "\U0001f4ad Think toggled", False),
+    CB_TOOLBAR_YOLO: ("C-y", "\U0001f1fe YOLO toggled", False),
+    CB_TOOLBAR_EOF: ("C-d", "^D Sent", False),
+    CB_TOOLBAR_SUSPEND: ("C-z", "^Z Sent", False),
+    CB_TOOLBAR_ESC: ("Escape", "\u238b Esc", False),
+    CB_TOOLBAR_ENTER: ("Enter", "\u23ce Enter", False),
+    CB_TOOLBAR_TAB: ("Tab", "\u21e5 Tab", False),
+}
 
 # Provider-specific row-2 button definitions: (label, CB prefix or None=dismiss)
 _PROVIDER_ROW2: dict[str, list[tuple[str, str | None]]] = {
@@ -400,9 +412,6 @@ async def _handle_toolbar_send(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_TOOLBAR_SEND: open file browser for the window's CWD."""
-    from pathlib import Path
-
-    from .send_command import _cache_browser_state, build_file_browser
 
     window_id = data[len(CB_TOOLBAR_SEND) :]
     if not user_owns_window(user_id, window_id):
@@ -417,7 +426,6 @@ async def _handle_toolbar_send(
     if context.user_data is None:
         await query.answer("State error", show_alert=True)
         return
-    _cache_browser_state(context.user_data, cwd, items, window_id)
     thread_id = get_thread_id(update)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id) if thread_id else None
     if chat_id is None:
@@ -429,118 +437,31 @@ async def _handle_toolbar_send(
         reply_markup=markup,
         message_thread_id=thread_id,
     )
+    _cache_browser_state(context.user_data, cwd, items, window_id)
     await query.answer()
 
 
-async def _handle_toolbar_mode(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_MODE: send Shift+Tab to cycle mode."""
-    window_id = data[len(CB_TOOLBAR_MODE) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "\x1b[Z", enter=False, literal=True)
-        await query.answer("\U0001f500 Mode cycled")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_think(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_THINK: send Tab to toggle think."""
-    window_id = data[len(CB_TOOLBAR_THINK) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "Tab", enter=False, literal=False)
-        await query.answer("\U0001f4ad Think toggled")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_yolo(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_YOLO: send Ctrl+Y to toggle YOLO mode."""
-    window_id = data[len(CB_TOOLBAR_YOLO) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "C-y", enter=False, literal=False)
-        await query.answer("\U0001f1fe YOLO toggled")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_eof(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_EOF: send Ctrl+D (EOF)."""
-    window_id = data[len(CB_TOOLBAR_EOF) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "C-d", enter=False, literal=False)
-        await query.answer("^D Sent")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_suspend(
-    query: CallbackQuery, user_id: int, data: str
+async def _send_toolbar_key(
+    query: CallbackQuery,
+    user_id: int,
+    data: str,
+    prefix: str,
+    tmux_key: str,
+    toast: str,
+    *,
+    literal: bool = False,
 ) -> None:
-    """Handle CB_TOOLBAR_SUSPEND: send Ctrl+Z (suspend)."""
-    window_id = data[len(CB_TOOLBAR_SUSPEND) :]
+    """Generic handler for toolbar buttons that send a tmux key."""
+    window_id = data[len(prefix) :]
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return
     w = await tmux_manager.find_window_by_id(window_id)
     if w:
-        await tmux_manager.send_keys(w.window_id, "C-z", enter=False, literal=False)
-        await query.answer("^Z Sent")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_esc(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_ESC: send Escape key."""
-    window_id = data[len(CB_TOOLBAR_ESC) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "Escape", enter=False, literal=False)
-        await query.answer("\u238b Esc")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_enter(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_ENTER: send Enter key."""
-    window_id = data[len(CB_TOOLBAR_ENTER) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "Enter", enter=False, literal=False)
-        await query.answer("\u23ce Enter")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_toolbar_tab(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_TOOLBAR_TAB: send Tab key."""
-    window_id = data[len(CB_TOOLBAR_TAB) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "Tab", enter=False, literal=False)
+        await tmux_manager.send_keys(
+            w.window_id, tmux_key, enter=False, literal=literal
+        )
+        await query.answer(toast)
         await query.answer("\u21e5 Tab")
     else:
         await query.answer("Window not found", show_alert=True)
@@ -584,18 +505,18 @@ async def handle_screenshot_callback(
         CB_STATUS_NOTIFY: _handle_notify_toggle,
         CB_STATUS_REMOTE: _handle_remote_control,
         CB_TOOLBAR_CTRLC: _handle_toolbar_ctrlc,
-        CB_TOOLBAR_MODE: _handle_toolbar_mode,
-        CB_TOOLBAR_THINK: _handle_toolbar_think,
-        CB_TOOLBAR_YOLO: _handle_toolbar_yolo,
-        CB_TOOLBAR_EOF: _handle_toolbar_eof,
-        CB_TOOLBAR_SUSPEND: _handle_toolbar_suspend,
-        CB_TOOLBAR_ESC: _handle_toolbar_esc,
-        CB_TOOLBAR_ENTER: _handle_toolbar_enter,
-        CB_TOOLBAR_TAB: _handle_toolbar_tab,
     }
     for prefix, handler in without_update.items():
         if data.startswith(prefix):
             await handler(query, user_id, data)
+            return
+
+    # Generic toolbar key buttons — all use _send_toolbar_key
+    for prefix, (tmux_key, toast, literal) in _TOOLBAR_KEY_MAP.items():
+        if data.startswith(prefix):
+            await _send_toolbar_key(
+                query, user_id, data, prefix, tmux_key, toast, literal=literal
+            )
             return
 
     if data == CB_TOOLBAR_DISMISS:

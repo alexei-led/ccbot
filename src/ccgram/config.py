@@ -202,17 +202,16 @@ class Config:
         self.live_view_timeout: int = max(
             1, _parse_int_env("CCGRAM_LIVE_VIEW_TIMEOUT", 300)
         )
-        # Auto-close stale topics (minutes; 0 = disabled)
+
+    def _init_send(self) -> None:
+        self.send_search_depth: int = _parse_int_env("CCGRAM_SEND_SEARCH_DEPTH", 5)
+        self.send_max_results: int = _parse_int_env("CCGRAM_SEND_MAX_RESULTS", 50)
         self.autoclose_done_minutes: int = int(
             os.getenv("AUTOCLOSE_DONE_MINUTES", "30")
         )
         self.autoclose_dead_minutes: int = int(
             os.getenv("AUTOCLOSE_DEAD_MINUTES", "10")
         )
-
-    def _init_send(self) -> None:
-        self.send_search_depth: int = _parse_int_env("CCGRAM_SEND_SEARCH_DEPTH", 5)
-        self.send_max_results: int = _parse_int_env("CCGRAM_SEND_MAX_RESULTS", 50)
 
     def is_user_allowed(self, user_id: int) -> bool:
         """Check if a user is in the allowed list."""

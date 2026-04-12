@@ -1,6 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
-from ccgram.handlers.screenshot_callbacks import build_toolbar_keyboard
+from ccgram.handlers.screenshot_callbacks import (
+    _send_toolbar_key,
+    build_toolbar_keyboard,
+)
 
 
 class TestBuildToolbarKeyboardRow1:
@@ -77,84 +80,37 @@ class TestBuildToolbarKeyboardRow2:
             assert len(kb.inline_keyboard[1]) == 4
 
 
-class TestToolbarKeyHandlers:
+class TestSendToolbarKey:
     @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
     @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
     async def test_mode_sends_shift_tab(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_mode
-
         query = AsyncMock()
-        await _handle_toolbar_mode(query, 123, "tb:mode:@0")
+        await _send_toolbar_key(
+            query, 123, "tb:mode:@0", "tb:mode:", "\x1b[Z", "Mode", literal=True
+        )
         mock_tmux.send_keys.assert_called_once()
-        call_args = mock_tmux.send_keys.call_args
-        assert call_args[0][1] == "\x1b[Z"
+        assert mock_tmux.send_keys.call_args[0][1] == "\x1b[Z"
+        assert mock_tmux.send_keys.call_args[1]["literal"] is True
 
     @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
     @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_think_sends_tab(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_think
-
+    async def test_regular_key_not_literal(self, mock_tmux, _mock_owns):
         query = AsyncMock()
-        await _handle_toolbar_think(query, 123, "tb:think:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "Tab"
+        await _send_toolbar_key(query, 123, "tb:esc:@0", "tb:esc:", "Escape", "Esc")
+        assert mock_tmux.send_keys.call_args[1]["literal"] is False
+
+    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=False)
+    @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
+    async def test_not_owner_rejected(self, mock_tmux, _mock_owns):
+        query = AsyncMock()
+        await _send_toolbar_key(query, 123, "tb:esc:@0", "tb:esc:", "Escape", "Esc")
+        mock_tmux.send_keys.assert_not_called()
+        query.answer.assert_awaited_once_with("Not your session", show_alert=True)
 
     @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
     @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_yolo_sends_ctrl_y(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_yolo
-
+    async def test_window_not_found(self, mock_tmux, _mock_owns):
+        mock_tmux.find_window_by_id.return_value = None
         query = AsyncMock()
-        await _handle_toolbar_yolo(query, 123, "tb:yolo:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "C-y"
-
-    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
-    @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_eof_sends_ctrl_d(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_eof
-
-        query = AsyncMock()
-        await _handle_toolbar_eof(query, 123, "tb:eof:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "C-d"
-
-    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
-    @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_suspend_sends_ctrl_z(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_suspend
-
-        query = AsyncMock()
-        await _handle_toolbar_suspend(query, 123, "tb:susp:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "C-z"
-
-    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
-    @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_esc_sends_escape(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_esc
-
-        query = AsyncMock()
-        await _handle_toolbar_esc(query, 123, "tb:esc:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "Escape"
-
-    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
-    @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_enter_sends_enter(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_enter
-
-        query = AsyncMock()
-        await _handle_toolbar_enter(query, 123, "tb:ent:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "Enter"
-
-    @patch("ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True)
-    @patch("ccgram.handlers.screenshot_callbacks.tmux_manager", new_callable=AsyncMock)
-    async def test_tab_sends_tab(self, mock_tmux, _mock_owns):
-        from ccgram.handlers.screenshot_callbacks import _handle_toolbar_tab
-
-        query = AsyncMock()
-        await _handle_toolbar_tab(query, 123, "tb:tab:@0")
-        mock_tmux.send_keys.assert_called_once()
-        assert mock_tmux.send_keys.call_args[0][1] == "Tab"
+        await _send_toolbar_key(query, 123, "tb:eof:@0", "tb:eof:", "C-d", "^D")
+        mock_tmux.send_keys.assert_not_called()
