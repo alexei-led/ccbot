@@ -191,16 +191,16 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 
 - Create: `src/ccgram/handlers/send_command.py` (utilities only)
 
-- [ ] Create `send_command.py` with module docstring, imports, logger, `_IMAGE_EXTENSIONS` frozenset, `_ITEMS_PER_PAGE = 8`
-- [ ] Implement `_is_image(path: Path) -> bool` — check suffix against `_IMAGE_EXTENSIONS`
-- [ ] Implement `_find_files(cwd: Path, pattern: str) -> list[Path]` — if `*` or `?` in pattern: `Path.rglob` with depth check; else try exact relative path, then substring rglob `*{pattern}*`. Skip `is_excluded_dir` during traversal, `validate_sendable` on results. Cap at `config.send_max_results`, sort by mtime descending
-- [ ] Implement `_list_directory(path: Path, cwd: Path) -> tuple[list[Path], list[Path]]` — iterdir, split dirs/files, filter excluded dirs and denied files, sort alphabetically
-- [ ] Implement `_format_file_label(path: Path, cwd: Path) -> str` — relative path + human-readable size (B/KB/MB), truncate path portion to fit button label
-- [ ] Add tests for `_is_image` to `test_send_command.py`
-- [ ] Add tests for `_find_files` (exact, glob, substring, depth limit, excluded dirs, denied files filtered, max cap, empty, sort order)
-- [ ] Add tests for `_list_directory` (mixed content, noise dirs excluded, hidden excluded, denied files excluded, alphabetical sort)
-- [ ] Add tests for `_format_file_label` (short path, long path truncation, B/KB/MB sizes)
-- [ ] Run `make test` — must pass before Task 4
+- [x] Create `send_command.py` with module docstring, imports, logger, `_IMAGE_EXTENSIONS` frozenset, `_ITEMS_PER_PAGE = 8`
+- [x] Implement `_is_image(path: Path) -> bool` — check suffix against `_IMAGE_EXTENSIONS`
+- [x] Implement `_find_files(cwd: Path, pattern: str) -> list[Path]` — if `*` or `?` in pattern: `Path.rglob` with depth check; else try exact relative path, then substring rglob `*{pattern}*`. Skip `is_excluded_dir` during traversal, `validate_sendable` on results. Cap at `config.send_max_results`, sort by mtime descending
+- [x] Implement `_list_directory(path: Path, cwd: Path) -> tuple[list[Path], list[Path]]` — iterdir, split dirs/files, filter excluded dirs and denied files, sort alphabetically
+- [x] Implement `_format_file_label(path: Path, cwd: Path) -> str` — relative path + human-readable size (B/KB/MB), truncate path portion to fit button label
+- [x] Add tests for `_is_image` to `test_send_command.py`
+- [x] Add tests for `_find_files` (exact, glob, substring, depth limit, excluded dirs, denied files filtered, max cap, empty, sort order)
+- [x] Add tests for `_list_directory` (mixed content, noise dirs excluded, hidden excluded, denied files excluded, alphabetical sort)
+- [x] Add tests for `_format_file_label` (short path, long path truncation, B/KB/MB sizes)
+- [x] Run `make test` — must pass before Task 4
 
 ### Task 4: File browser and search result keyboards
 
