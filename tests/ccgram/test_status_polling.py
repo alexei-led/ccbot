@@ -1513,7 +1513,7 @@ class TestMaybeDiscoverTranscript:
             provider_name="codex",
         )
 
-        def _provider_for_window(_: str) -> MagicMock:
+        def _provider_for_window(_wid: str, _name: str | None = None) -> MagicMock:
             if mock_state.provider_name == "gemini":
                 return mock_gemini
             return mock_codex
@@ -1597,7 +1597,7 @@ class TestMaybeDiscoverTranscript:
             provider_name="claude",
         )
 
-        def _provider_for_window(_: str) -> MagicMock:
+        def _provider_for_window(_wid: str, _name: str | None = None) -> MagicMock:
             if mock_state.provider_name == "codex":
                 return mock_codex
             return mock_claude

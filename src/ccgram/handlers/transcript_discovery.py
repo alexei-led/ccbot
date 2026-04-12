@@ -81,7 +81,7 @@ def _resolve_providers_to_try(
     from ..providers import registry
 
     if state.provider_name:
-        provider = get_provider_for_window(window_id)
+        provider = get_provider_for_window(window_id, state.provider_name)
         if not provider.capabilities.supports_mailbox_delivery:
             return []
         return [(provider.capabilities.name, provider)]
@@ -168,7 +168,7 @@ async def discover_and_register_transcript(
         await _detect_and_apply_provider(window_id, state, w)
 
     if state.provider_name:
-        provider = get_provider_for_window(window_id)
+        provider = get_provider_for_window(window_id, state.provider_name)
         if provider.capabilities.supports_hook:
             return
 
