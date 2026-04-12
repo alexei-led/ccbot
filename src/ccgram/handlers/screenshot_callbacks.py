@@ -10,6 +10,15 @@ Handles inline keyboard callbacks for screenshot UI and status message buttons:
   - CB_STATUS_REMOTE: Toggle Remote Control activation
   - CB_TOOLBAR_CTRLC: Send Ctrl-C from toolbar
   - CB_TOOLBAR_DISMISS: Dismiss toolbar message
+  - CB_TOOLBAR_SEND: Open file browser from toolbar
+  - CB_TOOLBAR_MODE: Send Shift+Tab (mode cycle)
+  - CB_TOOLBAR_THINK: Send Tab (think toggle)
+  - CB_TOOLBAR_YOLO: Send Ctrl+Y (YOLO toggle)
+  - CB_TOOLBAR_EOF: Send Ctrl+D (EOF)
+  - CB_TOOLBAR_SUSPEND: Send Ctrl+Z (suspend)
+  - CB_TOOLBAR_ESC: Send Escape
+  - CB_TOOLBAR_ENTER: Send Enter
+  - CB_TOOLBAR_TAB: Send Tab
   - CB_KEYS_PREFIX: Send a quick key from screenshot keyboard
 
 Key function: handle_screenshot_callback (uniform callback handler signature).
@@ -220,43 +229,85 @@ async def _handle_live_stop(
     await query.answer("\u23f9 Stopped")
 
 
-def build_toolbar_keyboard(window_id: str) -> InlineKeyboardMarkup:
-    """Build inline keyboard for /toolbar command."""
-    from .polling_strategies import is_rc_active
+from .callback_data import (  # noqa: E402  (grouped with runtime imports below)
+    CB_TOOLBAR_ENTER,
+    CB_TOOLBAR_EOF,
+    CB_TOOLBAR_ESC,
+    CB_TOOLBAR_MODE,
+    CB_TOOLBAR_SEND,
+    CB_TOOLBAR_SUSPEND,
+    CB_TOOLBAR_TAB,
+    CB_TOOLBAR_THINK,
+    CB_TOOLBAR_YOLO,
+)
 
-    rc_label = "\U0001f4e1\u2713 RC" if is_rc_active(window_id) else "\U0001f4e1 RC"
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    rc_label,
-                    callback_data=f"{CB_STATUS_REMOTE}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    "\U0001f4f7 Screenshot",
-                    callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    "\U0001f4fa Live",
-                    callback_data=f"{CB_LIVE_START}{window_id}"[:64],
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "\U0001f514 Notify",
-                    callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    "\u23f9 Ctrl-C",
-                    callback_data=f"{CB_TOOLBAR_CTRLC}{window_id}"[:64],
-                ),
-                InlineKeyboardButton(
-                    "\u2716 Dismiss",
-                    callback_data=CB_TOOLBAR_DISMISS,
-                ),
-            ],
-        ]
-    )
+# Provider-specific row-2 button definitions: (label, CB prefix or None=dismiss)
+_PROVIDER_ROW2: dict[str, list[tuple[str, str | None]]] = {
+    "claude": [
+        ("\U0001f500 Mode", CB_TOOLBAR_MODE),
+        ("\U0001f4ad Think", CB_TOOLBAR_THINK),
+        ("\u238b Esc", CB_TOOLBAR_ESC),
+        ("\u2716 Close", None),
+    ],
+    "codex": [
+        ("\u238b Esc", CB_TOOLBAR_ESC),
+        ("\u23ce Enter", CB_TOOLBAR_ENTER),
+        ("\u21e5 Tab", CB_TOOLBAR_TAB),
+        ("\u2716 Close", None),
+    ],
+    "gemini": [
+        ("\U0001f500 Mode", CB_TOOLBAR_MODE),
+        ("\U0001f1fe YOLO", CB_TOOLBAR_YOLO),
+        ("\u238b Esc", CB_TOOLBAR_ESC),
+        ("\u2716 Close", None),
+    ],
+    "shell": [
+        ("\u23ce Enter", CB_TOOLBAR_ENTER),
+        ("^D EOF", CB_TOOLBAR_EOF),
+        ("^Z Susp", CB_TOOLBAR_SUSPEND),
+        ("\u2716 Close", None),
+    ],
+}
+
+
+def build_toolbar_keyboard(
+    window_id: str, provider_name: str = "claude"
+) -> InlineKeyboardMarkup:
+    """Build inline keyboard for /toolbar command.
+
+    Row 1 is universal across all providers: Screenshot, Ctrl-C, Live, Send.
+    Row 2 is provider-specific: mode/think/esc/close for Claude, etc.
+    """
+    row1 = [
+        InlineKeyboardButton(
+            "\U0001f4f7 Screenshot",
+            callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
+        ),
+        InlineKeyboardButton(
+            "\u23f9 Ctrl-C",
+            callback_data=f"{CB_TOOLBAR_CTRLC}{window_id}"[:64],
+        ),
+        InlineKeyboardButton(
+            "\U0001f4fa Live",
+            callback_data=f"{CB_LIVE_START}{window_id}"[:64],
+        ),
+        InlineKeyboardButton(
+            "\U0001f4e4 Send",
+            callback_data=f"{CB_TOOLBAR_SEND}{window_id}"[:64],
+        ),
+    ]
+
+    row2_spec = _PROVIDER_ROW2.get(provider_name, _PROVIDER_ROW2["claude"])
+    row2 = []
+    for label, prefix in row2_spec:
+        if prefix is None:
+            row2.append(InlineKeyboardButton(label, callback_data=CB_TOOLBAR_DISMISS))
+        else:
+            row2.append(
+                InlineKeyboardButton(label, callback_data=f"{prefix}{window_id}"[:64])
+            )
+
+    return InlineKeyboardMarkup([row1, row2])
 
 
 async def _handle_pane_screenshot(
@@ -341,14 +392,188 @@ async def _handle_toolbar_dismiss(query: CallbackQuery) -> None:
     await query.answer()
 
 
+async def _handle_toolbar_send(
+    query: CallbackQuery,
+    user_id: int,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Handle CB_TOOLBAR_SEND: open file browser for the window's CWD."""
+    from pathlib import Path
+
+    from .send_command import build_file_browser
+    from .user_state import (
+        SEND_CWD_KEY,
+        SEND_ITEMS_KEY,
+        SEND_PAGE_KEY,
+        SEND_PATH_KEY,
+        SEND_WINDOW_ID_KEY,
+    )
+
+    window_id = data[len(CB_TOOLBAR_SEND) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    ws = session_manager.get_window_state(window_id)
+    cwd = Path(ws.cwd) if ws and ws.cwd else None
+    if not cwd or not cwd.is_dir():
+        await query.answer("Working directory not available", show_alert=True)
+        return
+    text, markup, items = build_file_browser(cwd, cwd, 0)
+    if context.user_data is None:
+        await query.answer("State error", show_alert=True)
+        return
+    context.user_data[SEND_PATH_KEY] = str(cwd)
+    context.user_data[SEND_CWD_KEY] = str(cwd)
+    context.user_data[SEND_PAGE_KEY] = 0
+    context.user_data[SEND_ITEMS_KEY] = items
+    context.user_data[SEND_WINDOW_ID_KEY] = window_id
+    thread_id = get_thread_id(update)
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id) if thread_id else None
+    if chat_id is None:
+        await query.answer("Use in a topic", show_alert=True)
+        return
+    await query.get_bot().send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=markup,
+        message_thread_id=thread_id,
+    )
+    await query.answer()
+
+
+async def _handle_toolbar_mode(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_MODE: send Shift+Tab to cycle mode."""
+    window_id = data[len(CB_TOOLBAR_MODE) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "\x1b[Z", enter=False, literal=True)
+        await query.answer("\U0001f500 Mode cycled")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_think(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_THINK: send Tab to toggle think."""
+    window_id = data[len(CB_TOOLBAR_THINK) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "Tab", enter=False, literal=False)
+        await query.answer("\U0001f4ad Think toggled")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_yolo(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_YOLO: send Ctrl+Y to toggle YOLO mode."""
+    window_id = data[len(CB_TOOLBAR_YOLO) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "C-y", enter=False, literal=False)
+        await query.answer("\U0001f1fe YOLO toggled")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_eof(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_EOF: send Ctrl+D (EOF)."""
+    window_id = data[len(CB_TOOLBAR_EOF) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "C-d", enter=False, literal=False)
+        await query.answer("^D Sent")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_suspend(
+    query: CallbackQuery, user_id: int, data: str
+) -> None:
+    """Handle CB_TOOLBAR_SUSPEND: send Ctrl+Z (suspend)."""
+    window_id = data[len(CB_TOOLBAR_SUSPEND) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "C-z", enter=False, literal=False)
+        await query.answer("^Z Sent")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_esc(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_ESC: send Escape key."""
+    window_id = data[len(CB_TOOLBAR_ESC) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "Escape", enter=False, literal=False)
+        await query.answer("\u238b Esc")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_enter(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_ENTER: send Enter key."""
+    window_id = data[len(CB_TOOLBAR_ENTER) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "Enter", enter=False, literal=False)
+        await query.answer("\u23ce Enter")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
+async def _handle_toolbar_tab(query: CallbackQuery, user_id: int, data: str) -> None:
+    """Handle CB_TOOLBAR_TAB: send Tab key."""
+    window_id = data[len(CB_TOOLBAR_TAB) :]
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    w = await tmux_manager.find_window_by_id(window_id)
+    if w:
+        await tmux_manager.send_keys(w.window_id, "Tab", enter=False, literal=False)
+        await query.answer("\u21e5 Tab")
+    else:
+        await query.answer("Window not found", show_alert=True)
+
+
 async def handle_screenshot_callback(
     query: CallbackQuery,
     user_id: int,
     data: str,
     update: Update,
-    _context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle screenshot, status button, toolbar, and quick-key callbacks."""
+    # Handlers that need (query, user_id, data, update, context)
+    with_context = {
+        CB_TOOLBAR_SEND: _handle_toolbar_send,
+    }
+    for prefix, handler in with_context.items():
+        if data.startswith(prefix):
+            await handler(query, user_id, data, update, context)
+            return
+
     # Handlers that need (query, user_id, data, update)
     with_update = {
         CB_LIVE_START: _handle_live_start,
@@ -370,6 +595,14 @@ async def handle_screenshot_callback(
         CB_STATUS_NOTIFY: _handle_notify_toggle,
         CB_STATUS_REMOTE: _handle_remote_control,
         CB_TOOLBAR_CTRLC: _handle_toolbar_ctrlc,
+        CB_TOOLBAR_MODE: _handle_toolbar_mode,
+        CB_TOOLBAR_THINK: _handle_toolbar_think,
+        CB_TOOLBAR_YOLO: _handle_toolbar_yolo,
+        CB_TOOLBAR_EOF: _handle_toolbar_eof,
+        CB_TOOLBAR_SUSPEND: _handle_toolbar_suspend,
+        CB_TOOLBAR_ESC: _handle_toolbar_esc,
+        CB_TOOLBAR_ENTER: _handle_toolbar_enter,
+        CB_TOOLBAR_TAB: _handle_toolbar_tab,
     }
     for prefix, handler in without_update.items():
         if data.startswith(prefix):
@@ -667,6 +900,15 @@ def _schedule_key_refresh(
     CB_STATUS_REMOTE,
     CB_TOOLBAR_CTRLC,
     CB_TOOLBAR_DISMISS,
+    CB_TOOLBAR_SEND,
+    CB_TOOLBAR_MODE,
+    CB_TOOLBAR_THINK,
+    CB_TOOLBAR_YOLO,
+    CB_TOOLBAR_EOF,
+    CB_TOOLBAR_SUSPEND,
+    CB_TOOLBAR_ESC,
+    CB_TOOLBAR_ENTER,
+    CB_TOOLBAR_TAB,
 )
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query

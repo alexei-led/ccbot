@@ -259,23 +259,23 @@ resolve → containment → hidden → secret → gitleaks → gitignore → ass
 - Modify: `src/ccgram/handlers/callback_data.py` (add new CB*TOOLBAR*\* constants)
 - Modify: `src/ccgram/handlers/screenshot_callbacks.py` (rebuild `build_toolbar_keyboard`, add handlers)
 
-- [ ] Add callback constants: `CB_TOOLBAR_SEND = "tb:send:"`, `CB_TOOLBAR_MODE = "tb:mode:"`, `CB_TOOLBAR_THINK = "tb:think:"`, `CB_TOOLBAR_YOLO = "tb:yolo:"`, `CB_TOOLBAR_EOF = "tb:eof:"`, `CB_TOOLBAR_SUSPEND = "tb:susp:"`
-- [ ] Refactor `build_toolbar_keyboard(window_id)` to accept provider name (resolve via `get_provider_for_window`). Build universal row 1: `📷 Screenshot | ⏹ Ctrl-C | 📺 Live | 📤 Send`. Build provider-specific row 2 from a config dict keyed by provider name
-- [ ] Claude row 2: `🔀 Mode | 💭 Think | ⎋ Esc | ✖ Close`
-- [ ] Codex row 2: `⎋ Esc | ⏎ Enter | ⇥ Tab | ✖ Close`
-- [ ] Gemini row 2: `🔀 Mode | 🅨 YOLO | ⎋ Esc | ✖ Close`
-- [ ] Shell row 2: `⏎ Enter | ^D EOF | ^Z Susp | ✖ Close`
-- [ ] Implement `_handle_toolbar_send`: resolve window*id → get CWD → `build_file_browser(cwd, cwd, 0)` → cache state in `user_data` → reply with new message containing browser. Reuses same `SEND*\*`state keys and`send_callbacks` handlers
-- [ ] Implement `_handle_toolbar_mode`: send `Shift+Tab` as `"\x1b[Z"` via `tmux_manager.send_keys(window_id, "\x1b[Z", literal=True, enter=False)`. Toast: "🔀 Mode cycled"
-- [ ] Implement `_handle_toolbar_think`: send `Tab` key. Toast: "💭 Think toggled"
-- [ ] Implement `_handle_toolbar_yolo`: send `C-y` key. Toast: "🅨 YOLO toggled"
-- [ ] Implement `_handle_toolbar_eof`: send `C-d` key. Toast: "^D Sent"
-- [ ] Implement `_handle_toolbar_suspend`: send `C-z` key. Toast: "^Z Sent"
-- [ ] Register all new `CB_TOOLBAR_*` constants in the dispatch table / `@register` decorator
-- [ ] Update `toolbar_command` in `bot.py` to pass provider context to `build_toolbar_keyboard`
-- [ ] Write tests for `build_toolbar_keyboard` — verify correct row 2 per provider (claude, codex, gemini, shell), verify row 1 universal across all, verify callback data format
-- [ ] Write tests for each new handler: mode sends correct escape sequence, think sends Tab, yolo sends C-y, eof sends C-d, suspend sends C-z, send opens file browser
-- [ ] Run `make test` — must pass before Task 8
+- [x] Add callback constants: `CB_TOOLBAR_SEND = "tb:send:"`, `CB_TOOLBAR_MODE = "tb:mode:"`, `CB_TOOLBAR_THINK = "tb:think:"`, `CB_TOOLBAR_YOLO = "tb:yolo:"`, `CB_TOOLBAR_EOF = "tb:eof:"`, `CB_TOOLBAR_SUSPEND = "tb:susp:"`
+- [x] Refactor `build_toolbar_keyboard(window_id)` to accept provider name (resolve via `get_provider_for_window`). Build universal row 1: `📷 Screenshot | ⏹ Ctrl-C | 📺 Live | 📤 Send`. Build provider-specific row 2 from a config dict keyed by provider name
+- [x] Claude row 2: `🔀 Mode | 💭 Think | ⎋ Esc | ✖ Close`
+- [x] Codex row 2: `⎋ Esc | ⏎ Enter | ⇥ Tab | ✖ Close`
+- [x] Gemini row 2: `🔀 Mode | 🅨 YOLO | ⎋ Esc | ✖ Close`
+- [x] Shell row 2: `⏎ Enter | ^D EOF | ^Z Susp | ✖ Close`
+- [x] Implement `_handle_toolbar_send`: resolve window*id → get CWD → `build_file_browser(cwd, cwd, 0)` → cache state in `user_data` → reply with new message containing browser. Reuses same `SEND*\*`state keys and`send_callbacks` handlers
+- [x] Implement `_handle_toolbar_mode`: send `Shift+Tab` as `"\x1b[Z"` via `tmux_manager.send_keys(window_id, "\x1b[Z", literal=True, enter=False)`. Toast: "🔀 Mode cycled"
+- [x] Implement `_handle_toolbar_think`: send `Tab` key. Toast: "💭 Think toggled"
+- [x] Implement `_handle_toolbar_yolo`: send `C-y` key. Toast: "🅨 YOLO toggled"
+- [x] Implement `_handle_toolbar_eof`: send `C-d` key. Toast: "^D Sent"
+- [x] Implement `_handle_toolbar_suspend`: send `C-z` key. Toast: "^Z Sent"
+- [x] Register all new `CB_TOOLBAR_*` constants in the dispatch table / `@register` decorator
+- [x] Update `toolbar_command` in `bot.py` to pass provider context to `build_toolbar_keyboard`
+- [x] Write tests for `build_toolbar_keyboard` — verify correct row 2 per provider (claude, codex, gemini, shell), verify row 1 universal across all, verify callback data format
+- [x] Write tests for each new handler: mode sends correct escape sequence, think sends Tab, yolo sends C-y, eof sends C-d, suspend sends C-z, send opens file browser
+- [x] Run `make test` — must pass before Task 8
 
 ### Task 8: Wire into bot and integration test
 

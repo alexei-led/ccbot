@@ -563,7 +563,9 @@ async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
 
     from .handlers.screenshot_callbacks import build_toolbar_keyboard
 
-    keyboard = build_toolbar_keyboard(window_id)
+    ws = session_manager.get_window_state(window_id)
+    provider_name = ws.provider_name if ws and ws.provider_name else "claude"
+    keyboard = build_toolbar_keyboard(window_id, provider_name)
     display = thread_router.get_display_name(window_id)
     await safe_reply(
         update.message,
