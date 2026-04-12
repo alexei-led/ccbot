@@ -39,11 +39,11 @@ sending files to Claude, this lets Claude/agent output files be retrieved back v
 
 ### Task 2: Security validation module
 
-- [ ] Create `src/ccgram/send_security.py` with `validate_send_path(path, cwd) -> bool`
-- [ ] Must resolve symlinks and verify the resolved path is within `cwd.resolve()`
-- [ ] Reject `.ccgram-uploads/` directory entries (reserved for inbound uploads)
-- [ ] Reject hidden files whose names start with `.` if configured (optional, default allow)
-- [ ] Write unit tests in `tests/ccgram/test_send_security.py`
+- [x] Create `src/ccgram/send_security.py` with `validate_send_path(path, cwd) -> bool`
+- [x] Must resolve symlinks and verify the resolved path is within `cwd.resolve()`
+- [x] Reject `.ccgram-uploads/` directory entries (reserved for inbound uploads)
+- [x] Reject hidden files whose names start with `.` if configured (optional, default allow)
+- [x] Write unit tests in `tests/ccgram/test_send_security.py`
 
 ### Task 3: File search and listing utilities
 
