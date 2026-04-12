@@ -402,14 +402,7 @@ async def _handle_toolbar_send(
     """Handle CB_TOOLBAR_SEND: open file browser for the window's CWD."""
     from pathlib import Path
 
-    from .send_command import build_file_browser
-    from .user_state import (
-        SEND_CWD_KEY,
-        SEND_ITEMS_KEY,
-        SEND_PAGE_KEY,
-        SEND_PATH_KEY,
-        SEND_WINDOW_ID_KEY,
-    )
+    from .send_command import _cache_browser_state, build_file_browser
 
     window_id = data[len(CB_TOOLBAR_SEND) :]
     if not user_owns_window(user_id, window_id):
@@ -424,11 +417,7 @@ async def _handle_toolbar_send(
     if context.user_data is None:
         await query.answer("State error", show_alert=True)
         return
-    context.user_data[SEND_PATH_KEY] = str(cwd)
-    context.user_data[SEND_CWD_KEY] = str(cwd)
-    context.user_data[SEND_PAGE_KEY] = 0
-    context.user_data[SEND_ITEMS_KEY] = items
-    context.user_data[SEND_WINDOW_ID_KEY] = window_id
+    _cache_browser_state(context.user_data, cwd, items, window_id)
     thread_id = get_thread_id(update)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id) if thread_id else None
     if chat_id is None:

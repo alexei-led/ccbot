@@ -80,26 +80,8 @@ def matches_secret_pattern(path: Path) -> str | None:
     return None
 
 
-def is_gitignored(path: Path, cwd: Path) -> bool:
-    """Return True if *path* is ignored according to git or a local .gitignore.
-
-    Primary: `git check-ignore -q <path>` subprocess. On any error (not a git
-    repo, git not found, timeout), falls back to pathspec: walks from path's
-    parent up to cwd collecting .gitignore files, builds a PathSpec, and
-    matches. Returns False if both strategies fail.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "check-ignore", "-q", str(path)],
-            cwd=cwd,
-            capture_output=True,
-            timeout=5,
-        )
-        return result.returncode == 0
-    except subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired:
-        pass
-
-    # Pathspec fallback — walk from path up to cwd collecting .gitignore rules
+def _gitignored_by_pathspec(path: Path, cwd: Path) -> bool:
+    """Pathspec fallback for is_gitignored — walk .gitignore files up to cwd."""
     try:
         import pathspec  # noqa: PLC0415 — lazy import for optional fallback
 
@@ -130,6 +112,32 @@ def is_gitignored(path: Path, cwd: Path) -> bool:
         return spec.match_file(str(rel))
     except Exception:  # noqa: BLE001 — last-resort fallback
         return False
+
+
+def is_gitignored(path: Path, cwd: Path) -> bool:
+    """Return True if *path* is ignored according to git or a local .gitignore.
+
+    Primary: `git check-ignore -q <path>` subprocess. Exit 0 → ignored,
+    exit 1 → not ignored, any other exit → fall through to pathspec fallback.
+    On subprocess error (not a git repo, git not found, timeout), also falls
+    back to pathspec. Returns False if both strategies fail.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", str(path)],
+            cwd=cwd,
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return True
+        if result.returncode == 1:
+            return False
+        # Any other returncode (e.g. fatal git error) — fall through to pathspec
+    except FileNotFoundError, subprocess.TimeoutExpired, OSError:
+        pass
+
+    return _gitignored_by_pathspec(path, cwd)
 
 
 def check_gitleaks_rules(path: Path, cwd: Path) -> str | None:

@@ -51,6 +51,14 @@ _KB = 1024
 _MB = 1024 * 1024
 
 
+def _safe_mtime(p: Path) -> float:
+    """Return mtime or 0.0 if the file disappeared (TOCTOU guard)."""
+    try:
+        return p.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _is_image(path: Path) -> bool:
     """Return True if *path* has an image file extension."""
     return path.suffix.lower() in _IMAGE_EXTENSIONS
@@ -106,7 +114,7 @@ def _find_files(cwd: Path, pattern: str) -> list[Path]:
             continue
         results.append(path)
 
-    results.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    results.sort(key=_safe_mtime, reverse=True)
     return results[:max_results]
 
 
@@ -146,7 +154,10 @@ def _format_file_label(path: Path, cwd: Path) -> str:
     except ValueError:
         rel = path.name
 
-    size_bytes = path.stat().st_size
+    try:
+        size_bytes = path.stat().st_size
+    except OSError:
+        return rel
     if size_bytes < _KB:
         size_str = f"{size_bytes} B"
     elif size_bytes < _MB:
@@ -249,6 +260,7 @@ def build_file_browser(
 def build_search_results(
     matches: list[Path],
     cwd: Path,
+    query: str = "",
 ) -> tuple[str, InlineKeyboardMarkup, list[Path]]:
     """Build an inline keyboard for selecting a file from search results.
 
@@ -261,7 +273,12 @@ def build_search_results(
     buttons = _pack_into_rows(flat)
     buttons.append([InlineKeyboardButton("✖ Cancel", callback_data=CB_SEND_CANCEL)])
 
-    return f"🔍 {len(matches)} file(s) found", InlineKeyboardMarkup(buttons), shown
+    count = len(matches)
+    cap = _ITEMS_PER_PAGE * 3
+    header = f"🔍 {count}+ results" if count >= cap else f"🔍 {count} result(s)"
+    if query:
+        header += f" for '{query}'"
+    return header, InlineKeyboardMarkup(buttons), shown
 
 
 async def _upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> None:
@@ -330,10 +347,14 @@ async def _dispatch_search(
         await safe_reply(update.message, f"No files found matching: {pattern}")  # type: ignore[arg-type]
         return
     if len(matches) == 1:
+        error = validate_sendable(matches[0], cwd)
+        if error:
+            await safe_reply(update.message, f"Cannot send: {error}")  # type: ignore[arg-type]
+            return
         await _upload_file(context.bot, chat_id, thread_id, matches[0])
         return
 
-    display_text, markup, shown = build_search_results(matches, cwd)
+    display_text, markup, shown = build_search_results(matches, cwd, query=pattern)
     _cache_browser_state(context.user_data, cwd, shown, window_id)
     await safe_reply(update.message, display_text, reply_markup=markup)  # type: ignore[arg-type]
 

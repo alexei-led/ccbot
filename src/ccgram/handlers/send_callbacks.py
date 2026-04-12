@@ -64,9 +64,15 @@ def _clear_send_state(context: ContextTypes.DEFAULT_TYPE) -> None:
 @register(CB_SEND_FILE, CB_SEND_DIR, CB_SEND_PAGE, CB_SEND_UP, CB_SEND_CANCEL)
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route CB_SEND_* callbacks to the appropriate handler."""
+    from ..config import config
+
     query = update.callback_query
     user = update.effective_user
     if query is None or query.data is None or user is None:
+        return
+
+    if not config.is_user_allowed(user.id):
+        await query.answer("Not authorized", show_alert=True)
         return
 
     assert context.user_data is not None

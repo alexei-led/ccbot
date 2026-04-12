@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import CallbackQuery, InlineKeyboardMarkup, Message, Update, User
 
+import pytest
+
 from ccgram.handlers.callback_data import (
     CB_SEND_CANCEL,
     CB_SEND_DIR,
@@ -22,6 +24,12 @@ from ccgram.handlers.user_state import (
     SEND_PATH_KEY,
     SEND_WINDOW_ID_KEY,
 )
+
+
+@pytest.fixture(autouse=True)
+def _allow_all_users():
+    with patch("ccgram.config.config.is_user_allowed", return_value=True):
+        yield
 
 
 def _make_query(data: str, user_id: int = 789, thread_id: int = 456) -> AsyncMock:
