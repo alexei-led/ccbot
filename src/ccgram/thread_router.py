@@ -300,7 +300,9 @@ class ThreadRouter:
 
     def pop_display_name(self, window_id: str) -> str:
         """Remove and return display name for window_id. Falls back to window_id."""
-        name = self.window_display_names.pop(window_id, window_id)
+        if window_id not in self.window_display_names:
+            return window_id
+        name = self.window_display_names.pop(window_id)
         self._schedule_save()
         return name
 

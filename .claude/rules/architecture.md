@@ -121,7 +121,7 @@ graph TB
 | `telegram_request.py`   | Telegram request helpers for resilient long polling (custom HTTPX transport)                                     |
 | `thread_router.py`      | ThreadRouter — thread bindings, display names, reverse index, chat ID resolution                                 |
 | `toolbar_config.py`     | Toolbar layout configuration — per-provider button grids loaded from TOML                                        |
-| `topic_state_registry.py` | Centralized registry for per-topic and per-window cleanup functions with self-registration decorator            |
+| `topic_state_registry.py` | Centralized registry for per-topic and per-window cleanup functions with self-registration decorator and `register_bound()` for instance methods |
 | `user_preferences.py`   | User directory favorites (starred/MRU) and per-user read offsets (extracted from SessionManager)                 |
 | `utils.py`              | Shared utilities (ccgram_dir, tmux_session_name, atomic_write_json)                                              |
 | `window_resolver.py`    | Window ID resolution, format helpers, and startup migration                                                      |
@@ -157,7 +157,7 @@ graph TB
 | `msg_telegram.py`          | Telegram notifications for inter-agent messages (silent, grouped, edit-in-place)                                                                  |
 | `periodic_tasks.py`        | Periodic task orchestration: broker delivery, mailbox sweep, spawn processing, lifecycle, live view                                               |
 | `polling_coordinator.py`   | Background status polling loop (1s), delegates to strategy classes                                                                                |
-| `polling_strategies.py`    | Polling strategy classes: TerminalScreenBuffer, InteractiveUI, TopicLifecycle, ShellRelay — decomposed from monolithic polling                     |
+| `polling_strategies.py`    | Polling strategy classes: TerminalScreenBuffer, TerminalPollState, InteractiveUIStrategy, TopicLifecycleStrategy — decomposed from monolithic polling                     |
 | `recovery_callbacks.py`    | Dead window recovery callbacks (fresh, continue, resume)                                                                                          |
 | `response_builder.py`      | Response pagination and formatting                                                                                                                |
 | `restore_command.py`       | /restore command: recover dead topics via recovery keyboard                                                                                       |
@@ -171,7 +171,7 @@ graph TB
 | `shell_commands.py`        | NL→command approval, dangerous command detection via LLM                                                                                          |
 | `shell_context.py`         | Shared shell helpers — `gather_llm_context`, `redact_for_llm`, `_detect_shell_tools` (extracted to break shell_commands ↔ shell_capture coupling) |
 | `shell_prompt_orchestrator.py` | Shell prompt marker setup orchestrator — centralizes five trigger sites into one ensure_setup entry point                                    |
-| `status_bubble.py`         | Status-bubble inline keyboard renderer — extracted from `message_queue` so polling/screenshot/hook callers share one keyboard builder             |
+| `status_bubble.py`         | Status-bubble keyboard + status message lifecycle (send, edit, clear, format, dedup) — owns `_status_msg_info`, `send_status_text`, `clear_status_message`, `build_status_keyboard`             |
 | `status_bar_actions.py`   | Status-bubble button callbacks (notify toggle, recall, remote control, esc, keys) — extracted from screenshot_callbacks                            |
 | `sync_command.py`          | /sync command: sync window state with tmux                                                                                                        |
 | `text_handler.py`          | Text message routing (UI guards → unbound → dead → forward)                                                                                       |
