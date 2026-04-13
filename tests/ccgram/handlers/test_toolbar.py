@@ -446,3 +446,70 @@ class TestStateReadback:
             )
             result = await _scrape_mode_toast("@5", "fb")
         assert "Plan mode" in result
+
+    @pytest.mark.parametrize(
+        ("mode_line", "expected_contains"),
+        [
+            # Claude Code's actual mode indicator formats from real observation
+            ("\u23f5\u23f5 auto mode on", "auto mode on"),
+            ("\u23f5\u23f5 accept edits on", "accept edits on"),
+            ("\u23f5\u23f5 bypass permissions", "bypass permissions"),
+            # Plan mode uses ⏸ (U+23F8 pause), NOT ⏵⏵
+            ("\u23f8 plan mode on", "plan mode on"),
+            # Gemini YOLO
+            ("yolo mode enabled", "yolo"),
+        ],
+    )
+    async def test_scrape_matches_real_claude_mode_formats(
+        self, mode_line: str, expected_contains: str
+    ) -> None:
+        from ccgram.handlers.toolbar_callbacks import _scrape_mode_toast
+
+        # Simulate a realistic Claude pane with a chrome block at the bottom.
+        # Lines must be short (< _MAX_CHROME_LINE_LENGTH) to satisfy
+        # find_chrome_boundary's "gap is chrome" heuristic.
+        pane = (
+            "some earlier output line A\n"
+            "more output line B\n"
+            "\n"
+            "──────────\n"  # top separator = chrome boundary
+            "\u276f\n"  # ❯ prompt
+            "──────────\n"
+            "[Opus] 34%\n"
+            f"  {mode_line}\n"
+        )
+        with (
+            patch(
+                "ccgram.handlers.toolbar_callbacks.asyncio.sleep",
+                new=AsyncMock(),
+            ),
+            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+        ):
+            mock_tmux.capture_pane = AsyncMock(return_value=pane)
+            result = await _scrape_mode_toast("@5", "fb-toast")
+        assert result != "fb-toast", f"Mode line should be found: {mode_line!r}"
+        assert expected_contains in result.lower()
+        # Marker glyphs stripped for clean display
+        assert "\u23f5" not in result
+        assert "\u23f8" not in result
+
+    async def test_scrape_returns_fallback_when_default_mode_no_indicator(
+        self,
+    ) -> None:
+        """Default mode has no indicator line at all — return fallback."""
+        from ccgram.handlers.toolbar_callbacks import _scrape_mode_toast
+
+        pane = (
+            "some output\n──────────\n\u276f\n──────────\n[Opus] 34%\n"
+            # No mode indicator line — default mode
+        )
+        with (
+            patch(
+                "ccgram.handlers.toolbar_callbacks.asyncio.sleep",
+                new=AsyncMock(),
+            ),
+            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+        ):
+            mock_tmux.capture_pane = AsyncMock(return_value=pane)
+            result = await _scrape_mode_toast("@5", "\U0001f500 Mode")
+        assert result == "\U0001f500 Mode"

@@ -118,12 +118,24 @@ def build_toolbar_keyboard(
 # Strip ANSI escapes for plain-text mode-line scraping.
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 
-# Heuristic patterns that match a mode-line in pane output.
+# Claude Code's mode indicator appears in the bottom chrome with one of two
+# marker glyphs, depending on the mode:
+#   ⏵⏵ auto mode on            (U+23F5 ⏵ — play)
+#   ⏵⏵ accept edits on
+#   ⏵⏵ bypass permissions…
+#   ⏸  plan mode on            (U+23F8 ⏸ — pause)
+# Default mode has no indicator line at all.
+_CLAUDE_MODE_MARKERS: tuple[str, ...] = ("\u23f5\u23f5", "\u23f8")
+
+# Fallback substring hints for other providers (Gemini YOLO, etc.) or
+# when Claude renders a mode-line without the marker.
 _MODE_LINE_HINTS: tuple[str, ...] = (
+    "auto mode",
     "auto-accept",
     "accept edits",
     "plan mode",
     "default mode",
+    "bypass permissions",
     "extended thinking",
     "thinking on",
     "thinking off",
@@ -131,30 +143,71 @@ _MODE_LINE_HINTS: tuple[str, ...] = (
     "auto-approve",
 )
 
-_READ_STATE_DELAY_S = 0.25
+# Trim leading marker glyphs + whitespace so the toast shows a clean label.
+_CLEAN_RE = re.compile(r"^[\s\u23f5\u23f8]+|\s+$")
+
+_READ_STATE_DELAY_S = 0.35  # long enough for Claude to re-render its chrome
 _READ_STATE_LINE_LIMIT = 80
+
+
+def _clean_mode_line(line: str) -> str:
+    """Strip leading marker glyphs + trailing whitespace for toast display."""
+    return _CLEAN_RE.sub("", line)[:_READ_STATE_LINE_LIMIT]
+
+
+def _find_mode_line(capture: str) -> str | None:
+    """Find the mode-indicator line in a pane capture.
+
+    Uses ``find_chrome_boundary`` to locate Claude Code's bottom chrome
+    block, then scans it for the ⏵⏵ marker (fast, unambiguous). Falls
+    back to substring hints for providers without the marker.
+    """
+    from ..terminal_parser import find_chrome_boundary
+
+    cleaned = _ANSI_RE.sub("", capture)
+    lines = cleaned.splitlines()
+
+    # Chrome block first — always where Claude renders the mode indicator.
+    boundary = find_chrome_boundary(lines)
+    chrome_lines = lines[boundary + 1 :] if boundary is not None else lines[-20:]
+    for line in reversed(chrome_lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(marker in stripped for marker in _CLAUDE_MODE_MARKERS):
+            return _clean_mode_line(stripped)
+
+    # Fallback: scan the bottom 25 lines for any provider's mode hint.
+    for line in reversed(lines[-25:]):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower()
+        if any(hint in lower for hint in _MODE_LINE_HINTS):
+            return _clean_mode_line(stripped)
+    return None
 
 
 async def _scrape_mode_toast(window_id: str, fallback: str) -> str:
     """Capture the pane after a toggle key and return the mode-line.
 
     Falls back to ``fallback`` if the pane capture fails or no recognized
-    mode-line is found in the last ~20 lines.
+    mode-line is found.
     """
     await asyncio.sleep(_READ_STATE_DELAY_S)
     try:
         capture = await tmux_manager.capture_pane(window_id)
     except OSError, TelegramError:
+        logger.debug("Mode scrape: capture_pane failed for %s", window_id)
         return fallback
     if not capture:
+        logger.debug("Mode scrape: empty capture for %s", window_id)
         return fallback
-    cleaned = _ANSI_RE.sub("", capture)
-    lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
-    for line in reversed(lines[-20:]):
-        lower = line.lower()
-        if any(hint in lower for hint in _MODE_LINE_HINTS):
-            return line[:_READ_STATE_LINE_LIMIT]
-    return fallback
+    mode_line = _find_mode_line(capture)
+    if mode_line is None:
+        logger.debug("Mode scrape: no mode line found for %s", window_id)
+        return fallback
+    return mode_line
 
 
 # ──────────────────────────────────────────────────────────────────────
