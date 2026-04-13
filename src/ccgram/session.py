@@ -16,23 +16,21 @@ Key class: SessionManager (singleton instantiated as `session_manager`).
 Thread routing: delegated to ThreadRouter (see thread_router.py) — no pass-throughs.
 """
 
-import asyncio
-import fcntl
 import json
 import structlog
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
-
-import aiofiles
 
 from .config import config
 from .session_resolver import ClaudeSession
+from .session_map import session_map_sync
 from .state_persistence import StatePersistence
 from .tmux_manager import tmux_manager
 from .thread_router import thread_router
 from .user_preferences import user_preferences
-from .utils import atomic_write_json
 from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window_id
+from .window_view import WindowView
 from .window_state_store import (
     APPROVAL_MODES,
     BATCH_MODES,
@@ -189,12 +187,23 @@ class SessionManager:
 
     def __post_init__(self) -> None:
         self._persistence = StatePersistence(config.state_file, self._serialize_state)
+        self._wire_singletons()
+        self._load_state()
+
+    def _wire_singletons(self) -> None:
+        """Wire all module-level state singletons to this manager.
+
+        Centralized so adding a new singleton in the future is a one-line
+        change in one place. Singletons start with a fail-loud
+        ``unwired_save`` default that raises ``RuntimeError`` if mutated
+        before this method runs.
+        """
         window_store._schedule_save = self._save_state
         window_store._on_hookless_provider_switch = self._clear_session_map_entry
         thread_router._schedule_save = self._save_state
         thread_router._has_window_state = lambda wid: wid in window_store.window_states
         user_preferences._schedule_save = self._save_state
-        self._load_state()
+        session_map_sync._schedule_save = self._save_state
 
     def _serialize_state(self) -> dict[str, Any]:
         """Serialize all state to a dict for persistence."""
@@ -339,39 +348,10 @@ class SessionManager:
     async def wait_for_session_map_entry(
         self, window_id: str, timeout: float = 5.0, interval: float = 0.5
     ) -> bool:
-        """Poll session_map.json until an entry for window_id appears.
-
-        Returns True if the entry was found within timeout, False otherwise.
-        """
-        logger.debug(
-            "Waiting for session_map entry: window_id=%s, timeout=%.1f",
-            window_id,
-            timeout,
+        """Delegate to session_map_sync — see session_map.py for implementation."""
+        return await session_map_sync.wait_for_session_map_entry(
+            window_id, timeout, interval
         )
-        key = f"{config.tmux_session_name}:{window_id}"
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
-        while loop.time() < deadline:
-            try:
-                if config.session_map_file.exists():
-                    async with aiofiles.open(config.session_map_file, "r") as f:
-                        content = await f.read()
-                    session_map = json.loads(content)
-                    info = session_map.get(key, {})
-                    if info.get("session_id"):
-                        # Found — load into window_states immediately
-                        logger.debug(
-                            "session_map entry found for window_id %s", window_id
-                        )
-                        await self.load_session_map()
-                        return True
-            except (json.JSONDecodeError, OSError):  # fmt: skip
-                pass
-            await asyncio.sleep(interval)
-        logger.warning(
-            "Timed out waiting for session_map entry: window_id=%s", window_id
-        )
-        return False
 
     def prune_stale_state(
         self, live_window_ids: set[str], *, skip_chat_ids: bool = False
@@ -440,44 +420,8 @@ class SessionManager:
         return True
 
     def prune_session_map(self, live_window_ids: set[str]) -> None:
-        """Remove session_map.json entries for windows that no longer exist.
-
-        Reads session_map.json, drops entries whose window_id is not in
-        live_window_ids, and writes back only if changes were made.
-        Also removes corresponding window_states.
-        """
-        if not config.session_map_file.exists():
-            return
-        try:
-            raw = json.loads(config.session_map_file.read_text())
-        except (json.JSONDecodeError, OSError):  # fmt: skip
-            return
-
-        prefix = f"{config.tmux_session_name}:"
-        dead_entries: list[tuple[str, str]] = []  # (map_key, window_id)
-        for key in raw:
-            if not key.startswith(prefix):
-                continue
-            window_id = key[len(prefix) :]
-            if self._is_window_id(window_id) and window_id not in live_window_ids:
-                dead_entries.append((key, window_id))
-
-        if not dead_entries:
-            return
-
-        changed_state = False
-        for key, window_id in dead_entries:
-            logger.info(
-                "Pruning dead session_map entry: %s (window %s)", key, window_id
-            )
-            del raw[key]
-            if window_id in self.window_states:
-                del self.window_states[window_id]
-                changed_state = True
-
-        atomic_write_json(config.session_map_file, raw)
-        if changed_state:
-            self._save_state()
+        """Delegate to session_map_sync — see session_map.py for implementation."""
+        session_map_sync.prune_session_map(live_window_ids)
 
     def _get_session_map_window_ids(self) -> set[str]:
         """Read session_map.json and return window IDs tracked by ccgram.
@@ -666,155 +610,9 @@ class SessionManager:
         self._save_state()
         return True
 
-    def _sync_window_from_session_map(
-        self,
-        window_id: str,
-        info: dict[str, Any],
-        *,
-        mark_external: bool = False,
-    ) -> bool:
-        """Sync a single window's state from session_map entry.
-
-        Returns True if any state was changed.
-        """
-        new_sid = info.get("session_id", "")
-        if not new_sid:
-            return False
-        new_cwd = info.get("cwd", "")
-        new_wname = info.get("window_name", "")
-        new_transcript = info.get("transcript_path", "")
-        changed = False
-
-        state = self.get_window_state(window_id)
-        if mark_external and not state.external:
-            state.external = True
-            changed = True
-        if state.session_id != new_sid or state.cwd != new_cwd:
-            logger.info(
-                "Session map: window_id %s updated sid=%s, cwd=%s",
-                window_id,
-                new_sid,
-                new_cwd,
-            )
-            state.session_id = new_sid
-            state.cwd = new_cwd
-            changed = True
-        if new_transcript and state.transcript_path != new_transcript:
-            state.transcript_path = new_transcript
-            changed = True
-        # Sync provider_name from session_map (hook data is authoritative).
-        new_provider = info.get("provider_name", "")
-        if new_provider and state.provider_name != new_provider:
-            state.provider_name = new_provider
-            changed = True
-        # Initialize display name from session_map only when unknown.
-        if (
-            new_wname
-            and not thread_router.window_display_names.get(window_id)
-            and not state.window_name
-        ):
-            state.window_name = new_wname
-            thread_router.window_display_names[window_id] = new_wname
-            changed = True
-        return changed
-
     async def load_session_map(self) -> None:
-        """Read session_map.json and update window_states with new session associations.
-
-        Keys in session_map are formatted as "tmux_session:window_id" (e.g. "ccgram:@12").
-        Native entries (matching our tmux_session_name) and emdash entries (prefixed
-        with "emdash-") are both processed. Emdash windows are marked as external.
-        Also cleans up window_states entries not in current session_map.
-        Updates window_display_names from the "window_name" field in values.
-        """
-        if not config.session_map_file.exists():
-            return
-        try:
-            async with aiofiles.open(config.session_map_file, "r") as f:
-                content = await f.read()
-            session_map = json.loads(content)
-        except (json.JSONDecodeError, OSError):  # fmt: skip
-            return
-
-        prefix = f"{config.tmux_session_name}:"
-        valid_wids: set[str] = set()
-        # Track session_ids from old-format entries so we don't nuke
-        # migrated window_states before the new hook has fired.
-        old_format_sids: set[str] = set()
-        changed = False
-
-        old_format_keys: list[str] = []
-        for key, info in session_map.items():
-            if not isinstance(info, dict):
-                continue
-
-            # Emdash entries: use the full key as window_id
-            if key.startswith(EMDASH_SESSION_PREFIX):
-                valid_wids.add(key)
-                if self._sync_window_from_session_map(key, info, mark_external=True):
-                    changed = True
-                # Infer provider from session name — always attempt if missing,
-                # regardless of whether _sync changed other fields.
-                state = self.get_window_state(key)
-                if not state.provider_name:
-                    session_name = key.rsplit(":", 1)[0]
-                    detected = parse_emdash_provider(session_name)
-                    if detected:
-                        state.provider_name = detected
-                        changed = True
-                continue
-
-            # Native entries: strip prefix, process by window_id
-            if not key.startswith(prefix):
-                continue
-            window_id = key[len(prefix) :]
-            # Old-format key (window_name instead of window_id): remember the
-            # session_id so migrated window_states survive stale cleanup,
-            # then mark for removal from session_map.json.
-            if not self._is_window_id(window_id):
-                sid = info.get("session_id", "")
-                if sid:
-                    old_format_sids.add(sid)
-                old_format_keys.append(key)
-                continue
-            valid_wids.add(window_id)
-            if self._sync_window_from_session_map(window_id, info):
-                changed = True
-
-        # Clean up window_states entries not in current session_map.
-        # Protect entries whose session_id is still referenced by old-format
-        # keys — those sessions are valid but haven't re-triggered the hook yet.
-        # Also protect entries bound to a topic (hookless providers like codex/gemini
-        # never appear in session_map but still need their window state preserved).
-        bound_wids = {
-            wid
-            for user_bindings in thread_router.thread_bindings.values()
-            for wid in user_bindings.values()
-            if wid
-        }
-        stale_wids = [
-            w
-            for w in self.window_states
-            if w
-            and w not in valid_wids
-            and w not in bound_wids
-            and self.window_states[w].session_id not in old_format_sids
-        ]
-        for wid in stale_wids:
-            logger.info("Removing stale window_state: %s", wid)
-            del self.window_states[wid]
-            changed = True
-
-        # Purge old-format keys from session_map.json so they don't
-        # get logged every poll cycle.
-        if old_format_keys:
-            for key in old_format_keys:
-                logger.info("Removing old-format session_map key: %s", key)
-                del session_map[key]
-            atomic_write_json(config.session_map_file, session_map)
-
-        if changed:
-            self._save_state()
+        """Delegate to session_map_sync — see session_map.py for implementation."""
+        await session_map_sync.load_session_map()
 
     def register_hookless_session(
         self,
@@ -824,21 +622,10 @@ class SessionManager:
         transcript_path: str,
         provider_name: str,
     ) -> None:
-        """Register a session for a hookless provider (Codex, Gemini).
-
-        Updates in-memory WindowState and schedules a debounced state save.
-        Must be called from the event loop thread (not from asyncio.to_thread)
-        because _save_state() touches asyncio timer handles.
-
-        Pair with write_hookless_session_map() for the file-locked
-        session_map.json write, which is safe to call from any thread.
-        """
-        state = self.get_window_state(window_id)
-        state.session_id = session_id
-        state.cwd = cwd
-        state.transcript_path = transcript_path
-        state.provider_name = provider_name
-        self._save_state()
+        """Delegate to session_map_sync — see session_map.py for implementation."""
+        session_map_sync.register_hookless_session(
+            window_id, session_id, cwd, transcript_path, provider_name
+        )
 
     def write_hookless_session_map(
         self,
@@ -848,68 +635,10 @@ class SessionManager:
         transcript_path: str,
         provider_name: str,
     ) -> None:
-        """Write a synthetic entry to session_map.json for a hookless provider.
-
-        Uses file locking consistent with hook.py. Safe to call from any
-        thread (no asyncio handles touched).
-        """
-        import fcntl
-
-        map_file = config.session_map_file
-        map_file.parent.mkdir(parents=True, exist_ok=True)
-        # Foreign windows (emdash) are already fully qualified
-        if is_foreign_window(window_id):
-            window_key = window_id
-        else:
-            window_key = f"{config.tmux_session_name}:{window_id}"
-        lock_path = map_file.with_suffix(".lock")
-        try:
-            with open(lock_path, "w") as lock_f:
-                fcntl.flock(lock_f, fcntl.LOCK_EX)
-                try:
-                    session_map: dict[str, Any] = {}
-                    if map_file.exists():
-                        try:
-                            parsed = json.loads(map_file.read_text())
-                            if isinstance(parsed, dict):
-                                session_map = parsed
-                        except json.JSONDecodeError:
-                            backup = map_file.with_suffix(".json.corrupt")
-                            try:
-                                import shutil
-
-                                shutil.copy2(map_file, backup)
-                                logger.warning(
-                                    "Corrupted session_map.json backed up to %s",
-                                    backup,
-                                )
-                            except OSError:
-                                logger.warning(
-                                    "Corrupted session_map.json (backup failed)"
-                                )
-                        except OSError:
-                            logger.warning(
-                                "Failed to read session_map.json for hookless write"
-                            )
-                    display_name = self.get_display_name(window_id)
-                    session_map[window_key] = {
-                        "session_id": session_id,
-                        "cwd": cwd,
-                        "window_name": display_name,
-                        "transcript_path": transcript_path,
-                        "provider_name": provider_name,
-                    }
-                    atomic_write_json(map_file, session_map)
-                    logger.info(
-                        "Registered hookless session: %s -> session_id=%s, cwd=%s",
-                        window_key,
-                        session_id,
-                        cwd,
-                    )
-                finally:
-                    fcntl.flock(lock_f, fcntl.LOCK_UN)
-        except OSError:
-            logger.exception("Failed to write session_map for hookless session")
+        """Delegate to session_map_sync — see session_map.py for implementation."""
+        session_map_sync.write_hookless_session_map(
+            window_id, session_id, cwd, transcript_path, provider_name
+        )
 
     def get_session_id_for_window(self, window_id: str) -> str | None:
         """Look up session_id for a window from window_states."""
@@ -920,6 +649,26 @@ class SessionManager:
     def get_window_state(self, window_id: str) -> WindowState:
         """Get or create window state."""
         return window_store.get_window_state(window_id)
+
+    def view_window(self, window_id: str) -> WindowView | None:
+        """Read-only snapshot of a window's state.
+
+        Returns ``None`` when no state exists for the window. Prefer this
+        over ``get_window_state`` for read-only callers — it documents the
+        exact fields the caller depends on and insulates them from internal
+        WindowState shape changes.
+        """
+        ws = window_store.window_states.get(window_id)
+        if ws is None:
+            return None
+        return WindowView(
+            window_id=window_id,
+            cwd=ws.cwd or "",
+            provider_name=ws.provider_name,
+            approval_mode=ws.approval_mode,
+            notification_mode=ws.notification_mode,
+            transcript_path=Path(ws.transcript_path) if ws.transcript_path else None,
+        )
 
     def clear_window_session(self, window_id: str) -> None:
         """Clear session association for a window (e.g., after /clear command)."""
@@ -938,26 +687,8 @@ class SessionManager:
         window_store.set_window_provider(window_id, provider_name, cwd=cwd)
 
     def _clear_session_map_entry(self, window_id: str) -> None:
-        """Remove a window's entry from session_map.json if present."""
-        if not config.session_map_file.exists():
-            return
-        lock_path = config.session_map_file.with_suffix(".lock")
-        try:
-            with open(lock_path, "w") as lock_f:
-                fcntl.flock(lock_f, fcntl.LOCK_EX)
-                try:
-                    raw = json.loads(config.session_map_file.read_text())
-                    key = f"{config.tmux_session_name}:{window_id}"
-                    if key in raw:
-                        del raw[key]
-                        atomic_write_json(config.session_map_file, raw)
-                        logger.debug("Cleared session_map entry for %s", window_id)
-                except (json.JSONDecodeError, OSError):  # fmt: skip
-                    return
-                finally:
-                    fcntl.flock(lock_f, fcntl.LOCK_UN)
-        except OSError:
-            logger.debug("Failed to lock session_map for clearing %s", window_id)
+        """Delegate to session_map_sync — see session_map.py for implementation."""
+        session_map_sync.clear_session_map_entry(window_id)
 
     def get_approval_mode(self, window_id: str) -> str:
         """Get approval mode for a window (default: 'normal')."""

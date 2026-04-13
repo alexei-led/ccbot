@@ -254,8 +254,8 @@ async def _handle_dead_window(
         return False
 
     display = thread_router.get_display_name(window_id)
-    window_state = session_manager.get_window_state(window_id)
-    cwd = window_state.cwd if window_state.cwd else ""
+    view = session_manager.view_window(window_id)
+    cwd = view.cwd if view else ""
 
     if not cwd or not Path(cwd).is_dir():
         # No valid cwd — unbind and fall back to directory browser

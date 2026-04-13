@@ -118,11 +118,11 @@ def _resolve_upload_dir(
     if not window_id:
         return None, None, "No session bound to this topic."
 
-    state = session_manager.get_window_state(window_id)
-    if not state.cwd:
+    view = session_manager.view_window(window_id)
+    if view is None or not view.cwd:
         return window_id, None, "Session has no working directory."
 
-    upload_path = Path(state.cwd) / _UPLOAD_DIR
+    upload_path = Path(view.cwd) / _UPLOAD_DIR
     return window_id, upload_path, None
 
 
