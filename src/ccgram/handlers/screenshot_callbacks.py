@@ -498,7 +498,7 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
     label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
     # Update keyboard in-place to reflect new bell icon (all modes keep the
     # message so users can always toggle back)
-    from .message_queue import build_status_keyboard
+    from .status_bubble import build_status_keyboard
 
     keyboard = build_status_keyboard(window_id)
     with contextlib.suppress(TelegramError):

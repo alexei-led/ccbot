@@ -12,7 +12,7 @@ from ccgram.handlers.callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from ccgram.handlers.message_queue import build_status_keyboard
+from ccgram.handlers.status_bubble import build_status_keyboard
 
 
 def _all_callback_data(window_id: str) -> list[str]:

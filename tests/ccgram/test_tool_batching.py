@@ -1092,12 +1092,12 @@ class TestBatchResultPrefix:
         ],
     )
     def test_prefix_detection(self, text, expected):
-        from ccgram.handlers.message_queue import _batch_result_prefix
+        from ccgram.handlers.tool_batch import _batch_result_prefix
 
         assert _batch_result_prefix(text) == expected
 
     def test_error_takes_priority_over_success(self):
-        from ccgram.handlers.message_queue import _batch_result_prefix
+        from ccgram.handlers.tool_batch import _batch_result_prefix
 
         text = "3 passed, 1 FAILED"
         assert _batch_result_prefix(text) == "\u274c"

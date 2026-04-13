@@ -240,13 +240,13 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `src/ccgram/handlers/message_queue.py`
 - Modify: `tests/ccgram/handlers/test_message_queue.py` (trim + refocus on queue primitives)
 
-- [ ] verify `message_queue.py` contains only: `MessageTask` (unchanged discriminated dataclass), `_message_queue_queues`, `_queue_workers`, `_queue_locks` dicts, `get_message_queue`, `get_or_create_queue`, `_inspect_queue`, `_can_merge_tasks`, `_merge_content_tasks`, `_coalesce_status_updates`, `_handle_content_task` (now a thin router), `_message_queue_worker`, `_process_content_task` (for non-batch content), `_is_ghost_window_task_at_enqueue`, `_get_idle_history`, `_send_kwargs`, `enqueue_content_message`, `enqueue_status_update`, `clear_batch_for_topic` → delegates to `tool_batch.clear_batch_for_topic`, `clear_tool_msg_ids_for_topic`, `shutdown_workers`
-- [ ] delete: dataclasses, batch helpers, status handlers, Claude task formatting — anything moved in Task 1 or Task 2
-- [ ] verify file is in the 450–550 line range (from 1132)
-- [ ] update `test_message_queue.py` — keep tests for FIFO, merging, rate-limit coalescing, worker startup/shutdown; remove batch-specific and status-specific tests (they moved to `test_tool_batch.py` / `test_status_bubble.py`)
-- [ ] add `test_enqueue_creates_worker`, `test_enqueue_reuses_worker`, `test_merge_consecutive_text_tasks`, `test_merge_stops_on_tool_use`, `test_merge_stops_at_3800_chars`, `test_status_update_coalesces` (if not already present)
-- [ ] run `make check` — must be green
-- [ ] run `make test-e2e` — Phase 1 sanity check (message delivery is load-bearing for every agent interaction)
+- [x] verify `message_queue.py` contains only: `MessageTask` (unchanged discriminated dataclass), `_message_queue_queues`, `_queue_workers`, `_queue_locks` dicts, `get_message_queue`, `get_or_create_queue`, `_inspect_queue`, `_can_merge_tasks`, `_merge_content_tasks`, `_coalesce_status_updates`, `_handle_content_task` (now a thin router), `_message_queue_worker`, `_process_content_task` (for non-batch content), `_is_ghost_window_task_at_enqueue`, `_get_idle_history`, `_send_kwargs`, `enqueue_content_message`, `enqueue_status_update`, `clear_batch_for_topic` → delegates to `tool_batch.clear_batch_for_topic`, `clear_tool_msg_ids_for_topic`, `shutdown_workers`
+- [x] delete: dataclasses, batch helpers, status handlers, Claude task formatting — anything moved in Task 1 or Task 2
+- [x] verify file is in the 450–550 line range (from 1132)
+- [x] update `test_message_queue.py` — keep tests for FIFO, merging, rate-limit coalescing, worker startup/shutdown; remove batch-specific and status-specific tests (they moved to `test_tool_batch.py` / `test_status_bubble.py`)
+- [x] add `test_enqueue_creates_worker`, `test_enqueue_reuses_worker`, `test_merge_consecutive_text_tasks`, `test_merge_stops_on_tool_use`, `test_merge_stops_at_3800_chars`, `test_status_update_coalesces` (if not already present)
+- [x] run `make check` — must be green
+- [x] run `make test-e2e` — Phase 1 sanity check (message delivery is load-bearing for every agent interaction)
 
 ### Phase 2 — Polling Registry and Strategy Split
 

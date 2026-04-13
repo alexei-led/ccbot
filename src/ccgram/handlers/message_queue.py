@@ -19,27 +19,15 @@ from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import task_done_callback
 from .message_sender import edit_with_fallback, rate_limit_send_message
-from .status_bubble import (  # noqa: F401
-    build_status_keyboard,
+from .status_bubble import (
     clear_status_message,
-    clear_status_msg_info,
     convert_status_to_content,
-    format_claude_task_status,
     process_status_clear_task,
     process_status_update_task,
-    send_status_text,
 )
-from .tool_batch import (  # noqa: F401
-    BATCH_MAX_ENTRIES,
-    BATCH_MAX_LENGTH,
-    ToolBatch,
-    ToolBatchEntry,
+from .tool_batch import (
     _active_batches,
-    _batch_result_prefix,
-    clear_batch_for_topic,
     flush_batch,
-    format_batch_message,
-    has_active_batch,
     is_batch_eligible,
     process_tool_event,
 )
