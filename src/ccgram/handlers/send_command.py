@@ -434,8 +434,8 @@ async def send_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await safe_reply(update.message, "No session bound to this topic.")
         return
 
-    ws = session_manager.get_window_state(window_id)
-    cwd = Path(ws.cwd) if ws.cwd else None
+    view = session_manager.view_window(window_id)
+    cwd = Path(view.cwd) if view and view.cwd else None
     if not cwd or not cwd.is_dir():
         await safe_reply(update.message, "Working directory not available.")
         return

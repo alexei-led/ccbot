@@ -17,7 +17,6 @@ import fcntl
 import json
 import logging
 import os
-import re
 import shlex
 import subprocess
 import structlog
@@ -27,10 +26,11 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
+from ccgram.providers.base import UUID_RE
+
 logger = structlog.get_logger()
 
 # Validate session_id looks like a UUID
-UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def _claude_settings_file() -> Path:

@@ -482,7 +482,7 @@ async def update_status_message(
         terminal_strategy.mark_seen_status(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
-            from .hook_events import build_subagent_label, get_subagent_names
+            from ..claude_task_state import build_subagent_label, get_subagent_names
 
             subagent_names = get_subagent_names(window_id)
             display_status = status_line

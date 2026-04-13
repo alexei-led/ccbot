@@ -19,6 +19,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from .state_persistence import unwired_save
+
 logger = structlog.get_logger()
 
 
@@ -45,7 +47,7 @@ class ThreadRouter:
 
     def __post_init__(self) -> None:
         # Instance attributes (not fields) — avoids descriptor protocol binding
-        self._schedule_save: Callable[[], None] = lambda: None
+        self._schedule_save: Callable[[], None] = unwired_save("ThreadRouter")
         self._has_window_state: Callable[[str], bool] = lambda _wid: False
 
     def reset(self) -> None:

@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .state_persistence import unwired_save
+
 logger = structlog.get_logger()
 
 
@@ -33,7 +35,7 @@ class UserPreferences:
     user_window_offsets: dict[int, dict[str, int]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self._schedule_save: Callable[[], None] = lambda: None
+        self._schedule_save: Callable[[], None] = unwired_save("UserPreferences")
 
     def reset(self) -> None:
         """Clear all state. Used for test isolation."""

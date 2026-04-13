@@ -16,7 +16,7 @@ from telegramify_markdown import convert as _tm_convert
 from telegramify_markdown import utf16_len as _utf16_len
 from telegramify_markdown.entity import MessageEntity as _LibEntity
 
-from .providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
+from .expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 
 # Disable auto-promotion of long blockquotes to expandable blockquotes —
 # ccgram manages expandable quotes exclusively through sentinel tokens.

@@ -16,6 +16,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Self
 
+from .state_persistence import unwired_save
+
 logger = structlog.get_logger()
 
 APPROVAL_MODES: frozenset[str] = frozenset({"normal", "yolo"})
@@ -109,7 +111,7 @@ class WindowStateStore:
     window_states: dict[str, WindowState] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self._schedule_save: Callable[[], None] = lambda: None
+        self._schedule_save: Callable[[], None] = unwired_save("WindowStateStore")
         self._on_hookless_provider_switch: Callable[[str], None] = lambda _wid: None
 
     def reset(self) -> None:
