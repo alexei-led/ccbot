@@ -10,10 +10,7 @@ Key components:
 """
 
 import asyncio
-import functools
 import os
-import re
-import shutil
 
 import structlog
 
@@ -30,7 +27,6 @@ from telegram.ext import ContextTypes
 
 from ..llm import get_completer
 from ..llm import CommandResult
-from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import (
@@ -52,50 +48,12 @@ _shell_pending: dict[tuple[int, int], tuple[str, int]] = {}
 _generation_counter: dict[tuple[int, int], int] = {}
 
 
-_MODERN_TOOLS: dict[str, str] = {
-    "fd": "find replacement (use fd syntax: fd PATTERN, fd --type file, NOT find syntax)",
-    "rg": "grep replacement (use rg PATTERN, NOT grep syntax)",
-    "bat": "cat replacement",
-    "eza": "ls replacement (use eza, NOT ls)",
-    "sd": "sed replacement (use sd 'from' 'to', NOT sed syntax)",
-    "dust": "du replacement (use dust, NOT du)",
-    "procs": "ps replacement",
-}
-
-
-@functools.cache
-def _detect_shell_tools() -> str:
-    """Detect available modern CLI tools on PATH (cached)."""
-    available = []
-    for tool, desc in _MODERN_TOOLS.items():
-        if shutil.which(tool):
-            available.append(f"{tool} ({desc})")
-    return ", ".join(available)
-
-
-# Patterns redacted from terminal output before sending to the LLM
-_SENSITIVE_RE = re.compile(
-    r"(?i)"
-    r"(?:export\s+\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)\w*\s*=\s*\S+)"
-    r"|(?:(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)\w*\s*[=:]\s*['\"]?\S{8,})"
-    r"|(?:(?:sk|pk|ghp|gho|ghu|ghs|ghr|glpat|xoxb|xoxp|xoxs|AKIA)-[A-Za-z0-9_/+=]{10,})"
-    r"|(?:Bearer\s+[A-Za-z0-9_.+/=-]{20,})",
+# gather_llm_context, redact_for_llm, and _detect_shell_tools moved to
+# shell_context.py — re-exported here for callers that haven't been migrated.
+from .shell_context import (  # noqa: E402, F401
+    gather_llm_context,
+    redact_for_llm,
 )
-
-
-def redact_for_llm(text: str) -> str:
-    """Strip sensitive patterns from terminal text before sending to an LLM."""
-    return _SENSITIVE_RE.sub("[REDACTED]", text)
-
-
-async def gather_llm_context(window_id: str) -> dict[str, str]:
-    """Gather cwd, shell type, and available tools for LLM calls."""
-    from ..providers.shell import detect_pane_shell
-
-    shell = await detect_pane_shell(window_id)
-    tools = _detect_shell_tools()
-    cwd = session_manager.get_window_state(window_id).cwd or ""
-    return {"cwd": cwd, "shell": shell, "shell_tools": tools}
 
 
 def has_shell_pending(chat_id: int, thread_id: int) -> bool:

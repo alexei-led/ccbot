@@ -341,12 +341,9 @@ async def _maybe_suggest_fix(
     if not completer:
         return
 
-    from .shell_commands import gather_llm_context
+    from .shell_context import gather_llm_context, redact_for_llm
 
     ctx = await gather_llm_context(window_id)
-
-    from .shell_commands import redact_for_llm
-
     trimmed = redact_for_llm(output or "")
     if len(trimmed) > _MAX_FIX_OUTPUT_CHARS:
         trimmed = f"\u2026{trimmed[-_MAX_FIX_OUTPUT_CHARS:]}"
