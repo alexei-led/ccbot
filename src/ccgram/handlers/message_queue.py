@@ -18,7 +18,7 @@ from telegram.error import RetryAfter, TelegramError
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import task_done_callback
-from .message_sender import edit_with_fallback, rate_limit_send_message
+from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
 from .status_bubble import (
     clear_status_message,
     convert_status_to_content,
@@ -330,13 +330,6 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
             )
 
 
-def _send_kwargs(thread_id: int | None) -> dict[str, int]:
-    """Build message_thread_id kwargs for bot.send_message()."""
-    if thread_id is not None:
-        return {"message_thread_id": thread_id}
-    return {}
-
-
 async def process_content_task(bot: Bot, user_id: int, task: MessageTask) -> None:
     """Process a content message task."""
     window_id = task.window_id or ""
@@ -388,7 +381,7 @@ async def process_content_task(bot: Bot, user_id: int, task: MessageTask) -> Non
             bot,
             chat_id,
             part,
-            **_send_kwargs(task.thread_id),  # type: ignore[arg-type]
+            **send_kwargs(task.thread_id),  # type: ignore[arg-type]
         )
 
         if sent:

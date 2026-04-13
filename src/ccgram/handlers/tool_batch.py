@@ -13,8 +13,11 @@ Key components:
   - format_batch_message: render batch entries as compact text
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import structlog
 from telegram import Bot
@@ -22,7 +25,10 @@ from telegram import Bot
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
-from .message_sender import edit_with_fallback, rate_limit_send_message
+from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
+
+if TYPE_CHECKING:
+    from .message_queue import MessageTask
 
 logger = structlog.get_logger()
 
@@ -71,7 +77,7 @@ _BATCH_SUCCESS_RE = re.compile(r"\b(passed|success|exit code 0)\b", re.IGNORECAS
 # ---------------------------------------------------------------------------
 
 
-def is_batch_eligible(task: "MessageTask", window_id: str) -> bool:
+def is_batch_eligible(task: MessageTask, window_id: str) -> bool:
     """Check if a task should go through the batching pipeline."""
     return (
         task.task_type == "content"
@@ -298,13 +304,6 @@ def _extract_task_tool_suffix(entry: ToolBatchEntry) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _send_kwargs(thread_id: int | None) -> dict[str, int]:
-    """Build message_thread_id kwargs for bot.send_message()."""
-    if thread_id is not None:
-        return {"message_thread_id": thread_id}
-    return {}
-
-
 async def _send_or_edit_batch(
     bot: Bot,
     user_id: int,
@@ -326,7 +325,7 @@ async def _send_or_edit_batch(
             bot,
             chat_id,
             batch_text,
-            **_send_kwargs(raw_thread_id),  # type: ignore[arg-type]
+            **send_kwargs(raw_thread_id),  # type: ignore[arg-type]
         )
         if sent:
             batch.telegram_msg_id = sent.message_id
@@ -342,7 +341,7 @@ async def _send_or_edit_batch(
 async def _handle_tool_result(
     bot: Bot,
     user_id: int,
-    task: "MessageTask",
+    task: MessageTask,
     batch: ToolBatch | None,
     thread_id: int,
 ) -> ToolBatch | None:
@@ -364,7 +363,7 @@ async def _handle_tool_result(
 
 
 def _add_tool_use_entry(
-    task: "MessageTask",
+    task: MessageTask,
     batch: ToolBatch,
 ) -> bool:
     """Append a tool_use entry to the batch. Returns True if overflow occurred."""
@@ -387,7 +386,7 @@ def _add_tool_use_entry(
 async def process_tool_event(
     bot: Bot,
     user_id: int,
-    task: "MessageTask",
+    task: MessageTask,
 ) -> None:
     """Add a tool_use or tool_result to the active batch, send/edit the batch message."""
     from .message_queue import process_content_task
@@ -416,7 +415,7 @@ async def process_tool_event(
 async def _handle_tool_use_event(
     bot: Bot,
     user_id: int,
-    task: "MessageTask",
+    task: MessageTask,
     batch: ToolBatch | None,
     window_id: str,
     thread_id: int,
@@ -461,7 +460,7 @@ async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
             bot,
             chat_id,
             batch_text,
-            **_send_kwargs(thread_id),  # type: ignore[arg-type]
+            **send_kwargs(thread_id),  # type: ignore[arg-type]
         )
         return
 
@@ -487,9 +486,3 @@ def clear_batch_for_topic(user_id: int, thread_id: int | None = None) -> None:
 def clear_all_batches() -> None:
     """Clear all active batches (called on shutdown)."""
     _active_batches.clear()
-
-
-from typing import TYPE_CHECKING  # noqa: E402
-
-if TYPE_CHECKING:
-    from .message_queue import MessageTask

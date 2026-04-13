@@ -74,17 +74,11 @@ async def ensure_setup(
             await setup_shell_prompt(window_id, clear=False)
         return
 
-    if trigger == "external_bind":
+    if trigger in ("external_bind", "provider_switch"):
         if await has_prompt_marker(window_id):
             return
-        if not st.was_offered:
-            await _show_offer_keyboard(
-                window_id, bot=bot, chat_id=chat_id, thread_id=thread_id
-            )
-        return
-
-    if trigger == "provider_switch":
-        if not st.skip_flag:
+        suppress = st.was_offered if trigger == "external_bind" else st.skip_flag
+        if not suppress:
             await _show_offer_keyboard(
                 window_id, bot=bot, chat_id=chat_id, thread_id=thread_id
             )

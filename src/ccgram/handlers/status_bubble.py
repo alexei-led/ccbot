@@ -30,7 +30,7 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from .message_sender import edit_with_fallback, rate_limit_send_message
+from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
 
 logger = structlog.get_logger()
 
@@ -119,13 +119,6 @@ def _get_idle_history(
     if first_line != IDLE_STATUS_TEXT:
         return None
     return get_history(user_id, thread_id_or_0, limit=2) or None
-
-
-def _send_kwargs(thread_id: int | None) -> dict[str, int]:
-    """Build message_thread_id kwargs for bot.send_message()."""
-    if thread_id is not None:
-        return {"message_thread_id": thread_id}
-    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +215,7 @@ async def send_status_text(
         chat_id,
         text,
         reply_markup=keyboard,
-        **_send_kwargs(thread_id),  # type: ignore[arg-type]
+        **send_kwargs(thread_id),  # type: ignore[arg-type]
     )
     if sent:
         _status_msg_info[skey] = (sent.message_id, window_id, text, chat_id)

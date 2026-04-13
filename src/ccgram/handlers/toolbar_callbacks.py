@@ -32,7 +32,7 @@ from ..toolbar_config import ToolbarAction
 from .callback_data import CB_TOOLBAR
 from .callback_helpers import get_thread_id, user_owns_window
 from .callback_registry import register
-from .toolbar_keyboard import _get_toolbar_config, refresh_button_label
+from .toolbar_keyboard import get_toolbar_config, refresh_button_label
 
 logger = structlog.get_logger()
 
@@ -233,7 +233,7 @@ async def handle_toolbar_callback(
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return
-    cfg = _get_toolbar_config()
+    cfg = get_toolbar_config()
     action = cfg.actions.get(action_name)
     if action is None:
         await query.answer(f"Unknown action: {action_name}", show_alert=True)

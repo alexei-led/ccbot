@@ -84,7 +84,7 @@ class TestBuildToolbarKeyboardCustom:
             actions=dict(BUILTIN_ACTIONS),
         )
         with patch(
-            "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
+            "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
             return_value=custom_cfg,
         ):
             kb = build_toolbar_keyboard("@7", "claude")
@@ -101,7 +101,7 @@ class TestBuildToolbarKeyboardCustom:
             actions=dict(BUILTIN_ACTIONS),
         )
         with patch(
-            "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
+            "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
             return_value=custom_cfg,
         ):
             kb = build_toolbar_keyboard("@7", "claude")
@@ -249,7 +249,7 @@ class TestDispatchText:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
+                "ccgram.handlers.toolbar_callbacks.get_toolbar_config",
                 return_value=custom_cfg,
             ),
             patch(

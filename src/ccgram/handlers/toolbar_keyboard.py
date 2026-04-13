@@ -28,7 +28,7 @@ from .callback_data import CB_TOOLBAR
 _toolbar_cfg: ToolbarConfig | None = None
 
 
-def _get_toolbar_config() -> ToolbarConfig:
+def get_toolbar_config() -> ToolbarConfig:
     """Return the loaded ToolbarConfig, lazy-loading on first access."""
     global _toolbar_cfg  # noqa: PLW0603
     if _toolbar_cfg is None:
@@ -89,7 +89,7 @@ def build_toolbar_keyboard(
     window_id: str, provider_name: str = "claude"
 ) -> InlineKeyboardMarkup:
     """Build the inline keyboard for /toolbar from per-provider config."""
-    cfg = _get_toolbar_config()
+    cfg = get_toolbar_config()
     layout = cfg.for_provider(provider_name)
     rows: list[list[InlineKeyboardButton]] = []
     for row_names in layout.buttons:
@@ -115,7 +115,7 @@ async def seed_button_states(window_id: str) -> None:
     initial button text reflects the real mode (Edit/Plan/Full/Def) rather
     than the static "Mode" placeholder.
     """
-    cfg = _get_toolbar_config()
+    cfg = get_toolbar_config()
     mode_action = cfg.actions.get("mode")
     if mode_action is None or not mode_action.read_state:
         return
