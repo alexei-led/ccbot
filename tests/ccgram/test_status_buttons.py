@@ -118,7 +118,8 @@ class TestBuildStatusKeyboard:
 
     def test_rc_button_label_active(self) -> None:
         with patch(
-            "ccgram.handlers.polling_strategies.is_rc_active", return_value=True
+            "ccgram.handlers.polling_strategies.terminal_strategy.is_rc_active",
+            return_value=True,
         ):
             kb = build_status_keyboard("@0")
         rc_btn = [

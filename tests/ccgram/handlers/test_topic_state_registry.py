@@ -206,3 +206,75 @@ class TestClearAll:
         window_fn.assert_called_once_with("@5")
         qualified_fn.assert_called_once_with("ccgram:@5")
         chat_fn.assert_called_once_with(-200, 100)
+
+
+class TestRegisterBound:
+    def test_register_bound_window_scope(self, registry: TopicStateRegistry):
+        class Strategy:
+            def __init__(self):
+                self.cleared: list[str] = []
+
+            def clear_state(self, window_id: str) -> None:
+                self.cleared.append(window_id)
+
+        s = Strategy()
+        registry.register_bound("window", s.clear_state)
+        registry.clear_window(window_id="@7")
+        assert s.cleared == ["@7"]
+
+    def test_register_bound_topic_scope(self, registry: TopicStateRegistry):
+        class Strategy:
+            def __init__(self):
+                self.cleared: list[tuple[int, int]] = []
+
+            def clear_state(self, user_id: int, thread_id: int) -> None:
+                self.cleared.append((user_id, thread_id))
+
+        s = Strategy()
+        registry.register_bound("topic", s.clear_state)
+        registry.clear_topic(user_id=5, thread_id=99)
+        assert s.cleared == [(5, 99)]
+
+    def test_register_bound_invalid_scope_raises(self, registry: TopicStateRegistry):
+        with pytest.raises(ValueError, match="Unknown cleanup scope"):
+            registry.register_bound("bogus", lambda: None)
+
+    def test_register_bound_deduplicates(self, registry: TopicStateRegistry):
+        fn = MagicMock()
+        registry.register_bound("window", fn)
+        registry.register_bound("window", fn)
+        registry.clear_window("@0")
+        fn.assert_called_once_with("@0")
+
+    def test_failing_bound_callback_does_not_block_others(
+        self, registry: TopicStateRegistry
+    ):
+        first = MagicMock()
+        failing = MagicMock(side_effect=RuntimeError("boom"))
+        third = MagicMock()
+        registry.register_bound("window", first)
+        registry.register_bound("window", failing)
+        registry.register_bound("window", third)
+
+        registry.clear_window("@0")
+
+        first.assert_called_once()
+        third.assert_called_once()
+
+    def test_mixed_register_and_register_bound(self, registry: TopicStateRegistry):
+        decorator_fn = MagicMock()
+        registry.register("window")(decorator_fn)
+
+        class Strategy:
+            def __init__(self):
+                self.called = False
+
+            def cleanup(self, window_id: str) -> None:
+                self.called = True
+
+        s = Strategy()
+        registry.register_bound("window", s.cleanup)
+
+        registry.clear_window("@1")
+        decorator_fn.assert_called_once_with("@1")
+        assert s.called

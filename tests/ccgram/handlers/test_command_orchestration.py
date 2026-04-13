@@ -218,10 +218,7 @@ class TestForwardCommandResolution:
         self.mock_sm.clear_window_session.assert_called_once_with("@1")
 
     async def test_clear_enqueues_status_clear_and_resets_idle(self) -> None:
-        from ccgram.handlers.polling_strategies import (
-            reset_seen_status_state,
-            terminal_strategy,
-        )
+        from ccgram.handlers.polling_strategies import terminal_strategy
 
         _window_poll_state = terminal_strategy._states
 
@@ -246,7 +243,7 @@ class TestForwardCommandResolution:
                 and _window_poll_state["@1"].has_seen_status
             )
         finally:
-            reset_seen_status_state()
+            terminal_strategy.reset_all_seen_status()
 
     async def test_no_session_bound(self) -> None:
         self.mock_tr.resolve_window_for_thread.return_value = None

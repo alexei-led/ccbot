@@ -224,7 +224,8 @@ class TestBuildScreenshotKeyboard:
 class TestBuildToolbarKeyboard:
     def test_has_live_button(self):
         with patch(
-            "ccgram.handlers.polling_strategies.is_rc_active", return_value=False
+            "ccgram.handlers.polling_strategies.terminal_strategy.is_rc_active",
+            return_value=False,
         ):
             kb = build_toolbar_keyboard("@0")
         flat = [btn for row in kb.inline_keyboard for btn in row]
@@ -233,7 +234,8 @@ class TestBuildToolbarKeyboard:
 
     def test_live_replaces_esc_in_row1(self):
         with patch(
-            "ccgram.handlers.polling_strategies.is_rc_active", return_value=False
+            "ccgram.handlers.polling_strategies.terminal_strategy.is_rc_active",
+            return_value=False,
         ):
             kb = build_toolbar_keyboard("@0")
         row1_labels = [btn.text for btn in kb.inline_keyboard[0]]
@@ -246,7 +248,8 @@ class TestBuildToolbarKeyboard:
         from ccgram.handlers.callback_data import CB_TOOLBAR
 
         with patch(
-            "ccgram.handlers.polling_strategies.is_rc_active", return_value=False
+            "ccgram.handlers.polling_strategies.terminal_strategy.is_rc_active",
+            return_value=False,
         ):
             kb = build_toolbar_keyboard("@0")
         flat = [btn for row in kb.inline_keyboard for btn in row]

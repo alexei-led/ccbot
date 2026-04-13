@@ -201,9 +201,9 @@ def _resolve_rc_mode(chat_id: int, thread_id: int) -> bool:
     window_id = thread_router.get_window_for_chat_thread(chat_id, thread_id)
     if not window_id:
         return False
-    from .polling_strategies import is_rc_active
+    from .polling_strategies import terminal_strategy
 
-    return is_rc_active(window_id)
+    return terminal_strategy.is_rc_active(window_id)
 
 
 def format_topic_name_for_mode(display_name: str, approval_mode: str) -> str:

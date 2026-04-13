@@ -37,7 +37,7 @@ from .message_sender import (
     safe_reply,
 )
 from .recovery_callbacks import build_recovery_keyboard
-from .polling_strategies import clear_probe_failures
+from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 from ..session import session_manager
@@ -267,9 +267,7 @@ async def _handle_dead_window(
             thread_id,
         )
         thread_router.unbind_thread(user_id, thread_id)
-        from .polling_strategies import clear_dead_notification
-
-        clear_dead_notification(user_id, thread_id)
+        lifecycle_strategy.clear_dead_notification(user_id, thread_id)
         start_path = str(Path.cwd())
         msg_text, keyboard, subdirs = build_directory_browser(
             start_path, user_id=user_id
@@ -324,7 +322,7 @@ async def _forward_message(
     # Cancel any running bash capture — new message pushes pane content down
     cancel_bash_capture(user_id, thread_id)
 
-    clear_probe_failures(window_id)
+    lifecycle_strategy.clear_probe_failures(window_id)
 
     success, err_message = await send_to_window(window_id, text)
     if not success:

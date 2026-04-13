@@ -36,13 +36,13 @@ def _debounce_for(state: str) -> float:
 
 @pytest.fixture(autouse=True)
 def _reset():
-    from ccgram.handlers.polling_strategies import reset_seen_status_state
+    from ccgram.handlers.polling_strategies import terminal_strategy
 
     reset_all_state()
-    reset_seen_status_state()
+    terminal_strategy.reset_all_seen_status()
     yield
     reset_all_state()
-    reset_seen_status_state()
+    terminal_strategy.reset_all_seen_status()
 
 
 class TestStripEmojiPrefix:

@@ -110,6 +110,7 @@ class TerminalStatusStrategy:
 
     def __init__(self) -> None:
         self._states: dict[str, WindowPollState] = {}
+        topic_state.register_bound("window", self.clear_state)
 
     def get_state(self, window_id: str) -> WindowPollState:
         """Get or create WindowPollState for a window."""
@@ -387,6 +388,7 @@ class InteractiveUIStrategy:
     def __init__(self, terminal: TerminalStatusStrategy) -> None:
         self._terminal = terminal
         self._pane_alert_hashes: dict[str, tuple[str, float, str]] = {}
+        topic_state.register_bound("window", self.clear_pane_alerts)
 
     def has_pane_alert(self, pane_id: str) -> bool:
         """Check whether a pane currently has an active alert."""
@@ -442,6 +444,8 @@ class TopicLifecycleStrategy:
         self._terminal = terminal
         self._states: dict[tuple[int, int], TopicPollState] = {}
         self._dead_notified: set[tuple[int, int, str]] = set()
+        topic_state.register_bound("topic", self.clear_state)
+        topic_state.register_bound("topic", self.clear_dead_notification)
 
     def get_state(self, user_id: int, thread_id: int) -> TopicPollState:
         """Get or create TopicPollState for a topic."""
@@ -556,97 +560,3 @@ class TopicLifecycleStrategy:
 terminal_strategy = TerminalStatusStrategy()
 interactive_strategy = InteractiveUIStrategy(terminal_strategy)
 lifecycle_strategy = TopicLifecycleStrategy(terminal_strategy)
-
-
-# ── Module-level convenience functions ────────────────────────────────
-# Thin delegates so consumers don't need to know about strategy internals.
-
-
-@topic_state.register("window")
-def clear_window_poll_state(window_id: str) -> None:
-    """Remove all polling state for a window."""
-    terminal_strategy.clear_state(window_id)
-
-
-def clear_screen_buffer(window_id: str) -> None:
-    """Remove a window's ScreenBuffer, pane count cache, and pyte cache."""
-    terminal_strategy.clear_screen_buffer(window_id)
-
-
-def reset_screen_buffer_state() -> None:
-    """Reset all ScreenBuffers and caches (for testing)."""
-    terminal_strategy.reset_screen_buffer_state()
-    interactive_strategy.clear_all_alerts()
-
-
-def is_rc_active(window_id: str) -> bool:
-    """Check whether Remote Control is currently active for a window."""
-    return terminal_strategy.is_rc_active(window_id)
-
-
-@topic_state.register("topic")
-def clear_topic_poll_state(user_id: int, thread_id: int) -> None:
-    """Remove all polling state for a topic."""
-    lifecycle_strategy.clear_state(user_id, thread_id)
-
-
-def clear_autoclose_timer(user_id: int, thread_id: int) -> None:
-    """Remove autoclose timer for a topic (called on cleanup)."""
-    lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
-
-
-def reset_autoclose_state() -> None:
-    """Reset all autoclose tracking (for testing)."""
-    lifecycle_strategy.reset_autoclose_state()
-
-
-@topic_state.register("topic")
-def clear_dead_notification(user_id: int, thread_id: int) -> None:
-    """Remove dead notification tracking for a topic (called on cleanup)."""
-    lifecycle_strategy.clear_dead_notification(user_id, thread_id)
-
-
-def reset_dead_notification_state() -> None:
-    """Reset all dead notification tracking (for testing)."""
-    lifecycle_strategy.reset_dead_notification_state()
-
-
-def clear_probe_failures(window_id: str) -> None:
-    """Reset probe failure counter for a window (e.g. on user activity)."""
-    lifecycle_strategy.clear_probe_failures(window_id)
-
-
-def reset_probe_failures_state() -> None:
-    """Reset all probe failure tracking (for testing)."""
-    lifecycle_strategy.reset_probe_failures_state()
-
-
-def clear_typing_state(user_id: int, thread_id: int) -> None:
-    """Clear typing indicator throttle for a topic (called on cleanup)."""
-    lifecycle_strategy.clear_typing_state(user_id, thread_id)
-
-
-def clear_seen_status(window_id: str) -> None:
-    """Clear startup status tracking for a window (called on cleanup)."""
-    lifecycle_strategy.clear_seen_status(window_id)
-
-
-def reset_seen_status_state() -> None:
-    """Reset all startup status tracking (for testing)."""
-    lifecycle_strategy.reset_seen_status_state()
-
-
-def reset_typing_state() -> None:
-    """Reset all typing indicator tracking (for testing)."""
-    lifecycle_strategy.reset_typing_state()
-
-
-def has_pane_alert(pane_id: str) -> bool:
-    """Check whether a pane currently has an active alert."""
-    return interactive_strategy.has_pane_alert(pane_id)
-
-
-@topic_state.register("window")
-def clear_pane_alerts(window_id: str) -> None:
-    """Remove pane alert state for a specific window only."""
-    interactive_strategy.clear_pane_alerts(window_id)

@@ -261,15 +261,15 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify callers of the deleted free functions: grep `rg "from \.polling_strategies import " src/ccgram/` and update each import to use the strategy instance method
 - Create: `tests/ccgram/handlers/test_topic_state_registry.py` (or expand existing)
 
-- [ ] add `register_bound(scope: Scope, method: MethodType) -> None` to `TopicStateRegistry` — store as callable in the same scope registry that `register` populates
-- [ ] update `fire(scope, ...)` to call all callables in the scope's registry (bound methods already carry `self`)
-- [ ] in `TerminalStatusStrategy.__init__` (soon to be split — see Task 5), in `InteractiveUIStrategy.__init__`, in `TopicLifecycleStrategy.__init__`: call `topic_state.register_bound("window", self.clear_state)` etc. for every cleanup-relevant method
-- [ ] delete the 20+ module-level wrappers at L566-L652 of `polling_strategies.py`: `clear_window_poll_state`, `clear_screen_buffer`, `reset_screen_buffer_state`, `is_rc_active`, `clear_topic_poll_state`, `clear_autoclose_timer`, `reset_autoclose_state`, `clear_dead_notification`, `reset_dead_notification_state`, `clear_probe_failures`, `reset_probe_failures_state`, `clear_typing_state`, `clear_seen_status`, `reset_seen_status_state`, `reset_typing_state`, `has_pane_alert`, `clear_pane_alerts` — including their `@topic_state.register` decorators
-- [ ] grep `rg "from \.polling_strategies import (clear_|reset_|is_rc|has_pane)" src/ccgram/` and update each caller to use the strategy instance method (`terminal_strategy.clear_state(wid)`, etc.)
-- [ ] write `test_register_bound_window_scope` — instantiate a fake class with a cleanup method, register via `register_bound`, call `fire`, verify the method is called with the correct self
-- [ ] write `test_register_bound_topic_scope` — same for topic scope with `(user_id, thread_id)` signature
-- [ ] write `test_failing_callback_does_not_block_others` — verify one raising callback doesn't prevent the others in the same scope from running
-- [ ] run `make check` — must be green before Task 5
+- [x] add `register_bound(scope: Scope, method: MethodType) -> None` to `TopicStateRegistry` — store as callable in the same scope registry that `register` populates
+- [x] update `fire(scope, ...)` to call all callables in the scope's registry (bound methods already carry `self`) — existing `_safe_call` already handles any callable
+- [x] in `TerminalStatusStrategy.__init__` (soon to be split — see Task 5), in `InteractiveUIStrategy.__init__`, in `TopicLifecycleStrategy.__init__`: call `topic_state.register_bound("window", self.clear_state)` etc. for every cleanup-relevant method
+- [x] delete the 20+ module-level wrappers at L566-L652 of `polling_strategies.py`: `clear_window_poll_state`, `clear_screen_buffer`, `reset_screen_buffer_state`, `is_rc_active`, `clear_topic_poll_state`, `clear_autoclose_timer`, `reset_autoclose_state`, `clear_dead_notification`, `reset_dead_notification_state`, `clear_probe_failures`, `reset_probe_failures_state`, `clear_typing_state`, `clear_seen_status`, `reset_seen_status_state`, `reset_typing_state`, `has_pane_alert`, `clear_pane_alerts` — including their `@topic_state.register` decorators
+- [x] grep `rg "from \.polling_strategies import (clear_|reset_|is_rc|has_pane)" src/ccgram/` and update each caller to use the strategy instance method (`terminal_strategy.clear_state(wid)`, etc.)
+- [x] write `test_register_bound_window_scope` — instantiate a fake class with a cleanup method, register via `register_bound`, call `fire`, verify the method is called with the correct self
+- [x] write `test_register_bound_topic_scope` — same for topic scope with `(user_id, thread_id)` signature
+- [x] write `test_failing_callback_does_not_block_others` — verify one raising callback doesn't prevent the others in the same scope from running
+- [x] run `make check` — must be green before Task 5
 
 ### Task 5: Split `TerminalStatusStrategy` into `TerminalScreenBuffer` + `TerminalPollState`
 

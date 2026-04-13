@@ -13,7 +13,9 @@ def _patch_deps():
         patch("ccgram.handlers.restore_command.thread_router") as mock_tr,
         patch("ccgram.handlers.restore_command.tmux_manager") as mock_tm,
         patch("ccgram.handlers.restore_command.config") as mock_cfg,
-        patch("ccgram.handlers.restore_command.clear_dead_notification") as mock_cdn,
+        patch(
+            "ccgram.handlers.restore_command.lifecycle_strategy.clear_dead_notification"
+        ) as mock_cdn,
         patch("ccgram.handlers.restore_command.get_provider_for_window") as mock_gpw,
         patch("ccgram.handlers.restore_command.resolve_launch_command") as mock_rlc,
     ):

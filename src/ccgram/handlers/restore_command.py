@@ -21,7 +21,7 @@ from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from .message_sender import safe_reply
-from .polling_strategies import clear_dead_notification
+from .polling_strategies import lifecycle_strategy
 from .topic_emoji import format_topic_name_for_mode
 
 logger = structlog.get_logger()
@@ -63,7 +63,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Auto-recover: unbind old, create new window with --continue, rebind
     thread_router.unbind_thread(user_id, thread_id)
-    clear_dead_notification(user_id, thread_id)
+    lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
     provider = get_provider_for_window(window_id)
     approval_mode = session_manager.get_approval_mode(window_id)

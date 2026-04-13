@@ -528,16 +528,13 @@ async def _handle_clear_command(
     logger.info("Clearing session for window %s after /clear", display)
     session_manager.clear_window_session(window_id)
     from .message_queue import enqueue_status_update
-    from .polling_strategies import (
-        clear_screen_buffer,
-        clear_seen_status,
-    )
+    from .polling_strategies import terminal_strategy
 
     await enqueue_status_update(
         update.get_bot(), user_id, window_id, None, thread_id=thread_id
     )
-    clear_seen_status(window_id)
-    clear_screen_buffer(window_id)
+    terminal_strategy.clear_seen_status(window_id)
+    terminal_strategy.clear_screen_buffer(window_id)
 
 
 # --- Main command handler ---
@@ -618,9 +615,9 @@ async def forward_command_handler(
         probe_pane_before,
     ) = await _capture_command_probe_context(window_id, provider)
     status_probe_offset = _status_snapshot_probe_offset(window_id, cc_slash)
-    from .polling_strategies import clear_probe_failures
+    from .polling_strategies import lifecycle_strategy
 
-    clear_probe_failures(window_id)
+    lifecycle_strategy.clear_probe_failures(window_id)
     success, error_msg = await send_to_window(window_id, cc_slash)
     if not success:
         await safe_reply(update.message, f"\u274c {error_msg}")

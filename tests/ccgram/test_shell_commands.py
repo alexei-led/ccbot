@@ -92,7 +92,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.session_manager"),
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch(
@@ -115,7 +115,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.session_manager"),
             patch(
                 f"{_MOD}.send_to_window",
@@ -134,7 +134,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.session_manager") as mock_sm,
         ):
             mock_sm.send_to_window = AsyncMock()
@@ -148,7 +148,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=None),
             patch(f"{_CTX}.session_manager"),
             patch(
@@ -175,7 +175,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
@@ -210,7 +210,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
             patch(f"{_CTX}.session_manager") as mock_sm,
             patch(f"{_MOD}.thread_router") as mock_tr,
@@ -236,7 +236,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", side_effect=ValueError("bad provider")),
             patch(f"{_CTX}.session_manager") as mock_sm,
             patch(f"{_MOD}.thread_router") as mock_tr,
@@ -255,7 +255,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.session_manager") as mock_sm,
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
@@ -283,7 +283,7 @@ class TestHandleShellMessage:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
@@ -661,7 +661,7 @@ class TestLazyMarkerRecovery:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.session_manager") as mock_sm,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
@@ -687,7 +687,7 @@ class TestLazyMarkerRecovery:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.session_manager") as mock_sm,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
@@ -820,7 +820,7 @@ class TestGenerationCounter:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
@@ -850,7 +850,7 @@ class TestGenerationCounter:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
@@ -883,7 +883,7 @@ class TestCommandHistoryRecording:
 
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.clear_probe_failures"),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,

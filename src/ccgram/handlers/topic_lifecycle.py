@@ -26,7 +26,6 @@ from ..window_resolver import is_foreign_window
 from .cleanup import clear_topic_state
 from .message_sender import is_thread_gone
 from .polling_strategies import (
-    clear_window_poll_state,
     lifecycle_strategy,
     terminal_strategy,
 )
@@ -155,7 +154,7 @@ async def _kill_expired_unbound(now: float, timeout: float) -> None:
 def _prune_orphaned_poll_state(live_ids: set[str], bound_ids: set[str]) -> None:
     """Remove poll state for windows that are neither live nor bound."""
     for wid in terminal_strategy.get_orphaned_window_ids(live_ids, bound_ids):
-        clear_window_poll_state(wid)
+        terminal_strategy.clear_state(wid)
 
 
 # ── Display name sync / state pruning ─────────────────────────────────────

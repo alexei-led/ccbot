@@ -281,7 +281,7 @@ async def _handle_stop_failure(event: HookEvent, bot: Bot) -> None:
 async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
     """Handle a SessionEnd event — clean up session lifecycle."""
     from .message_queue import enqueue_status_update
-    from .polling_strategies import clear_seen_status
+    from .polling_strategies import terminal_strategy
     from .topic_emoji import update_topic_emoji
 
     users = _resolve_users_for_window_key(event.window_key)
@@ -303,7 +303,7 @@ async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
         clear_subagents(window_id)
 
     for user_id, thread_id, window_id in users:
-        clear_seen_status(window_id)
+        terminal_strategy.clear_seen_status(window_id)
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         display = thread_router.get_display_name(window_id)
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)

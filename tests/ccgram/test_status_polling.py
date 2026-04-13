@@ -21,14 +21,9 @@ from ccgram.handlers.polling_coordinator import (
 )
 from ccgram.handlers.polling_strategies import (
     MAX_PROBE_FAILURES,
-    clear_autoclose_timer,
-    clear_pane_alerts,
-    clear_screen_buffer,
-    has_pane_alert,
     interactive_strategy,
     is_shell_prompt,
     lifecycle_strategy,
-    reset_screen_buffer_state,
     terminal_strategy,
 )
 from ccgram.tmux_manager import PaneInfo
@@ -97,11 +92,11 @@ class TestAutocloseTimers:
 
     def test_clear_timer(self) -> None:
         _start_autoclose_timer(1, 42, "done", 100.0)
-        clear_autoclose_timer(1, 42)
+        lifecycle_strategy.clear_autoclose_timer(1, 42)
         assert not _has_autoclose(1, 42)
 
     def test_clear_nonexistent_is_noop(self) -> None:
-        clear_autoclose_timer(1, 42)
+        lifecycle_strategy.clear_autoclose_timer(1, 42)
 
     @pytest.mark.parametrize(
         ("state", "minutes", "elapsed"),
@@ -355,9 +350,11 @@ class TestStartupTimeout:
 
 @pytest.fixture()
 def _reset_pyte():
-    reset_screen_buffer_state()
+    terminal_strategy.reset_screen_buffer_state()
+    interactive_strategy.clear_all_alerts()
     yield
-    reset_screen_buffer_state()
+    terminal_strategy.reset_screen_buffer_state()
+    interactive_strategy.clear_all_alerts()
 
 
 _SEP = "─" * 30
@@ -468,7 +465,7 @@ class TestPyteContentHashCaching:
         ws = terminal_strategy.get_state("@0")
         assert ws.last_pane_hash != 0
 
-        clear_screen_buffer("@0")
+        terminal_strategy.clear_screen_buffer("@0")
         assert ws.last_pane_hash == 0
         assert ws.last_pyte_result is None
 
@@ -543,7 +540,7 @@ class TestAnsiCapturePyteParsing:
         _parse_with_pyte("@0", "Hello\nWorld\n")
         ws = terminal_strategy.get_state("@0")
         assert ws.last_rendered_text is not None
-        clear_screen_buffer("@0")
+        terminal_strategy.clear_screen_buffer("@0")
         assert ws.last_rendered_text is None
 
     def test_empty_screen_renders_as_empty_string(self) -> None:
@@ -658,11 +655,9 @@ class TestPyteFallbackInUpdateStatus:
 
 class TestClearSeenStatus:
     def test_clears_seen_status_and_startup(self) -> None:
-        from ccgram.handlers.polling_strategies import clear_seen_status
-
         terminal_strategy.get_state("@0").has_seen_status = True
         terminal_strategy.get_state("@0").startup_time = 100.0
-        clear_seen_status("@0")
+        terminal_strategy.clear_seen_status("@0")
         assert not (
             _window_poll_state.get("@0") and _window_poll_state["@0"].has_seen_status
         )
@@ -1753,16 +1748,16 @@ class TestDeadWindowNotification:
 class TestPaneAlertHelpers:
     def test_has_pane_alert_true_when_present(self) -> None:
         _pane_alert_hashes["%1"] = ("prompt text", 100.0, "@0")
-        assert has_pane_alert("%1") is True
+        assert interactive_strategy.has_pane_alert("%1") is True
 
     def test_has_pane_alert_false_when_absent(self) -> None:
-        assert has_pane_alert("%99") is False
+        assert interactive_strategy.has_pane_alert("%99") is False
 
     def test_clear_pane_alerts_removes_for_window(self) -> None:
         _pane_alert_hashes["%1"] = ("prompt A", 100.0, "@0")
         _pane_alert_hashes["%2"] = ("prompt B", 100.0, "@0")
         _pane_alert_hashes["%3"] = ("prompt C", 100.0, "@5")
-        clear_pane_alerts("@0")
+        interactive_strategy.clear_pane_alerts("@0")
         assert "%1" not in _pane_alert_hashes
         assert "%2" not in _pane_alert_hashes
         assert "%3" in _pane_alert_hashes

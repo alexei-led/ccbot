@@ -290,9 +290,9 @@ async def _create_resume_window(
     old_window_id = thread_router.get_window_for_thread(user_id, thread_id)
     if old_window_id:
         thread_router.unbind_thread(user_id, thread_id)
-        from .polling_strategies import clear_dead_notification
+        from .polling_strategies import lifecycle_strategy
 
-        clear_dead_notification(user_id, thread_id)
+        lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
     provider = (
         get_provider_for_window(old_window_id) if old_window_id else get_provider()
