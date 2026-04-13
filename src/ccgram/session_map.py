@@ -22,6 +22,7 @@ from typing import Any
 import aiofiles
 
 from .config import config
+from .state_persistence import unwired_save
 from .utils import atomic_write_json
 from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window_id
 
@@ -83,7 +84,7 @@ class SessionMapSync:
     """
 
     def __post_init__(self) -> None:
-        self._schedule_save: Callable[[], None] = lambda: None
+        self._schedule_save: Callable[[], None] = unwired_save("SessionMapSync")
 
     # ------------------------------------------------------------------
     # Public: async read/sync methods

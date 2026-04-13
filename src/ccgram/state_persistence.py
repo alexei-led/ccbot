@@ -22,6 +22,25 @@ logger = structlog.get_logger()
 _SaveError = (OSError, TypeError, ValueError)
 
 
+def unwired_save(owner: str) -> Callable[[], None]:
+    """Build a default ``_schedule_save`` callback that fails loudly when called.
+
+    Module-level singletons (window_store, thread_router, user_preferences,
+    session_map_sync) start with this default. ``SessionManager.__post_init__``
+    replaces it with the real persistence callback. If a test (or any caller)
+    mutates a singleton before SessionManager has been instantiated, this
+    raises instead of silently dropping the save.
+    """
+
+    def _raise() -> None:
+        raise RuntimeError(
+            f"{owner}._schedule_save was called before SessionManager wired it. "
+            "Instantiate SessionManager() before mutating singleton state."
+        )
+
+    return _raise
+
+
 class StatePersistence:
     """Debounced, atomic JSON file persistence."""
 
