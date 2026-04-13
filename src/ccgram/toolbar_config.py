@@ -165,7 +165,9 @@ BUILTIN_ACTIONS: dict[str, ToolbarAction] = {
             literal=True,
             read_state=True,
         ),
-        _b("think", "\U0001f4ad", "Think", "key", "Tab", read_state=True),
+        # Claude Code uses Meta+T (Alt+T) to toggle extended thinking.
+        # Tab is WRONG — it just inserts a tab into the input field.
+        _b("think", "\U0001f4ad", "Think", "key", "M-t", read_state=True),
         _b("yolo", "\U0001f1fe", "YOLO", "key", "C-y", read_state=True),
         # Plain key sends.
         _b("esc", "\u238b", "Esc", "key", "Escape"),
