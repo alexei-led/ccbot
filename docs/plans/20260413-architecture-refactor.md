@@ -394,10 +394,10 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 
 - Modify: `src/ccgram/handlers/directory_callbacks.py` L593
 
-- [ ] replace `if approval_mode == "yolo" and provider_name == "claude":` with `if approval_mode == "yolo" and provider.capabilities.has_yolo_confirmation:` — the `provider` object is already in scope at this point (resolved earlier in the function)
-- [ ] update relevant test in `test_directory_callbacks.py` to pass a provider with `has_yolo_confirmation=True/False` and verify both branches
-- [ ] run `make check` — must be green
-- [ ] run `make test-e2e` — Phase 4 sanity check
+- [x] replace `if approval_mode == "yolo" and provider_name == "claude":` with `if approval_mode == "yolo" and provider.capabilities.has_yolo_confirmation:` — the `provider` object is already in scope at this point (resolved earlier in the function)
+- [x] update relevant test in `test_directory_callbacks.py` to pass a provider with `has_yolo_confirmation=True/False` and verify both branches
+- [x] run `make check` — must be green
+- [x] run `make test-e2e` — Phase 4 sanity check (skipped - requires real agent CLIs)
 
 ### Phase 5 — Opportunistic Cleanup
 

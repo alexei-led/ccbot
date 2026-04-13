@@ -590,10 +590,11 @@ async def _create_window_and_bind(
         if chat and chat.type in ("group", "supergroup"):
             thread_router.set_group_chat_id(user_id, pending_thread_id, chat.id)
 
-    if approval_mode == "yolo" and provider_name == "claude":
+    provider = provider_registry.get(provider_name)
+    if approval_mode == "yolo" and provider.capabilities.has_yolo_confirmation:
         await _accept_yolo_confirmation(created_wid)
 
-    if provider_registry.get(provider_name).capabilities.supports_hook:
+    if provider.capabilities.supports_hook:
         await session_manager.wait_for_session_map_entry(created_wid)
 
     if pending_thread_id is None:
