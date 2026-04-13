@@ -183,18 +183,31 @@ _MODE_LINE_HINTS: tuple[str, ...] = (
 )
 
 # Compact labels for button text. The button label IS the state indicator —
-# no popups, no toast. User clicks Mode, the button text changes from
-# "Mode" to "Edit", "Plan", "Auto", "Perm" etc. Ephemeral toasts are too
-# easy to miss on mobile; popups are too disruptive.
+# no popups, no toast. User clicks Mode and the button text cycles through
+# Def → Edit → Plan → Auto → YOLO. Fits the mobile keyboard budget.
+#
+# Per anthropic.com/blog/auto-mode, Claude Code has FIVE distinct modes:
+#   default                 — asks for each tool call             → "Def"
+#   accept edits            — auto-accepts file writes only       → "Edit"
+#   plan mode               — read-only, no tool execution        → "Plan"
+#   auto mode               — classifier-guarded auto-approve     → "Auto"
+#   bypass permissions      — skips ALL checks (YOLO)             → "YOLO"
+#
+# Auto ≠ YOLO: Auto uses a safety classifier; YOLO skips everything.
+# Gemini CLI's own "YOLO mode" and "auto-approve" both map to YOLO here.
 _MODE_SHORT_LABELS: tuple[tuple[str, str], ...] = (
     ("accept edits", "Edit"),
+    ("auto-accept", "Edit"),
     ("plan", "Plan"),
     ("auto mode", "Auto"),
-    ("auto-accept", "Auto"),
-    ("bypass", "Perm"),
+    ("bypass", "YOLO"),
     ("yolo", "YOLO"),
     ("auto-approve", "YOLO"),
 )
+
+# Default fallback label used when no recognized mode-line is found —
+# Claude's default mode has no indicator, so "no line" means "default".
+_DEFAULT_MODE_LABEL = "Def"
 
 _READ_STATE_DELAY_S = 0.35  # long enough for Claude to re-render its chrome
 _READ_STATE_LINE_LIMIT = 80
@@ -254,23 +267,53 @@ def _find_mode_line(capture: str) -> str | None:
 # ──────────────────────────────────────────────────────────────────────
 
 
+async def _scrape_current_mode(window_id: str) -> str:
+    """Capture the pane and return the current mode as a short label.
+
+    Returns ``_DEFAULT_MODE_LABEL`` ("Def") when:
+      - pane capture fails
+      - pane is empty
+      - no recognized mode-indicator line is found (default mode)
+    """
+    try:
+        capture = await tmux_manager.capture_pane(window_id)
+    except (OSError, TelegramError) as exc:
+        logger.warning("Mode scrape: capture_pane failed %s (%s)", window_id, exc)
+        return _DEFAULT_MODE_LABEL
+    if not capture:
+        return _DEFAULT_MODE_LABEL
+    mode_line = _find_mode_line(capture)
+    return _mode_short_label(mode_line, _DEFAULT_MODE_LABEL)
+
+
+async def seed_button_states(window_id: str) -> None:
+    """Populate toggle-button label overrides with the actual current state.
+
+    Called from ``/toolbar`` handler BEFORE rendering the keyboard, so the
+    initial button text reflects the real mode (Edit/Plan/Full/Def) rather
+    than the static "Mode" placeholder. Best-effort — failures are silent.
+    """
+    cfg = _get_toolbar_config()
+    # Seed every action in the pool that has read_state=True. For now that's
+    # just the "mode" action, but this future-proofs user-defined toggles.
+    for action_name, action in cfg.actions.items():
+        if not action.read_state:
+            continue
+        label = await _scrape_current_mode(window_id)
+        _set_action_label(window_id, action_name, label)
+
+
 async def _refresh_button_label(
     action: ToolbarAction, query: CallbackQuery, window_id: str
 ) -> str:
     """Scrape the pane, update the button label, rebuild the keyboard.
 
-    This is how toggle actions (Mode/Think/YOLO) show their current state:
-    the button text itself becomes the indicator. No popups, no toasts.
-    Returns the short label used so the caller can include it in the toast.
+    This is how toggle actions (Mode) show their current state: the button
+    text itself becomes the indicator. No popups, no ephemeral toasts.
+    Returns the short label used so the caller can echo it in the toast.
     """
     await asyncio.sleep(_READ_STATE_DELAY_S)
-    capture: str | None = None
-    try:
-        capture = await tmux_manager.capture_pane(window_id)
-    except (OSError, TelegramError) as exc:
-        logger.warning("Mode scrape: capture_pane failed %s (%s)", window_id, exc)
-    mode_line = _find_mode_line(capture) if capture else None
-    short_label = _mode_short_label(mode_line, action.text)
+    short_label = await _scrape_current_mode(window_id)
     _set_action_label(window_id, action.name, short_label)
 
     # Rebuild the keyboard for the same provider and edit the message.
@@ -280,7 +323,6 @@ async def _refresh_button_label(
     try:
         await query.edit_message_reply_markup(reply_markup=new_kb)
     except TelegramError as exc:
-        # Concurrent edit or rate limit — the toast still gives feedback.
         logger.debug("Toolbar reply_markup edit failed: %s", exc)
     return short_label
 

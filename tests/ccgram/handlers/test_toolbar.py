@@ -433,10 +433,11 @@ class TestModeShortLabel:
         ("mode_line", "expected"),
         [
             ("\u23f5\u23f5 accept edits on", "Edit"),
+            ("auto-accept enabled", "Edit"),
             ("\u23f8 plan mode on", "Plan"),
+            # Auto mode (classifier-guarded) is DISTINCT from YOLO/bypass
             ("\u23f5\u23f5 auto mode on", "Auto"),
-            ("auto-accept enabled", "Auto"),
-            ("\u23f5\u23f5 bypass permissions…", "Perm"),
+            ("\u23f5\u23f5 bypass permissions…", "YOLO"),
             ("yolo mode enabled", "YOLO"),
             ("auto-approve on", "YOLO"),
         ],
@@ -444,17 +445,17 @@ class TestModeShortLabel:
     def test_maps_known_modes(self, mode_line: str, expected: str) -> None:
         from ccgram.handlers.toolbar_callbacks import _mode_short_label
 
-        assert _mode_short_label(mode_line, "Mode") == expected
+        assert _mode_short_label(mode_line, "Def") == expected
 
     def test_none_returns_default(self) -> None:
         from ccgram.handlers.toolbar_callbacks import _mode_short_label
 
-        assert _mode_short_label(None, "Mode") == "Mode"
+        assert _mode_short_label(None, "Def") == "Def"
 
     def test_unknown_mode_returns_default(self) -> None:
         from ccgram.handlers.toolbar_callbacks import _mode_short_label
 
-        assert _mode_short_label("something weird", "Mode") == "Mode"
+        assert _mode_short_label("something weird", "Def") == "Def"
 
 
 class TestRefreshButtonLabel:
@@ -515,7 +516,44 @@ class TestRefreshButtonLabel:
         assert "Plan" in mode_btn.text
         assert "\U0001f500" in mode_btn.text
 
-    async def test_capture_failure_preserves_default_label(self) -> None:
+    async def test_seed_button_states_populates_mode_label(self) -> None:
+        """seed_button_states scrapes the pane and pre-populates the label."""
+        from ccgram.handlers.toolbar_callbacks import (
+            _clear_window_labels,
+            _get_action_label,
+            seed_button_states,
+        )
+
+        _clear_window_labels("@111")
+        pane = (
+            "output\n"
+            "──────────\n"
+            "\u276f\n"
+            "──────────\n"
+            "[Opus] 34%\n"
+            "  \u23f8 plan mode on\n"
+        )
+        with patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux:
+            mock_tmux.capture_pane = AsyncMock(return_value=pane)
+            await seed_button_states("@111")
+        assert _get_action_label("@111", "mode") == "Plan"
+
+    async def test_seed_button_states_default_when_no_indicator(self) -> None:
+        from ccgram.handlers.toolbar_callbacks import (
+            _clear_window_labels,
+            _get_action_label,
+            seed_button_states,
+        )
+
+        _clear_window_labels("@222")
+        # No mode indicator line — default mode
+        pane = "some output\n──────────\n\u276f\n──────────\n[Opus] 34%\n"
+        with patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux:
+            mock_tmux.capture_pane = AsyncMock(return_value=pane)
+            await seed_button_states("@222")
+        assert _get_action_label("@222", "mode") == "Def"
+
+    async def test_capture_failure_returns_def_label(self) -> None:
         from ccgram.handlers.toolbar_callbacks import (
             _get_action_label,
             _refresh_button_label,
@@ -535,5 +573,6 @@ class TestRefreshButtonLabel:
             mock_tmux.capture_pane = AsyncMock(side_effect=OSError("boom"))
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
             result = await _refresh_button_label(BUILTIN_ACTIONS["mode"], query, "@42")
-        assert result == "Mode"
-        assert _get_action_label("@42", "mode") == "Mode"
+        # Capture failure → assume default mode → "Def"
+        assert result == "Def"
+        assert _get_action_label("@42", "mode") == "Def"

@@ -281,8 +281,10 @@ class TestBuiltins:
         assert mode.read_state is True
         assert mode.payload == "\x1b[Z"
 
-    def test_think_and_yolo_have_read_state(self) -> None:
-        assert BUILTIN_ACTIONS["think"].read_state is True
+    def test_yolo_has_read_state(self) -> None:
+        # Think was changed to read_state=False because Claude Code has no
+        # persistent chrome indicator for extended-thinking state.
+        assert BUILTIN_ACTIONS["think"].read_state is False
         assert BUILTIN_ACTIONS["yolo"].read_state is True
 
     def test_default_layouts_have_3x3_grids(self) -> None:

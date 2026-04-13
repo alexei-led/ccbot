@@ -155,7 +155,8 @@ BUILTIN_ACTIONS: dict[str, ToolbarAction] = {
         _b("live", "\U0001f4fa", "Live", "builtin", "live"),
         _b("send", "\U0001f4e4", "Send", "builtin", "send"),
         _b("close", "\u2716", "Close", "builtin", "dismiss"),
-        # Key sends with state-readback for Mode/Think/YOLO toggles.
+        # Mode toggle — cycles Claude's permission modes via Shift-Tab.
+        # read_state=True so the button label updates to Def/Edit/Plan/Full.
         _b(
             "mode",
             "\U0001f500",
@@ -166,8 +167,8 @@ BUILTIN_ACTIONS: dict[str, ToolbarAction] = {
             read_state=True,
         ),
         # Claude Code uses Meta+T (Alt+T) to toggle extended thinking.
-        # Tab is WRONG — it just inserts a tab into the input field.
-        _b("think", "\U0001f4ad", "Think", "key", "M-t", read_state=True),
+        # Thinking has no persistent chrome indicator, so no read_state.
+        _b("think", "\U0001f4ad", "Think", "key", "M-t"),
         _b("yolo", "\U0001f1fe", "YOLO", "key", "C-y", read_state=True),
         # Plain key sends.
         _b("esc", "\u238b", "Esc", "key", "Escape"),

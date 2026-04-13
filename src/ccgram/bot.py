@@ -215,10 +215,16 @@ async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    from .handlers.toolbar_callbacks import build_toolbar_keyboard
+    from .handlers.toolbar_callbacks import (
+        build_toolbar_keyboard,
+        seed_button_states,
+    )
 
     ws = session_manager.get_window_state(window_id)
     provider_name = ws.provider_name if ws and ws.provider_name else "claude"
+    # Seed toggle-button labels with the actual current state so the
+    # initial render shows "Edit"/"Plan"/"YOLO"/"Def" instead of "Mode".
+    await seed_button_states(window_id)
     keyboard = build_toolbar_keyboard(window_id, provider_name)
     display = thread_router.get_display_name(window_id)
     await safe_reply(
