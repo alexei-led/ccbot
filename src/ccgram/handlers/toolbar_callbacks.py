@@ -32,23 +32,9 @@ from ..toolbar_config import ToolbarAction
 from .callback_data import CB_TOOLBAR
 from .callback_helpers import get_thread_id, user_owns_window
 from .callback_registry import register
-from .toolbar_keyboard import (  # noqa: F401 — re-exported for callers
-    _get_toolbar_config,
-    build_toolbar_keyboard,
-    refresh_button_label,
-    reload_toolbar_config,
-    seed_button_states,
-)
+from .toolbar_keyboard import _get_toolbar_config, refresh_button_label
 
 logger = structlog.get_logger()
-
-__all__ = [
-    "build_toolbar_keyboard",
-    "handle_toolbar_callback",
-    "refresh_button_label",
-    "reload_toolbar_config",
-    "seed_button_states",
-]
 
 
 async def _dispatch_key(

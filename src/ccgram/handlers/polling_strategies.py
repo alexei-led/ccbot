@@ -16,6 +16,7 @@ enables independent testing of state logic without mocking external deps.
 import structlog
 import time
 from dataclasses import dataclass, field
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from ..providers.base import StatusUpdate
@@ -115,7 +116,7 @@ class TerminalScreenBuffer:
 
     def clear_screen_buffer(self, window_id: str) -> None:
         """Remove a window's ScreenBuffer, caches, and pyte results."""
-        ws = self._poll_state._states.get(window_id)
+        ws = self._poll_state.peek_state(window_id)
         if ws:
             ws.screen_buffer = None
             ws.pane_count_cache = None
@@ -125,7 +126,7 @@ class TerminalScreenBuffer:
 
     def reset_screen_buffer_state(self) -> None:
         """Reset all ScreenBuffers and caches (for testing)."""
-        for ws in self._poll_state._states.values():
+        for ws in self._poll_state.iter_states():
             ws.screen_buffer = None
             ws.pane_count_cache = None
             ws.last_pane_hash = 0
@@ -136,7 +137,7 @@ class TerminalScreenBuffer:
 
     def is_rc_active(self, window_id: str) -> bool:
         """Check whether Remote Control is currently active for a window."""
-        ws = self._poll_state._states.get(window_id)
+        ws = self._poll_state.peek_state(window_id)
         return ws.rc_active if ws else False
 
     def update_rc_state(self, ws: WindowPollState, rc_detected: bool) -> None:
@@ -161,7 +162,7 @@ class TerminalScreenBuffer:
 
     def is_single_pane_cached(self, window_id: str) -> bool:
         """Check if pane count cache confirms single pane (skip subprocess)."""
-        ws = self._poll_state._states.get(window_id)
+        ws = self._poll_state.peek_state(window_id)
         if not ws or not ws.pane_count_cache:
             return False
         count, expiry = ws.pane_count_cache
@@ -169,7 +170,7 @@ class TerminalScreenBuffer:
 
     def get_rendered_text(self, window_id: str, fallback: str) -> str:
         """Return last rendered text if available, otherwise fallback."""
-        ws = self._poll_state._states.get(window_id)
+        ws = self._poll_state.peek_state(window_id)
         if ws and ws.last_rendered_text is not None:
             return ws.last_rendered_text
         return fallback
@@ -281,6 +282,14 @@ class TerminalPollState:
     def get_state(self, window_id: str) -> WindowPollState:
         """Get or create WindowPollState for a window."""
         return self._states.setdefault(window_id, WindowPollState())
+
+    def peek_state(self, window_id: str) -> WindowPollState | None:
+        """Return existing state without creating it, or None."""
+        return self._states.get(window_id)
+
+    def iter_states(self) -> Iterable[WindowPollState]:
+        """Iterate over all existing window poll states."""
+        return self._states.values()
 
     def clear_state(self, window_id: str) -> None:
         """Remove all polling state for a window."""
@@ -401,8 +410,7 @@ class InteractiveUIStrategy:
     in polling_coordinator.py and access state through this strategy.
     """
 
-    def __init__(self, screen_buffer: TerminalScreenBuffer) -> None:
-        self._screen_buffer = screen_buffer
+    def __init__(self) -> None:
         self._pane_alert_hashes: dict[str, tuple[str, float, str]] = {}
         topic_state.register_bound("window", self.clear_pane_alerts)
 
@@ -575,10 +583,5 @@ class TopicLifecycleStrategy:
 
 terminal_poll_state = TerminalPollState()
 terminal_screen_buffer = TerminalScreenBuffer(terminal_poll_state)
-interactive_strategy = InteractiveUIStrategy(terminal_screen_buffer)
+interactive_strategy = InteractiveUIStrategy()
 lifecycle_strategy = TopicLifecycleStrategy(terminal_poll_state)
-
-# Backward-compatible alias — callers that import `terminal_strategy` get
-# the poll-state singleton (which owns the WindowPollState dict, matching
-# the old TerminalStatusStrategy's primary role).
-terminal_strategy = terminal_poll_state

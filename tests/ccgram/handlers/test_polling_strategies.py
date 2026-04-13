@@ -250,7 +250,7 @@ class TestInteractiveUIStrategy:
     def setup_method(self):
         self.poll_state = TerminalPollState()
         self.screen_buffer = TerminalScreenBuffer(self.poll_state)
-        self.strategy = InteractiveUIStrategy(self.screen_buffer)
+        self.strategy = InteractiveUIStrategy()
 
     def test_has_pane_alert_false_by_default(self):
         assert not self.strategy.has_pane_alert("%0")
