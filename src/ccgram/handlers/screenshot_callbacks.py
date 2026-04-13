@@ -1,21 +1,17 @@
-"""Screenshot and status button callback handlers.
+"""Screenshot callback handlers.
 
-Handles inline keyboard callbacks for screenshot UI and status message buttons:
+Handles inline keyboard callbacks for screenshot UI:
   - CB_SCREENSHOT_REFRESH: Refresh an existing screenshot
   - CB_LIVE_START: Start auto-refreshing live terminal view
   - CB_LIVE_STOP: Stop live view and revert to screenshot keyboard
-  - CB_STATUS_RECALL: Send one of the two recent commands from status row
-  - CB_STATUS_ESC: Send Escape key from status message
   - CB_STATUS_SCREENSHOT: Take a screenshot from status message
-  - CB_STATUS_REMOTE: Toggle Remote Control activation
-  - CB_KEYS_PREFIX: Send a quick key from screenshot keyboard
+  - CB_PANE_SCREENSHOT: Take a screenshot of a specific pane
 
-Toolbar callbacks (CB_TOOLBAR_*) are in toolbar_callbacks.py.
-
-Key function: handle_screenshot_callback (uniform callback handler signature).
+Status-bar button callbacks (notify, recall, esc, remote, keys) are in
+status_bar_actions.py. Toolbar callbacks (CB_TOOLBAR_*) are in
+toolbar_callbacks.py.
 """
 
-import asyncio
 import contextlib
 import io
 import time
@@ -34,45 +30,20 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..screenshot import text_to_image
-from ..session import session_manager
 from ..thread_router import thread_router
-from ..tmux_manager import send_to_window, tmux_manager
+from ..tmux_manager import tmux_manager
 from .callback_data import (
     CB_KEYS_PREFIX,
     CB_LIVE_START,
     CB_LIVE_STOP,
     CB_PANE_SCREENSHOT,
     CB_SCREENSHOT_REFRESH,
-    CB_STATUS_ESC,
-    CB_STATUS_NOTIFY,
-    CB_STATUS_RECALL,
-    CB_STATUS_REMOTE,
     CB_STATUS_SCREENSHOT,
-    NOTIFY_MODE_LABELS,
 )
-from ..topic_state_registry import topic_state
 from .callback_helpers import get_thread_id, user_owns_window
 from .callback_registry import register
 
 logger = structlog.get_logger()
-
-_KEY_REFRESH_DELAY = 0.3  # seconds — debounce window for rapid key taps
-_pending_key_refreshes: dict[tuple[int, str], asyncio.Task[None]] = {}
-
-
-@topic_state.register("window")
-def _clear_key_refreshes(window_id: str) -> None:
-    """Cancel in-flight debounced key-refresh tasks for a closing window."""
-    stale = [
-        k
-        for k in _pending_key_refreshes
-        if k[1] == window_id or k[1].startswith(f"{window_id}:%")
-    ]
-    for k in stale:
-        task = _pending_key_refreshes.pop(k, None)
-        if task and not task.done():
-            task.cancel()
-
 
 # key_id -> (tmux_key, enter, literal)
 KEYS_SEND_MAP: dict[str, tuple[str, bool, bool]] = {
@@ -290,22 +261,6 @@ async def _handle_pane_screenshot(
         await query.answer("Failed to send screenshot", show_alert=True)
 
 
-async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_STATUS_REMOTE: activate Remote Control or show status."""
-    from .polling_strategies import terminal_screen_buffer
-
-    window_id = data[len(CB_STATUS_REMOTE) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    if terminal_screen_buffer.is_rc_active(window_id):
-        await query.answer("\U0001f4e1 Remote Control active")
-    else:
-        display = thread_router.get_display_name(window_id)
-        await send_to_window(window_id, f"/remote-control {display}")
-        await query.answer("\U0001f4e1 Activating\u2026")
-
-
 async def handle_screenshot_callback(
     query: CallbackQuery,
     user_id: int,
@@ -313,27 +268,24 @@ async def handle_screenshot_callback(
     update: Update,
     _context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    """Handle screenshot, status button, and quick-key callbacks."""
-    # Handlers that need (query, user_id, data, update)
+    """Handle screenshot-related callbacks only.
+
+    Status-bar actions (notify, recall, esc, remote, keys) are dispatched
+    separately by status_bar_actions.py.
+    """
     with_update = {
         CB_LIVE_START: _handle_live_start,
         CB_LIVE_STOP: _handle_live_stop,
-        CB_STATUS_RECALL: _handle_status_recall,
         CB_STATUS_SCREENSHOT: _handle_status_screenshot,
         CB_PANE_SCREENSHOT: _handle_pane_screenshot,
-        CB_KEYS_PREFIX: _handle_keys,
     }
     for prefix, handler in with_update.items():
         if data.startswith(prefix):
             await handler(query, user_id, data, update)
             return
 
-    # Handlers that need (query, user_id, data)
     without_update = {
         CB_SCREENSHOT_REFRESH: _handle_refresh,
-        CB_STATUS_ESC: _handle_status_esc,
-        CB_STATUS_NOTIFY: _handle_notify_toggle,
-        CB_STATUS_REMOTE: _handle_remote_control,
     }
     for prefix, handler in without_update.items():
         if data.startswith(prefix):
@@ -378,79 +330,6 @@ async def _handle_refresh(query: CallbackQuery, user_id: int, data: str) -> None
         await query.answer("Failed to refresh", show_alert=True)
 
 
-async def _handle_status_esc(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_STATUS_ESC: send Escape key from status message."""
-    window_id = data[len(CB_STATUS_ESC) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    w = await tmux_manager.find_window_by_id(window_id)
-    if w:
-        await tmux_manager.send_keys(w.window_id, "Escape", enter=False, literal=False)
-        await query.answer("\u238b Sent Escape")
-    else:
-        await query.answer("Window not found", show_alert=True)
-
-
-async def _handle_status_recall(
-    query: CallbackQuery, user_id: int, data: str, update: Update
-) -> None:
-    """Handle CB_STATUS_RECALL: send one of the last shown commands directly."""
-    rest = data[len(CB_STATUS_RECALL) :]
-    if ":" not in rest:
-        await query.answer("Invalid data")
-        return
-    window_id, idx_raw = rest.rsplit(":", 1)
-    try:
-        idx = int(idx_raw)
-        if idx < 0:
-            raise ValueError  # noqa: TRY301
-    except ValueError:
-        await query.answer("Invalid data")
-        return
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-
-    thread_id = get_thread_id(update)
-    if thread_id is None:
-        await query.answer("Use in a topic", show_alert=True)
-        return
-    if thread_router.resolve_window_for_thread(user_id, thread_id) != window_id:
-        await query.answer("Stale status button", show_alert=True)
-        return
-
-    from .command_history import get_history, record_command
-
-    history = get_history(user_id, thread_id, limit=idx + 1)
-    if idx >= len(history):
-        await query.answer("Command not found", show_alert=True)
-        return
-
-    command = history[idx]
-
-    # Shell provider: route through LLM pipeline instead of raw send
-    from ..providers import get_provider_for_window
-
-    provider = get_provider_for_window(window_id)
-    if not provider.capabilities.supports_mailbox_delivery:
-        from .shell_commands import handle_shell_message
-
-        await handle_shell_message(
-            query.get_bot(), user_id, thread_id, window_id, command
-        )
-        await query.answer("\u21a9 Recalled")
-        return
-
-    ok, err = await send_to_window(window_id, command)
-    if not ok:
-        await query.answer(err or "Failed to send command", show_alert=True)
-        return
-
-    record_command(user_id, thread_id, command)
-    await query.answer("\u21a9 Sent")
-
-
 async def _handle_status_screenshot(
     query: CallbackQuery, user_id: int, data: str, update: Update
 ) -> None:
@@ -486,119 +365,6 @@ async def _handle_status_screenshot(
     except TelegramError as e:
         logger.error("Failed to send screenshot: %s", e)
         await query.answer("Failed to send screenshot", show_alert=True)
-
-
-async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -> None:
-    """Handle CB_STATUS_NOTIFY: cycle notification mode for a window."""
-    window_id = data[len(CB_STATUS_NOTIFY) :]
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-    new_mode = session_manager.cycle_notification_mode(window_id)
-    label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
-    # Update keyboard in-place to reflect new bell icon (all modes keep the
-    # message so users can always toggle back)
-    from .status_bubble import build_status_keyboard
-
-    keyboard = build_status_keyboard(window_id)
-    with contextlib.suppress(TelegramError):
-        await query.edit_message_reply_markup(reply_markup=keyboard)
-    await query.answer(label)
-
-
-async def _handle_keys(
-    query: CallbackQuery, user_id: int, data: str, update: Update
-) -> None:
-    """Handle CB_KEYS_PREFIX: send a quick key from screenshot keyboard."""
-    rest = data[len(CB_KEYS_PREFIX) :]
-    colon_idx = rest.find(":")
-    if colon_idx < 0:
-        await query.answer("Invalid data")
-        return
-    key_id = rest[:colon_idx]
-    target = rest[colon_idx + 1 :]
-    window_id, pane_id = _parse_target(target)
-
-    if not user_owns_window(user_id, window_id):
-        await query.answer("Not your session", show_alert=True)
-        return
-
-    key_info = KEYS_SEND_MAP.get(key_id)
-    if not key_info:
-        await query.answer("Unknown key")
-        return
-
-    tmux_key, enter, literal = key_info
-    w = await tmux_manager.find_window_by_id(window_id)
-    if not w:
-        await query.answer("Window not found", show_alert=True)
-        return
-
-    if pane_id:
-        await tmux_manager.send_keys_to_pane(
-            pane_id, tmux_key, enter=enter, literal=literal, window_id=window_id
-        )
-    else:
-        await tmux_manager.send_keys(
-            w.window_id, tmux_key, enter=enter, literal=literal
-        )
-    await query.answer(KEY_LABELS.get(key_id, key_id))
-
-    # During live view, skip the refresh — next tick handles it
-    from .live_view import get_live_view
-
-    thread_id = get_thread_id(update)
-    if thread_id is not None and get_live_view(user_id, thread_id) is not None:
-        return
-
-    _schedule_key_refresh(user_id, target, query, window_id, pane_id)
-
-
-def _schedule_key_refresh(
-    user_id: int,
-    target: str,
-    query: CallbackQuery,
-    window_id: str,
-    pane_id: str | None,
-) -> None:
-    """Schedule a debounced screenshot refresh after a key press.
-
-    Cancels any pending refresh for the same target so rapid key taps
-    (e.g. Down Down Down) only render the final terminal state.
-    """
-    refresh_key = (user_id, target)
-    prev = _pending_key_refreshes.pop(refresh_key, None)
-    if prev and not prev.done():
-        prev.cancel()
-
-    async def _do_refresh() -> None:
-        try:
-            await asyncio.sleep(_KEY_REFRESH_DELAY)
-            if pane_id:
-                text = await tmux_manager.capture_pane_by_id(
-                    pane_id, with_ansi=True, window_id=window_id
-                )
-            else:
-                text = await tmux_manager.capture_pane(window_id, with_ansi=True)
-            if text:
-                png_bytes = await text_to_image(text, with_ansi=True)
-                keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
-                with contextlib.suppress(TelegramError):
-                    await query.edit_message_media(
-                        media=InputMediaDocument(
-                            media=io.BytesIO(png_bytes),
-                            filename="screenshot.png",
-                        ),
-                        reply_markup=keyboard,
-                    )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("debounced screenshot refresh failed")
-        finally:
-            _pending_key_refreshes.pop(refresh_key, None)
-
-    _pending_key_refreshes[refresh_key] = asyncio.create_task(_do_refresh())
 
 
 # ------------------------------------------------------------------
@@ -748,13 +514,8 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     CB_LIVE_START,
     CB_LIVE_STOP,
     CB_SCREENSHOT_REFRESH,
-    CB_STATUS_RECALL,
-    CB_STATUS_ESC,
-    CB_STATUS_NOTIFY,
     CB_STATUS_SCREENSHOT,
-    CB_KEYS_PREFIX,
     CB_PANE_SCREENSHOT,
-    CB_STATUS_REMOTE,
 )
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query

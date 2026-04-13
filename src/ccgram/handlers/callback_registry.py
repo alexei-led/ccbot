@@ -121,6 +121,7 @@ def load_handlers() -> None:
         resume_command,
         screenshot_callbacks,
         send_callbacks,
+        status_bar_actions,
         toolbar_callbacks,
         sessions_dashboard,
         shell_capture,

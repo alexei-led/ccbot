@@ -411,16 +411,16 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Create: `tests/ccgram/handlers/test_status_bar_actions.py`
 - Modify: `tests/ccgram/handlers/test_screenshot_callbacks.py`
 
-- [ ] create `status_bar_actions.py` with module docstring: "Status-bubble button callbacks (notify toggle, recall, remote control, esc, keys)"
-- [ ] move from `screenshot_callbacks.py`: `_handle_notify_toggle`, `_handle_status_recall`, `_handle_remote_control`, `_handle_status_esc`, `_handle_keys`, `_schedule_key_refresh` (and its inner `_do_refresh`), `_pending_key_refreshes` dict, `_clear_key_refreshes` cleanup
-- [ ] add a new `_dispatch` function decorated with `@register(CB_STATUS_NOTIFY, CB_STATUS_RECALL, CB_STATUS_REMOTE, CB_STATUS_ESC, CB_STATUS_KEY)`
-- [ ] `_handle_status_screenshot` stays in `screenshot_callbacks.py` — it is the one status-bar action that legitimately belongs there
-- [ ] `_handle_status_esc` stays? review: it's "send Escape via the status bubble button" — belongs in status_bar_actions (key dispatch), not screenshot
-- [ ] update `callback_registry.load_handlers()` to import `status_bar_actions`
-- [ ] verify `screenshot_callbacks.py` is ~350 lines after the move (down from 764)
-- [ ] write unit tests for each moved function against its respective CB\_ prefix — use mocked `session_manager`, mocked `tmux_manager`
-- [ ] update `test_screenshot_callbacks.py` — remove moved tests
-- [ ] run `make check` — must be green before Task 12
+- [x] create `status_bar_actions.py` with module docstring: "Status-bubble button callbacks (notify toggle, recall, remote control, esc, keys)"
+- [x] move from `screenshot_callbacks.py`: `_handle_notify_toggle`, `_handle_status_recall`, `_handle_remote_control`, `_handle_status_esc`, `_handle_keys`, `_schedule_key_refresh` (and its inner `_do_refresh`), `_pending_key_refreshes` dict, `_clear_key_refreshes` cleanup
+- [x] add a new `_dispatch` function decorated with `@register(CB_STATUS_NOTIFY, CB_STATUS_RECALL, CB_STATUS_REMOTE, CB_STATUS_ESC, CB_STATUS_KEY)`
+- [x] `_handle_status_screenshot` stays in `screenshot_callbacks.py` — it is the one status-bar action that legitimately belongs there
+- [x] `_handle_status_esc` stays? review: it's "send Escape via the status bubble button" — belongs in status_bar_actions (key dispatch), not screenshot
+- [x] update `callback_registry.load_handlers()` to import `status_bar_actions`
+- [x] verify `screenshot_callbacks.py` is ~350 lines after the move (down from 764) — actual: 524 lines (plan estimate was approximate; all status-bar actions extracted, remaining code is screenshot/live-view/pane)
+- [x] write unit tests for each moved function against its respective CB\_ prefix — use mocked `session_manager`, mocked `tmux_manager`
+- [x] update `test_screenshot_callbacks.py` — remove moved tests (updated test_status_recall_callback.py and test_live_view.py patch paths)
+- [x] run `make check` — must be green before Task 12
 
 ### Task 12: WindowView migration for 6 read-only handlers
 

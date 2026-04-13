@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from ccgram.handlers.callback_data import CB_STATUS_RECALL
-from ccgram.handlers.screenshot_callbacks import handle_screenshot_callback
+from ccgram.handlers.status_bar_actions import _handle_status_bar_action  # noqa: F401
 
 
 def _make_query() -> AsyncMock:
@@ -18,12 +18,10 @@ async def test_status_recall_sends_selected_history_command() -> None:
     context = MagicMock()
 
     with (
+        patch("ccgram.handlers.status_bar_actions.user_owns_window", return_value=True),
+        patch("ccgram.handlers.status_bar_actions.get_thread_id", return_value=42),
         patch(
-            "ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True
-        ),
-        patch("ccgram.handlers.screenshot_callbacks.get_thread_id", return_value=42),
-        patch(
-            "ccgram.handlers.screenshot_callbacks.thread_router.resolve_window_for_thread",
+            "ccgram.handlers.status_bar_actions.thread_router.resolve_window_for_thread",
             return_value="@0",
         ),
         patch(
@@ -31,13 +29,13 @@ async def test_status_recall_sends_selected_history_command() -> None:
             return_value=["/status", "/clear"],
         ),
         patch(
-            "ccgram.handlers.screenshot_callbacks.send_to_window",
+            "ccgram.handlers.status_bar_actions.send_to_window",
             new_callable=AsyncMock,
             return_value=(True, ""),
         ) as mock_send,
         patch("ccgram.handlers.command_history.record_command") as mock_record,
     ):
-        await handle_screenshot_callback(
+        await _handle_status_bar_action(
             query, 100, f"{CB_STATUS_RECALL}@0:1", update, context
         )
 
@@ -52,20 +50,18 @@ async def test_status_recall_rejects_stale_topic_binding() -> None:
     context = MagicMock()
 
     with (
+        patch("ccgram.handlers.status_bar_actions.user_owns_window", return_value=True),
+        patch("ccgram.handlers.status_bar_actions.get_thread_id", return_value=42),
         patch(
-            "ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True
-        ),
-        patch("ccgram.handlers.screenshot_callbacks.get_thread_id", return_value=42),
-        patch(
-            "ccgram.handlers.screenshot_callbacks.thread_router.resolve_window_for_thread",
+            "ccgram.handlers.status_bar_actions.thread_router.resolve_window_for_thread",
             return_value="@9",
         ),
         patch(
-            "ccgram.handlers.screenshot_callbacks.send_to_window",
+            "ccgram.handlers.status_bar_actions.send_to_window",
             new_callable=AsyncMock,
         ) as mock_send,
     ):
-        await handle_screenshot_callback(
+        await _handle_status_bar_action(
             query, 100, f"{CB_STATUS_RECALL}@0:0", update, context
         )
 
@@ -79,21 +75,19 @@ async def test_status_recall_handles_missing_history_entry() -> None:
     context = MagicMock()
 
     with (
+        patch("ccgram.handlers.status_bar_actions.user_owns_window", return_value=True),
+        patch("ccgram.handlers.status_bar_actions.get_thread_id", return_value=42),
         patch(
-            "ccgram.handlers.screenshot_callbacks.user_owns_window", return_value=True
-        ),
-        patch("ccgram.handlers.screenshot_callbacks.get_thread_id", return_value=42),
-        patch(
-            "ccgram.handlers.screenshot_callbacks.thread_router.resolve_window_for_thread",
+            "ccgram.handlers.status_bar_actions.thread_router.resolve_window_for_thread",
             return_value="@0",
         ),
         patch("ccgram.handlers.command_history.get_history", return_value=["/status"]),
         patch(
-            "ccgram.handlers.screenshot_callbacks.send_to_window",
+            "ccgram.handlers.status_bar_actions.send_to_window",
             new_callable=AsyncMock,
         ) as mock_send,
     ):
-        await handle_screenshot_callback(
+        await _handle_status_bar_action(
             query, 100, f"{CB_STATUS_RECALL}@0:1", update, context
         )
 
