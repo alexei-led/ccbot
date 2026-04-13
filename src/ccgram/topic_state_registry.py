@@ -107,7 +107,7 @@ def _safe_call(fn: Callable, *args: object) -> None:
     except (
         OSError,
         ValueError,
-        KeyError,
+        LookupError,
         TypeError,
         RuntimeError,
         AttributeError,

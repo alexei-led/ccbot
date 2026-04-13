@@ -13,11 +13,13 @@ a policy based on trigger type:
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
 
 from ..topic_state_registry import topic_state
 from .callback_registry import register
@@ -159,9 +161,21 @@ async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     data = query.data
     if data.startswith(CB_SHELL_SETUP):
         window_id = data[len(CB_SHELL_SETUP) :]
-        await accept_offer(window_id)
-        await query.edit_message_text("✅ Shell prompt marker configured")
+        try:
+            await accept_offer(window_id)
+            await query.edit_message_text("✅ Shell prompt marker configured")
+        except TelegramError as exc:
+            logger.debug("shell_setup_edit_failed", error=str(exc))
+        except OSError as exc:
+            logger.warning(
+                "shell_setup_tmux_error", window_id=window_id, error=str(exc)
+            )
+            with contextlib.suppress(TelegramError):
+                await query.edit_message_text(
+                    "❌ Setup failed — window may have closed"
+                )
     elif data.startswith(CB_SHELL_SKIP):
         window_id = data[len(CB_SHELL_SKIP) :]
         record_skip(window_id)
-        await query.edit_message_text("⏭ Skipped — send ! prefix for raw commands")
+        with contextlib.suppress(TelegramError):
+            await query.edit_message_text("⏭ Skipped — send ! prefix for raw commands")
