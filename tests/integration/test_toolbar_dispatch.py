@@ -21,7 +21,7 @@ from ccgram.handlers.callback_registry import (
     dispatch as callback_dispatch,
     load_handlers,
 )
-from ccgram.handlers.toolbar_callbacks import (
+from ccgram.handlers.toolbar_keyboard import (
     build_toolbar_keyboard,
     reload_toolbar_config,
 )

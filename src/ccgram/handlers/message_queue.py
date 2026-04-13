@@ -26,8 +26,9 @@ from .status_bubble import (
     process_status_update_task,
 )
 from .tool_batch import (
-    _active_batches,
+    clear_all_batches,
     flush_batch,
+    has_active_batch,
     is_batch_eligible,
     process_tool_event,
 )
@@ -237,15 +238,14 @@ async def _handle_content_task(
 
     # Non-tool content: flush any active batch first
     thread_id = task.thread_id or 0
-    bkey = (user_id, thread_id)
-    if bkey in _active_batches:
+    if has_active_batch(user_id, thread_id):
         await flush_batch(bot, user_id, thread_id)
 
     # Try to merge consecutive content tasks
     merged_task, merge_count = await _merge_content_tasks(queue, task, lock)
     if merge_count > 0:
         logger.debug("Merged %d tasks for user %s", merge_count, user_id)
-    await _process_content_task(bot, user_id, merged_task)
+    await process_content_task(bot, user_id, merged_task)
     return merge_count
 
 
@@ -278,8 +278,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                         elif task.task_type == "status_update":
                             # Flush batch before status
                             thread_id = task.thread_id or 0
-                            bkey = (user_id, thread_id)
-                            if bkey in _active_batches:
+                            if has_active_batch(user_id, thread_id):
                                 await flush_batch(bot, user_id, thread_id)
                             collapsed_task, dropped = await _coalesce_status_updates(
                                 queue, task, lock
@@ -292,8 +291,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                             )
                         elif task.task_type == "status_clear":
                             thread_id = task.thread_id or 0
-                            bkey = (user_id, thread_id)
-                            if bkey in _active_batches:
+                            if has_active_batch(user_id, thread_id):
                                 await flush_batch(bot, user_id, thread_id)
                             await process_status_clear_task(bot, user_id, task)
                         break
@@ -339,7 +337,7 @@ def _send_kwargs(thread_id: int | None) -> dict[str, int]:
     return {}
 
 
-async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> None:
+async def process_content_task(bot: Bot, user_id: int, task: MessageTask) -> None:
     """Process a content message task."""
     window_id = task.window_id or ""
     thread_id = task.thread_id or 0
@@ -484,5 +482,5 @@ async def shutdown_workers() -> None:
     _queue_workers.clear()
     _message_queues.clear()
     _queue_locks.clear()
-    _active_batches.clear()
+    clear_all_batches()
     logger.info("Message queue workers stopped")

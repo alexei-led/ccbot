@@ -16,7 +16,7 @@ from ccgram.handlers.tool_batch import (
     ToolBatch,
     ToolBatchEntry,
     _active_batches,
-    _is_batch_eligible,
+    is_batch_eligible,
     clear_batch_for_topic,
     flush_batch,
     format_batch_message,
@@ -232,22 +232,24 @@ class TestFormatBatchMessage:
 
 class TestIsBatchEligible:
     @pytest.mark.parametrize("content_type", ["tool_use", "tool_result"])
-    def test_tool_types_eligible(self, content_type: str) -> None:
+    @patch("ccgram.handlers.tool_batch.session_manager")
+    def test_tool_types_eligible(self, mock_sm, content_type: str) -> None:
+        mock_sm.get_batch_mode.return_value = "batched"
         task = MessageTask(task_type="content", content_type=content_type, parts=["x"])
-        assert _is_batch_eligible(task) is True
+        assert is_batch_eligible(task, "@0") is True
 
     @pytest.mark.parametrize("content_type", ["text", "thinking", "assistant"])
     def test_non_tool_types_not_eligible(self, content_type: str) -> None:
         task = MessageTask(task_type="content", content_type=content_type, parts=["x"])
-        assert _is_batch_eligible(task) is False
+        assert is_batch_eligible(task, "@0") is False
 
     def test_status_update_not_eligible(self) -> None:
         task = MessageTask(task_type="status_update", text="working")
-        assert _is_batch_eligible(task) is False
+        assert is_batch_eligible(task, "@0") is False
 
     def test_status_clear_not_eligible(self) -> None:
         task = MessageTask(task_type="status_clear", text="clear")
-        assert _is_batch_eligible(task) is False
+        assert is_batch_eligible(task, "@0") is False
 
 
 class TestBatchDataStructures:
@@ -408,7 +410,10 @@ def _make_tool_result(
 class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_tool_use_creates_batch(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -430,7 +435,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_task_create_batch_sends_task_list(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -457,7 +465,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_tool_result_updates_entry(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -476,7 +487,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_multiple_tool_calls_accumulate(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -510,7 +524,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_tool_result_truncates_long_text(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -533,12 +550,13 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch("ccgram.handlers.tool_batch.flush_batch", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_tool_result_no_matching_entry_flushes(
         self, mock_process, mock_flush, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -555,7 +573,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch("ccgram.handlers.tool_batch.flush_batch", new_callable=AsyncMock)
     async def test_different_window_flushes_old_batch(
@@ -575,7 +596,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_batch_overflow_entries_splits(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -598,7 +622,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_batch_clears_status_on_first_send(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -614,7 +641,10 @@ class TestProcessBatchTask:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_second_tool_edits_existing_message(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -635,7 +665,10 @@ class TestProcessBatchTask:
 
 
 class TestHandleContentTask:
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
     async def test_batch_eligible_routes_to_batch(
         self, mock_batch, mock_should
@@ -653,10 +686,11 @@ class TestHandleContentTask:
         assert extra == 0
         mock_batch.assert_awaited_once()
 
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=False)
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="individual",
     )
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_verbose_mode_skips_batch(self, mock_process, mock_should) -> None:
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
@@ -672,9 +706,7 @@ class TestHandleContentTask:
         mock_process.assert_awaited_once()
 
     @patch("ccgram.handlers.message_queue.flush_batch", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_text_flushes_active_batch(self, mock_process, mock_flush) -> None:
         _active_batches[(1, 0)] = ToolBatch(window_id="@0", thread_id=0, entries=[])
 
@@ -692,9 +724,7 @@ class TestHandleContentTask:
         mock_process.assert_awaited_once()
 
     @patch("ccgram.handlers.message_queue.flush_batch", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_thinking_flushes_active_batch(
         self, mock_process, mock_flush
     ) -> None:
@@ -713,9 +743,7 @@ class TestHandleContentTask:
         await _handle_content_task(bot, 1, task, queue, lock)
         mock_flush.assert_awaited_once_with(bot, 1, 5)
 
-    @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_no_batch_no_flush(self, mock_process) -> None:
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
@@ -729,7 +757,10 @@ class TestHandleContentTask:
         await _handle_content_task(bot, 1, task, queue, lock)
         mock_process.assert_awaited_once()
 
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
     async def test_no_window_id_skips_batch(self, mock_batch, mock_should) -> None:
         bot = AsyncMock()
@@ -742,7 +773,7 @@ class TestHandleContentTask:
             parts=["Read x"],
         )
         with patch(
-            "ccgram.handlers.message_queue._process_content_task",
+            "ccgram.handlers.message_queue.process_content_task",
             new_callable=AsyncMock,
         ) as mock_process:
             await _handle_content_task(bot, 1, task, queue, lock)
@@ -845,7 +876,10 @@ class TestFlushBatch:
 class TestBatchIsolation:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_different_threads_separate_batches(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -908,11 +942,12 @@ class TestQueueWorkerRetryAfter:
 class TestToolResultNotDropped:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
     )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_tool_result_no_active_batch_falls_through(
         self, mock_process, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -924,11 +959,12 @@ class TestToolResultNotDropped:
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
     )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_tool_result_none_tool_use_id_falls_through(
         self, mock_process, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -949,7 +985,10 @@ class TestToolResultNotDropped:
 class TestBatchLengthOverflow:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_overflow_on_length(
         self, mock_clear, mock_should, mock_send, mock_tr
@@ -1010,9 +1049,7 @@ class TestFlushSendFallback:
 
 class TestDefensiveElseBranch:
     @patch("ccgram.handlers.tool_batch.thread_router")
-    @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_unexpected_content_type_routes_to_normal(
         self, mock_process, mock_tr
     ) -> None:
@@ -1032,7 +1069,10 @@ class TestDefensiveElseBranch:
 class TestDifferentUsersIsolation:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
+    @patch(
+        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
+        return_value="batched",
+    )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_different_users_same_thread_separate_batches(
         self, mock_clear, mock_should, mock_send, mock_tr

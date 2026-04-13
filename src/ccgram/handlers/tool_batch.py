@@ -73,20 +73,11 @@ _BATCH_SUCCESS_RE = re.compile(r"\b(passed|success|exit code 0)\b", re.IGNORECAS
 
 def is_batch_eligible(task: "MessageTask", window_id: str) -> bool:
     """Check if a task should go through the batching pipeline."""
-    return _is_batch_eligible(task) and _should_batch(window_id)
-
-
-def _is_batch_eligible(task: "MessageTask") -> bool:
-    """Check if a task is eligible for tool call batching."""
-    return task.task_type == "content" and task.content_type in (
-        "tool_use",
-        "tool_result",
+    return (
+        task.task_type == "content"
+        and task.content_type in ("tool_use", "tool_result")
+        and session_manager.get_batch_mode(window_id) == "batched"
     )
-
-
-def _should_batch(window_id: str) -> bool:
-    """Check if batching is enabled for a window."""
-    return session_manager.get_batch_mode(window_id) == "batched"
 
 
 # ---------------------------------------------------------------------------
@@ -356,10 +347,10 @@ async def _handle_tool_result(
     thread_id: int,
 ) -> ToolBatch | None:
     """Process a tool_result event, updating the matching batch entry."""
-    from .message_queue import _process_content_task
+    from .message_queue import process_content_task
 
     if not task.tool_use_id or not batch:
-        await _process_content_task(bot, user_id, task)
+        await process_content_task(bot, user_id, task)
         return None
     for entry in batch.entries:
         if entry.tool_use_id == task.tool_use_id:
@@ -368,7 +359,7 @@ async def _handle_tool_result(
             entry.tool_result_text = first_line
             return batch
     await flush_batch(bot, user_id, thread_id)
-    await _process_content_task(bot, user_id, task)
+    await process_content_task(bot, user_id, task)
     return None
 
 
@@ -399,7 +390,7 @@ async def process_tool_event(
     task: "MessageTask",
 ) -> None:
     """Add a tool_use or tool_result to the active batch, send/edit the batch message."""
-    from .message_queue import _process_content_task
+    from .message_queue import process_content_task
 
     window_id = task.window_id or ""
     thread_id = task.thread_id or 0
@@ -416,7 +407,7 @@ async def process_tool_event(
             bot, user_id, task, batch, window_id, thread_id, bkey
         )
     else:
-        await _process_content_task(bot, user_id, task)
+        await process_content_task(bot, user_id, task)
         return
 
     await _send_or_edit_batch(bot, user_id, batch, chat_id, task.thread_id, thread_id)
@@ -491,6 +482,11 @@ def has_active_batch(user_id: int, thread_id_or_0: int) -> bool:
 def clear_batch_for_topic(user_id: int, thread_id: int | None = None) -> None:
     """Clear active batch for a specific topic (called on topic cleanup)."""
     _active_batches.pop((user_id, thread_id or 0), None)
+
+
+def clear_all_batches() -> None:
+    """Clear all active batches (called on shutdown)."""
+    _active_batches.clear()
 
 
 from typing import TYPE_CHECKING  # noqa: E402

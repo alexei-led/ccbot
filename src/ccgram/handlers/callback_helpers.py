@@ -15,6 +15,17 @@ def user_owns_window(user_id: int, window_id: str) -> bool:
     return window_id in thread_router.get_all_thread_windows(user_id).values()
 
 
+def parse_target(target: str) -> tuple[str, str | None]:
+    """Parse window_id and optional pane_id from callback target string.
+
+    Target format: ``@0`` (window only) or ``@0:%3`` (window + pane).
+    """
+    if ":%" in target:
+        idx = target.index(":%")
+        return target[:idx], target[idx + 1 :]
+    return target, None
+
+
 def get_thread_id(update: Update) -> int | None:
     """Extract thread_id from an update, returning None if not in a named topic."""
     msg = update.message or (

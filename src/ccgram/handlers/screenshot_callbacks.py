@@ -40,7 +40,7 @@ from .callback_data import (
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_SCREENSHOT,
 )
-from .callback_helpers import get_thread_id, user_owns_window
+from .callback_helpers import get_thread_id, parse_target, user_owns_window
 from .callback_registry import register
 
 logger = structlog.get_logger()
@@ -107,23 +107,12 @@ def build_screenshot_keyboard(
     )
 
 
-def _parse_target(target: str) -> tuple[str, str | None]:
-    """Parse window_id and optional pane_id from target string.
-
-    Target format: ``@0`` (window only) or ``@0:%3`` (window + pane).
-    """
-    if ":%" in target:
-        idx = target.index(":%")
-        return target[:idx], target[idx + 1 :]
-    return target, None
-
-
 async def _handle_live_start(
     query: CallbackQuery, user_id: int, data: str, update: Update
 ) -> None:
     """Handle CB_LIVE_START: start auto-refreshing live view."""
     target = data[len(CB_LIVE_START) :]
-    window_id, pane_id = _parse_target(target)
+    window_id, pane_id = parse_target(target)
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return
@@ -198,7 +187,7 @@ async def _handle_live_stop(
 ) -> None:
     """Handle CB_LIVE_STOP: stop live view and revert to screenshot keyboard."""
     target = data[len(CB_LIVE_STOP) :]
-    window_id, pane_id = _parse_target(target)
+    window_id, pane_id = parse_target(target)
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return
@@ -296,7 +285,7 @@ async def handle_screenshot_callback(
 async def _handle_refresh(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_SCREENSHOT_REFRESH: refresh an existing screenshot."""
     target = data[len(CB_SCREENSHOT_REFRESH) :]
-    window_id, pane_id = _parse_target(target)
+    window_id, pane_id = parse_target(target)
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return

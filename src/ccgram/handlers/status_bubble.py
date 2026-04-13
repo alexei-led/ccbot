@@ -3,7 +3,7 @@
 Owns the per-topic status message lifecycle: keyboard layout, send/edit/clear
 I/O, Claude task-list formatting, and status-to-content conversion.  The queue
 worker in ``message_queue`` delegates ``status_update`` / ``status_clear``
-tasks here; ``_process_content_task`` calls ``convert_status_to_content`` and
+tasks here; ``process_content_task`` calls ``convert_status_to_content`` and
 ``clear_status_message`` for the edit-in-place optimisation.
 """
 
@@ -123,7 +123,7 @@ def _get_idle_history(
 
 def _send_kwargs(thread_id: int | None) -> dict[str, int]:
     """Build message_thread_id kwargs for bot.send_message()."""
-    if thread_id:
+    if thread_id is not None:
         return {"message_thread_id": thread_id}
     return {}
 

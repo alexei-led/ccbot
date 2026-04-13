@@ -36,7 +36,7 @@ from .callback_data import (
     CB_STATUS_REMOTE,
     NOTIFY_MODE_LABELS,
 )
-from .callback_helpers import get_thread_id, user_owns_window
+from .callback_helpers import get_thread_id, parse_target, user_owns_window
 from .callback_registry import register
 from .screenshot_callbacks import (
     KEY_LABELS,
@@ -179,7 +179,7 @@ async def _handle_keys(
         return
     key_id = rest[:colon_idx]
     target = rest[colon_idx + 1 :]
-    window_id, pane_id = _parse_target(target)
+    window_id, pane_id = parse_target(target)
 
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
@@ -213,14 +213,6 @@ async def _handle_keys(
         return
 
     _schedule_key_refresh(user_id, target, query, window_id, pane_id)
-
-
-def _parse_target(target: str) -> tuple[str, str | None]:
-    """Parse window_id and optional pane_id from target string."""
-    if ":" in target:
-        parts = target.split(":", 1)
-        return parts[0], parts[1]
-    return target, None
 
 
 def _schedule_key_refresh(

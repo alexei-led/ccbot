@@ -117,7 +117,9 @@ class TestIsBatchEligible:
     ) -> None:
         from ccgram.handlers import tool_batch
 
-        monkeypatch.setattr(tool_batch, "_should_batch", lambda _wid: True)
+        monkeypatch.setattr(
+            tool_batch.session_manager, "get_batch_mode", lambda _wid: "batched"
+        )
         task = self._make_task(content_type=content_type)
         assert is_batch_eligible(task, "@0") is True
 
@@ -125,14 +127,18 @@ class TestIsBatchEligible:
     def test_non_tool_types_not_eligible(self, content_type: str, monkeypatch) -> None:
         from ccgram.handlers import tool_batch
 
-        monkeypatch.setattr(tool_batch, "_should_batch", lambda _wid: True)
+        monkeypatch.setattr(
+            tool_batch.session_manager, "get_batch_mode", lambda _wid: "batched"
+        )
         task = self._make_task(content_type=content_type)
         assert is_batch_eligible(task, "@0") is False
 
     def test_not_eligible_when_batch_mode_disabled(self, monkeypatch) -> None:
         from ccgram.handlers import tool_batch
 
-        monkeypatch.setattr(tool_batch, "_should_batch", lambda _wid: False)
+        monkeypatch.setattr(
+            tool_batch.session_manager, "get_batch_mode", lambda _wid: "individual"
+        )
         task = self._make_task(content_type="tool_use")
         assert is_batch_eligible(task, "@0") is False
 
