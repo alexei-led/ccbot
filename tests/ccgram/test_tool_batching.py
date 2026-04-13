@@ -409,9 +409,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_tool_use_creates_batch(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -433,9 +431,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_task_create_batch_sends_task_list(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -462,9 +458,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_tool_result_updates_entry(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -483,9 +477,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_multiple_tool_calls_accumulate(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -519,9 +511,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_tool_result_truncates_long_text(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -544,9 +534,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch("ccgram.handlers.tool_batch.flush_batch", new_callable=AsyncMock)
     @patch(
         "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
@@ -568,9 +556,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch("ccgram.handlers.tool_batch.flush_batch", new_callable=AsyncMock)
     async def test_different_window_flushes_old_batch(
         self, mock_flush, mock_clear, mock_should, mock_send, mock_tr
@@ -590,9 +576,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_batch_overflow_entries_splits(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -615,9 +599,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_batch_clears_status_on_first_send(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -633,9 +615,7 @@ class TestProcessBatchTask:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_second_tool_edits_existing_message(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -866,9 +846,7 @@ class TestBatchIsolation:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_different_threads_separate_batches(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -931,9 +909,7 @@ class TestToolResultNotDropped:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch(
         "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
     )
@@ -949,9 +925,7 @@ class TestToolResultNotDropped:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch(
         "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
     )
@@ -976,9 +950,7 @@ class TestBatchLengthOverflow:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_overflow_on_length(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
@@ -1061,9 +1033,7 @@ class TestDifferentUsersIsolation:
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
     @patch("ccgram.handlers.tool_batch._should_batch", return_value=True)
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_different_users_same_thread_separate_batches(
         self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:

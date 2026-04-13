@@ -1,19 +1,9 @@
 """Per-user message queue management for ordered message delivery.
 
-Provides a queue-based message processing system that ensures:
-  - Messages are sent in receive order (FIFO)
-  - Status messages always follow content messages
-  - Consecutive content messages can be merged for efficiency
-  - Rate limiting is respected
-  - Thread-aware sending: each MessageTask carries an optional thread_id
-    for Telegram topic support
-
-Key components:
-  - MessageTask: Dataclass representing a queued message task (with thread_id)
-  - get_or_create_queue: Get or create queue and worker for a user
-  - Message queue worker: Background task processing user's queue
-  - Content task processing with tool_use/tool_result handling
-  - Status message tracking and conversion (keyed by (user_id, thread_id))
+Queue primitives (FIFO ordering, merging, coalescing) and the worker loop
+that dispatches tasks to ``tool_batch`` and ``status_bubble``.  Status I/O,
+task-list formatting, and keyboard rendering live in ``status_bubble``;
+tool-use batching lives in ``tool_batch``.
 """
 
 import asyncio
@@ -25,11 +15,20 @@ import structlog
 from telegram import Bot
 from telegram.error import RetryAfter, TelegramError
 
-from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import task_done_callback
 from .message_sender import edit_with_fallback, rate_limit_send_message
+from .status_bubble import (  # noqa: F401
+    build_status_keyboard,
+    clear_status_message,
+    clear_status_msg_info,
+    convert_status_to_content,
+    format_claude_task_status,
+    process_status_clear_task,
+    process_status_update_task,
+    send_status_text,
+)
 from .tool_batch import (  # noqa: F401
     BATCH_MAX_ENTRIES,
     BATCH_MAX_LENGTH,
@@ -48,10 +47,6 @@ from .tool_batch import (  # noqa: F401
 logger = structlog.get_logger()
 
 MERGE_MAX_LENGTH = 3800  # Leave room within Telegram's 4096 char message limit
-
-# build_status_keyboard moved to status_bubble.py — re-exported for callers
-# that haven't been migrated yet. New code should import from status_bubble.
-from .status_bubble import build_status_keyboard  # noqa: E402, F401
 
 
 @dataclass
@@ -77,9 +72,6 @@ _queue_locks: dict[int, asyncio.Lock] = {}  # Protect drain/refill operations
 # Map (tool_use_id, user_id, thread_id_or_0) -> telegram message_id
 # for editing tool_use messages with results
 _tool_msg_ids: dict[tuple[str, int, int], int] = {}
-
-# Status message tracking: (user_id, thread_id_or_0) -> (message_id, window_id, last_text)
-_status_msg_info: dict[tuple[int, int], tuple[int, str, str, int]] = {}
 
 
 def get_message_queue(user_id: int) -> asyncio.Queue[MessageTask] | None:
@@ -307,7 +299,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                             if dropped > 0:
                                 for _ in range(dropped):
                                     queue.task_done()
-                            await _process_status_update_task(
+                            await process_status_update_task(
                                 bot, user_id, collapsed_task
                             )
                         elif task.task_type == "status_clear":
@@ -315,7 +307,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                             bkey = (user_id, thread_id)
                             if bkey in _active_batches:
                                 await flush_batch(bot, user_id, thread_id)
-                            await _process_status_clear_task(bot, user_id, task)
+                            await process_status_clear_task(bot, user_id, task)
                         break
                     except RetryAfter as e:
                         retry_secs = min(
@@ -371,7 +363,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
         edit_msg_id = _tool_msg_ids.pop(_tkey, None)
         if edit_msg_id is not None:
             # Clear status message first
-            await _do_clear_status_message(bot, user_id, thread_id)
+            await clear_status_message(bot, user_id, thread_id)
             # Join all parts for editing (merged content goes together)
             full_text = "\n\n".join(task.parts)
             success = await edit_with_fallback(
@@ -395,7 +387,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
         # For first part, try to convert status message to content (edit instead of delete)
         if first_part:
             first_part = False
-            converted_msg_id = await _convert_status_to_content(
+            converted_msg_id = await convert_status_to_content(
                 bot,
                 user_id,
                 thread_id,
@@ -422,233 +414,6 @@ async def _process_content_task(bot: Bot, user_id: int, task: MessageTask) -> No
 
     # Status will be recreated by the 1-second poll loop — no need to
     # eagerly send a new status message here (doing so caused pile-up).
-
-
-async def _convert_status_to_content(
-    bot: Bot,
-    user_id: int,
-    thread_id_or_0: int,
-    window_id: str,
-    content_text: str,
-) -> int | None:
-    """Convert status message to content message by editing it.
-
-    Returns the message_id if converted successfully, None otherwise.
-    """
-    skey = (user_id, thread_id_or_0)
-    info = _status_msg_info.pop(skey, None)
-    if not info:
-        return None
-
-    msg_id, stored_wid, _, chat_id = info
-    if stored_wid != window_id:
-        # Different window, just delete the old status
-        with contextlib.suppress(TelegramError):
-            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
-        return None
-
-    # Edit status message to show content (remove status buttons)
-    success = await edit_with_fallback(
-        bot,
-        chat_id,
-        msg_id,
-        content_text,
-        reply_markup=None,
-    )
-    if success:
-        return msg_id
-    # Message might be deleted or too old, caller will send new message
-    return None
-
-
-def _get_idle_history(
-    user_id: int, thread_id_or_0: int, status_text: str
-) -> list[str] | None:
-    """Return history list if the status is idle, else None."""
-    from .callback_data import IDLE_STATUS_TEXT
-    from .command_history import get_history
-
-    first_line = status_text.split("\n", 1)[0]
-    if first_line != IDLE_STATUS_TEXT:
-        return None
-    return get_history(user_id, thread_id_or_0, limit=2) or None
-
-
-def _format_claude_task_status(window_id: str, base_text: str | None) -> str | None:
-    """Compose Claude wait/task state into the status bubble text."""
-    snapshot = get_claude_task_snapshot(window_id)
-    wait_header = get_claude_wait_header(window_id)
-    if snapshot is None and not wait_header:
-        return base_text
-
-    lines: list[str] = []
-    header = wait_header or base_text
-    if header:
-        lines.append(header)
-
-    if snapshot is not None:
-        lines.append(
-            f"{snapshot.total_count} tasks ({snapshot.done_count} done, {snapshot.open_count} open)"
-        )
-        visible_items = snapshot.items[:8]
-        for item in visible_items:
-            if item.status == "completed":
-                glyph = "✔"
-            elif item.status == "in_progress":
-                glyph = "◔"
-            else:
-                glyph = "◻"
-
-            label = (
-                item.active_form
-                if item.status == "in_progress" and item.active_form
-                else item.subject
-            )
-            if item.owner:
-                label = f"{label} ({item.owner})"
-            line = f"{glyph} #{item.task_id} {label}".rstrip()
-            if item.blocked_by:
-                blocked = ", ".join(f"#{task_id}" for task_id in item.blocked_by)
-                line = f"{line} blocked by {blocked}"
-            lines.append(line)
-
-        hidden_count = snapshot.total_count - len(visible_items)
-        if hidden_count > 0:
-            lines.append(f"+{hidden_count} more")
-
-    return "\n".join(lines) if lines else base_text
-
-
-async def _process_status_update_task(
-    bot: Bot, user_id: int, task: MessageTask
-) -> None:
-    """Process a status update task."""
-    window_id = task.window_id or ""
-    thread_id = task.thread_id or 0
-    skey = (user_id, thread_id)
-    # task.text must be pre-formatted (display_label from StatusUpdate, not raw terminal text)
-    status_text = _format_claude_task_status(window_id, task.text)
-
-    if not status_text:
-        # No status text means clear status
-        await _do_clear_status_message(bot, user_id, thread_id)
-        return
-
-    current_info = _status_msg_info.get(skey)
-
-    if current_info:
-        msg_id, stored_wid, last_text, stored_chat_id = current_info
-
-        if stored_wid != window_id:
-            # Window changed - delete old and send new
-            await _do_clear_status_message(bot, user_id, thread_id)
-            await _do_send_status_message(
-                bot, user_id, thread_id, window_id, status_text
-            )
-        elif status_text == last_text:
-            # Same content, skip edit
-            pass
-        else:
-            # Same window, text changed - edit in place
-            history = _get_idle_history(user_id, thread_id, status_text)
-            keyboard = build_status_keyboard(window_id, history=history)
-            success = await edit_with_fallback(
-                bot,
-                stored_chat_id,
-                msg_id,
-                status_text,
-                reply_markup=keyboard,
-            )
-            if success:
-                _status_msg_info[skey] = (
-                    msg_id,
-                    window_id,
-                    status_text,
-                    stored_chat_id,
-                )
-            else:
-                # Edit failed (message deleted, rate limit, etc.)
-                # Clear tracking and let the next poll cycle recreate it
-                # instead of sending a new message (which causes pile-up).
-                _status_msg_info.pop(skey, None)
-    else:
-        # No existing status message, send new
-        await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)
-
-
-async def _process_status_clear_task(bot: Bot, user_id: int, task: MessageTask) -> None:
-    """Delete or re-render a status message after a clear request."""
-    thread_id = task.thread_id or 0
-    window_id = task.window_id or ""
-    status_text = _format_claude_task_status(window_id, None)
-    if status_text and window_id:
-        await _do_send_status_message(bot, user_id, thread_id, window_id, status_text)
-        return
-    await _do_clear_status_message(bot, user_id, thread_id)
-
-
-async def _do_send_status_message(
-    bot: Bot,
-    user_id: int,
-    thread_id_or_0: int,
-    window_id: str,
-    text: str,
-) -> None:
-    """Send a new status message with action buttons and track it.
-
-    If a status message already exists for this (user, thread), edit it
-    in-place instead of sending a new one — prevents orphaned duplicates.
-    """
-    skey = (user_id, thread_id_or_0)
-    thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
-    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-    history = _get_idle_history(user_id, thread_id_or_0, text)
-    keyboard = build_status_keyboard(window_id, history=history)
-
-    # Guard: if a status message already exists, edit it instead of sending new
-    existing = _status_msg_info.get(skey)
-    if existing:
-        msg_id, stored_wid, last_text, stored_chat_id = existing
-        if stored_wid == window_id and text == last_text:
-            return  # identical, nothing to do
-        if stored_wid == window_id:
-            success = await edit_with_fallback(
-                bot, stored_chat_id, msg_id, text, reply_markup=keyboard
-            )
-            if success:
-                _status_msg_info[skey] = (msg_id, window_id, text, stored_chat_id)
-                return
-            # Edit failed — clear tracking, fall through to send new
-            _status_msg_info.pop(skey, None)
-        else:
-            # Different window — delete old status first
-            await _do_clear_status_message(bot, user_id, thread_id_or_0)
-
-    sent = await rate_limit_send_message(
-        bot,
-        chat_id,
-        text,
-        reply_markup=keyboard,
-        **_send_kwargs(thread_id),  # type: ignore[arg-type]
-    )
-    if sent:
-        _status_msg_info[skey] = (sent.message_id, window_id, text, chat_id)
-
-
-async def _do_clear_status_message(
-    bot: Bot,
-    user_id: int,
-    thread_id_or_0: int = 0,
-) -> None:
-    """Delete the status message for a user (internal, called from worker)."""
-    skey = (user_id, thread_id_or_0)
-    info = _status_msg_info.pop(skey, None)
-    if info:
-        msg_id, _, _, chat_id = info
-        try:
-            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
-        except TelegramError as e:
-            logger.debug("Failed to delete status message %s: %s", msg_id, e)
 
 
 async def enqueue_content_message(
@@ -705,20 +470,6 @@ async def enqueue_status_update(
         )
 
     queue.put_nowait(task)
-
-
-def clear_status_msg_info(user_id: int, thread_id: int | None = None) -> None:
-    """Clear status message tracking for a user (and optionally a specific thread).
-
-    NOT registered with TopicStateRegistry — must only be called explicitly
-    from cleanup.py in the ``bot is None`` path.  When a bot is available,
-    ``_do_clear_status_message`` (via the queued ``status_clear`` task) pops
-    the entry *and* deletes the Telegram message.  Registering this function
-    with the registry would pop the entry before the worker runs, preventing
-    the actual Telegram delete.
-    """
-    skey = (user_id, thread_id or 0)
-    _status_msg_info.pop(skey, None)
 
 
 @topic_state.register("topic")

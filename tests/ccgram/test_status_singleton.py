@@ -3,7 +3,7 @@
 Verifies three invariants:
 1. Edit failure does NOT send a new status message (clears tracking only).
 2. Content delivery does NOT eagerly recreate status (poll loop handles it).
-3. _do_send_status_message edits existing status instead of sending new.
+3. send_status_text edits existing status instead of sending new.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,12 +11,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ccgram.claude_task_state import claude_task_state
-from ccgram.handlers.message_queue import (
-    MessageTask,
-    _do_send_status_message,
-    _process_status_clear_task,
-    _process_status_update_task,
+from ccgram.handlers.message_queue import MessageTask
+from ccgram.handlers.status_bubble import (
     _status_msg_info,
+    process_status_clear_task,
+    process_status_update_task,
+    send_status_text,
 )
 
 USER_ID = 1
@@ -45,10 +45,10 @@ def _status_task(text: str = "running...", window_id: str = WINDOW_ID) -> Messag
 class TestEditFailureNoNewMessage:
     """Change 1: edit failure clears tracking, does NOT send a new message."""
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_edit_failure_clears_tracking_no_send(
         self, mock_send, mock_edit, mock_tr
@@ -60,7 +60,7 @@ class TestEditFailureNoNewMessage:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
 
         bot = AsyncMock()
-        await _process_status_update_task(bot, USER_ID, _status_task("new text"))
+        await process_status_update_task(bot, USER_ID, _status_task("new text"))
 
         # Tracking should be cleared
         assert SKEY not in _status_msg_info
@@ -68,10 +68,10 @@ class TestEditFailureNoNewMessage:
         # No new message should be sent
         mock_send.assert_not_called()
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_edit_success_updates_tracking(
         self, mock_send, mock_edit, mock_tr
@@ -82,15 +82,15 @@ class TestEditFailureNoNewMessage:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
 
         bot = AsyncMock()
-        await _process_status_update_task(bot, USER_ID, _status_task("new text"))
+        await process_status_update_task(bot, USER_ID, _status_task("new text"))
 
         # Tracking should be updated with new text, same message id
         assert _status_msg_info[SKEY] == (100, WINDOW_ID, "new text", CHAT_ID)
         mock_send.assert_not_called()
 
-    @patch("ccgram.handlers.message_queue.thread_router")
+    @patch("ccgram.handlers.status_bubble.thread_router")
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_status_update_appends_claude_tasks(self, mock_send, mock_tr) -> None:
         mock_tr.resolve_chat_id.return_value = CHAT_ID
@@ -130,7 +130,7 @@ class TestEditFailureNoNewMessage:
         )
 
         bot = AsyncMock()
-        await _process_status_update_task(bot, USER_ID, _status_task("Working"))
+        await process_status_update_task(bot, USER_ID, _status_task("Working"))
 
         sent_text = mock_send.call_args[0][2]
         assert sent_text.startswith("Working")
@@ -138,8 +138,8 @@ class TestEditFailureNoNewMessage:
         assert "✔ #1 Review changes" in sent_text
         assert "◔ #2 Writing tests" in sent_text
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     async def test_status_clear_renders_task_only_when_snapshot_exists(
         self, mock_edit, mock_tr
     ) -> None:
@@ -174,7 +174,7 @@ class TestEditFailureNoNewMessage:
         )
 
         bot = AsyncMock()
-        await _process_status_clear_task(
+        await process_status_clear_task(
             bot,
             USER_ID,
             MessageTask(
@@ -188,12 +188,12 @@ class TestEditFailureNoNewMessage:
 
 
 class TestDoSendGuard:
-    """Change 3: _do_send_status_message edits existing instead of sending new."""
+    """Change 3: send_status_text edits existing instead of sending new."""
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_existing_status_same_window_edits_in_place(
         self, mock_send, mock_edit, mock_tr
@@ -204,17 +204,17 @@ class TestDoSendGuard:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
 
         bot = AsyncMock()
-        await _do_send_status_message(bot, USER_ID, THREAD_ID, WINDOW_ID, "new text")
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "new text")
 
         # Should edit, not send new
         mock_edit.assert_called_once()
         mock_send.assert_not_called()
         assert _status_msg_info[SKEY] == (100, WINDOW_ID, "new text", CHAT_ID)
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_existing_status_identical_text_skips(
         self, mock_send, mock_edit, mock_tr
@@ -224,16 +224,16 @@ class TestDoSendGuard:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "running...", CHAT_ID)
 
         bot = AsyncMock()
-        await _do_send_status_message(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
 
         # Should do nothing — identical text
         mock_edit.assert_not_called()
         mock_send.assert_not_called()
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_no_existing_status_sends_new(
         self, mock_send, mock_edit, mock_tr
@@ -244,20 +244,18 @@ class TestDoSendGuard:
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        await _do_send_status_message(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
 
         mock_edit.assert_not_called()
         mock_send.assert_called_once()
         assert _status_msg_info[SKEY] == (200, WINDOW_ID, "running...", CHAT_ID)
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
-    @patch(
-        "ccgram.handlers.message_queue._do_clear_status_message", new_callable=AsyncMock
-    )
+    @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     async def test_existing_status_different_window_clears_and_sends(
         self, mock_clear, mock_send, mock_edit, mock_tr
     ) -> None:
@@ -269,16 +267,16 @@ class TestDoSendGuard:
         _status_msg_info[SKEY] = (100, "@1", "running...", CHAT_ID)  # different window
 
         bot = AsyncMock()
-        await _do_send_status_message(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
 
         mock_clear.assert_called_once_with(bot, USER_ID, THREAD_ID)
         mock_send.assert_called_once()
         assert _status_msg_info[SKEY] == (300, WINDOW_ID, "running...", CHAT_ID)
 
-    @patch("ccgram.handlers.message_queue.thread_router")
-    @patch("ccgram.handlers.message_queue.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue.rate_limit_send_message", new_callable=AsyncMock
+        "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
     async def test_existing_status_edit_fails_falls_through_to_send(
         self, mock_send, mock_edit, mock_tr
@@ -292,7 +290,7 @@ class TestDoSendGuard:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
 
         bot = AsyncMock()
-        await _do_send_status_message(bot, USER_ID, THREAD_ID, WINDOW_ID, "new text")
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "new text")
 
         # Edit attempted first, then falls through to send
         mock_edit.assert_called_once()

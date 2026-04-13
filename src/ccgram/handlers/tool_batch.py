@@ -324,13 +324,13 @@ async def _send_or_edit_batch(
 ) -> None:
     """Send a new batch message or edit the existing one in place."""
     from ..claude_task_state import build_subagent_label, get_subagent_names
-    from .message_queue import _do_clear_status_message
+    from .status_bubble import clear_status_message
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
 
     if batch.telegram_msg_id is None:
-        await _do_clear_status_message(bot, user_id, thread_id_or_0)
+        await clear_status_message(bot, user_id, thread_id_or_0)
         sent = await rate_limit_send_message(
             bot,
             chat_id,

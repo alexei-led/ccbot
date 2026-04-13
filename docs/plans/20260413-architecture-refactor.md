@@ -223,15 +223,15 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `src/ccgram/handlers/tool_batch.py` (imports `status_bubble.clear_status_text`)
 - Create: `tests/ccgram/handlers/test_status_bubble.py` (or expand existing)
 
-- [ ] move from `message_queue.py` to `status_bubble.py`: `_process_status_update_task`, `_process_status_clear_task`, `_do_send_status_message`, `_do_clear_status_message`, `_convert_status_to_content`, `_format_claude_task_status`, `_status_msg_info` dict, `clear_status_msg_info`
-- [ ] rename: `_do_send_status_message` → `send_status_text` (public), `_do_clear_status_message` → `clear_status_text` (public)
-- [ ] add `@topic_state.register("topic")` cleanup for `_status_msg_info` inside `status_bubble.py`
-- [ ] update `tool_batch.process_tool_event` to import `from .status_bubble import clear_status_text` and call `await clear_status_text(bot, user_id, thread_id)` before sending a new batch message
-- [ ] update `message_queue._message_queue_worker` dispatch: status_update task → `status_bubble.send_status_text(...)`, status_clear task → `status_bubble.clear_status_text(...)`
-- [ ] update all callers of `clear_status_msg_info` — most will stay as-is via re-export or direct import of `status_bubble.clear_status_msg_info`
-- [ ] write unit tests for `send_status_text` (new send path, edit-in-place path, dedup on identical content), `clear_status_text`, `_format_claude_task_status` (no tasks / with wait header / with task list)
-- [ ] update `test_message_queue.py` — status tests move to `test_status_bubble.py`
-- [ ] run `make check` — must be green before Task 3
+- [x] move from `message_queue.py` to `status_bubble.py`: `_process_status_update_task`, `_process_status_clear_task`, `_do_send_status_message`, `_do_clear_status_message`, `_convert_status_to_content`, `_format_claude_task_status`, `_status_msg_info` dict, `clear_status_msg_info`
+- [x] rename: `_do_send_status_message` → `send_status_text` (public), `_do_clear_status_message` → `clear_status_message` (public)
+- [x] add `@topic_state.register("topic")` cleanup for `_status_msg_info` inside `status_bubble.py` — kept as explicit call from cleanup.py per existing design (see docstring)
+- [x] update `tool_batch.process_tool_event` to import `from .status_bubble import clear_status_message` and call `await clear_status_message(bot, user_id, thread_id)` before sending a new batch message
+- [x] update `message_queue._message_queue_worker` dispatch: status_update task → `status_bubble.process_status_update_task(...)`, status_clear task → `status_bubble.process_status_clear_task(...)`
+- [x] update all callers of `clear_status_msg_info` — cleanup.py imports directly from `status_bubble`, message_queue re-exports for backward compat
+- [x] write unit tests for `send_status_text` (new send path, edit-in-place path, dedup on identical content), `clear_status_message`, `format_claude_task_status` (no tasks / with wait header / with task list)
+- [x] update `test_message_queue.py` — status tests (test_status_singleton.py, test_tool_batching.py) updated to import from `status_bubble`
+- [x] run `make check` — must be green before Task 3
 
 ### Task 3: Slim `handlers/message_queue.py` to queue primitives
 
