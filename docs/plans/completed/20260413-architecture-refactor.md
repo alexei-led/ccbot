@@ -496,10 +496,10 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `CLAUDE.md` (handler list, if any entries changed)
 - Modify: `docs/modularity-review/2026-04-13/modularity-review.md` (add a "Resolved" section at the end pointing at this plan)
 
-- [ ] update `.claude/rules/architecture.md` module inventory: add `tool_batch.py`, `toolbar_keyboard.py`, `shell_prompt_orchestrator.py`, `status_bar_actions.py`; note the `TerminalStatusStrategy` split; note the `topic_state.register_bound` capability
-- [ ] update `CLAUDE.md` if any user-visible pattern changed — probably just the handler inventory table
-- [ ] add a short "Resolved by 20260413-architecture-refactor" note at the bottom of `docs/modularity-review/2026-04-13/modularity-review.md`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update `.claude/rules/architecture.md` module inventory: add `tool_batch.py`, `toolbar_keyboard.py`, `shell_prompt_orchestrator.py`, `status_bar_actions.py`; note the `TerminalStatusStrategy` split; note the `topic_state.register_bound` capability
+- [x] update `CLAUDE.md` if any user-visible pattern changed — CLAUDE.md references architecture.md, no separate table
+- [x] add a short "Resolved by 20260413-architecture-refactor" note at the bottom of `docs/modularity-review/2026-04-13/modularity-review.md`
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

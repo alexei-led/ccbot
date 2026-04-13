@@ -100,11 +100,13 @@ graph TB
 | Module                  | Description                                                                                                      |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `cc_commands.py`        | CC command discovery (skills, custom commands) + menu registration                                               |
+| `command_catalog.py`    | Provider-agnostic command discovery and caching — separates command-source from menu registration                 |
 | `claude_task_state.py`  | Claude task tracking from transcripts — per-window task snapshots for live status bubble                         |
 | `cli.py`                | Click-based CLI entry point (run subcommand + all bot-config flags)                                              |
 | `config.py`             | Application configuration singleton (env vars, .env files, defaults)                                             |
 | `doctor_cmd.py`         | `ccgram doctor [--fix]` — validate setup without bot token                                                       |
 | `mailbox.py`            | File-based mailbox: message CRUD, TTL expiration, sweep, ID migration, broadcast                                 |
+| `monitor_state.py`      | Monitor state persistence — tracks byte offsets for each session                                                 |
 | `main.py`               | Application entry point (Click dispatcher, run_bot bootstrap)                                                    |
 | `msg_cmd.py`            | `ccgram msg` CLI group: send, inbox, read, reply, broadcast, register, spawn                                     |
 | `msg_discovery.py`      | Peer discovery: view over SessionManager + self-declared overlay (task, team)                                    |
@@ -118,8 +120,11 @@ graph TB
 | `status_cmd.py`         | `ccgram status` — show running state without bot token                                                           |
 | `telegram_request.py`   | Telegram request helpers for resilient long polling (custom HTTPX transport)                                     |
 | `thread_router.py`      | ThreadRouter — thread bindings, display names, reverse index, chat ID resolution                                 |
+| `toolbar_config.py`     | Toolbar layout configuration — per-provider button grids loaded from TOML                                        |
+| `topic_state_registry.py` | Centralized registry for per-topic and per-window cleanup functions with self-registration decorator            |
 | `user_preferences.py`   | User directory favorites (starred/MRU) and per-user read offsets (extracted from SessionManager)                 |
 | `utils.py`              | Shared utilities (ccgram_dir, tmux_session_name, atomic_write_json)                                              |
+| `window_resolver.py`    | Window ID resolution, format helpers, and startup migration                                                      |
 | `window_state_store.py` | Window state storage — WindowState dataclass, per-window mode settings (approval, batch, notification)           |
 | `window_view.py`        | Read-only WindowView projection — frozen snapshot used by handlers that only need to read window state           |
 | `expandable_quote.py`   | Sentinel constants and `format_expandable_quote()` — markup contract between transcript parsers and presentation |
@@ -143,7 +148,8 @@ graph TB
 | `interactive_callbacks.py` | Callbacks for interactive UI (arrow keys, enter, esc)                                                                                             |
 | `interactive_ui.py`        | AskUserQuestion / ExitPlanMode / Permission UI rendering                                                                                          |
 | `live_view.py`             | Live terminal view — auto-refreshing screenshot via editMessageMedia, content-hash gating, auto-stop                                              |
-| `message_queue.py`         | Per-user queue + worker (merge, status dedup)                                                                                                     |
+| `message_queue.py`         | Per-user FIFO queue + worker — merge, status dedup, tool-use batching delegation                                                                  |
+| `message_routing.py`     | Inbound message routing — routes new assistant messages from SessionMonitor to Telegram topics                                                     |
 | `message_sender.py`        | safe_reply/safe_edit/safe_send + rate_limit_send                                                                                                  |
 | `msg_broker.py`            | Broker delivery: idle detection, send_keys injection, rate limiting, loop detection                                                               |
 | `msg_delivery.py`          | Message delivery state: per-window tracking, rate limiting, loop detection (extracted from msg_broker)                                            |
@@ -151,23 +157,30 @@ graph TB
 | `msg_telegram.py`          | Telegram notifications for inter-agent messages (silent, grouped, edit-in-place)                                                                  |
 | `periodic_tasks.py`        | Periodic task orchestration: broker delivery, mailbox sweep, spawn processing, lifecycle, live view                                               |
 | `polling_coordinator.py`   | Background status polling loop (1s), delegates to strategy classes                                                                                |
-| `polling_strategies.py`    | TerminalStatus, InteractiveUI, TopicLifecycle, ShellRelay strategy classes                                                                        |
+| `polling_strategies.py`    | Polling strategy classes: TerminalScreenBuffer, InteractiveUI, TopicLifecycle, ShellRelay — decomposed from monolithic polling                     |
 | `recovery_callbacks.py`    | Dead window recovery callbacks (fresh, continue, resume)                                                                                          |
 | `response_builder.py`      | Response pagination and formatting                                                                                                                |
 | `restore_command.py`       | /restore command: recover dead topics via recovery keyboard                                                                                       |
 | `resume_command.py`        | /resume command: scan past sessions, paginated picker                                                                                             |
-| `screenshot_callbacks.py`  | Screenshot, status buttons, RC toggle, toolbar, quick-key, live view callbacks                                                                    |
+| `screenshot_callbacks.py`  | Screenshot callback handlers — screenshot capture, quick-key, live view toggle                                                                    |
+| `send_callbacks.py`      | Callback handlers for /send file browser navigation                                                                                               |
+| `send_command.py`        | File search, listing and upload utilities for the /send command                                                                                   |
+| `send_security.py`       | Security validation for the /send command — multi-layer access control                                                                            |
 | `sessions_dashboard.py`    | /sessions command: active session overview + kill                                                                                                 |
 | `shell_capture.py`         | Prompt-marker output isolation, exit code detection, baseline-diff fallback, glyph stripping                                                      |
-| `shell_commands.py`        | NL→command approval, dangerous command detection via LLM, prompt marker offer UI                                                                  |
+| `shell_commands.py`        | NL→command approval, dangerous command detection via LLM                                                                                          |
 | `shell_context.py`         | Shared shell helpers — `gather_llm_context`, `redact_for_llm`, `_detect_shell_tools` (extracted to break shell_commands ↔ shell_capture coupling) |
+| `shell_prompt_orchestrator.py` | Shell prompt marker setup orchestrator — centralizes five trigger sites into one ensure_setup entry point                                    |
 | `status_bubble.py`         | Status-bubble inline keyboard renderer — extracted from `message_queue` so polling/screenshot/hook callers share one keyboard builder             |
+| `status_bar_actions.py`   | Status-bubble button callbacks (notify toggle, recall, remote control, esc, keys) — extracted from screenshot_callbacks                            |
 | `sync_command.py`          | /sync command: sync window state with tmux                                                                                                        |
 | `text_handler.py`          | Text message routing (UI guards → unbound → dead → forward)                                                                                       |
+| `tool_batch.py`          | Claude tool-use batching — state machine, formatting, edit-in-place delivery                                                                      |
+| `toolbar_callbacks.py`   | Toolbar callback handlers — dispatch for /toolbar inline button clicks                                                                            |
+| `toolbar_keyboard.py`    | Toolbar keyboard builder — constructs the /toolbar inline keyboard from TOML config with per-window label overrides                               |
 | `topic_emoji.py`           | Topic name emoji updates (active/idle/done/dead + RC/YOLO badges), debounced                                                                      |
 | `topic_lifecycle.py`       | Topic lifecycle management — autoclose timers for done/dead topics, unbound window TTL                                                            |
 | `topic_orchestration.py`   | New window/topic creation, unbound window adoption, rate limiting                                                                                 |
-| `topic_state_registry.py`  | Self-registering cleanup registry (topic/window/qualified/chat scopes)                                                                            |
 | `transcript_discovery.py`  | Hookless transcript discovery for Codex/Gemini, provider auto-detection, shell↔agent transitions                                                  |
 | `upgrade.py`               | /upgrade command: uv tool upgrade + process restart                                                                                               |
 | `user_state.py`            | context.user_data string key constants                                                                                                            |

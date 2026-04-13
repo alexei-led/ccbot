@@ -379,3 +379,9 @@ The Apr 12 refactor delivered on its quick wins. Half the evening review's issue
 ---
 
 _This analysis was performed using the [Balanced Coupling](https://coupling.dev) model by [Vlad Khononov](https://vladikk.com)._
+
+---
+
+## Resolution
+
+Resolved by [20260413-architecture-refactor](../../plans/completed/20260413-architecture-refactor.md). All actionable recommendations from this review were addressed across 15 implementation tasks covering message queue decomposition, polling strategy extraction, shell prompt orchestration, toolbar module split, provider capability flags, WindowView migration, and documentation updates.
