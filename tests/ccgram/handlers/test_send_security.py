@@ -292,8 +292,11 @@ path = ".*private.*"
     def test_file_too_large_denied(self, tmp_path: Path) -> None:
         f = tmp_path / "huge.bin"
         f.write_text("x", encoding="utf-8")
+        import stat as stat_module
+
         mock_stat = MagicMock()
         mock_stat.st_size = 60 * 1024 * 1024
+        mock_stat.st_mode = stat_module.S_IFREG | 0o644
         mock_result = MagicMock()
         mock_result.returncode = 1
         with (

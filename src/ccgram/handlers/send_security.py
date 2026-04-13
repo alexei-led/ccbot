@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import stat
 import subprocess
 import tomllib
 from pathlib import Path
@@ -185,14 +186,14 @@ def check_gitleaks_rules(path: Path, cwd: Path) -> str | None:
 def _check_size_and_type(path: Path) -> str | None:
     """Return an error string if the file fails size or type checks, else None."""
     try:
-        size = path.stat().st_size
+        st = path.stat()
     except OSError:
         return "File not accessible"
-    if size > _TELEGRAM_FILE_LIMIT:
-        size_mb = size / (1024 * 1024)
-        return f"File too large: {size_mb:.0f} MB (limit: 50 MB)"
-    if not path.is_file():
+    if not stat.S_ISREG(st.st_mode):
         return "Not a regular file"
+    if st.st_size > _TELEGRAM_FILE_LIMIT:
+        size_mb = st.st_size / (1024 * 1024)
+        return f"File too large: {size_mb:.0f} MB (limit: 50 MB)"
     return None
 
 

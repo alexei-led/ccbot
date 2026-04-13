@@ -370,7 +370,8 @@ def _read_toml(path: Path) -> dict | None:
         logger.warning("Toolbar config file not found: %s — using defaults", path)
         return None
     try:
-        raw = tomllib.loads(path.read_text())
+        with path.open("rb") as fh:
+            raw = tomllib.load(fh)
     except (OSError, tomllib.TOMLDecodeError) as e:
         logger.warning("Toolbar config %s unreadable (%s) — using defaults", path, e)
         return None

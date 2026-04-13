@@ -11,6 +11,9 @@ Provides utilities for the /send Telegram command:
   - send_command: handle the /send command
 """
 
+import fnmatch
+import os
+
 import structlog
 from pathlib import Path
 
@@ -64,60 +67,65 @@ def _is_image(path: Path) -> bool:
     return path.suffix.lower() in _IMAGE_EXTENSIONS
 
 
+def _walk_filtered(cwd: Path, depth_limit: int) -> list[Path]:
+    """Walk *cwd* with in-place pruning of excluded dirs, yielding file paths.
+
+    Stops descending once a directory's depth relative to *cwd* reaches
+    *depth_limit*. Files at depths up to *depth_limit* are included.
+    """
+    cwd_resolved = cwd.resolve()
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(cwd):
+        dirnames[:] = [d for d in dirnames if not is_excluded_dir(d)]
+        dir_path = Path(dirpath)
+        try:
+            rel_depth = len(dir_path.resolve().relative_to(cwd_resolved).parts)
+        except ValueError:
+            dirnames[:] = []
+            continue
+        if rel_depth >= depth_limit:
+            dirnames[:] = []
+        for filename in filenames:
+            files.append(dir_path / filename)
+    return files
+
+
 def _find_files(cwd: Path, pattern: str) -> list[Path]:
     """Search for files matching *pattern* under *cwd*.
 
     Dispatch rules:
-    - Pattern contains ``*`` or ``?``: glob search via ``cwd.rglob(pattern)``.
-    - Otherwise: try exact relative path first; if not found, substring search via
-      ``cwd.rglob(f"*{pattern}*")``.
+    - Pattern contains ``*`` or ``?``: fnmatch filter against filenames.
+    - Otherwise: try exact relative path first; if not found, case-insensitive
+      substring match on filenames.
 
-    All candidates are filtered:
-    - Skip files inside excluded directories (any ancestor component matches
-      ``is_excluded_dir``).
-    - Skip files where ``validate_sendable`` returns a non-None error string.
-    - Skip files deeper than ``config.send_search_depth`` levels below *cwd*.
-
-    Results are capped at ``config.send_max_results`` and sorted by mtime descending.
+    Uses ``os.walk`` with in-place directory pruning so excluded trees
+    (``node_modules``, ``.venv``, etc.) are never descended into. Results
+    are filtered via ``validate_sendable``, capped at ``config.send_max_results``,
+    and sorted by mtime descending.
     """
     is_glob = "*" in pattern or "?" in pattern
 
-    candidates: list[Path] = []
-
-    if is_glob:
-        candidates = list(cwd.rglob(pattern))
-    else:
+    if not is_glob:
         exact = cwd / pattern
         if exact.exists() and validate_sendable(exact, cwd) is None:
             rel = exact.resolve().relative_to(cwd.resolve())
             if not any(is_excluded_dir(part) for part in rel.parts[:-1]):
                 return [exact]
-        candidates = list(cwd.rglob(f"*{pattern}*"))
 
-    depth_limit = config.send_search_depth
-    max_results = config.send_max_results
+    needle = pattern.lower()
 
-    results: list[Path] = []
-    for path in candidates:
-        if not path.is_file():
-            continue
-        # Check depth relative to cwd
-        try:
-            rel = path.relative_to(cwd)
-        except ValueError:
-            continue
-        if len(rel.parts) > depth_limit:
-            continue
-        # Skip files inside excluded directories
-        if any(is_excluded_dir(part) for part in rel.parts[:-1]):
-            continue
-        # Skip denied files
-        if validate_sendable(path, cwd) is not None:
-            continue
-        results.append(path)
+    def _name_matches(name: str) -> bool:
+        if is_glob:
+            return fnmatch.fnmatch(name, pattern)
+        return needle in name.lower()
 
+    results = [
+        candidate
+        for candidate in _walk_filtered(cwd, config.send_search_depth)
+        if _name_matches(candidate.name) and validate_sendable(candidate, cwd) is None
+    ]
     results.sort(key=_safe_mtime, reverse=True)
-    return results[:max_results]
+    return results[: config.send_max_results]
 
 
 def _list_directory(path: Path, cwd: Path) -> tuple[list[Path], list[Path]]:

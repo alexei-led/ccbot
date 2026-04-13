@@ -41,6 +41,7 @@ from ..config import config
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
+from ..topic_state_registry import topic_state
 from ..toolbar_config import (
     ToolbarAction,
     ToolbarConfig,
@@ -97,7 +98,6 @@ def _clear_window_labels(window_id: str) -> None:
 
 # Register with the topic_state registry so window teardown clears the
 # label cache automatically (same pattern as other per-window state).
-from ..topic_state_registry import topic_state  # noqa: E402
 
 
 @topic_state.register("window")
@@ -294,13 +294,15 @@ async def seed_button_states(window_id: str) -> None:
     than the static "Mode" placeholder. Best-effort — failures are silent.
     """
     cfg = _get_toolbar_config()
-    # Seed every action in the pool that has read_state=True. For now that's
-    # just the "mode" action, but this future-proofs user-defined toggles.
-    for action_name, action in cfg.actions.items():
-        if not action.read_state:
-            continue
-        label = await _scrape_current_mode(window_id)
-        _set_action_label(window_id, action_name, label)
+    # Only seed the "mode" action — it's the single toggle whose readable
+    # state matches _scrape_current_mode's Claude-style mode-line output.
+    # YOLO/Think (or user-defined toggles) need their own readback logic
+    # and are left with their static default label until first click.
+    mode_action = cfg.actions.get("mode")
+    if mode_action is None or not mode_action.read_state:
+        return
+    label = await _scrape_current_mode(window_id)
+    _set_action_label(window_id, "mode", label)
 
 
 async def _refresh_button_label(
