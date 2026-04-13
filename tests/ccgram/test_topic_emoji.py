@@ -36,13 +36,13 @@ def _debounce_for(state: str) -> float:
 
 @pytest.fixture(autouse=True)
 def _reset():
-    from ccgram.handlers.polling_strategies import terminal_strategy
+    from ccgram.handlers.polling_strategies import terminal_poll_state
 
     reset_all_state()
-    terminal_strategy.reset_all_seen_status()
+    terminal_poll_state.reset_all_seen_status()
     yield
     reset_all_state()
-    terminal_strategy.reset_all_seen_status()
+    terminal_poll_state.reset_all_seen_status()
 
 
 class TestStripEmojiPrefix:
@@ -433,9 +433,9 @@ class TestStatusPollingIntegration:
             ),
         ):
             from ccgram.handlers.polling_coordinator import update_status_message
-            from ccgram.handlers.polling_strategies import terminal_strategy
+            from ccgram.handlers.polling_strategies import terminal_poll_state
 
-            terminal_strategy.get_state("@0").has_seen_status = True
+            terminal_poll_state.get_state("@0").has_seen_status = True
 
             mock_window = MagicMock()
             mock_window.pane_current_command = "node"
@@ -468,9 +468,9 @@ class TestStatusPollingIntegration:
             ),
         ):
             from ccgram.handlers.polling_coordinator import update_status_message
-            from ccgram.handlers.polling_strategies import terminal_strategy
+            from ccgram.handlers.polling_strategies import terminal_poll_state
 
-            terminal_strategy._states.pop("@99", None)
+            terminal_poll_state._states.pop("@99", None)
 
             mock_window = MagicMock()
             mock_window.pane_current_command = "node"

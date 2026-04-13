@@ -768,7 +768,7 @@ class TestHandleSessionEnd:
                 "ccgram.handlers.message_queue.enqueue_status_update"
             ) as mock_enqueue,
             patch(
-                "ccgram.handlers.polling_strategies.terminal_strategy.clear_seen_status"
+                "ccgram.handlers.polling_strategies.terminal_poll_state.clear_seen_status"
             ) as mock_clear,
         ):
             event = _make_event(event_type="SessionEnd", data={"reason": "clear"})
@@ -824,7 +824,7 @@ class TestHandleSessionEnd:
             patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
             patch("ccgram.handlers.message_queue.enqueue_status_update"),
             patch(
-                "ccgram.handlers.polling_strategies.terminal_strategy.clear_seen_status"
+                "ccgram.handlers.polling_strategies.terminal_poll_state.clear_seen_status"
             ),
         ):
             event = _make_event(event_type="SessionEnd", data={"reason": "clear"})
@@ -854,7 +854,7 @@ class TestHandleSessionEnd:
             patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
             patch("ccgram.handlers.message_queue.enqueue_status_update"),
             patch(
-                "ccgram.handlers.polling_strategies.terminal_strategy.clear_seen_status"
+                "ccgram.handlers.polling_strategies.terminal_poll_state.clear_seen_status"
             ),
         ):
             event = _make_event(event_type="SessionEnd", data={"reason": "clear"})

@@ -20,18 +20,18 @@ from ccgram.handlers.polling_coordinator import (
 )
 from ccgram.handlers.polling_strategies import (
     lifecycle_strategy,
-    terminal_strategy,
+    terminal_poll_state,
 )
 
 
 @pytest.fixture(autouse=True)
 def _clean_strategy_state():
     """Reset all strategy state between tests."""
-    terminal_strategy._states.clear()
+    terminal_poll_state._states.clear()
     lifecycle_strategy._states.clear()
     lifecycle_strategy._dead_notified.clear()
     yield
-    terminal_strategy._states.clear()
+    terminal_poll_state._states.clear()
     lifecycle_strategy._states.clear()
     lifecycle_strategy._dead_notified.clear()
 
@@ -87,7 +87,7 @@ class TestCheckUnboundWindowTtl:
 
     @pytest.mark.asyncio
     async def test_bound_window_timer_cleared(self):
-        ws = terminal_strategy.get_state("@0")
+        ws = terminal_poll_state.get_state("@0")
         ws.unbound_timer = time.monotonic() - 100
         mock_window = MagicMock(window_id="@0", window_name="test")
         with (
@@ -168,7 +168,7 @@ class TestProbeTopicExistence:
     @pytest.mark.asyncio
     async def test_suspended_probe_skipped(self):
         bot = AsyncMock(spec=Bot)
-        ws = terminal_strategy.get_state("@0")
+        ws = terminal_poll_state.get_state("@0")
         ws.probe_failures = 999
         with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router:
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]

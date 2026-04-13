@@ -280,15 +280,15 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: other callers — grep `rg "terminal_strategy\." src/ccgram/` and route each call to the new owner
 - Modify: `tests/ccgram/handlers/test_polling_strategies.py` — split into two test classes
 
-- [ ] create `TerminalScreenBuffer` class in `polling_strategies.py` owning: `clear_screen_buffer`, `reset_screen_buffer_state`, `get_screen_buffer`, `parse_with_pyte`, `update_pane_count_cache`, `is_single_pane_cached` — all the pyte / screen buffer / pane count concerns
-- [ ] create `TerminalPollState` class in `polling_strategies.py` owning: `get_state`, `clear_state`, `clear_unbound_timers`, `get_expired_unbound`, `get_orphaned_window_ids`, `is_rc_active`, `update_rc_state`, `reset_probe_failures`, `clear_seen_status`, `set_unbound_timer`, `clear_unbound_timer`, `reset_all_probe_failures`, `reset_all_seen_status`, `reset_all_unbound_timers`, `cancel_startup_timer`, `begin_startup_timer`, `check_seen_status`, `get_rendered_text`, `is_recently_active`, `is_startup_expired`, `mark_seen_status` — RC debounce + probe failures + startup grace + activity tracking
-- [ ] expose `terminal_screen_buffer` and `terminal_poll_state` module-level singletons; add `@topic_state.register_bound("window", self.clear_screen_buffer)` calls in `TerminalScreenBuffer.__init__`, similar for `TerminalPollState.clear_state` etc.
-- [ ] delete the old `TerminalStatusStrategy` class
-- [ ] route callers: `polling_coordinator._parse_with_pyte` → `terminal_screen_buffer.parse_with_pyte`; `_handle_no_status` and friends → `terminal_poll_state.*`; `InteractiveUIStrategy.__init__(self, terminal_screen_buffer)` if pane alerts need the screen buffer
-- [ ] update `TopicLifecycleStrategy.__init__(self, terminal_poll_state)` if it still needs RC state
-- [ ] verify with `rg "TerminalStatusStrategy" src/ccgram/` — zero matches expected
-- [ ] add unit tests for `TerminalScreenBuffer` (pyte parsing, cache TTL) and `TerminalPollState` (RC debounce, probe failure counter, startup grace, unbound timer expiry, recent activity)
-- [ ] run `make check` — must be green
+- [x] create `TerminalScreenBuffer` class in `polling_strategies.py` owning: `clear_screen_buffer`, `reset_screen_buffer_state`, `get_screen_buffer`, `parse_with_pyte`, `update_pane_count_cache`, `is_single_pane_cached`, `get_rendered_text`, `is_rc_active`, `update_rc_state` — all the pyte / screen buffer / pane count / RC concerns
+- [x] create `TerminalPollState` class in `polling_strategies.py` owning: `get_state`, `clear_state`, `clear_unbound_timers`, `get_expired_unbound`, `get_orphaned_window_ids`, `reset_probe_failures`, `clear_seen_status`, `set_unbound_timer`, `clear_unbound_timer`, `reset_all_probe_failures`, `reset_all_seen_status`, `reset_all_unbound_timers`, `cancel_startup_timer`, `begin_startup_timer`, `check_seen_status`, `is_recently_active`, `is_startup_expired`, `mark_seen_status` — probe failures + startup grace + activity tracking
+- [x] expose `terminal_screen_buffer` and `terminal_poll_state` module-level singletons; add `@topic_state.register_bound("window", self.clear_screen_buffer)` calls in `TerminalScreenBuffer.__init__`, similar for `TerminalPollState.clear_state` etc. Backward-compat alias `terminal_strategy = terminal_poll_state` for any remaining consumers.
+- [x] delete the old `TerminalStatusStrategy` class
+- [x] route callers: `polling_coordinator._parse_with_pyte` → `terminal_screen_buffer.parse_with_pyte`; `_handle_no_status` and friends → `terminal_poll_state.*`; `InteractiveUIStrategy.__init__(self, terminal_screen_buffer)` for screen buffer access
+- [x] update `TopicLifecycleStrategy.__init__(self, terminal_poll_state)` — delegates probe failures and seen-status to poll state
+- [x] verify with `rg "TerminalStatusStrategy" src/ccgram/` — zero code matches (only docstring/comment references remain)
+- [x] add unit tests for `TerminalScreenBuffer` (pyte parsing, cache TTL, RC debounce, screen buffer clearing) and `TerminalPollState` (probe failure counter, startup grace, unbound timer expiry, recent activity, seen-status) — split from existing TestTerminalStatusStrategy
+- [x] run `make check` — green (3462 passed, 95 integration passed, 0 lint/type errors)
 
 ### Phase 3 — Shell Prompt Orchestrator
 

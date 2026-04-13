@@ -2,7 +2,8 @@
 
 Decomposes the polling subsystem state into focused, independently testable
 strategy classes:
-  - TerminalStatusStrategy: pyte screen buffer state, RC debounce, content-hash cache
+  - TerminalScreenBuffer: pyte screen buffer, RC debounce, pane count cache
+  - TerminalPollState: per-window poll state (seen-status, startup, probes, unbound timers)
   - InteractiveUIStrategy: pane alert hash state for deduplication
   - TopicLifecycleStrategy: autoclose timers, dead notification tracking, probe failures
 
@@ -97,15 +98,180 @@ class TopicPollState:
     last_typing_sent: float | None = None
 
 
-# ── TerminalStatusStrategy ──────────────────────────────────────────────
+# ── TerminalScreenBuffer ───────────────────────────────────────────────
 
 
-class TerminalStatusStrategy:
-    """Pyte screen buffer state, RC debounce, content-hash cache.
+class TerminalScreenBuffer:
+    """Pyte screen buffer, RC debounce, pane count cache, content-hash cache.
 
-    Owns WindowPollState instances keyed by window_id. Domain-specific parsing
-    functions (parse_with_pyte, check_transcript_activity) live in polling_coordinator.py
-    and access state through this strategy.
+    Reads WindowPollState from a shared TerminalPollState instance for
+    screen-buffer fields. Domain-specific parsing functions remain in
+    polling_coordinator.py.
+    """
+
+    def __init__(self, poll_state: "TerminalPollState") -> None:
+        self._poll_state = poll_state
+        topic_state.register_bound("window", self.clear_screen_buffer)
+
+    def clear_screen_buffer(self, window_id: str) -> None:
+        """Remove a window's ScreenBuffer, caches, and pyte results."""
+        ws = self._poll_state._states.get(window_id)
+        if ws:
+            ws.screen_buffer = None
+            ws.pane_count_cache = None
+            ws.last_pane_hash = 0
+            ws.last_pyte_result = None
+            ws.last_rendered_text = None
+
+    def reset_screen_buffer_state(self) -> None:
+        """Reset all ScreenBuffers and caches (for testing)."""
+        for ws in self._poll_state._states.values():
+            ws.screen_buffer = None
+            ws.pane_count_cache = None
+            ws.last_pane_hash = 0
+            ws.last_pyte_result = None
+            ws.last_rendered_text = None
+            ws.rc_active = False
+            ws.rc_off_since = None
+
+    def is_rc_active(self, window_id: str) -> bool:
+        """Check whether Remote Control is currently active for a window."""
+        ws = self._poll_state._states.get(window_id)
+        return ws.rc_active if ws else False
+
+    def update_rc_state(self, ws: WindowPollState, rc_detected: bool) -> None:
+        """Update Remote Control state with debounce on removal."""
+        if rc_detected:
+            ws.rc_active = True
+            ws.rc_off_since = None
+        elif ws.rc_active:
+            now = time.monotonic()
+            if ws.rc_off_since is None:
+                ws.rc_off_since = now
+            elif now - ws.rc_off_since >= RC_DEBOUNCE_SECONDS:
+                ws.rc_active = False
+                ws.rc_off_since = None
+
+    def update_pane_count_cache(self, window_id: str, count: int) -> None:
+        """Record freshly-fetched pane count with TTL expiry."""
+        self._poll_state.get_state(window_id).pane_count_cache = (
+            count,
+            time.monotonic() + PANE_COUNT_TTL,
+        )
+
+    def is_single_pane_cached(self, window_id: str) -> bool:
+        """Check if pane count cache confirms single pane (skip subprocess)."""
+        ws = self._poll_state._states.get(window_id)
+        if not ws or not ws.pane_count_cache:
+            return False
+        count, expiry = ws.pane_count_cache
+        return count <= 1 and expiry > time.monotonic()
+
+    def get_rendered_text(self, window_id: str, fallback: str) -> str:
+        """Return last rendered text if available, otherwise fallback."""
+        ws = self._poll_state._states.get(window_id)
+        if ws and ws.last_rendered_text is not None:
+            return ws.last_rendered_text
+        return fallback
+
+    def get_screen_buffer(
+        self, window_id: str, columns: int, rows: int
+    ) -> "ScreenBuffer":
+        """Get or create a ScreenBuffer for a window, resizing if needed."""
+        from ..screen_buffer import ScreenBuffer
+
+        ws = self._poll_state.get_state(window_id)
+        buf = ws.screen_buffer
+        if buf is None or not isinstance(buf, ScreenBuffer):
+            buf = ScreenBuffer(columns=columns, rows=rows)
+            ws.screen_buffer = buf
+        elif buf.columns != columns or buf.rows != rows:
+            buf.resize(columns, rows)
+        else:
+            buf.reset()
+        return buf
+
+    def parse_with_pyte(
+        self,
+        window_id: str,
+        pane_text: str,
+        columns: int = 0,
+        rows: int = 0,
+    ) -> StatusUpdate | None:
+        """Parse terminal via pyte screen buffer for status and interactive UI.
+
+        Content-hash optimization: unchanged pane content returns cached result
+        without re-parsing.
+        """
+        from ..terminal_parser import (
+            detect_remote_control,
+            format_status_display,
+            parse_from_screen,
+            parse_status_block_from_screen,
+        )
+
+        if (
+            not isinstance(columns, int)
+            or not isinstance(rows, int)
+            or columns <= 0
+            or rows <= 0
+        ):
+            columns, rows = 200, 50
+
+        ws = self._poll_state.get_state(window_id)
+        content_hash = hash((pane_text, columns, rows))
+        if (
+            content_hash == ws.last_pane_hash
+            and ws.last_pane_hash != 0
+            and (ws.last_pyte_result is None or not ws.last_pyte_result.is_interactive)
+        ):
+            self.update_rc_state(ws, ws.last_rc_detected)
+            return ws.last_pyte_result
+
+        buf = self.get_screen_buffer(window_id, columns, rows)
+        buf.feed(pane_text)
+        ws.last_rendered_text = buf.rendered_text
+
+        rc_detected = detect_remote_control(buf.display)
+        ws.last_rc_detected = rc_detected
+        self.update_rc_state(ws, rc_detected)
+
+        interactive = parse_from_screen(buf)
+        if interactive:
+            result = StatusUpdate(
+                raw_text=interactive.content,
+                display_label=interactive.name,
+                is_interactive=True,
+                ui_type=interactive.name,
+            )
+            ws.last_pane_hash = content_hash
+            ws.last_pyte_result = result
+            return result
+
+        raw_status = parse_status_block_from_screen(buf)
+        if raw_status:
+            headline = raw_status.split("\n", 1)[0]
+            result = StatusUpdate(
+                raw_text=raw_status,
+                display_label=format_status_display(headline),
+            )
+            ws.last_pane_hash = content_hash
+            ws.last_pyte_result = result
+            return result
+
+        ws.last_pane_hash = content_hash
+        ws.last_pyte_result = None
+        return None
+
+
+# ── TerminalPollState ──────────────────────────────────────────────────
+
+
+class TerminalPollState:
+    """Per-window poll state: seen-status, startup grace, probe failures, unbound timers.
+
+    Owns the WindowPollState dict. TerminalScreenBuffer accesses it for
+    screen-buffer-related fields.
     """
 
     def __init__(self) -> None:
@@ -119,27 +285,6 @@ class TerminalStatusStrategy:
     def clear_state(self, window_id: str) -> None:
         """Remove all polling state for a window."""
         self._states.pop(window_id, None)
-
-    def clear_screen_buffer(self, window_id: str) -> None:
-        """Remove a window's ScreenBuffer, caches, and pyte results."""
-        ws = self._states.get(window_id)
-        if ws:
-            ws.screen_buffer = None
-            ws.pane_count_cache = None
-            ws.last_pane_hash = 0
-            ws.last_pyte_result = None
-            ws.last_rendered_text = None
-
-    def reset_screen_buffer_state(self) -> None:
-        """Reset all ScreenBuffers and caches (for testing)."""
-        for ws in self._states.values():
-            ws.screen_buffer = None
-            ws.pane_count_cache = None
-            ws.last_pane_hash = 0
-            ws.last_pyte_result = None
-            ws.last_rendered_text = None
-            ws.rc_active = False
-            ws.rc_off_since = None
 
     def clear_unbound_timers(self, bound_ids: set[str], live_ids: set[str]) -> None:
         """Clear unbound timers for windows that are now bound or gone."""
@@ -164,24 +309,6 @@ class TerminalStatusStrategy:
         return [
             wid for wid in self._states if wid not in live_ids and wid not in bound_ids
         ]
-
-    def is_rc_active(self, window_id: str) -> bool:
-        """Check whether Remote Control is currently active for a window."""
-        ws = self._states.get(window_id)
-        return ws.rc_active if ws else False
-
-    def update_rc_state(self, ws: WindowPollState, rc_detected: bool) -> None:
-        """Update Remote Control state with debounce on removal."""
-        if rc_detected:
-            ws.rc_active = True
-            ws.rc_off_since = None
-        elif ws.rc_active:
-            now = time.monotonic()
-            if ws.rc_off_since is None:
-                ws.rc_off_since = now
-            elif now - ws.rc_off_since >= RC_DEBOUNCE_SECONDS:
-                ws.rc_active = False
-                ws.rc_off_since = None
 
     def reset_probe_failures(self, window_id: str) -> None:
         """Reset probe failure counter for a single window."""
@@ -233,24 +360,10 @@ class TerminalStatusStrategy:
         """Record the moment a window's startup grace period begins."""
         self.get_state(window_id).startup_time = now
 
-    def update_pane_count_cache(self, window_id: str, count: int) -> None:
-        """Record freshly-fetched pane count with TTL expiry."""
-        self.get_state(window_id).pane_count_cache = (
-            count,
-            time.monotonic() + PANE_COUNT_TTL,
-        )
-
     def check_seen_status(self, window_id: str) -> bool:
         """Return True if this window has received at least one status update."""
         ws = self._states.get(window_id)
         return ws.has_seen_status if ws else False
-
-    def get_rendered_text(self, window_id: str, fallback: str) -> str:
-        """Return last rendered text if available, otherwise fallback."""
-        ws = self._states.get(window_id)
-        if ws and ws.last_rendered_text is not None:
-            return ws.last_rendered_text
-        return fallback
 
     def is_recently_active(self, window_id: str, last_activity: float | None) -> bool:
         """Check if recent transcript activity indicates an active agent.
@@ -271,108 +384,11 @@ class TerminalStatusStrategy:
             return False
         return (time.monotonic() - ws.startup_time) >= STARTUP_TIMEOUT
 
-    def is_single_pane_cached(self, window_id: str) -> bool:
-        """Check if pane count cache confirms single pane (skip subprocess)."""
-        ws = self._states.get(window_id)
-        if not ws or not ws.pane_count_cache:
-            return False
-        count, expiry = ws.pane_count_cache
-        return count <= 1 and expiry > time.monotonic()
-
     def mark_seen_status(self, window_id: str) -> None:
         """Mark a window as having seen its first status update."""
         ws = self.get_state(window_id)
         ws.has_seen_status = True
         ws.startup_time = None
-
-    def get_screen_buffer(
-        self, window_id: str, columns: int, rows: int
-    ) -> "ScreenBuffer":
-        """Get or create a ScreenBuffer for a window, resizing if needed."""
-        from ..screen_buffer import ScreenBuffer
-
-        ws = self.get_state(window_id)
-        buf = ws.screen_buffer
-        if buf is None or not isinstance(buf, ScreenBuffer):
-            buf = ScreenBuffer(columns=columns, rows=rows)
-            ws.screen_buffer = buf
-        elif buf.columns != columns or buf.rows != rows:
-            buf.resize(columns, rows)
-        else:
-            buf.reset()
-        return buf
-
-    def parse_with_pyte(
-        self,
-        window_id: str,
-        pane_text: str,
-        columns: int = 0,
-        rows: int = 0,
-    ) -> StatusUpdate | None:
-        """Parse terminal via pyte screen buffer for status and interactive UI.
-
-        Content-hash optimization: unchanged pane content returns cached result
-        without re-parsing.
-        """
-        from ..terminal_parser import (
-            detect_remote_control,
-            format_status_display,
-            parse_from_screen,
-            parse_status_block_from_screen,
-        )
-
-        if (
-            not isinstance(columns, int)
-            or not isinstance(rows, int)
-            or columns <= 0
-            or rows <= 0
-        ):
-            columns, rows = 200, 50
-
-        ws = self.get_state(window_id)
-        content_hash = hash((pane_text, columns, rows))
-        if (
-            content_hash == ws.last_pane_hash
-            and ws.last_pane_hash != 0
-            and (ws.last_pyte_result is None or not ws.last_pyte_result.is_interactive)
-        ):
-            self.update_rc_state(ws, ws.last_rc_detected)
-            return ws.last_pyte_result
-
-        buf = self.get_screen_buffer(window_id, columns, rows)
-        buf.feed(pane_text)
-        ws.last_rendered_text = buf.rendered_text
-
-        rc_detected = detect_remote_control(buf.display)
-        ws.last_rc_detected = rc_detected
-        self.update_rc_state(ws, rc_detected)
-
-        interactive = parse_from_screen(buf)
-        if interactive:
-            result = StatusUpdate(
-                raw_text=interactive.content,
-                display_label=interactive.name,
-                is_interactive=True,
-                ui_type=interactive.name,
-            )
-            ws.last_pane_hash = content_hash
-            ws.last_pyte_result = result
-            return result
-
-        raw_status = parse_status_block_from_screen(buf)
-        if raw_status:
-            headline = raw_status.split("\n", 1)[0]
-            result = StatusUpdate(
-                raw_text=raw_status,
-                display_label=format_status_display(headline),
-            )
-            ws.last_pane_hash = content_hash
-            ws.last_pyte_result = result
-            return result
-
-        ws.last_pane_hash = content_hash
-        ws.last_pyte_result = None
-        return None
 
 
 # ── InteractiveUIStrategy ───────────────────────────────────────────────
@@ -385,8 +401,8 @@ class InteractiveUIStrategy:
     in polling_coordinator.py and access state through this strategy.
     """
 
-    def __init__(self, terminal: TerminalStatusStrategy) -> None:
-        self._terminal = terminal
+    def __init__(self, screen_buffer: TerminalScreenBuffer) -> None:
+        self._screen_buffer = screen_buffer
         self._pane_alert_hashes: dict[str, tuple[str, float, str]] = {}
         topic_state.register_bound("window", self.clear_pane_alerts)
 
@@ -440,8 +456,8 @@ class TopicLifecycleStrategy:
     this strategy.
     """
 
-    def __init__(self, terminal: TerminalStatusStrategy) -> None:
-        self._terminal = terminal
+    def __init__(self, poll_state: TerminalPollState) -> None:
+        self._poll_state = poll_state
         self._states: dict[tuple[int, int], TopicPollState] = {}
         self._dead_notified: set[tuple[int, int, str]] = set()
         topic_state.register_bound("topic", self.clear_state)
@@ -486,7 +502,7 @@ class TopicLifecycleStrategy:
         """Reset all autoclose tracking (for testing)."""
         for ts in self._states.values():
             ts.autoclose = None
-        self._terminal.reset_all_unbound_timers()
+        self._poll_state.reset_all_unbound_timers()
 
     def clear_dead_notification(self, user_id: int, thread_id: int) -> None:
         """Remove dead notification tracking for a topic."""
@@ -500,11 +516,11 @@ class TopicLifecycleStrategy:
 
     def clear_probe_failures(self, window_id: str) -> None:
         """Reset probe failure counter for a window."""
-        self._terminal.reset_probe_failures(window_id)
+        self._poll_state.reset_probe_failures(window_id)
 
     def reset_probe_failures_state(self) -> None:
         """Reset all probe failure tracking (for testing)."""
-        self._terminal.reset_all_probe_failures()
+        self._poll_state.reset_all_probe_failures()
 
     def clear_typing_state(self, user_id: int, thread_id: int) -> None:
         """Clear typing indicator throttle for a topic."""
@@ -519,11 +535,11 @@ class TopicLifecycleStrategy:
 
     def clear_seen_status(self, window_id: str) -> None:
         """Clear startup status tracking for a window."""
-        self._terminal.clear_seen_status(window_id)
+        self._poll_state.clear_seen_status(window_id)
 
     def reset_seen_status_state(self) -> None:
         """Reset all startup status tracking (for testing)."""
-        self._terminal.reset_all_seen_status()
+        self._poll_state.reset_all_seen_status()
 
     def record_typing_sent(self, user_id: int, thread_id: int) -> None:
         """Stamp the current time as the last typing indicator sent."""
@@ -538,12 +554,12 @@ class TopicLifecycleStrategy:
 
     def should_skip_probe(self, window_id: str) -> bool:
         """Check if a window has exceeded the probe failure threshold."""
-        ws = self._terminal.get_state(window_id)
+        ws = self._poll_state.get_state(window_id)
         return ws.probe_failures >= MAX_PROBE_FAILURES
 
     def record_probe_failure(self, window_id: str) -> int:
         """Increment probe failure counter; log once when threshold is reached."""
-        ws = self._terminal.get_state(window_id)
+        ws = self._poll_state.get_state(window_id)
         ws.probe_failures += 1
         count = ws.probe_failures
         if count == MAX_PROBE_FAILURES:
@@ -557,6 +573,12 @@ class TopicLifecycleStrategy:
 
 # ── Module-level strategy singletons ────────────────────────────────────
 
-terminal_strategy = TerminalStatusStrategy()
-interactive_strategy = InteractiveUIStrategy(terminal_strategy)
-lifecycle_strategy = TopicLifecycleStrategy(terminal_strategy)
+terminal_poll_state = TerminalPollState()
+terminal_screen_buffer = TerminalScreenBuffer(terminal_poll_state)
+interactive_strategy = InteractiveUIStrategy(terminal_screen_buffer)
+lifecycle_strategy = TopicLifecycleStrategy(terminal_poll_state)
+
+# Backward-compatible alias — callers that import `terminal_strategy` get
+# the poll-state singleton (which owns the WindowPollState dict, matching
+# the old TerminalStatusStrategy's primary role).
+terminal_strategy = terminal_poll_state

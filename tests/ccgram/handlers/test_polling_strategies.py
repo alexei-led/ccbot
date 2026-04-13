@@ -10,7 +10,8 @@ from ccgram.handlers.polling_strategies import (
     InteractiveUIStrategy,
     MAX_PROBE_FAILURES,
     RC_DEBOUNCE_SECONDS,
-    TerminalStatusStrategy,
+    TerminalPollState,
+    TerminalScreenBuffer,
     TopicLifecycleStrategy,
     TopicPollState,
     WindowPollState,
@@ -18,30 +19,13 @@ from ccgram.handlers.polling_strategies import (
 )
 
 
-class TestTerminalStatusStrategy:
+class TestTerminalScreenBuffer:
     def setup_method(self):
-        self.strategy = TerminalStatusStrategy()
-
-    def test_get_state_creates_new(self):
-        ws = self.strategy.get_state("@0")
-        assert isinstance(ws, WindowPollState)
-        assert not ws.has_seen_status
-
-    def test_get_state_returns_same_instance(self):
-        ws1 = self.strategy.get_state("@0")
-        ws2 = self.strategy.get_state("@0")
-        assert ws1 is ws2
-
-    def test_clear_state_removes(self):
-        self.strategy.get_state("@0")
-        self.strategy.clear_state("@0")
-        assert "@0" not in self.strategy._states
-
-    def test_clear_state_nonexistent_is_noop(self):
-        self.strategy.clear_state("@999")
+        self.poll_state = TerminalPollState()
+        self.strategy = TerminalScreenBuffer(self.poll_state)
 
     def test_clear_screen_buffer(self):
-        ws = self.strategy.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.last_pane_hash = 12345
         ws.last_rendered_text = "some text"
         self.strategy.clear_screen_buffer("@0")
@@ -50,7 +34,7 @@ class TestTerminalStatusStrategy:
         assert ws.last_rendered_text is None
 
     def test_reset_screen_buffer_state(self):
-        ws = self.strategy.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.rc_active = True
         ws.last_pane_hash = 999
         self.strategy.reset_screen_buffer_state()
@@ -61,7 +45,7 @@ class TestTerminalStatusStrategy:
         assert not self.strategy.is_rc_active("@0")
 
     def test_is_rc_active_when_set(self):
-        ws = self.strategy.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.rc_active = True
         assert self.strategy.is_rc_active("@0")
 
@@ -91,7 +75,7 @@ class TestTerminalStatusStrategy:
         assert ws.rc_off_since is None
 
     def test_parse_with_pyte_content_hash_cache(self):
-        ws = self.strategy.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.last_pane_hash = hash(("same text", 200, 50))
         ws.last_pyte_result = None
         result = self.strategy.parse_with_pyte("@0", "same text", 200, 50)
@@ -99,7 +83,7 @@ class TestTerminalStatusStrategy:
 
     def test_parse_with_pyte_invalid_dimensions_defaults(self):
         with patch(
-            "ccgram.handlers.polling_strategies.TerminalStatusStrategy.get_screen_buffer"
+            "ccgram.handlers.polling_strategies.TerminalScreenBuffer.get_screen_buffer"
         ) as mock_buf:
             mock_buf.return_value.rendered_text = ""
             mock_buf.return_value.display = []
@@ -115,10 +99,54 @@ class TestTerminalStatusStrategy:
                 self.strategy.parse_with_pyte("@0", "text", 0, 0)
                 mock_buf.assert_called_with("@0", 200, 50)
 
+    def test_is_single_pane_cached_true(self):
+        ws = self.poll_state.get_state("@0")
+        ws.pane_count_cache = (1, time.monotonic() + 10.0)
+        assert self.strategy.is_single_pane_cached("@0")
 
-class TestTerminalStatusStrategyPublicMethods:
+    def test_is_single_pane_cached_false_multi(self):
+        ws = self.poll_state.get_state("@0")
+        ws.pane_count_cache = (3, time.monotonic() + 10.0)
+        assert not self.strategy.is_single_pane_cached("@0")
+
+    def test_is_single_pane_cached_false_expired(self):
+        ws = self.poll_state.get_state("@0")
+        ws.pane_count_cache = (1, time.monotonic() - 1.0)
+        assert not self.strategy.is_single_pane_cached("@0")
+
+    def test_is_single_pane_cached_false_no_cache(self):
+        assert not self.strategy.is_single_pane_cached("@0")
+
+    def test_get_rendered_text_returns_cached(self):
+        ws = self.poll_state.get_state("@0")
+        ws.last_rendered_text = "cached"
+        assert self.strategy.get_rendered_text("@0", "fallback") == "cached"
+
+    def test_get_rendered_text_returns_fallback(self):
+        assert self.strategy.get_rendered_text("@0", "fallback") == "fallback"
+
+
+class TestTerminalPollState:
     def setup_method(self):
-        self.strategy = TerminalStatusStrategy()
+        self.strategy = TerminalPollState()
+
+    def test_get_state_creates_new(self):
+        ws = self.strategy.get_state("@0")
+        assert isinstance(ws, WindowPollState)
+        assert not ws.has_seen_status
+
+    def test_get_state_returns_same_instance(self):
+        ws1 = self.strategy.get_state("@0")
+        ws2 = self.strategy.get_state("@0")
+        assert ws1 is ws2
+
+    def test_clear_state_removes(self):
+        self.strategy.get_state("@0")
+        self.strategy.clear_state("@0")
+        assert "@0" not in self.strategy._states
+
+    def test_clear_state_nonexistent_is_noop(self):
+        self.strategy.clear_state("@999")
 
     def test_reset_probe_failures(self):
         ws = self.strategy.get_state("@0")
@@ -191,11 +219,38 @@ class TestTerminalStatusStrategyPublicMethods:
         assert ws.has_seen_status
         assert ws.startup_time is None
 
+    def test_is_recently_active_true(self):
+        now = time.monotonic()
+        assert self.strategy.is_recently_active("@0", now - 1.0)
+        assert self.strategy.get_state("@0").has_seen_status
+
+    def test_is_recently_active_false_when_stale(self):
+        assert not self.strategy.is_recently_active("@0", time.monotonic() - 60.0)
+
+    def test_is_recently_active_false_when_none(self):
+        assert not self.strategy.is_recently_active("@0", None)
+
+    def test_is_startup_expired_true(self):
+        from ccgram.handlers.polling_strategies import STARTUP_TIMEOUT
+
+        ws = self.strategy.get_state("@0")
+        ws.startup_time = time.monotonic() - STARTUP_TIMEOUT - 1.0
+        assert self.strategy.is_startup_expired("@0")
+
+    def test_is_startup_expired_false_within_grace(self):
+        ws = self.strategy.get_state("@0")
+        ws.startup_time = time.monotonic()
+        assert not self.strategy.is_startup_expired("@0")
+
+    def test_is_startup_expired_false_no_startup(self):
+        assert not self.strategy.is_startup_expired("@0")
+
 
 class TestInteractiveUIStrategy:
     def setup_method(self):
-        self.terminal = TerminalStatusStrategy()
-        self.strategy = InteractiveUIStrategy(self.terminal)
+        self.poll_state = TerminalPollState()
+        self.screen_buffer = TerminalScreenBuffer(self.poll_state)
+        self.strategy = InteractiveUIStrategy(self.screen_buffer)
 
     def test_has_pane_alert_false_by_default(self):
         assert not self.strategy.has_pane_alert("%0")
@@ -219,8 +274,8 @@ class TestInteractiveUIStrategy:
 
 class TestTopicLifecycleStrategy:
     def setup_method(self):
-        self.terminal = TerminalStatusStrategy()
-        self.strategy = TopicLifecycleStrategy(self.terminal)
+        self.poll_state = TerminalPollState()
+        self.strategy = TopicLifecycleStrategy(self.poll_state)
 
     def test_get_state_creates_new(self):
         ts = self.strategy.get_state(1, 42)
@@ -273,7 +328,7 @@ class TestTopicLifecycleStrategy:
         assert len(self.strategy._dead_notified) == 0
 
     def test_clear_probe_failures(self):
-        ws = self.terminal.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.probe_failures = 5
         self.strategy.clear_probe_failures("@0")
         assert ws.probe_failures == 0
@@ -298,7 +353,7 @@ class TestTopicLifecycleStrategy:
         assert ts.last_typing_sent is None
 
     def test_clear_seen_status(self):
-        ws = self.terminal.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.has_seen_status = True
         ws.startup_time = 100.0
         self.strategy.clear_seen_status("@0")
@@ -308,12 +363,37 @@ class TestTopicLifecycleStrategy:
     def test_reset_autoclose_state_clears_all(self):
         self.strategy.start_autoclose_timer(1, 42, "done", 100.0)
         self.strategy.start_autoclose_timer(2, 43, "dead", 200.0)
-        ws = self.terminal.get_state("@0")
+        ws = self.poll_state.get_state("@0")
         ws.unbound_timer = 50.0
         self.strategy.reset_autoclose_state()
         for ts in self.strategy._states.values():
             assert ts.autoclose is None
         assert ws.unbound_timer is None
+
+    def test_is_typing_throttled_true(self):
+        ts = self.strategy.get_state(1, 42)
+        ts.last_typing_sent = time.monotonic()
+        assert self.strategy.is_typing_throttled(1, 42)
+
+    def test_is_typing_throttled_false_past_interval(self):
+        from ccgram.handlers.polling_strategies import TYPING_INTERVAL
+
+        ts = self.strategy.get_state(1, 42)
+        ts.last_typing_sent = time.monotonic() - TYPING_INTERVAL - 1.0
+        assert not self.strategy.is_typing_throttled(1, 42)
+
+    def test_is_typing_throttled_false_no_state(self):
+        assert not self.strategy.is_typing_throttled(1, 42)
+
+    def test_should_skip_probe_true(self):
+        ws = self.poll_state.get_state("@0")
+        ws.probe_failures = MAX_PROBE_FAILURES
+        assert self.strategy.should_skip_probe("@0")
+
+    def test_should_skip_probe_false(self):
+        ws = self.poll_state.get_state("@0")
+        ws.probe_failures = MAX_PROBE_FAILURES - 1
+        assert not self.strategy.should_skip_probe("@0")
 
 
 class TestIsShellPrompt:
@@ -328,94 +408,3 @@ class TestIsShellPrompt:
     @pytest.mark.parametrize("cmd", ["claude", "codex", "python", "node"])
     def test_non_shell_not_detected(self, cmd):
         assert not is_shell_prompt(cmd)
-
-
-class TestDecisionMethods:
-    def test_is_recently_active_true(self):
-        strategy = TerminalStatusStrategy()
-        now = time.monotonic()
-        assert strategy.is_recently_active("@0", now - 1.0)
-        assert strategy.get_state("@0").has_seen_status
-
-    def test_is_recently_active_false_when_stale(self):
-        strategy = TerminalStatusStrategy()
-        assert not strategy.is_recently_active("@0", time.monotonic() - 60.0)
-
-    def test_is_recently_active_false_when_none(self):
-        strategy = TerminalStatusStrategy()
-        assert not strategy.is_recently_active("@0", None)
-
-    def test_is_startup_expired_true(self):
-        from ccgram.handlers.polling_strategies import STARTUP_TIMEOUT
-
-        strategy = TerminalStatusStrategy()
-        ws = strategy.get_state("@0")
-        ws.startup_time = time.monotonic() - STARTUP_TIMEOUT - 1.0
-        assert strategy.is_startup_expired("@0")
-
-    def test_is_startup_expired_false_within_grace(self):
-        strategy = TerminalStatusStrategy()
-        ws = strategy.get_state("@0")
-        ws.startup_time = time.monotonic()
-        assert not strategy.is_startup_expired("@0")
-
-    def test_is_startup_expired_false_no_startup(self):
-        strategy = TerminalStatusStrategy()
-        assert not strategy.is_startup_expired("@0")
-
-    def test_is_single_pane_cached_true(self):
-        strategy = TerminalStatusStrategy()
-        ws = strategy.get_state("@0")
-        ws.pane_count_cache = (1, time.monotonic() + 10.0)
-        assert strategy.is_single_pane_cached("@0")
-
-    def test_is_single_pane_cached_false_multi(self):
-        strategy = TerminalStatusStrategy()
-        ws = strategy.get_state("@0")
-        ws.pane_count_cache = (3, time.monotonic() + 10.0)
-        assert not strategy.is_single_pane_cached("@0")
-
-    def test_is_single_pane_cached_false_expired(self):
-        strategy = TerminalStatusStrategy()
-        ws = strategy.get_state("@0")
-        ws.pane_count_cache = (1, time.monotonic() - 1.0)
-        assert not strategy.is_single_pane_cached("@0")
-
-    def test_is_single_pane_cached_false_no_cache(self):
-        strategy = TerminalStatusStrategy()
-        assert not strategy.is_single_pane_cached("@0")
-
-    def test_is_typing_throttled_true(self):
-        terminal = TerminalStatusStrategy()
-        lifecycle = TopicLifecycleStrategy(terminal)
-        ts = lifecycle.get_state(1, 42)
-        ts.last_typing_sent = time.monotonic()
-        assert lifecycle.is_typing_throttled(1, 42)
-
-    def test_is_typing_throttled_false_past_interval(self):
-        from ccgram.handlers.polling_strategies import TYPING_INTERVAL
-
-        terminal = TerminalStatusStrategy()
-        lifecycle = TopicLifecycleStrategy(terminal)
-        ts = lifecycle.get_state(1, 42)
-        ts.last_typing_sent = time.monotonic() - TYPING_INTERVAL - 1.0
-        assert not lifecycle.is_typing_throttled(1, 42)
-
-    def test_is_typing_throttled_false_no_state(self):
-        terminal = TerminalStatusStrategy()
-        lifecycle = TopicLifecycleStrategy(terminal)
-        assert not lifecycle.is_typing_throttled(1, 42)
-
-    def test_should_skip_probe_true(self):
-        terminal = TerminalStatusStrategy()
-        lifecycle = TopicLifecycleStrategy(terminal)
-        ws = terminal.get_state("@0")
-        ws.probe_failures = MAX_PROBE_FAILURES
-        assert lifecycle.should_skip_probe("@0")
-
-    def test_should_skip_probe_false(self):
-        terminal = TerminalStatusStrategy()
-        lifecycle = TopicLifecycleStrategy(terminal)
-        ws = terminal.get_state("@0")
-        ws.probe_failures = MAX_PROBE_FAILURES - 1
-        assert not lifecycle.should_skip_probe("@0")

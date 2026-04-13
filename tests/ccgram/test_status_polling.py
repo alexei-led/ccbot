@@ -24,11 +24,12 @@ from ccgram.handlers.polling_strategies import (
     interactive_strategy,
     is_shell_prompt,
     lifecycle_strategy,
-    terminal_strategy,
+    terminal_poll_state,
+    terminal_screen_buffer,
 )
 from ccgram.tmux_manager import PaneInfo
 
-_window_poll_state = terminal_strategy._states
+_window_poll_state = terminal_poll_state._states
 _topic_poll_state = lifecycle_strategy._states
 _dead_notified = lifecycle_strategy._dead_notified
 _pane_alert_hashes = interactive_strategy._pane_alert_hashes
@@ -251,7 +252,7 @@ class TestTranscriptActivityHeuristic:
     def test_clears_startup_timer_on_activity(self) -> None:
         now = time.monotonic()
 
-        terminal_strategy.get_state("@0").startup_time = now - 15.0
+        terminal_poll_state.get_state("@0").startup_time = now - 15.0
         mock_monitor = MagicMock()
         mock_monitor.get_last_activity.return_value = now - 3.0
         with (
@@ -298,7 +299,7 @@ class TestStartupTimeout:
         from ccgram.handlers.polling_coordinator import _handle_no_status
 
         bot = AsyncMock(spec=Bot)
-        terminal_strategy.get_state("@0").startup_time = time.monotonic() - 31.0
+        terminal_poll_state.get_state("@0").startup_time = time.monotonic() - 31.0
         with (
             patch("ccgram.handlers.polling_coordinator.thread_router") as mock_tr,
             patch(
@@ -324,7 +325,7 @@ class TestStartupTimeout:
         from ccgram.handlers.polling_coordinator import _handle_no_status
 
         bot = AsyncMock(spec=Bot)
-        terminal_strategy.get_state("@0").startup_time = time.monotonic()
+        terminal_poll_state.get_state("@0").startup_time = time.monotonic()
         with (
             patch("ccgram.handlers.polling_coordinator.thread_router") as mock_tr,
             patch(
@@ -350,10 +351,10 @@ class TestStartupTimeout:
 
 @pytest.fixture()
 def _reset_pyte():
-    terminal_strategy.reset_screen_buffer_state()
+    terminal_screen_buffer.reset_screen_buffer_state()
     interactive_strategy.clear_all_alerts()
     yield
-    terminal_strategy.reset_screen_buffer_state()
+    terminal_screen_buffer.reset_screen_buffer_state()
     interactive_strategy.clear_all_alerts()
 
 
@@ -445,7 +446,7 @@ class TestPyteContentHashCaching:
         result2 = _parse_with_pyte("@0", pane_text)
         assert result1 is None
         assert result2 is None
-        assert terminal_strategy.get_state("@0").last_pane_hash != 0
+        assert terminal_poll_state.get_state("@0").last_pane_hash != 0
 
     def test_interactive_ui_not_cached(self) -> None:
         pane_text = (
@@ -462,10 +463,10 @@ class TestPyteContentHashCaching:
 
     def test_clear_screen_buffer_resets_cache(self) -> None:
         _parse_with_pyte("@0", f"Output\n✻ Working\n{_SEP}\n")
-        ws = terminal_strategy.get_state("@0")
+        ws = terminal_poll_state.get_state("@0")
         assert ws.last_pane_hash != 0
 
-        terminal_strategy.clear_screen_buffer("@0")
+        terminal_screen_buffer.clear_screen_buffer("@0")
         assert ws.last_pane_hash == 0
         assert ws.last_pyte_result is None
 
@@ -474,14 +475,14 @@ class TestPyteContentHashCaching:
 class TestPyteDimensionPassthrough:
     def test_custom_dimensions_used(self) -> None:
         _parse_with_pyte("@0", f"Output\n✻ Working\n{_SEP}\n", columns=80, rows=24)
-        buf = terminal_strategy.get_state("@0").screen_buffer
+        buf = terminal_poll_state.get_state("@0").screen_buffer
         assert buf is not None
         assert buf.columns == 80
         assert buf.rows == 24
 
     def test_zero_dimensions_fall_back_to_default(self) -> None:
         _parse_with_pyte("@0", f"Output\n✻ Working\n{_SEP}\n", columns=0, rows=0)
-        buf = terminal_strategy.get_state("@0").screen_buffer
+        buf = terminal_poll_state.get_state("@0").screen_buffer
         assert buf is not None
         assert buf.columns == 200
         assert buf.rows == 50
@@ -489,11 +490,11 @@ class TestPyteDimensionPassthrough:
     def test_resize_reuses_buffer(self) -> None:
         pane_text = f"Output\n✻ Working\n{_SEP}\n"
         _parse_with_pyte("@0", pane_text, columns=80, rows=24)
-        buf1 = terminal_strategy.get_state("@0").screen_buffer
+        buf1 = terminal_poll_state.get_state("@0").screen_buffer
         assert buf1 is not None
 
         _parse_with_pyte("@0", pane_text + " changed", columns=120, rows=40)
-        buf2 = terminal_strategy.get_state("@0").screen_buffer
+        buf2 = terminal_poll_state.get_state("@0").screen_buffer
         assert buf2 is buf1
         assert buf2 is not None
         assert buf2.columns == 120
@@ -523,7 +524,7 @@ class TestAnsiCapturePyteParsing:
 
     def test_last_rendered_text_populated(self) -> None:
         _parse_with_pyte("@0", "\x1b[32mHello\x1b[0m\nWorld\n")
-        ws = terminal_strategy.get_state("@0")
+        ws = terminal_poll_state.get_state("@0")
         assert ws.last_rendered_text is not None
         assert "\x1b" not in ws.last_rendered_text
         assert "Hello" in ws.last_rendered_text
@@ -532,20 +533,20 @@ class TestAnsiCapturePyteParsing:
     def test_last_rendered_text_cached_on_hash_hit(self) -> None:
         pane_text = "$ echo hello\nhello\n"
         _parse_with_pyte("@0", pane_text)
-        rendered_first = terminal_strategy.get_state("@0").last_rendered_text
+        rendered_first = terminal_poll_state.get_state("@0").last_rendered_text
         _parse_with_pyte("@0", pane_text)
-        assert terminal_strategy.get_state("@0").last_rendered_text is rendered_first
+        assert terminal_poll_state.get_state("@0").last_rendered_text is rendered_first
 
     def test_last_rendered_text_cleared_by_clear_screen_buffer(self) -> None:
         _parse_with_pyte("@0", "Hello\nWorld\n")
-        ws = terminal_strategy.get_state("@0")
+        ws = terminal_poll_state.get_state("@0")
         assert ws.last_rendered_text is not None
-        terminal_strategy.clear_screen_buffer("@0")
+        terminal_screen_buffer.clear_screen_buffer("@0")
         assert ws.last_rendered_text is None
 
     def test_empty_screen_renders_as_empty_string(self) -> None:
         _parse_with_pyte("@0", "\n\n\n")
-        assert terminal_strategy.get_state("@0").last_rendered_text == ""
+        assert terminal_poll_state.get_state("@0").last_rendered_text == ""
 
 
 def _mock_update_status_patches(*, pyte_result, provider):
@@ -609,7 +610,7 @@ class TestPyteFallbackInUpdateStatus:
         with stack:
             from ccgram.handlers.polling_coordinator import update_status_message
 
-            terminal_strategy.get_state("@0").last_rendered_text = ""
+            terminal_poll_state.get_state("@0").last_rendered_text = ""
             await update_status_message(AsyncMock(spec=Bot), 1, "@0", thread_id=42)
 
             call_args = mocks["provider"].return_value.parse_terminal_status.call_args
@@ -622,7 +623,9 @@ class TestPyteFallbackInUpdateStatus:
         with stack:
             from ccgram.handlers.polling_coordinator import update_status_message
 
-            terminal_strategy.get_state("@0").last_rendered_text = "clean rendered text"
+            terminal_poll_state.get_state(
+                "@0"
+            ).last_rendered_text = "clean rendered text"
             await update_status_message(AsyncMock(spec=Bot), 1, "@0", thread_id=42)
 
             provider_mock = mocks["provider"].return_value
@@ -655,9 +658,9 @@ class TestPyteFallbackInUpdateStatus:
 
 class TestClearSeenStatus:
     def test_clears_seen_status_and_startup(self) -> None:
-        terminal_strategy.get_state("@0").has_seen_status = True
-        terminal_strategy.get_state("@0").startup_time = 100.0
-        terminal_strategy.clear_seen_status("@0")
+        terminal_poll_state.get_state("@0").has_seen_status = True
+        terminal_poll_state.get_state("@0").startup_time = 100.0
+        terminal_poll_state.clear_seen_status("@0")
         assert not (
             _window_poll_state.get("@0") and _window_poll_state["@0"].has_seen_status
         )
@@ -705,7 +708,7 @@ class TestShellPromptClearsStatus:
     async def test_shell_prompt_enqueues_status_clear(self) -> None:
         from ccgram.handlers.polling_coordinator import _handle_no_status
 
-        terminal_strategy.get_state("@0").has_seen_status = True
+        terminal_poll_state.get_state("@0").has_seen_status = True
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.polling_coordinator.thread_router") as mock_tr,
@@ -729,7 +732,7 @@ class TestShellPromptClearsStatus:
         from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
         from ccgram.handlers.polling_coordinator import _handle_no_status
 
-        terminal_strategy.get_state("@0").has_seen_status = True
+        terminal_poll_state.get_state("@0").has_seen_status = True
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.polling_coordinator.session_manager") as mock_sm,
@@ -758,7 +761,7 @@ class TestShellPromptClearsStatus:
 
 class TestProbeFailures:
     async def test_probe_skips_suspended_windows(self) -> None:
-        terminal_strategy.get_state("@5").probe_failures = MAX_PROBE_FAILURES
+        terminal_poll_state.get_state("@5").probe_failures = MAX_PROBE_FAILURES
         bot = AsyncMock(spec=Bot)
         with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
@@ -766,7 +769,7 @@ class TestProbeFailures:
         bot.unpin_all_forum_topic_messages.assert_not_called()
 
     async def test_probe_success_resets_counter(self) -> None:
-        terminal_strategy.get_state("@5").probe_failures = 2
+        terminal_poll_state.get_state("@5").probe_failures = 2
         bot = AsyncMock(spec=Bot)
         with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
@@ -815,7 +818,7 @@ class TestProbeFailures:
         ],
     )
     async def test_topic_deleted_cleans_up(self, window_alive: bool) -> None:
-        terminal_strategy.get_state("@5").probe_failures = 1
+        terminal_poll_state.get_state("@5").probe_failures = 1
         bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = BadRequest("Topic_id_invalid")
         mock_window = MagicMock()
@@ -1955,7 +1958,7 @@ class TestUpdateStatusMessageEdgeCases:
         from ccgram.handlers.polling_coordinator import update_status_message
         from ccgram.providers.base import StatusUpdate
 
-        terminal_strategy.get_state(
+        terminal_poll_state.get_state(
             "@0"
         ).last_rendered_text = "some code\n-- INSERT --\n"
         pyte_status = StatusUpdate(raw_text="Working", display_label="...working")

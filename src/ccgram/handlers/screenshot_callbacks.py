@@ -292,13 +292,13 @@ async def _handle_pane_screenshot(
 
 async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_STATUS_REMOTE: activate Remote Control or show status."""
-    from .polling_strategies import terminal_strategy
+    from .polling_strategies import terminal_screen_buffer
 
     window_id = data[len(CB_STATUS_REMOTE) :]
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
         return
-    if terminal_strategy.is_rc_active(window_id):
+    if terminal_screen_buffer.is_rc_active(window_id):
         await query.answer("\U0001f4e1 Remote Control active")
     else:
         display = thread_router.get_display_name(window_id)

@@ -27,7 +27,7 @@ from .cleanup import clear_topic_state
 from .message_sender import is_thread_gone
 from .polling_strategies import (
     lifecycle_strategy,
-    terminal_strategy,
+    terminal_poll_state,
 )
 
 if TYPE_CHECKING:
@@ -122,14 +122,14 @@ async def check_unbound_window_ttl(
         live_windows = await tmux_manager.list_windows()
     live_ids = {w.window_id for w in live_windows}
 
-    terminal_strategy.clear_unbound_timers(bound_ids, live_ids)
+    terminal_poll_state.clear_unbound_timers(bound_ids, live_ids)
 
     now = time.monotonic()
     for w in live_windows:
         if w.window_id not in bound_ids and not is_foreign_window(w.window_id):
-            ws = terminal_strategy.get_state(w.window_id)
+            ws = terminal_poll_state.get_state(w.window_id)
             if ws.unbound_timer is None:
-                terminal_strategy.set_unbound_timer(w.window_id, now)
+                terminal_poll_state.set_unbound_timer(w.window_id, now)
 
     await _kill_expired_unbound(now, timeout)
     _prune_orphaned_poll_state(live_ids, bound_ids)
@@ -137,7 +137,7 @@ async def check_unbound_window_ttl(
 
 async def _kill_expired_unbound(now: float, timeout: float) -> None:
     """Find and kill unbound windows past their TTL."""
-    expired = terminal_strategy.get_expired_unbound(now, timeout)
+    expired = terminal_poll_state.get_expired_unbound(now, timeout)
     for wid in expired:
         await tmux_manager.kill_window(wid)
 
@@ -153,8 +153,8 @@ async def _kill_expired_unbound(now: float, timeout: float) -> None:
 
 def _prune_orphaned_poll_state(live_ids: set[str], bound_ids: set[str]) -> None:
     """Remove poll state for windows that are neither live nor bound."""
-    for wid in terminal_strategy.get_orphaned_window_ids(live_ids, bound_ids):
-        terminal_strategy.clear_state(wid)
+    for wid in terminal_poll_state.get_orphaned_window_ids(live_ids, bound_ids):
+        terminal_poll_state.clear_state(wid)
 
 
 # ── Display name sync / state pruning ─────────────────────────────────────
@@ -181,7 +181,7 @@ async def probe_topic_existence(bot: Bot) -> None:
                 chat_id=thread_router.resolve_chat_id(user_id, thread_id),
                 message_thread_id=thread_id,
             )
-            terminal_strategy.reset_probe_failures(wid)
+            terminal_poll_state.reset_probe_failures(wid)
         except TelegramError as e:
             if isinstance(e, BadRequest) and (
                 "Topic_id_invalid" in e.message
@@ -190,7 +190,7 @@ async def probe_topic_existence(bot: Bot) -> None:
                 w = await tmux_manager.find_window_by_id(wid)
                 if w:
                     await tmux_manager.kill_window(w.window_id)
-                terminal_strategy.reset_probe_failures(wid)
+                terminal_poll_state.reset_probe_failures(wid)
                 await clear_topic_state(user_id, thread_id, bot, window_id=wid)
                 thread_router.unbind_thread(user_id, thread_id)
                 logger.info(

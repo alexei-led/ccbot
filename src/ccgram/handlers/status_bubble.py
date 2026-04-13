@@ -57,7 +57,7 @@ def build_status_keyboard(
       Row 2: [Esc] [Screenshot] [Bell] [RC]
     """
     from .command_history import truncate_for_display
-    from .polling_strategies import terminal_strategy
+    from .polling_strategies import terminal_screen_buffer
 
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -77,7 +77,7 @@ def build_status_keyboard(
     bell = NOTIFY_MODE_ICONS.get(mode, "\U0001f514")
     rc_label = (
         "\U0001f4e1\u2713"
-        if terminal_strategy.is_rc_active(window_id)
+        if terminal_screen_buffer.is_rc_active(window_id)
         else "\U0001f4e1"
     )
     rows.append(
