@@ -572,7 +572,8 @@ async def _create_window_and_bind(
     )
     await tmux_manager.stamp_pane_title(created_wid, provider_name)
 
-    if provider_name == "shell":
+    provider_caps = provider_registry.get(provider_name).capabilities
+    if provider_caps.chat_first_command_path:
         from ccgram.providers.shell import setup_shell_prompt
 
         await _wait_for_shell_ready(created_wid)
@@ -626,8 +627,8 @@ async def _create_window_and_bind(
             context.user_data.pop(PENDING_THREAD_TEXT, None)
             context.user_data.pop(PENDING_THREAD_ID, None)
 
-        # Shell provider: route through NL→command approval flow
-        if provider_name == "shell":
+        # Chat-first providers (shell): route through NL→command approval flow
+        if provider_caps.chat_first_command_path:
             from .shell_commands import handle_shell_message
 
             await handle_shell_message(

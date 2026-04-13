@@ -100,7 +100,10 @@ async def _detect_and_setup_provider(
     )
     if detected:
         session_manager.set_window_provider(window_id, detected)
-        if detected == "shell":
+        from ..providers import get_provider_for_window
+
+        provider = get_provider_for_window(window_id, detected)
+        if provider and provider.capabilities.chat_first_command_path:
             from ..providers.shell import setup_shell_prompt
 
             await setup_shell_prompt(window_id, clear=False)
@@ -124,7 +127,11 @@ async def _forward_pending_text(
             one from directory browser).  For shell, skips handle_shell_message
             to avoid _ensure_prompt_marker racing with the offer keyboard.
     """
-    if provider_name == "shell" and not is_existing_window:
+    from ..providers import get_provider_for_window
+
+    provider = get_provider_for_window(window_id, provider_name)
+    is_chat_first = bool(provider and provider.capabilities.chat_first_command_path)
+    if is_chat_first and not is_existing_window:
         from .shell_commands import handle_shell_message
 
         await handle_shell_message(bot, user_id, thread_id, window_id, text)

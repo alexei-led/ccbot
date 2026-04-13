@@ -55,12 +55,18 @@ async def _detect_and_apply_provider(
     if detected and detected != state.provider_name:
         old_provider = state.provider_name
         session_manager.set_window_provider(window_id, detected, cwd=w.cwd or None)
-        if detected == "shell":
+        from ..providers import get_provider_for_window
+
+        new_caps = get_provider_for_window(window_id, detected)
+        old_caps = (
+            get_provider_for_window(window_id, old_provider) if old_provider else None
+        )
+        if new_caps and new_caps.capabilities.chat_first_command_path:
             state.transcript_path = ""
             from ..providers.shell import setup_shell_prompt
 
             await setup_shell_prompt(window_id, clear=False)
-        elif old_provider == "shell":
+        elif old_caps and old_caps.capabilities.chat_first_command_path:
             from .shell_capture import clear_shell_monitor_state
 
             clear_shell_monitor_state(window_id)
