@@ -299,18 +299,18 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Create: `src/ccgram/handlers/shell_prompt_orchestrator.py`
 - Create: `tests/ccgram/handlers/test_shell_prompt_orchestrator.py`
 
-- [ ] create the module with the `Trigger` enum (`Literal["auto", "external_bind", "provider_switch", "lazy"]`), `_WindowOrchestratorState` dataclass, `_state: dict[str, _WindowOrchestratorState]` private dict
-- [ ] implement `async def ensure_setup(window_id: str, trigger: Trigger) -> None` with the decision table:
+- [x] create the module with the `Trigger` enum (`Literal["auto", "external_bind", "provider_switch", "lazy"]`), `_WindowOrchestratorState` dataclass, `_state: dict[str, _WindowOrchestratorState]` private dict
+- [x] implement `async def ensure_setup(window_id: str, trigger: Trigger) -> None` with the decision table:
   - `auto` → always call `setup_shell_prompt(clear=True)`
   - `lazy` → call only if `not state.skip_flag and not await has_prompt_marker(window_id)`, with `clear=False`
   - `external_bind` → show offer keyboard if marker missing and not already offered; no-op otherwise
   - `provider_switch` → show offer keyboard if not `state.skip_flag`; reoffer is OK if skip was cleared
-- [ ] implement `async def accept_offer(window_id: str) -> None` — sets `was_offered=True`, calls `setup_shell_prompt(clear=False)`
-- [ ] implement `def record_skip(window_id: str) -> None` — sets `state.skip_flag=True`, session-scoped
-- [ ] implement `def clear_state(window_id: str) -> None` and register via `@topic_state.register_bound("window", ...)` inside an init hook or at module load
-- [ ] write table-driven unit tests matching the design doc's 10 scenarios (auto_always_runs, lazy_no_op_when_marker_present, lazy_runs_when_marker_missing, lazy_respects_skip_flag, external_bind_shows_offer, external_bind_no_offer_if_marker_present, provider_switch_reoffers_after_skip_cleared, provider_switch_respects_skip, accept_offer_runs_setup, record_skip_sets_flag)
-- [ ] mock `has_prompt_marker` and `setup_shell_prompt` in tests — orchestrator is pure policy
-- [ ] run `make check` — must be green before Task 7
+- [x] implement `async def accept_offer(window_id: str) -> None` — sets `was_offered=True`, calls `setup_shell_prompt(clear=False)`
+- [x] implement `def record_skip(window_id: str) -> None` — sets `state.skip_flag=True`, session-scoped
+- [x] implement `def clear_state(window_id: str) -> None` and register via `@topic_state.register_bound("window", ...)` inside an init hook or at module load
+- [x] write table-driven unit tests matching the design doc's 10 scenarios (auto_always_runs, lazy_no_op_when_marker_present, lazy_runs_when_marker_missing, lazy_respects_skip_flag, external_bind_shows_offer, external_bind_no_offer_if_marker_present, provider_switch_reoffers_after_skip_cleared, provider_switch_respects_skip, accept_offer_runs_setup, record_skip_sets_flag)
+- [x] mock `has_prompt_marker` and `setup_shell_prompt` in tests — orchestrator is pure policy
+- [x] run `make check` — must be green before Task 7
 
 ### Task 7: Migrate 5 shell setup trigger sites
 
