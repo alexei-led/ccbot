@@ -117,11 +117,11 @@ async def _show_offer_keyboard(
 ) -> None:
     """Show inline keyboard with Set up / Skip buttons."""
     st = _get_state(window_id)
-    st.was_offered = True
 
     if not bot or not chat_id:
         from ..providers.shell_infra import setup_shell_prompt
 
+        st.was_offered = True
         await setup_shell_prompt(window_id, clear=False)
         return
 
@@ -137,13 +137,15 @@ async def _show_offer_keyboard(
             ]
         ]
     )
-    await safe_send(
+    result = await safe_send(
         bot,
         chat_id,
         "Shell prompt marker helps ccgram detect command output. Set up now?",
-        thread_id=thread_id,
+        message_thread_id=thread_id,
         reply_markup=keyboard,
     )
+    if result is not None:
+        st.was_offered = True
 
 
 @register(CB_SHELL_SETUP, CB_SHELL_SKIP)

@@ -405,6 +405,8 @@ async def process_tool_event(
         batch = await _handle_tool_use_event(
             bot, user_id, task, batch, window_id, thread_id, bkey
         )
+        if batch is None:
+            return
     else:
         await process_content_task(bot, user_id, task)
         return
@@ -420,7 +422,7 @@ async def _handle_tool_use_event(
     window_id: str,
     thread_id: int,
     bkey: tuple[int, int],
-) -> ToolBatch:
+) -> ToolBatch | None:
     """Process a tool_use event, creating/flushing batches as needed."""
     if batch and batch.window_id != window_id:
         await flush_batch(bot, user_id, thread_id)
@@ -434,8 +436,14 @@ async def _handle_tool_use_event(
     if overflow:
         await flush_batch(bot, user_id, thread_id)
         batch = ToolBatch(window_id=window_id, thread_id=thread_id)
-        _add_tool_use_entry(task, batch)
+        still_overflow = _add_tool_use_entry(task, batch)
         _active_batches[bkey] = batch
+        if still_overflow:
+            from .message_queue import process_content_task
+
+            _active_batches.pop(bkey, None)
+            await process_content_task(bot, user_id, task)
+            return None
 
     return batch
 

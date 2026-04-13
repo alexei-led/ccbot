@@ -161,7 +161,7 @@ async def test_show_offer_keyboard_sends_message(mock_setup, mock_has_marker):
 
     mock_send.assert_awaited_once()
     call_kwargs = mock_send.call_args[1]
-    assert call_kwargs["thread_id"] == 42
+    assert call_kwargs["message_thread_id"] == 42
     assert _state["@3"].was_offered is True
     mock_setup.assert_not_awaited()
 

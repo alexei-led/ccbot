@@ -199,7 +199,7 @@ async def safe_send(
     text: str,
     message_thread_id: int | None = None,
     **kwargs: Any,
-) -> None:
+) -> Message | None:
     """Send message with entity formatting, falling back to plain text on failure."""
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
     if message_thread_id is not None:
@@ -208,7 +208,9 @@ async def safe_send(
     async def _send(text: str, **kw: Any) -> Message:
         return await bot.send_message(chat_id=chat_id, text=text, **kw)
 
-    await _with_entity_fallback(_send, text, f"send message to {chat_id}", **kwargs)
+    return await _with_entity_fallback(
+        _send, text, f"send message to {chat_id}", **kwargs
+    )
 
 
 async def edit_with_fallback(

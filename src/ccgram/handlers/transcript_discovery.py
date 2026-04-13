@@ -82,8 +82,10 @@ async def _detect_and_apply_provider(
             )
         elif old_caps and old_caps.capabilities.chat_first_command_path:
             from .shell_capture import clear_shell_monitor_state
+            from .shell_prompt_orchestrator import clear_state as clear_orchestrator
 
             clear_shell_monitor_state(window_id)
+            clear_orchestrator(window_id)
     elif not detected and state.transcript_path:
         inferred = detect_provider_from_transcript_path(state.transcript_path)
         if inferred and inferred != state.provider_name:
