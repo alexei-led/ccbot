@@ -288,8 +288,8 @@ class TerminalPollState:
         return self._states.get(window_id)
 
     def iter_states(self) -> Iterable[WindowPollState]:
-        """Iterate over all existing window poll states."""
-        return self._states.values()
+        """Iterate over all existing window poll states (snapshot-safe)."""
+        return list(self._states.values())
 
     def clear_state(self, window_id: str) -> None:
         """Remove all polling state for a window."""

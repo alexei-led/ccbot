@@ -57,14 +57,9 @@ def _get_action_label(window_id: str, action_name: str) -> str | None:
     return _window_action_labels.get(window_id, {}).get(action_name)
 
 
-def _clear_window_labels(window_id: str) -> None:
-    """Drop all label overrides for a window (on teardown)."""
-    _window_action_labels.pop(window_id, None)
-
-
 @topic_state.register("window")
 def _clear_toolbar_labels(window_id: str) -> None:
-    _clear_window_labels(window_id)
+    _window_action_labels.pop(window_id, None)
 
 
 # ──────────────────────────────────────────────────────────────────────

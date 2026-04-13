@@ -12,7 +12,7 @@ from ccgram.handlers.toolbar_callbacks import (
     handle_toolbar_callback,
 )
 from ccgram.handlers.toolbar_keyboard import (
-    _clear_window_labels,
+    _clear_toolbar_labels,
     _get_action_label,
     _set_action_label,
     build_toolbar_keyboard,
@@ -410,7 +410,7 @@ class TestRefreshButtonLabel:
         assert "\U0001f500" in mode_btn.text
 
     async def test_seed_button_states_populates_mode_label(self) -> None:
-        _clear_window_labels("@111")
+        _clear_toolbar_labels("@111")
         mock_provider = AsyncMock()
         mock_provider.scrape_current_mode = AsyncMock(return_value="Plan")
         with patch(
@@ -421,7 +421,7 @@ class TestRefreshButtonLabel:
         assert _get_action_label("@111", "mode") == "Plan"
 
     async def test_seed_button_states_no_label_when_none(self) -> None:
-        _clear_window_labels("@222")
+        _clear_toolbar_labels("@222")
         mock_provider = AsyncMock()
         mock_provider.scrape_current_mode = AsyncMock(return_value=None)
         with patch(
