@@ -434,17 +434,17 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `src/ccgram/handlers/topic_emoji.py`
 - Modify: corresponding tests
 
-- [ ] in each handler, replace `session_manager.get_window_state(wid).{field}` reads with `session_manager.view_window(wid).{field}` where the only purpose is to read a scalar
-- [ ] `file_handler.py` — read `cwd` via `view_window`
-- [ ] `history.py` — read `transcript_path` via `view_window`
-- [ ] `shell_commands.py` — read `cwd` via `view_window`
-- [ ] `text_handler.py` — read `cwd` via `view_window`
-- [ ] `send_command.py` — read `cwd` via `view_window`
-- [ ] `topic_emoji.py` — read `approval_mode` via `view_window` (only if it is a pure read; if it also calls `set_approval_mode`, keep `get_window_state`)
-- [ ] handle `None` return from `view_window` in every migrated site — match the existing behaviour when `get_window_state` returned a default
-- [ ] update each handler's tests to use `WindowView` fixtures instead of `WindowStateStore` wiring — where possible
-- [ ] track progress with `grep -c 'session_manager\.get_window_state' src/ccgram/handlers/*.py` — verify the count decreased by 6
-- [ ] run `make check` — must be green before Task 13
+- [x] in each handler, replace `session_manager.get_window_state(wid).{field}` reads with `session_manager.view_window(wid).{field}` where the only purpose is to read a scalar
+- [x] `file_handler.py` — read `cwd` via `view_window` (already migrated in prior work)
+- [x] `history.py` — read `transcript_path` via `view_window` (uses get_recent_messages, no get_window_state to migrate)
+- [x] `shell_commands.py` — read `cwd` via `view_window` (no session_manager usage, cwd comes from context)
+- [x] `text_handler.py` — read `cwd` via `view_window` (already migrated in prior work)
+- [x] `send_command.py` — read `cwd` via `view_window` (already migrated in prior work)
+- [x] `topic_emoji.py` — read `approval_mode` via `view_window` (only if it is a pure read; if it also calls `set_approval_mode`, keep `get_window_state`)
+- [x] handle `None` return from `view_window` in every migrated site — match the existing behaviour when `get_window_state` returned a default
+- [x] update each handler's tests to use `WindowView` fixtures instead of `WindowStateStore` wiring — where possible (tests mock \_resolve_approval_mode directly, no changes needed)
+- [x] track progress with `grep -c 'session_manager\.get_window_state' src/ccgram/handlers/*.py` — verify the count decreased by 6 (0 calls in target files, 16 remain in non-target handlers that need mutable access)
+- [x] run `make check` — must be green before Task 13
 
 ### Task 13: Residual cleanup — `session.py` display-name access, `send_command._upload_file` rename
 
