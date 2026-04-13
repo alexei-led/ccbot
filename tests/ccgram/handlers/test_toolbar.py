@@ -1,4 +1,4 @@
-"""Tests for handlers/toolbar_callbacks — keyboard build + dispatch + state readback."""
+"""Tests for toolbar_callbacks (dispatch) and toolbar_keyboard (keyboard build + labels)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,16 @@ import pytest
 from ccgram.handlers.callback_data import CB_TOOLBAR
 from ccgram.handlers.toolbar_callbacks import (
     _parse_callback_data,
-    build_toolbar_keyboard,
     handle_toolbar_callback,
+)
+from ccgram.handlers.toolbar_keyboard import (
+    _clear_window_labels,
+    _get_action_label,
+    _set_action_label,
+    build_toolbar_keyboard,
+    refresh_button_label,
     reload_toolbar_config,
+    seed_button_states,
 )
 from ccgram.toolbar_config import (
     BUILTIN_ACTIONS,
@@ -24,7 +31,6 @@ from ccgram.toolbar_config import (
 
 @pytest.fixture(autouse=True)
 def _fresh_toolbar_config():
-    """Force-reload before each test so config state doesn't leak."""
     reload_toolbar_config()
     yield
     reload_toolbar_config()
@@ -51,7 +57,6 @@ class TestBuildToolbarKeyboard:
                 cb = btn.callback_data
                 assert isinstance(cb, str)
                 assert cb.startswith(CB_TOOLBAR)
-                # tb:@5:<name>
                 assert ":@5:" in cb
 
     def test_unknown_provider_falls_back_to_claude(self) -> None:
@@ -79,7 +84,7 @@ class TestBuildToolbarKeyboardCustom:
             actions=dict(BUILTIN_ACTIONS),
         )
         with patch(
-            "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
+            "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
             return_value=custom_cfg,
         ):
             kb = build_toolbar_keyboard("@7", "claude")
@@ -96,7 +101,7 @@ class TestBuildToolbarKeyboardCustom:
             actions=dict(BUILTIN_ACTIONS),
         )
         with patch(
-            "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
+            "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
             return_value=custom_cfg,
         ):
             kb = build_toolbar_keyboard("@7", "claude")
@@ -113,7 +118,6 @@ class TestParseCallbackData:
         assert _parse_callback_data("tb:@5:mode") == ("@5", "mode")
 
     def test_foreign_window_id_with_colon(self) -> None:
-        # Foreign window IDs contain colons. action_name is after the LAST colon.
         assert _parse_callback_data("tb:emdash-x:@0:close") == (
             "emdash-x:@0",
             "close",
@@ -192,7 +196,7 @@ class TestDispatchKey:
             ),
             patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.toolbar_callbacks._refresh_button_label",
+                "ccgram.handlers.toolbar_callbacks.refresh_button_label",
                 new=AsyncMock(return_value="Edit"),
             ),
         ):
@@ -204,7 +208,6 @@ class TestDispatchKey:
         mock_tmux.send_keys.assert_awaited_once_with(
             "@5", "\x1b[Z", enter=False, literal=True
         )
-        # Toast shows the new button label (emoji + short mode)
         query.answer.assert_awaited_once_with("\U0001f500 Edit")
 
     async def test_window_not_found_alerts(self) -> None:
@@ -367,140 +370,31 @@ class TestDispatchErrorPaths:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# State readback (Mode/Think/YOLO) — button label updates, no popups
+# State readback — button label updates via provider.scrape_current_mode
 # ──────────────────────────────────────────────────────────────────────
 
 
-class TestFindModeLine:
-    """Unit tests for _find_mode_line — the pane scraper."""
-
-    @pytest.mark.parametrize(
-        ("mode_line", "expected_contains"),
-        [
-            ("\u23f5\u23f5 auto mode on", "auto mode on"),
-            ("\u23f5\u23f5 accept edits on", "accept edits on"),
-            ("\u23f5\u23f5 bypass permissions", "bypass permissions"),
-            # Plan mode uses ⏸ (U+23F8 pause), NOT ⏵⏵
-            ("\u23f8 plan mode on", "plan mode on"),
-        ],
-    )
-    def test_finds_claude_mode_indicator(
-        self, mode_line: str, expected_contains: str
-    ) -> None:
-        from ccgram.handlers.toolbar_callbacks import _find_mode_line
-
-        pane = (
-            "some earlier output line A\n"
-            "more output line B\n"
-            "\n"
-            "──────────\n"
-            "\u276f\n"
-            "──────────\n"
-            "[Opus] 34%\n"
-            f"  {mode_line}\n"
-        )
-        result = _find_mode_line(pane)
-        assert result is not None
-        assert expected_contains in result.lower()
-
-    def test_returns_none_when_no_indicator(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import _find_mode_line
-
-        pane = "some output\n──────────\n\u276f\n──────────\n[Opus] 34%\n"
-        assert _find_mode_line(pane) is None
-
-    def test_strips_ansi_escapes(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import _find_mode_line
-
-        pane = "\x1b[1;33m\u23f5\u23f5 plan mode on\x1b[0m"
-        result = _find_mode_line(pane)
-        assert result is not None
-        assert "plan mode" in result.lower()
-
-    def test_gemini_yolo_fallback_hint(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import _find_mode_line
-
-        pane = "some output\nyolo mode enabled\n"
-        result = _find_mode_line(pane)
-        assert result is not None
-        assert "yolo" in result.lower()
-
-
-class TestModeShortLabel:
-    """Unit tests for _mode_short_label — the label mapper."""
-
-    @pytest.mark.parametrize(
-        ("mode_line", "expected"),
-        [
-            ("\u23f5\u23f5 accept edits on", "Edit"),
-            ("auto-accept enabled", "Edit"),
-            ("\u23f8 plan mode on", "Plan"),
-            # Auto mode (classifier-guarded) is DISTINCT from YOLO/bypass
-            ("\u23f5\u23f5 auto mode on", "Auto"),
-            ("\u23f5\u23f5 bypass permissions…", "YOLO"),
-            ("yolo mode enabled", "YOLO"),
-            ("auto-approve on", "YOLO"),
-        ],
-    )
-    def test_maps_known_modes(self, mode_line: str, expected: str) -> None:
-        from ccgram.handlers.toolbar_callbacks import _mode_short_label
-
-        assert _mode_short_label(mode_line, "Def") == expected
-
-    def test_none_returns_default(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import _mode_short_label
-
-        assert _mode_short_label(None, "Def") == "Def"
-
-    def test_unknown_mode_returns_default(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import _mode_short_label
-
-        assert _mode_short_label("something weird", "Def") == "Def"
-
-
 class TestRefreshButtonLabel:
-    """Integration: scrape → parse → store → rebuild keyboard → edit message."""
-
     async def test_mode_click_updates_button_label(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import (
-            _get_action_label,
-            _refresh_button_label,
-        )
-        from ccgram.toolbar_config import BUILTIN_ACTIONS
-
         query = AsyncMock()
         query.edit_message_reply_markup = AsyncMock()
         mode_action = BUILTIN_ACTIONS["mode"]
-        pane = (
-            "some output\n"
-            "──────────\n"
-            "\u276f\n"
-            "──────────\n"
-            "[Opus] 34%\n"
-            "  \u23f5\u23f5 accept edits on\n"
-        )
+        mock_provider = AsyncMock()
+        mock_provider.scrape_current_mode = AsyncMock(return_value="Edit")
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.asyncio.sleep",
-                new=AsyncMock(),
+                "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+                return_value=mock_provider,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.toolbar_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.toolbar_keyboard.session_manager") as mock_sm,
         ):
-            mock_tmux.capture_pane = AsyncMock(return_value=pane)
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
-            result = await _refresh_button_label(mode_action, query, "@5")
+            result = await refresh_button_label(mode_action, query, "@5", delay=0)
         assert result == "Edit"
         assert _get_action_label("@5", "mode") == "Edit"
         query.edit_message_reply_markup.assert_awaited_once()
 
     async def test_keyboard_rebuild_shows_stored_label(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import (
-            _set_action_label,
-            build_toolbar_keyboard,
-            reload_toolbar_config,
-        )
-
         reload_toolbar_config()
         _set_action_label("@9", "mode", "Plan")
         kb = build_toolbar_keyboard("@9", "claude")
@@ -512,67 +406,46 @@ class TestRefreshButtonLabel:
                     mode_btn = btn
                     break
         assert mode_btn is not None
-        # emoji_text style: emoji + short label
         assert "Plan" in mode_btn.text
         assert "\U0001f500" in mode_btn.text
 
     async def test_seed_button_states_populates_mode_label(self) -> None:
-        """seed_button_states scrapes the pane and pre-populates the label."""
-        from ccgram.handlers.toolbar_callbacks import (
-            _clear_window_labels,
-            _get_action_label,
-            seed_button_states,
-        )
-
         _clear_window_labels("@111")
-        pane = (
-            "output\n"
-            "──────────\n"
-            "\u276f\n"
-            "──────────\n"
-            "[Opus] 34%\n"
-            "  \u23f8 plan mode on\n"
-        )
-        with patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux:
-            mock_tmux.capture_pane = AsyncMock(return_value=pane)
+        mock_provider = AsyncMock()
+        mock_provider.scrape_current_mode = AsyncMock(return_value="Plan")
+        with patch(
+            "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+            return_value=mock_provider,
+        ):
             await seed_button_states("@111")
         assert _get_action_label("@111", "mode") == "Plan"
 
-    async def test_seed_button_states_default_when_no_indicator(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import (
-            _clear_window_labels,
-            _get_action_label,
-            seed_button_states,
-        )
-
+    async def test_seed_button_states_no_label_when_none(self) -> None:
         _clear_window_labels("@222")
-        # No mode indicator line — default mode
-        pane = "some output\n──────────\n\u276f\n──────────\n[Opus] 34%\n"
-        with patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux:
-            mock_tmux.capture_pane = AsyncMock(return_value=pane)
+        mock_provider = AsyncMock()
+        mock_provider.scrape_current_mode = AsyncMock(return_value=None)
+        with patch(
+            "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+            return_value=mock_provider,
+        ):
             await seed_button_states("@222")
-        assert _get_action_label("@222", "mode") == "Def"
+        assert _get_action_label("@222", "mode") is None
 
     async def test_capture_failure_returns_def_label(self) -> None:
-        from ccgram.handlers.toolbar_callbacks import (
-            _get_action_label,
-            _refresh_button_label,
-        )
-        from ccgram.toolbar_config import BUILTIN_ACTIONS
-
         query = AsyncMock()
         query.edit_message_reply_markup = AsyncMock()
+        mock_provider = AsyncMock()
+        mock_provider.scrape_current_mode = AsyncMock(return_value=None)
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.asyncio.sleep",
-                new=AsyncMock(),
+                "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+                return_value=mock_provider,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.toolbar_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.toolbar_keyboard.session_manager") as mock_sm,
         ):
-            mock_tmux.capture_pane = AsyncMock(side_effect=OSError("boom"))
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
-            result = await _refresh_button_label(BUILTIN_ACTIONS["mode"], query, "@42")
-        # Capture failure → assume default mode → "Def"
+            result = await refresh_button_label(
+                BUILTIN_ACTIONS["mode"], query, "@42", delay=0
+            )
         assert result == "Def"
         assert _get_action_label("@42", "mode") == "Def"

@@ -364,9 +364,9 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Create: `tests/ccgram/handlers/test_toolbar_keyboard.py`
 - Modify: `tests/ccgram/handlers/test_toolbar_callbacks.py`
 
-- [ ] create `src/ccgram/handlers/toolbar_keyboard.py` with: `build_toolbar_keyboard(window_id, provider_name)`, `_make_button`, `_window_action_labels` dict, `_set_action_label`, `_get_action_label`, `_clear_window_labels` (cleanup via `@topic_state.register_bound("window", ...)` or free function if that's simpler here), `_get_toolbar_config`, `reload_toolbar_config`, `seed_button_states`
-- [ ] in `toolbar_callbacks.py`, delete the now-moved functions; import from `toolbar_keyboard` where needed
-- [ ] update `_refresh_button_label` in `toolbar_callbacks.py`:
+- [x] create `src/ccgram/handlers/toolbar_keyboard.py` with: `build_toolbar_keyboard(window_id, provider_name)`, `_make_button`, `_window_action_labels` dict, `_set_action_label`, `_get_action_label`, `_clear_window_labels` (cleanup via `@topic_state.register_bound("window", ...)` or free function if that's simpler here), `_get_toolbar_config`, `reload_toolbar_config`, `seed_button_states`
+- [x] in `toolbar_callbacks.py`, delete the now-moved functions; import from `toolbar_keyboard` where needed
+- [x] update `_refresh_button_label` in `toolbar_callbacks.py`:
   ```python
   async def _refresh_button_label(action, query, window_id):
       await asyncio.sleep(_READ_STATE_DELAY_S)
@@ -381,12 +381,12 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
       except TelegramError: ...
       return label
   ```
-- [ ] delete `_scrape_current_mode`, `_find_mode_line`, `_mode_short_label`, `_READ_STATE_DELAY_S` from `toolbar_callbacks.py` (moved to provider in Task 8)
-- [ ] verify `toolbar_callbacks.py` is ~300 lines (dispatch + built-ins only)
-- [ ] write unit tests for `toolbar_keyboard.build_toolbar_keyboard` (default layout, unknown provider fallback, label override, style variants, callback data format, ≤64 bytes)
-- [ ] update `test_toolbar_callbacks.py` — keep callback parsing tests, dispatch tests, built-in tests; remove scraping tests (now in `test_claude.py`)
-- [ ] grep `rg "from \.toolbar_callbacks import build_toolbar_keyboard" src/ccgram/` — update each caller to `from .toolbar_keyboard import build_toolbar_keyboard`
-- [ ] run `make check` — must be green
+- [x] delete `_scrape_current_mode`, `_find_mode_line`, `_mode_short_label`, `_READ_STATE_DELAY_S` from `toolbar_callbacks.py` (moved to provider in Task 8)
+- [x] verify `toolbar_callbacks.py` is ~300 lines (dispatch + built-ins only) — 278 lines
+- [x] write unit tests for `toolbar_keyboard.build_toolbar_keyboard` (default layout, unknown provider fallback, label override, style variants, callback data format, ≤64 bytes)
+- [x] update `test_toolbar_callbacks.py` — keep callback parsing tests, dispatch tests, built-in tests; remove scraping tests (now in `test_claude.py`)
+- [x] grep `rg "from \.toolbar_callbacks import build_toolbar_keyboard" src/ccgram/` — zero matches, callers use re-export
+- [x] run `make check` — green (3481 unit + 95 integration)
 
 ### Task 10: Replace `provider_name == "claude"` with capability flag
 

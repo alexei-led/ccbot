@@ -160,7 +160,7 @@ class TestDispatchRoundTrip:
             ),
             patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.toolbar_callbacks._refresh_button_label",
+                "ccgram.handlers.toolbar_callbacks.refresh_button_label",
                 new=AsyncMock(return_value="Edit"),
             ),
             patch.object(
@@ -191,6 +191,10 @@ class TestDispatchRoundTrip:
         )
         update = _make_callback_query_update(f"tb:{TEST_WINDOW_ID}:clear", bot=app.bot)
         with (
+            patch(
+                "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
+                return_value=cfg,
+            ),
             patch(
                 "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
                 return_value=cfg,
@@ -292,7 +296,7 @@ class TestCustomConfigDispatch:
         )
         # Render the keyboard and verify shape + labels.
         with patch(
-            "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
+            "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
             return_value=cfg,
         ):
             kb = build_toolbar_keyboard(TEST_WINDOW_ID, "claude")
@@ -306,6 +310,10 @@ class TestCustomConfigDispatch:
             f"tb:{TEST_WINDOW_ID}:summary", bot=app.bot
         )
         with (
+            patch(
+                "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
+                return_value=cfg,
+            ),
             patch(
                 "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
                 return_value=cfg,
@@ -343,6 +351,10 @@ class TestCustomConfigDispatch:
         )
         update = _make_callback_query_update(f"tb:{TEST_WINDOW_ID}:mode", bot=app.bot)
         with (
+            patch(
+                "ccgram.handlers.toolbar_keyboard._get_toolbar_config",
+                return_value=cfg,
+            ),
             patch(
                 "ccgram.handlers.toolbar_callbacks._get_toolbar_config",
                 return_value=cfg,
