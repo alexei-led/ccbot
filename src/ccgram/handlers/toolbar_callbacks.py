@@ -74,6 +74,37 @@ def reload_toolbar_config() -> None:
     _toolbar_cfg = None
 
 
+# Per-window per-action label overrides populated by state readback.
+# Example: {"@5": {"mode": "Edit"}} — when the toolbar is (re)built for
+# window @5, the "mode" action's label is replaced with "Edit" instead
+# of the default "Mode". This lets the button itself show the current
+# state — no popups, no ephemeral toasts.
+_window_action_labels: dict[str, dict[str, str]] = {}
+
+
+def _set_action_label(window_id: str, action_name: str, label: str) -> None:
+    _window_action_labels.setdefault(window_id, {})[action_name] = label
+
+
+def _get_action_label(window_id: str, action_name: str) -> str | None:
+    return _window_action_labels.get(window_id, {}).get(action_name)
+
+
+def _clear_window_labels(window_id: str) -> None:
+    """Drop all label overrides for a window (on teardown)."""
+    _window_action_labels.pop(window_id, None)
+
+
+# Register with the topic_state registry so window teardown clears the
+# label cache automatically (same pattern as other per-window state).
+from ..topic_state_registry import topic_state  # noqa: E402
+
+
+@topic_state.register("window")
+def _clear_toolbar_labels(window_id: str) -> None:
+    _clear_window_labels(window_id)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Keyboard builder
 # ──────────────────────────────────────────────────────────────────────
@@ -82,8 +113,18 @@ def reload_toolbar_config() -> None:
 def _make_button(
     action: ToolbarAction, window_id: str, style: str
 ) -> InlineKeyboardButton:
-    """Render one ToolbarAction as a Telegram inline button."""
-    label = action.render(style)  # type: ignore[arg-type]
+    """Render one ToolbarAction as a Telegram inline button.
+
+    If there is a label override stored for (window, action), use it —
+    this is how toggle buttons display their current state (e.g. Mode
+    shows "Edit" / "Plan" / "Auto" instead of the static "Mode").
+    """
+    override = _get_action_label(window_id, action.name)
+    if override is not None:
+        # Preserve emoji for emoji_text style; bare label for text/emoji.
+        label = f"{action.emoji} {override}" if style == "emoji_text" else override
+    else:
+        label = action.render(style)  # type: ignore[arg-type]
     cb = f"{CB_TOOLBAR}{window_id}:{action.name}"[:64]
     return InlineKeyboardButton(label, callback_data=cb)
 
@@ -95,7 +136,9 @@ def build_toolbar_keyboard(
 
     The grid shape, button identities, and rendering style all come from
     ``toolbar_config.load_toolbar_config`` (TOML file or built-in defaults).
-    Unknown providers fall back to the ``claude`` layout.
+    Per-window label overrides (populated by state readback) are honored
+    so toggle buttons show their current state. Unknown providers fall
+    back to the ``claude`` layout.
     """
     cfg = _get_toolbar_config()
     layout = cfg.for_provider(provider_name)
@@ -118,8 +161,8 @@ def build_toolbar_keyboard(
 # Strip ANSI escapes for plain-text mode-line scraping.
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 
-# Claude Code's mode indicator appears in the bottom chrome with one of two
-# marker glyphs, depending on the mode:
+# Claude Code's mode indicator appears in the bottom chrome with one of
+# two marker glyphs depending on the mode:
 #   ⏵⏵ auto mode on            (U+23F5 ⏵ — play)
 #   ⏵⏵ accept edits on
 #   ⏵⏵ bypass permissions…
@@ -127,40 +170,58 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 # Default mode has no indicator line at all.
 _CLAUDE_MODE_MARKERS: tuple[str, ...] = ("\u23f5\u23f5", "\u23f8")
 
-# Fallback substring hints for other providers (Gemini YOLO, etc.) or
-# when Claude renders a mode-line without the marker.
+# Fallback substring hints for other providers (Gemini YOLO, etc.) when
+# Claude renders a mode-line without the marker glyphs.
 _MODE_LINE_HINTS: tuple[str, ...] = (
     "auto mode",
     "auto-accept",
     "accept edits",
     "plan mode",
-    "default mode",
     "bypass permissions",
-    "extended thinking",
-    "thinking on",
-    "thinking off",
     "yolo",
     "auto-approve",
 )
 
-# Trim leading marker glyphs + whitespace so the toast shows a clean label.
-_CLEAN_RE = re.compile(r"^[\s\u23f5\u23f8]+|\s+$")
+# Compact labels for button text. The button label IS the state indicator —
+# no popups, no toast. User clicks Mode, the button text changes from
+# "Mode" to "Edit", "Plan", "Auto", "Perm" etc. Ephemeral toasts are too
+# easy to miss on mobile; popups are too disruptive.
+_MODE_SHORT_LABELS: tuple[tuple[str, str], ...] = (
+    ("accept edits", "Edit"),
+    ("plan", "Plan"),
+    ("auto mode", "Auto"),
+    ("auto-accept", "Auto"),
+    ("bypass", "Perm"),
+    ("yolo", "YOLO"),
+    ("auto-approve", "YOLO"),
+)
 
 _READ_STATE_DELAY_S = 0.35  # long enough for Claude to re-render its chrome
 _READ_STATE_LINE_LIMIT = 80
 
 
-def _clean_mode_line(line: str) -> str:
-    """Strip leading marker glyphs + trailing whitespace for toast display."""
-    return _CLEAN_RE.sub("", line)[:_READ_STATE_LINE_LIMIT]
+def _mode_short_label(mode_line: str | None, default: str) -> str:
+    """Map a scraped mode line to a compact button label.
+
+    Returns ``default`` (e.g. the action's static text) when no known
+    mode can be matched — that covers default mode (no indicator),
+    scrape failures, and unknown formats.
+    """
+    if not mode_line:
+        return default
+    lower = mode_line.lower()
+    for pattern, label in _MODE_SHORT_LABELS:
+        if pattern in lower:
+            return label
+    return default
 
 
 def _find_mode_line(capture: str) -> str | None:
     """Find the mode-indicator line in a pane capture.
 
     Uses ``find_chrome_boundary`` to locate Claude Code's bottom chrome
-    block, then scans it for the ⏵⏵ marker (fast, unambiguous). Falls
-    back to substring hints for providers without the marker.
+    block, then scans it for the ⏵⏵ / ⏸ markers. Falls back to substring
+    hints for providers without the marker.
     """
     from ..terminal_parser import find_chrome_boundary
 
@@ -175,7 +236,7 @@ def _find_mode_line(capture: str) -> str | None:
         if not stripped:
             continue
         if any(marker in stripped for marker in _CLAUDE_MODE_MARKERS):
-            return _clean_mode_line(stripped)
+            return stripped[:_READ_STATE_LINE_LIMIT]
 
     # Fallback: scan the bottom 25 lines for any provider's mode hint.
     for line in reversed(lines[-25:]):
@@ -184,30 +245,8 @@ def _find_mode_line(capture: str) -> str | None:
             continue
         lower = stripped.lower()
         if any(hint in lower for hint in _MODE_LINE_HINTS):
-            return _clean_mode_line(stripped)
+            return stripped[:_READ_STATE_LINE_LIMIT]
     return None
-
-
-async def _scrape_mode_toast(window_id: str, fallback: str) -> str:
-    """Capture the pane after a toggle key and return the mode-line.
-
-    Falls back to ``fallback`` if the pane capture fails or no recognized
-    mode-line is found.
-    """
-    await asyncio.sleep(_READ_STATE_DELAY_S)
-    try:
-        capture = await tmux_manager.capture_pane(window_id)
-    except OSError, TelegramError:
-        logger.debug("Mode scrape: capture_pane failed for %s", window_id)
-        return fallback
-    if not capture:
-        logger.debug("Mode scrape: empty capture for %s", window_id)
-        return fallback
-    mode_line = _find_mode_line(capture)
-    if mode_line is None:
-        logger.debug("Mode scrape: no mode line found for %s", window_id)
-        return fallback
-    return mode_line
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -215,10 +254,46 @@ async def _scrape_mode_toast(window_id: str, fallback: str) -> str:
 # ──────────────────────────────────────────────────────────────────────
 
 
+async def _refresh_button_label(
+    action: ToolbarAction, query: CallbackQuery, window_id: str
+) -> str:
+    """Scrape the pane, update the button label, rebuild the keyboard.
+
+    This is how toggle actions (Mode/Think/YOLO) show their current state:
+    the button text itself becomes the indicator. No popups, no toasts.
+    Returns the short label used so the caller can include it in the toast.
+    """
+    await asyncio.sleep(_READ_STATE_DELAY_S)
+    capture: str | None = None
+    try:
+        capture = await tmux_manager.capture_pane(window_id)
+    except (OSError, TelegramError) as exc:
+        logger.warning("Mode scrape: capture_pane failed %s (%s)", window_id, exc)
+    mode_line = _find_mode_line(capture) if capture else None
+    short_label = _mode_short_label(mode_line, action.text)
+    _set_action_label(window_id, action.name, short_label)
+
+    # Rebuild the keyboard for the same provider and edit the message.
+    view = session_manager.view_window(window_id)
+    provider_name = view.provider_name if view else "claude"
+    new_kb = build_toolbar_keyboard(window_id, provider_name)
+    try:
+        await query.edit_message_reply_markup(reply_markup=new_kb)
+    except TelegramError as exc:
+        # Concurrent edit or rate limit — the toast still gives feedback.
+        logger.debug("Toolbar reply_markup edit failed: %s", exc)
+    return short_label
+
+
 async def _dispatch_key(
     action: ToolbarAction, query: CallbackQuery, window_id: str
 ) -> None:
-    """Send a tmux key for a ``key`` action."""
+    """Send a tmux key for a ``key`` action.
+
+    Toggle actions (``read_state=True``) rewrite the clicked button's
+    label in place to reflect the new state — the button text is the
+    state indicator. No popups, no disruptive dialogs.
+    """
     w = await tmux_manager.find_window_by_id(window_id)
     if w is None:
         await query.answer("Window not found", show_alert=True)
@@ -226,12 +301,11 @@ async def _dispatch_key(
     await tmux_manager.send_keys(
         w.window_id, action.payload, enter=False, literal=action.literal
     )
-    fallback = f"{action.emoji} {action.text}"
     if action.read_state:
-        toast = await _scrape_mode_toast(window_id, fallback)
+        short_label = await _refresh_button_label(action, query, window_id)
+        await query.answer(f"{action.emoji} {short_label}")
     else:
-        toast = fallback
-    await query.answer(toast)
+        await query.answer(f"{action.emoji} {action.text}")
 
 
 async def _dispatch_text(
@@ -243,12 +317,11 @@ async def _dispatch_text(
         await query.answer("Window not found", show_alert=True)
         return
     await tmux_manager.send_keys(w.window_id, action.payload, enter=True, literal=True)
-    fallback = f"{action.emoji} {action.text}"
     if action.read_state:
-        toast = await _scrape_mode_toast(window_id, fallback)
+        short_label = await _refresh_button_label(action, query, window_id)
+        await query.answer(f"{action.emoji} {short_label}")
     else:
-        toast = fallback
-    await query.answer(toast)
+        await query.answer(f"{action.emoji} {action.text}")
 
 
 # ──────────────────────────────────────────────────────────────────────

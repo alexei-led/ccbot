@@ -158,8 +158,8 @@ class TestDispatchRoundTrip:
             ),
             patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.toolbar_callbacks._scrape_mode_toast",
-                new=AsyncMock(return_value="mode-line"),
+                "ccgram.handlers.toolbar_callbacks._refresh_button_label",
+                new=AsyncMock(return_value="Edit"),
             ),
             patch.object(
                 CallbackQuery, "answer", new_callable=AsyncMock
