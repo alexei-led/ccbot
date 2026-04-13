@@ -188,16 +188,46 @@ Send workspace files to Telegram. Three modes in one command:
 | Search depth | `CCGRAM_SEND_SEARCH_DEPTH` | `5`     |
 | Max results  | `CCGRAM_SEND_MAX_RESULTS`  | `50`    |
 
-### Toolbar — Provider-Specific
+### Toolbar — Configurable Per-Provider
 
-`/toolbar` shows an inline keyboard with 2 rows of 4 buttons. Row 1 is universal, row 2 is provider-specific:
+`/toolbar` shows an inline keyboard whose layout is loaded from a TOML file (or built-in defaults). Each provider has a grid of buttons (any rows × cols, ≤8 cells per row) and a rendering style (`emoji`, `text`, or `emoji_text`).
 
-| Row           | Claude                                    | Codex                          | Gemini                          | Shell                             |
-| ------------- | ----------------------------------------- | ------------------------------ | ------------------------------- | --------------------------------- |
-| 1 (universal) | 📷 Screenshot, ⏹ Ctrl-C, 📺 Live, 📤 Send | ← same                         | ← same                          | ← same                            |
-| 2 (provider)  | 🔀 Mode, 💭 Think, ⎋ Esc, ✖ Close         | ⎋ Esc, ⏎ Enter, ⇥ Tab, ✖ Close | 🔀 Mode, 🅨 YOLO, ⎋ Esc, ✖ Close | ⏎ Enter, ^D EOF, ^Z Susp, ✖ Close |
+**Default**: 3×3 grid per provider, `emoji_text` style:
 
-Key actions: **Mode** sends `Shift+Tab` (cycles permission mode in Claude/Gemini), **Think** sends `Tab` (toggles extended thinking), **YOLO** sends `Ctrl+Y` (toggles auto-approval in Gemini), **EOF** sends `Ctrl+D`, **Susp** sends `Ctrl+Z`. The **Send** button opens the `/send` file browser. Provider is resolved from `WindowState.provider_name`.
+| Provider | Row 1                        | Row 2                    | Row 3                     |
+| -------- | ---------------------------- | ------------------------ | ------------------------- |
+| Claude   | 📷 Screen, ⏹ Ctrl-C, 📺 Live | 🔀 Mode, 💭 Think, ⎋ Esc | 📤 Send, ⏎ Enter, ✖ Close |
+| Codex    | 📷 Screen, ⏹ Ctrl-C, 📺 Live | ⎋ Esc, ⏎ Enter, ⇥ Tab    | 📤 Send, 🔀 Mode, ✖ Close |
+| Gemini   | 📷 Screen, ⏹ Ctrl-C, 📺 Live | 🔀 Mode, 🅨 YOLO, ⎋ Esc   | 📤 Send, ⏎ Enter, ✖ Close |
+| Shell    | 📷 Screen, ⏹ Ctrl-C, 📺 Live | ⏎ Enter, ^D EOF, ^Z Susp | 📤 Send, ⎋ Esc, ✖ Close   |
+
+**Toggle actions with state readback**: Mode (Shift+Tab), Think (Tab), YOLO (Ctrl+Y) capture the pane ~250ms after the key press, scrape the agent CLI's mode-line, and surface it in the answer toast (e.g., "auto-accept edits on"). Falls back to the static toast when no recognized mode-line is found.
+
+**Action types** users can define in TOML:
+
+- **`key`** — send a tmux key sequence (e.g. `"Tab"`, `"C-c"`, `'\x1b[Z'`). Set `literal=true` for raw byte sequences (TOML literal strings — single-quoted).
+- **`text`** — send literal text + Enter (e.g. `"/clear"`, prompt template). Useful for slash commands the agent itself interprets.
+- **`builtin`** — reserved; users cannot define new builtins. Existing builtins: `screen`, `ctrlc`, `live`, `send`, `close`.
+
+**Configuration**: place a TOML file at `~/.ccgram/toolbar.toml` (auto-detected) or set `CCGRAM_TOOLBAR_CONFIG=/path/to/toolbar.toml`. See `docs/examples/toolbar.toml` for a fully-annotated example. Schema:
+
+```toml
+[actions.clear]                    # define a custom action
+emoji = "🧹"
+text  = "Clear"
+type  = "text"
+payload = "/clear"
+
+[providers.claude]                 # override claude's default grid
+style = "emoji_text"
+buttons = [
+  ["screen", "ctrlc", "live"],
+  ["mode",   "think", "clear"],
+  ["send",   "enter", "close"],
+]
+```
+
+Providers absent from the TOML keep their built-in defaults. Malformed entries are logged and skipped — the loader never raises. Action names must be ≤24 chars (callback_data budget). Provider is resolved from `WindowState.provider_name`.
 
 ### Migration Notes
 
