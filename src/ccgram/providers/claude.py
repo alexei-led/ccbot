@@ -5,7 +5,9 @@ cc_commands.py without changing any behavior. This is a thin adapter layer
 that translates between the provider protocol and existing module APIs.
 """
 
+import logging
 import os
+import re
 from typing import Any, cast
 
 from ccgram.cc_commands import CC_BUILTINS
@@ -23,10 +25,63 @@ from ccgram.providers.base import (
 from ccgram.terminal_parser import (
     extract_bash_output,
     extract_interactive_content,
+    find_chrome_boundary,
     format_status_display,
     parse_status_block,
 )
 from ccgram.transcript_parser import TranscriptParser
+
+_log = logging.getLogger(__name__)
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
+_MODE_MARKERS: tuple[str, ...] = ("\u23f5\u23f5", "\u23f8")
+_MODE_HINTS: tuple[str, ...] = (
+    "auto mode",
+    "auto-accept",
+    "accept edits",
+    "plan mode",
+    "bypass permissions",
+    "yolo",
+    "auto-approve",
+)
+_MODE_SHORT_LABELS: tuple[tuple[str, str], ...] = (
+    ("accept edits", "Edit"),
+    ("auto-accept", "Edit"),
+    ("plan", "Plan"),
+    ("auto mode", "Auto"),
+    ("bypass", "YOLO"),
+    ("yolo", "YOLO"),
+    ("auto-approve", "YOLO"),
+)
+_LINE_LIMIT = 80
+
+
+def _find_mode_line(capture: str) -> str | None:
+    cleaned = _ANSI_RE.sub("", capture)
+    lines = cleaned.splitlines()
+    boundary = find_chrome_boundary(lines)
+    chrome_lines = lines[boundary + 1 :] if boundary is not None else lines[-20:]
+    for line in reversed(chrome_lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(marker in stripped for marker in _MODE_MARKERS):
+            return stripped[:_LINE_LIMIT]
+    for line in reversed(lines[-25:]):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(hint in stripped.lower() for hint in _MODE_HINTS):
+            return stripped[:_LINE_LIMIT]
+    return None
+
+
+def _mode_short_label(mode_line: str) -> str | None:
+    lower = mode_line.lower()
+    for pattern, label in _MODE_SHORT_LABELS:
+        if pattern in lower:
+            return label
+    return None
 
 
 class ClaudeProvider:
@@ -53,6 +108,7 @@ class ClaudeProvider:
         transcript_format="jsonl",
         builtin_commands=tuple(CC_BUILTINS.keys()),
         supports_user_command_discovery=True,
+        has_yolo_confirmation=True,
     )
 
     @property
@@ -239,3 +295,16 @@ class ClaudeProvider:
     def has_output_since(self, transcript_path: str, offset: int) -> bool:
         _ = transcript_path, offset
         return False
+
+    async def scrape_current_mode(self, window_id: str) -> str | None:
+        from ccgram.tmux_manager import tmux_manager
+
+        try:
+            capture = await tmux_manager.capture_pane(window_id)
+        except OSError as exc:
+            _log.warning("Mode scrape: capture_pane failed %s (%s)", window_id, exc)
+            return None
+        if not capture:
+            return None
+        mode_line = _find_mode_line(capture)
+        return _mode_short_label(mode_line) if mode_line else None

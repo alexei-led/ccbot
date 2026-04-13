@@ -345,13 +345,13 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `src/ccgram/providers/codex.py`, `gemini.py`, `shell.py` (inherit the default)
 - Modify: `tests/ccgram/providers/test_claude.py`, `test_shell.py`, etc.
 
-- [ ] add `has_yolo_confirmation: bool = False` to `ProviderCapabilities` in `providers/base.py`
-- [ ] add `async def scrape_current_mode(self, window_id: str) -> str | None: return None` method to the `AgentProvider` protocol in `providers/base.py` with docstring from the design doc
-- [ ] in `providers/claude.py`, set `has_yolo_confirmation=True` in `ClaudeProvider.capabilities`
-- [ ] in `providers/claude.py`, implement `scrape_current_mode` — move `_find_mode_line`, `_mode_short_label`, and the sentinel strings (`"auto-accept edits"`, `"Plan mode"`, `"Full tool access"`) from `toolbar_callbacks.py`. Use `tmux_manager.capture_pane` via `self._capture_pane` or direct import.
-- [ ] `providers/codex.py`, `gemini.py`, `shell.py` do NOT override — they use the Protocol default
-- [ ] add unit tests: `test_claude_scrape_current_mode_edit`, `test_claude_scrape_current_mode_plan`, `test_claude_scrape_current_mode_full`, `test_claude_scrape_current_mode_none`, `test_shell_scrape_current_mode_default_returns_none`, `test_has_yolo_confirmation_only_claude`
-- [ ] run `make check` — must be green before Task 9
+- [x] add `has_yolo_confirmation: bool = False` to `ProviderCapabilities` in `providers/base.py`
+- [x] add `async def scrape_current_mode(self, window_id: str) -> str | None: return None` method to the `AgentProvider` protocol in `providers/base.py` with docstring from the design doc
+- [x] in `providers/claude.py`, set `has_yolo_confirmation=True` in `ClaudeProvider.capabilities`
+- [x] in `providers/claude.py`, implement `scrape_current_mode` — move `_find_mode_line`, `_mode_short_label`, and the sentinel strings (`"auto-accept edits"`, `"Plan mode"`, `"Full tool access"`) from `toolbar_callbacks.py`. Use `tmux_manager.capture_pane` via `self._capture_pane` or direct import.
+- [x] `providers/codex.py`, `gemini.py`, `shell.py` do NOT override — they use the Protocol default (via JsonlProvider base class)
+- [x] add unit tests: `test_claude_scrape_current_mode_edit`, `test_claude_scrape_current_mode_plan`, `test_claude_scrape_current_mode_full`, `test_claude_scrape_current_mode_none`, `test_shell_scrape_current_mode_default_returns_none`, `test_has_yolo_confirmation_only_claude`
+- [x] run `make check` — must be green before Task 9
 
 ### Task 9: Extract `handlers/toolbar_keyboard.py`; slim `toolbar_callbacks.py`
 

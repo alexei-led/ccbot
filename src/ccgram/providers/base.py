@@ -129,6 +129,7 @@ class ProviderCapabilities:
     # → command flow with a prompt-marker terminal loop. Used by handlers to
     # gate shell-specific behavior without checking ``provider_name == "shell"``.
     chat_first_command_path: bool = False
+    has_yolo_confirmation: bool = False
 
 
 # ── Provider protocol ────────────────────────────────────────────────────
@@ -297,3 +298,11 @@ class AgentProvider(Protocol):
         native transcript output, so the caller can skip the snapshot fallback.
         """
         ...
+
+    async def scrape_current_mode(self, window_id: str) -> str | None:  # noqa: ARG002
+        """Scrape the agent CLI's mode-line from the terminal and return a short label.
+
+        Returns a short human-readable label (e.g. "Edit", "Plan", "YOLO")
+        or None if the provider does not expose a mode indicator.
+        """
+        return None
