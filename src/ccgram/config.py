@@ -43,6 +43,21 @@ def _parse_int_env(name: str, default: int) -> int:
         raise ValueError(f"{name} must be a valid integer: {exc}") from exc
 
 
+def _resolve_toolbar_path() -> str:
+    """Resolve the toolbar TOML config path: env var → ~/.ccgram → empty.
+
+    Order:
+      1. ``$CCGRAM_TOOLBAR_CONFIG`` if set (used as-is, even if missing)
+      2. ``~/.ccgram/toolbar.toml`` if it exists
+      3. ``""`` (use built-in defaults)
+    """
+    env = os.getenv("CCGRAM_TOOLBAR_CONFIG", "").strip()
+    if env:
+        return env
+    fallback = ccgram_dir() / "toolbar.toml"
+    return str(fallback) if fallback.exists() else ""
+
+
 class Config:
     """Application configuration loaded from environment variables."""
 
@@ -154,9 +169,15 @@ class Config:
             "CCGRAM_WHISPER_LANGUAGE", "CCBOT_WHISPER_LANGUAGE"
         )
 
-        # LLM command generation (shell provider)
-        self.prompt_mode: str = os.getenv("CCGRAM_PROMPT_MODE", "wrap")
-        self.prompt_marker: str = os.getenv("CCGRAM_PROMPT_MARKER", "ccgram")
+        # LLM command generation (shell provider) and toolbar config path.
+        # toolbar_config_path resolution: env var → ~/.ccgram/toolbar.toml → "".
+        # Empty string means "use built-in defaults". The handler layer passes
+        # this path to ``toolbar_config.load_toolbar_config()`` once at startup.
+        self.prompt_mode, self.prompt_marker = (
+            os.getenv("CCGRAM_PROMPT_MODE", "wrap"),
+            os.getenv("CCGRAM_PROMPT_MARKER", "ccgram"),
+        )
+        self.toolbar_config_path: str = _resolve_toolbar_path()
         self.llm_provider: str = os.getenv("CCGRAM_LLM_PROVIDER", "")
         self.llm_api_key: str = os.getenv("CCGRAM_LLM_API_KEY", "")
         self.llm_base_url: str = os.getenv("CCGRAM_LLM_BASE_URL", "")
