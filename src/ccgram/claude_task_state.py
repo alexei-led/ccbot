@@ -505,3 +505,58 @@ def get_claude_wait_header(window_id: str) -> str | None:
 def clear_claude_task_window(window_id: str) -> None:
     """Clear Claude task and wait state for a window."""
     claude_task_state.clear_window(window_id)
+
+
+# ── Subagent tracking ────────────────────────────────────────────────────
+# Active subagents per window, keyed by subagent_id. Maintained by
+# hook_events SubagentStart/SubagentStop handlers; consumed by status
+# bubble rendering (message_queue, polling_coordinator).
+
+_active_subagents: dict[str, dict[str, str]] = {}
+
+_MAX_DISPLAYED_SUBAGENT_NAMES = 3
+
+
+def add_subagent(window_id: str, subagent_id: str, name: str) -> int:
+    """Record a started subagent. Returns the new active count for the window."""
+    _active_subagents.setdefault(window_id, {})[subagent_id] = name
+    return len(_active_subagents[window_id])
+
+
+def remove_subagent(window_id: str, subagent_id: str) -> tuple[str, int]:
+    """Remove a subagent. Returns ``(name, remaining_count)``.
+
+    Returns the recorded name (or a fallback) for the removed subagent and
+    the number of subagents still active for the window after removal.
+    """
+    agents = _active_subagents.get(window_id)
+    if not agents:
+        return (subagent_id[:12] or "subagent", 0)
+    name = agents.pop(subagent_id, subagent_id[:12] or "subagent")
+    if not agents:
+        _active_subagents.pop(window_id, None)
+    return (name, len(_active_subagents.get(window_id, {})))
+
+
+def get_subagent_names(window_id: str) -> list[str]:
+    """Return names of active subagents for a window."""
+    return list(_active_subagents.get(window_id, {}).values())
+
+
+def build_subagent_label(names: list[str]) -> str | None:
+    """Build a display label for active subagents.
+
+    Returns None if no subagents are active.
+    """
+    if not names:
+        return None
+    if len(names) == 1:
+        return f"\U0001f916 {names[0]}"
+    joined = ", ".join(names[:_MAX_DISPLAYED_SUBAGENT_NAMES])
+    return f"\U0001f916 {len(names)} subagents: {joined}"
+
+
+@topic_state.register("window")
+def clear_subagents(window_id: str) -> None:
+    """Clear all subagent tracking for a window."""
+    _active_subagents.pop(window_id, None)

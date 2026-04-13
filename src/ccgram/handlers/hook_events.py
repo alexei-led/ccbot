@@ -12,11 +12,16 @@ import structlog
 
 from telegram import Bot
 
-from ..claude_task_state import claude_task_state, classify_wait_message
+from ..claude_task_state import (
+    add_subagent,
+    claude_task_state,
+    classify_wait_message,
+    clear_subagents,
+    remove_subagent,
+)
 from ..providers.base import HookEvent
 from ..session import session_manager
 from ..thread_router import thread_router
-from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 
@@ -179,36 +184,6 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     await run_broker_cycle(bot, idle_windows=frozenset({event.window_key}))
 
 
-# Track active subagents per window: window_id -> {subagent_id -> name}
-_active_subagents: dict[str, dict[str, str]] = {}
-
-_MAX_DISPLAYED_NAMES = 3
-
-
-def get_subagent_names(window_id: str) -> list[str]:
-    """Return names of active subagents for a window."""
-    return list(_active_subagents.get(window_id, {}).values())
-
-
-def build_subagent_label(names: list[str]) -> str | None:
-    """Build a display label for active subagents.
-
-    Returns None if no subagents are active.
-    """
-    if not names:
-        return None
-    if len(names) == 1:
-        return f"\U0001f916 {names[0]}"
-    joined = ", ".join(names[:_MAX_DISPLAYED_NAMES])
-    return f"\U0001f916 {len(names)} subagents: {joined}"
-
-
-@topic_state.register("window")
-def clear_subagents(window_id: str) -> None:
-    """Clear all subagent tracking for a window."""
-    _active_subagents.pop(window_id, None)
-
-
 async def _handle_subagent_start(event: HookEvent, _bot: Bot) -> None:
     """Handle SubagentStart — track active subagent count and name."""
     users = _resolve_users_for_window_key(event.window_key)
@@ -224,18 +199,17 @@ async def _handle_subagent_start(event: HookEvent, _bot: Bot) -> None:
         or "subagent"
     )
 
-    _active_subagents.setdefault(window_id, {})[subagent_id] = name
+    count = add_subagent(window_id, subagent_id, name)
 
     logger.debug(
         "Subagent started: window=%s, count=%d, name=%s",
         window_id,
-        len(_active_subagents[window_id]),
+        count,
         name,
     )
 
     # No immediate status update — the polling loop (1s) already appends
     # subagent count/names to the status bubble via get_subagent_names().
-    # Sending status on every start/stop caused 6-10 rapid edits per task.
 
 
 async def _handle_subagent_stop(event: HookEvent, _bot: Bot) -> None:
@@ -247,17 +221,12 @@ async def _handle_subagent_stop(event: HookEvent, _bot: Bot) -> None:
     window_id = users[0][2]
     subagent_id = event.data.get("subagent_id", "")
 
-    agents = _active_subagents.get(window_id)
-    if not agents:
-        return
-    name = agents.pop(subagent_id, subagent_id[:12] or "subagent")
-    if not agents:
-        _active_subagents.pop(window_id, None)
+    name, remaining = remove_subagent(window_id, subagent_id)
 
     logger.debug(
         "Subagent stopped: window=%s, remaining=%d, name=%s",
         window_id,
-        len(_active_subagents.get(window_id, {})),
+        remaining,
         name,
     )
 
