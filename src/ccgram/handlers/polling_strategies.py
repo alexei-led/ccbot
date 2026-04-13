@@ -483,8 +483,8 @@ class TopicLifecycleStrategy:
         """Record that a dead notification was sent."""
         self._dead_notified.add((user_id, thread_id, window_id))
 
-    def iter_autoclose_timers(self) -> list[tuple[int, int, TopicPollState]]:
-        """Return list of (user_id, thread_id, state) for topics with state."""
+    def iter_topic_states(self) -> list[tuple[int, int, TopicPollState]]:
+        """Return list of (user_id, thread_id, state) for all tracked topics."""
         return [(uid, tid, ts) for (uid, tid), ts in self._states.items()]
 
     def clear_state(self, user_id: int, thread_id: int) -> None:

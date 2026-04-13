@@ -8,7 +8,7 @@ a policy based on trigger type:
 - auto: always set up (explicit shell topic creation)
 - lazy: set up only if marker missing and user hasn't skipped
 - external_bind: show offer keyboard if marker missing
-- provider_switch: show offer keyboard, re-offer after skip cleared
+- provider_switch: show offer keyboard (skip flag cleared on provider switch)
 """
 
 from __future__ import annotations

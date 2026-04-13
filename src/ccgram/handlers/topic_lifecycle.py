@@ -41,7 +41,7 @@ logger = structlog.get_logger()
 
 async def check_autoclose_timers(bot: Bot) -> None:
     """Close topics whose done/dead timers have expired."""
-    all_topics = lifecycle_strategy.iter_autoclose_timers()
+    all_topics = lifecycle_strategy.iter_topic_states()
     if not all_topics:
         return
 
