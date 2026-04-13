@@ -96,18 +96,10 @@ CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>
 # Remote Control button (status keyboard + toolbar)
 CB_STATUS_REMOTE = "st:rmt:"  # st:rmt:<window_id>
 
-# Toolbar command
-CB_TOOLBAR_CTRLC = "tb:cc:"  # tb:cc:<window_id> — sends Ctrl-C
-CB_TOOLBAR_DISMISS = "tb:x"  # dismiss toolbar message
-CB_TOOLBAR_SEND = "tb:send:"  # tb:send:<window_id> — open file browser
-CB_TOOLBAR_MODE = "tb:mode:"  # tb:mode:<window_id> — Shift+Tab
-CB_TOOLBAR_THINK = "tb:think:"  # tb:think:<window_id> — Tab
-CB_TOOLBAR_YOLO = "tb:yolo:"  # tb:yolo:<window_id> — Ctrl+Y
-CB_TOOLBAR_EOF = "tb:eof:"  # tb:eof:<window_id> — Ctrl+D
-CB_TOOLBAR_SUSPEND = "tb:susp:"  # tb:susp:<window_id> — Ctrl+Z
-CB_TOOLBAR_ESC = "tb:esc:"  # tb:esc:<window_id> — Escape
-CB_TOOLBAR_ENTER = "tb:ent:"  # tb:ent:<window_id> — Enter
-CB_TOOLBAR_TAB = "tb:tab:"  # tb:tab:<window_id> — Tab key
+# Toolbar — single prefix; the suffix encodes "<window_id>:<action_name>".
+# The action_name is looked up in the loaded ToolbarConfig.actions pool to
+# determine dispatch (key send / text send / builtin handler).
+CB_TOOLBAR = "tb:"  # tb:<window_id>:<action_name>
 
 # Sync command
 CB_SYNC_FIX = "sync:fix"

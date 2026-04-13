@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import structlog
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Bot
 from telegram.error import RetryAfter, TelegramError
 
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
@@ -31,14 +31,6 @@ from ..session import session_manager
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import task_done_callback
-from .callback_data import (
-    CB_STATUS_ESC,
-    CB_STATUS_NOTIFY,
-    CB_STATUS_RECALL,
-    CB_STATUS_REMOTE,
-    CB_STATUS_SCREENSHOT,
-    NOTIFY_MODE_ICONS,
-)
 from .message_sender import edit_with_fallback, rate_limit_send_message
 
 # Top-level loop resilience: catch any error to keep the worker alive
@@ -305,53 +297,9 @@ def _extract_task_tool_suffix(entry: ToolBatchEntry) -> str:
     return text
 
 
-def build_status_keyboard(
-    window_id: str, history: list[str] | None = None
-) -> InlineKeyboardMarkup:
-    """Build inline keyboard for status messages: [↑ cmd] row + [Esc] [Screenshot] [Bell] [RC]."""
-    from .command_history import truncate_for_display
-    from .polling_strategies import is_rc_active
-
-    rows: list[list[InlineKeyboardButton]] = []
-
-    # History recall row (up to 2 buttons)
-    if history:
-        hist_row: list[InlineKeyboardButton] = []
-        for idx, cmd in enumerate(history[:2]):
-            label = truncate_for_display(cmd, 20)
-            hist_row.append(
-                InlineKeyboardButton(
-                    f"\u2191 {label}",
-                    callback_data=f"{CB_STATUS_RECALL}{window_id}:{idx}"[:64],
-                )
-            )
-        rows.append(hist_row)
-
-    # Control row
-    mode = session_manager.get_notification_mode(window_id)
-    bell = NOTIFY_MODE_ICONS.get(mode, "\U0001f514")
-    rc_label = "\U0001f4e1\u2713" if is_rc_active(window_id) else "\U0001f4e1"
-    rows.append(
-        [
-            InlineKeyboardButton(
-                "\u238b Esc",
-                callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
-            ),
-            InlineKeyboardButton(
-                "\U0001f4f8",
-                callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
-            ),
-            InlineKeyboardButton(
-                bell,
-                callback_data=f"{CB_STATUS_NOTIFY}{window_id}"[:64],
-            ),
-            InlineKeyboardButton(
-                rc_label,
-                callback_data=f"{CB_STATUS_REMOTE}{window_id}"[:64],
-            ),
-        ]
-    )
-    return InlineKeyboardMarkup(rows)
+# build_status_keyboard moved to status_bubble.py — re-exported for callers
+# that haven't been migrated yet. New code should import from status_bubble.
+from .status_bubble import build_status_keyboard  # noqa: E402, F401
 
 
 @dataclass
@@ -608,7 +556,7 @@ async def _process_batch_task(bot: Bot, user_id: int, task: MessageTask) -> None
         return
 
     # Send or edit batch message
-    from .hook_events import build_subagent_label, get_subagent_names
+    from ..claude_task_state import build_subagent_label, get_subagent_names
 
     subagent_label = build_subagent_label(get_subagent_names(window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
@@ -644,7 +592,7 @@ async def _flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
 
-    from .hook_events import build_subagent_label, get_subagent_names
+    from ..claude_task_state import build_subagent_label, get_subagent_names
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
