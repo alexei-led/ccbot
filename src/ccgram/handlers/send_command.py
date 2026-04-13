@@ -180,8 +180,9 @@ def _format_file_label(path: Path, cwd: Path) -> str:
 
     max_len = 30
     if len(label) > max_len:
-        # Truncate path portion, keep size suffix
-        max_path_len = max_len - len(suffix) - 1  # 1 for ellipsis
+        # Truncate path portion, keep size suffix. Guard against a suffix
+        # longer than max_len (negative slice would truncate from the end).
+        max_path_len = max(0, max_len - len(suffix) - 1)
         rel = rel[:max_path_len] + "…"
         label = rel + suffix
 

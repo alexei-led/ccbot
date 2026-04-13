@@ -172,7 +172,10 @@ def check_gitleaks_rules(path: Path, cwd: Path) -> str | None:
     try:
         relative_path = str(path.relative_to(cwd))
     except ValueError:
-        relative_path = str(path)
+        # path is not contained in cwd — should have been caught by
+        # is_path_contained() earlier. Skip gitleaks rules rather than
+        # matching against the absolute path (breaks ^-anchored rules).
+        return None
 
     for rule in config.get("rules", []):
         rule_path = rule.get("path")
@@ -207,14 +210,14 @@ def validate_sendable(path: Path, cwd: Path) -> str | None:
     Returns a human-readable error string on the first failed check, or None
     if the file is safe to send.
 
-    Pipeline order:
+    Pipeline order (cheap stat-based checks first, subprocess last):
     1. Path containment (traversal)
     2. Hidden file/dir check
     3. Secret pattern match
-    4. Gitleaks rule match
-    5. Gitignore check
-    6. State-file protection (assert_sendable from utils)
-    7. File size limit + regular-file check
+    4. File size limit + regular-file check
+    5. State-file protection (assert_sendable from utils)
+    6. Gitleaks rule match
+    7. Gitignore check (subprocess — most expensive, last)
     """
     if not is_path_contained(path, cwd):
         return "File is outside project directory"
@@ -226,12 +229,9 @@ def validate_sendable(path: Path, cwd: Path) -> str | None:
     if pattern is not None:
         return f"File appears to contain credentials — denied ({pattern})"
 
-    rule_id = check_gitleaks_rules(path, cwd)
-    if rule_id is not None:
-        return f"File denied by gitleaks rule: {rule_id}"
-
-    if is_gitignored(path, cwd):
-        return "File is gitignored"
+    size_error = _check_size_and_type(path)
+    if size_error is not None:
+        return size_error
 
     from ..utils import assert_sendable  # noqa: PLC0415
 
@@ -240,7 +240,14 @@ def validate_sendable(path: Path, cwd: Path) -> str | None:
     except ValueError as exc:
         return str(exc)
 
-    return _check_size_and_type(path)
+    rule_id = check_gitleaks_rules(path, cwd)
+    if rule_id is not None:
+        return f"File denied by gitleaks rule: {rule_id}"
+
+    if is_gitignored(path, cwd):
+        return "File is gitignored"
+
+    return None
 
 
 def is_excluded_dir(name: str) -> bool:
