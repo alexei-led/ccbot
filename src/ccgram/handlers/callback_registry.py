@@ -125,6 +125,7 @@ def load_handlers() -> None:
         sessions_dashboard,
         shell_capture,
         shell_commands,
+        shell_prompt_orchestrator,
         sync_command,
         voice_callbacks,
         window_callbacks,

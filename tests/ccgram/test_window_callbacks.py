@@ -216,16 +216,18 @@ class TestBindProviderDetection:
                 return_value="shell",
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-            ) as mock_setup,
+            ) as mock_ensure,
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_sm.get_approval_mode.return_value = "normal"
             await handle_window_callback(query, 100, f"{CB_WIN_BIND}0", update, context)
 
         mock_sm.set_window_provider.assert_called_once_with("@5", "shell")
-        mock_setup.assert_awaited_once_with("@5", clear=False)
+        mock_ensure.assert_awaited_once()
+        call_args = mock_ensure.call_args
+        assert call_args[0] == ("@5", "external_bind")
 
     async def test_bind_claude_window_does_not_offer_prompt_setup(self) -> None:
         user_data = {UNBOUND_WINDOWS_KEY: ["@5"], PENDING_THREAD_ID: 42}
@@ -251,15 +253,15 @@ class TestBindProviderDetection:
                 return_value="claude",
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-            ) as mock_setup,
+            ) as mock_ensure,
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_sm.get_approval_mode.return_value = "normal"
             await handle_window_callback(query, 100, f"{CB_WIN_BIND}0", update, context)
 
-        mock_setup.assert_not_awaited()
+        mock_ensure.assert_not_awaited()
 
     async def test_bind_shell_pending_text_routes_through_shell_handler(self) -> None:
         user_data = {
@@ -289,7 +291,7 @@ class TestBindProviderDetection:
                 return_value="shell",
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ),
             patch(

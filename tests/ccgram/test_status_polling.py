@@ -887,9 +887,9 @@ class TestProviderSwitchPromptSetup:
                 return_value="shell",
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-            ) as mock_setup,
+            ) as mock_ensure,
         ):
             mock_sm.window_states = {
                 "@7": MagicMock(
@@ -907,7 +907,8 @@ class TestProviderSwitchPromptSetup:
             )
 
         mock_sm.set_window_provider.assert_called_once_with("@7", "shell", cwd="/proj")
-        mock_setup.assert_awaited_once_with("@7", clear=False)
+        mock_ensure.assert_awaited_once()
+        assert mock_ensure.call_args[0] == ("@7", "provider_switch")
 
     async def test_switch_to_claude_does_not_offer_prompt_setup(self) -> None:
         from ccgram.handlers.transcript_discovery import (
@@ -931,9 +932,9 @@ class TestProviderSwitchPromptSetup:
                 return_value=mock_provider,
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-            ) as mock_setup,
+            ) as mock_ensure,
         ):
             mock_sm.window_states = {
                 "@7": MagicMock(
@@ -950,7 +951,7 @@ class TestProviderSwitchPromptSetup:
                 "@7", bot=bot, user_id=1, thread_id=42
             )
 
-        mock_setup.assert_not_awaited()
+        mock_ensure.assert_not_awaited()
 
     async def test_fallback_shell_assignment_offers_prompt_setup(self) -> None:
         from ccgram.handlers.transcript_discovery import (
@@ -968,9 +969,9 @@ class TestProviderSwitchPromptSetup:
                 return_value="",
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-            ) as mock_setup,
+            ) as mock_ensure,
         ):
             mock_sm.window_states = {
                 "@7": MagicMock(
@@ -990,7 +991,8 @@ class TestProviderSwitchPromptSetup:
             )
 
         mock_sm.set_window_provider.assert_called_once_with("@7", "shell")
-        mock_setup.assert_awaited_once_with("@7", clear=False)
+        mock_ensure.assert_awaited_once()
+        assert mock_ensure.call_args[0] == ("@7", "provider_switch")
 
     async def test_fallback_shell_assignment_sets_up_prompt_without_bot(self) -> None:
         from ccgram.handlers.transcript_discovery import (
@@ -1007,9 +1009,9 @@ class TestProviderSwitchPromptSetup:
                 return_value="",
             ),
             patch(
-                "ccgram.providers.shell.setup_shell_prompt",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-            ) as mock_setup,
+            ) as mock_ensure,
             patch(
                 "ccgram.handlers.transcript_discovery.should_probe_pane_title_for_provider_detection",
                 return_value=False,
@@ -1030,7 +1032,8 @@ class TestProviderSwitchPromptSetup:
             mock_config.tmux_session_name = "ccgram"
             await discover_and_register_transcript("@7")
 
-        mock_setup.assert_awaited_once_with("@7", clear=False)
+        mock_ensure.assert_awaited_once()
+        assert mock_ensure.call_args[0] == ("@7", "provider_switch")
 
 
 class TestMaybeDiscoverTranscript:

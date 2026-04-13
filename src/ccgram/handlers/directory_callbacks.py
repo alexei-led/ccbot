@@ -574,10 +574,10 @@ async def _create_window_and_bind(
 
     provider_caps = provider_registry.get(provider_name).capabilities
     if provider_caps.chat_first_command_path:
-        from ccgram.providers.shell import setup_shell_prompt
+        from .shell_prompt_orchestrator import ensure_setup
 
         await _wait_for_shell_ready(created_wid)
-        await setup_shell_prompt(created_wid)
+        await ensure_setup(created_wid, "auto")
 
     _try_install_messaging_skill(provider_name, selected_path)
 

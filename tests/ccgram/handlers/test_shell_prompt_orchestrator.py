@@ -114,3 +114,62 @@ async def test_clear_state_removes_entry():
 
 async def test_clear_state_no_op_for_unknown_window():
     clear_state("@unknown")
+
+
+async def test_dispatch_setup_button(mock_setup, mock_has_marker):
+    from ccgram.handlers.shell_prompt_orchestrator import CB_SHELL_SETUP, _dispatch
+
+    query = AsyncMock()
+    query.data = f"{CB_SHELL_SETUP}@5"
+    update = AsyncMock()
+    update.callback_query = query
+    context = AsyncMock()
+
+    await _dispatch(update, context)
+
+    query.answer.assert_awaited_once()
+    mock_setup.assert_awaited_once_with("@5", clear=False)
+    assert _state["@5"].was_offered is True
+    query.edit_message_text.assert_awaited_once()
+
+
+async def test_dispatch_skip_button():
+    from ccgram.handlers.shell_prompt_orchestrator import CB_SHELL_SKIP, _dispatch
+
+    query = AsyncMock()
+    query.data = f"{CB_SHELL_SKIP}@5"
+    update = AsyncMock()
+    update.callback_query = query
+    context = AsyncMock()
+
+    await _dispatch(update, context)
+
+    query.answer.assert_awaited_once()
+    assert _state["@5"].skip_flag is True
+    query.edit_message_text.assert_awaited_once()
+
+
+async def test_show_offer_keyboard_sends_message(mock_setup, mock_has_marker):
+    from ccgram.handlers.shell_prompt_orchestrator import _show_offer_keyboard
+
+    bot = AsyncMock()
+    with patch(
+        "ccgram.handlers.shell_prompt_orchestrator.safe_send",
+        new_callable=AsyncMock,
+    ) as mock_send:
+        await _show_offer_keyboard("@3", bot=bot, chat_id=-100, thread_id=42)
+
+    mock_send.assert_awaited_once()
+    call_kwargs = mock_send.call_args[1]
+    assert call_kwargs["thread_id"] == 42
+    assert _state["@3"].was_offered is True
+    mock_setup.assert_not_awaited()
+
+
+async def test_show_offer_keyboard_falls_back_without_bot(mock_setup, mock_has_marker):
+    from ccgram.handlers.shell_prompt_orchestrator import _show_offer_keyboard
+
+    await _show_offer_keyboard("@3")
+
+    mock_setup.assert_awaited_once_with("@3", clear=False)
+    assert _state["@3"].was_offered is True

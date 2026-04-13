@@ -29,6 +29,8 @@ from ..window_resolver import is_foreign_window
 from .polling_strategies import is_shell_prompt
 
 if TYPE_CHECKING:
+    from telegram import Bot
+
     from ..providers.base import AgentProvider
     from ..session import WindowState
     from ..tmux_manager import TmuxWindow
@@ -37,7 +39,13 @@ logger = structlog.get_logger()
 
 
 async def _detect_and_apply_provider(
-    window_id: str, state: "WindowState", w: "TmuxWindow"
+    window_id: str,
+    state: "WindowState",
+    w: "TmuxWindow",
+    *,
+    bot: "Bot | None" = None,
+    chat_id: int = 0,
+    thread_id: int = 0,
 ) -> None:
     """Detect provider from pane process and apply transitions."""
     detected = await detect_provider_from_pane(
@@ -63,9 +71,15 @@ async def _detect_and_apply_provider(
         )
         if new_caps and new_caps.capabilities.chat_first_command_path:
             state.transcript_path = ""
-            from ..providers.shell import setup_shell_prompt
+            from .shell_prompt_orchestrator import ensure_setup
 
-            await setup_shell_prompt(window_id, clear=False)
+            await ensure_setup(
+                window_id,
+                "provider_switch",
+                bot=bot,
+                chat_id=chat_id,
+                thread_id=thread_id,
+            )
         elif old_caps and old_caps.capabilities.chat_first_command_path:
             from .shell_capture import clear_shell_monitor_state
 
@@ -155,23 +169,29 @@ async def discover_and_register_transcript(
     window_id: str,
     *,
     _window: "TmuxWindow | None" = None,
-    bot: "object | None" = None,  # noqa: ARG001
-    user_id: int = 0,  # noqa: ARG001
-    thread_id: int = 0,  # noqa: ARG001
+    bot: "Bot | None" = None,
+    user_id: int = 0,
+    thread_id: int = 0,
 ) -> None:
     """Discover and register transcript for hookless providers (Codex, Gemini).
 
     Also handles provider auto-detection from pane process name
     and shell ↔ agent transitions with prompt marker setup.
     """
+    from ..thread_router import thread_router
+
     state = session_manager.window_states.get(window_id)
     if not state:
         return
 
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id) if user_id else 0
+
     w = _window or await tmux_manager.find_window_by_id(window_id)
 
     if w and w.pane_current_command:
-        await _detect_and_apply_provider(window_id, state, w)
+        await _detect_and_apply_provider(
+            window_id, state, w, bot=bot, chat_id=chat_id, thread_id=thread_id
+        )
 
     if state.provider_name:
         provider = get_provider_for_window(window_id, state.provider_name)
@@ -189,9 +209,11 @@ async def discover_and_register_transcript(
     if providers_to_try is None:
         session_manager.set_window_provider(window_id, "shell")
         state.transcript_path = ""
-        from ..providers.shell import setup_shell_prompt
+        from .shell_prompt_orchestrator import ensure_setup
 
-        await setup_shell_prompt(window_id, clear=False)
+        await ensure_setup(
+            window_id, "provider_switch", bot=bot, chat_id=chat_id, thread_id=thread_id
+        )
         return
     if not providers_to_try:
         return

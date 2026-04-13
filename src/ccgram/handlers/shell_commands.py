@@ -70,10 +70,9 @@ def clear_shell_pending(chat_id: int, thread_id: int) -> None:
 
 async def _ensure_prompt_marker(window_id: str) -> None:
     """Lazily restore prompt marker if lost (exec bash, profile reload)."""
-    from ..providers.shell import has_prompt_marker, setup_shell_prompt
+    from .shell_prompt_orchestrator import ensure_setup
 
-    if not await has_prompt_marker(window_id):
-        await setup_shell_prompt(window_id, clear=False)
+    await ensure_setup(window_id, "lazy")
 
 
 async def _cancel_stuck_input(window_id: str) -> None:

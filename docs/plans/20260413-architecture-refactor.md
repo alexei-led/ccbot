@@ -322,17 +322,17 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `src/ccgram/handlers/shell_commands.py` (`_ensure_prompt_marker` pre-send hook)
 - Modify: `src/ccgram/handlers/shell_capture.py` (verify no orphan trigger — remove if present)
 
-- [ ] in `directory_callbacks._create_window_and_bind`, replace the current call to `setup_shell_prompt(wid)` with `await shell_prompt_orchestrator.ensure_setup(wid, "auto")`
-- [ ] in `window_callbacks._handle_bind` (or equivalent), replace the current offer-keyboard trigger with `await shell_prompt_orchestrator.ensure_setup(wid, "external_bind")` — the orchestrator internally shows the offer keyboard via a helper
-- [ ] in `transcript_discovery.discover_and_register_transcript` (on shell transition), replace with `await shell_prompt_orchestrator.ensure_setup(wid, "provider_switch")`
-- [ ] in `shell_commands._ensure_prompt_marker`, replace body with `await shell_prompt_orchestrator.ensure_setup(wid, "lazy")`
-- [ ] grep `rg "setup_shell_prompt\(" src/ccgram/handlers/` — only `shell_prompt_orchestrator.py` should have calls, everything else goes through `ensure_setup`
-- [ ] factor the offer-keyboard rendering (inline keyboard with Set up / Skip) into `shell_prompt_orchestrator._show_offer_keyboard(window_id)` — called from the `external_bind` and `provider_switch` branches
-- [ ] wire the "Set up" / "Skip" callbacks to `shell_prompt_orchestrator.accept_offer` / `record_skip` via the existing `handlers/shell_prompt_callbacks.py` (or add a small new callback dispatcher in this file)
-- [ ] update tests in `test_directory_callbacks`, `test_window_callbacks`, `test_transcript_discovery`, `test_shell_commands` — mock `shell_prompt_orchestrator.ensure_setup` and assert correct trigger name
-- [ ] write integration test: fake `has_prompt_marker=False`, call each trigger, verify expected `setup_shell_prompt` invocation pattern
-- [ ] run `make check` — must be green
-- [ ] run `make test-e2e` — Phase 3 sanity check (shell provider UX is e2e-tested)
+- [x] in `directory_callbacks._create_window_and_bind`, replace the current call to `setup_shell_prompt(wid)` with `await shell_prompt_orchestrator.ensure_setup(wid, "auto")`
+- [x] in `window_callbacks._handle_bind` (or equivalent), replace the current offer-keyboard trigger with `await shell_prompt_orchestrator.ensure_setup(wid, "external_bind")` — the orchestrator internally shows the offer keyboard via a helper
+- [x] in `transcript_discovery.discover_and_register_transcript` (on shell transition), replace with `await shell_prompt_orchestrator.ensure_setup(wid, "provider_switch")`
+- [x] in `shell_commands._ensure_prompt_marker`, replace body with `await shell_prompt_orchestrator.ensure_setup(wid, "lazy")`
+- [x] grep `rg "setup_shell_prompt\(" src/ccgram/handlers/` — only `shell_prompt_orchestrator.py` should have calls, everything else goes through `ensure_setup`
+- [x] factor the offer-keyboard rendering (inline keyboard with Set up / Skip) into `shell_prompt_orchestrator._show_offer_keyboard(window_id)` — called from the `external_bind` and `provider_switch` branches
+- [x] wire the "Set up" / "Skip" callbacks to `shell_prompt_orchestrator.accept_offer` / `record_skip` via the existing `handlers/shell_prompt_callbacks.py` (or add a small new callback dispatcher in this file)
+- [x] update tests in `test_directory_callbacks`, `test_window_callbacks`, `test_transcript_discovery`, `test_shell_commands` — mock `shell_prompt_orchestrator.ensure_setup` and assert correct trigger name
+- [x] write integration test: fake `has_prompt_marker=False`, call each trigger, verify expected `setup_shell_prompt` invocation pattern
+- [x] run `make check` — must be green
+- [x] run `make test-e2e` — Phase 3 sanity check (shell provider UX is e2e-tested)
 
 ### Phase 4 — Toolbar + Provider Capability
 

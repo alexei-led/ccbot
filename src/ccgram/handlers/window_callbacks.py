@@ -79,9 +79,9 @@ async def _detect_and_setup_provider(
     pane_current_command: str | None,
     *,
     pane_tty: str = "",
-    bot: "Bot | None" = None,  # noqa: ARG001
-    user_id: int = 0,  # noqa: ARG001
-    thread_id: int = 0,  # noqa: ARG001
+    bot: "Bot | None" = None,
+    user_id: int = 0,
+    thread_id: int = 0,
 ) -> str:
     """Detect provider from pane process and set up prompt if shell.
 
@@ -104,9 +104,15 @@ async def _detect_and_setup_provider(
 
         provider = get_provider_for_window(window_id, detected)
         if provider and provider.capabilities.chat_first_command_path:
-            from ..providers.shell import setup_shell_prompt
+            from .shell_prompt_orchestrator import ensure_setup
 
-            await setup_shell_prompt(window_id, clear=False)
+            await ensure_setup(
+                window_id,
+                "external_bind",
+                bot=bot,
+                chat_id=thread_router.resolve_chat_id(user_id, thread_id),
+                thread_id=thread_id,
+            )
     return detected
 
 

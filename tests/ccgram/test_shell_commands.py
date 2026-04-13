@@ -666,46 +666,16 @@ class TestLazyMarkerRecovery:
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
             patch(
-                "ccgram.providers.shell.has_prompt_marker",
+                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
-                return_value=False,
-            ),
-            patch(
-                "ccgram.providers.shell.setup_shell_prompt", new_callable=AsyncMock
-            ) as mock_setup,
+            ) as mock_ensure,
         ):
             mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
             await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
 
-        mock_setup.assert_awaited_once_with("@0", clear=False)
-
-    async def test_raw_command_skips_setup_when_marker_present(self) -> None:
-        bot = AsyncMock(spec=Bot)
-        message = AsyncMock(spec=Message)
-
-        with (
-            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
-            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
-            patch(f"{_CTX}.session_manager") as mock_sm,
-            patch(f"{_MOD}.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
-            patch(
-                "ccgram.providers.shell.has_prompt_marker",
-                new_callable=AsyncMock,
-                return_value=True,
-            ),
-            patch(
-                "ccgram.providers.shell.setup_shell_prompt", new_callable=AsyncMock
-            ) as mock_setup,
-        ):
-            mock_sm.send_to_window = AsyncMock(return_value=(True, ""))
-            mock_tm.find_window_by_id = AsyncMock(return_value=None)
-            mock_tm.capture_pane = AsyncMock(return_value=None)
-            await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
-
-        mock_setup.assert_not_awaited()
+        mock_ensure.assert_awaited_once_with("@0", "lazy")
 
 
 class TestHasPromptMarker:
