@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --max-width: 820px;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eef1f5;
+    --text: #1a1a1a;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --accent: #2b6cb0;
+    --accent-light: #ebf4ff;
+    --severity-critical: #c53030;
+    --severity-critical-bg: #fff5f5;
+    --severity-significant: #c05621;
+    --severity-significant-bg: #fffaf0;
+    --severity-minor: #2b6cb0;
+    --severity-minor-bg: #ebf8ff;
+    --table-stripe: #f7fafc;
+    --link: #2b6cb0;
+    --link-hover: #1a4971;
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2e2e2e;
+    --text: #e2e2e2;
+    --text-secondary: #a0a0a0;
+    --text-muted: #717171;
+    --border: #333333;
+    --accent: #b0b0b0;
+    --accent-light: #2a2a2a;
+    --severity-critical: #fc8181;
+    --severity-critical-bg: #2d1b1b;
+    --severity-significant: #f6ad55;
+    --severity-significant-bg: #2d2415;
+    --severity-minor: #a0a0a0;
+    --severity-minor-bg: #282828;
+    --table-stripe: #222222;
+    --link: #e0c97f;
+    --link-hover: #f0dca0;
+    --shadow: rgba(0, 0, 0, 0.2);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 2rem 1.5rem;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem 0;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.6rem 0;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link-hover);
+  }
+
+  /* Metadata */
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta strong {
+    color: var(--text-secondary);
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--table-stripe);
+  }
+
+  /* Severity badges */
+  .severity {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .severity-critical {
+    color: var(--severity-critical);
+    background: var(--severity-critical-bg);
+  }
+
+  .severity-significant {
+    color: var(--severity-significant);
+    background: var(--severity-significant-bg);
+  }
+
+  .severity-minor {
+    color: var(--severity-minor);
+    background: var(--severity-minor-bg);
+  }
+
+  /* Issue cards */
+  .issue {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .issue h2 {
+    margin-top: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .issue h3 {
+    font-size: 1rem;
+  }
+
+  .issue-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  /* Lists */
+  ul, ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  /* Code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  pre {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  pre code {
+    background: transparent;
+    padding: 0;
+  }
+
+  /* Horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .footer a {
+    color: var(--text-muted);
+    border-bottom-color: var(--border);
+  }
+
+  .footer a:hover {
+    color: var(--link);
+  }
+
+  /* Print */
+  @media print {
+    .theme-toggle { display: none; }
+    body { padding: 0; }
+    .issue { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <span id="theme-icon"></span>
+</button>
+
+<div class="container">
+
+<h1>Modularity Review</h1>
+
+<div class="meta">
+<strong>Scope</strong>: Entire ccgram codebase (post-refactor incremental review)<br>
+<strong>Date</strong>: 2026-04-13
+</div>
+
+<h2>Context and Relationship to Prior Reviews</h2>
+
+<p>This review is a follow-up to the two prior reviews in <code>docs/modularity-review/2026-04-12/</code> (morning and evening) and the refactor plan in <code>docs/plans/completed/20260412-modularity-refactor.md</code>. It verifies what was resolved by the refactor and reframes what remains — plus three fresh cohesion issues introduced by the <code>/send</code> command, the TOML-configurable toolbar, and the tool-use batching feature that landed in commit <code>42475db</code>.</p>
+
+<p>The analysis uses the <a href="https://coupling.dev/posts/core-concepts/balance/">Balanced Coupling</a> model. Volatility classifications below were confirmed with the maintainer: session tracking, provider resolution, per-window state, message routing, and the polling loop are all <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">core subdomain</a> areas (high volatility). A second agent provider is <strong>unlikely</strong> in the near term, which downgrades the urgency of the known Claude-hardcoded paths (summarizer, mode-line scraping, residual string checks) from <em>fix soon</em> to <em>fix when touched</em>.</p>
+
+<h2>Executive Summary</h2>
+
+<p>ccgram is a solo-maintained Python bot that bridges agent CLIs (Claude Code, Codex, Gemini, shell) to Telegram Forum topics via tmux. The Apr 12 refactor successfully closed most of the prior review's quick wins — boundary violations in <code>providers/base.py</code> are gone, <code>UUID_RE</code> and <code>EXPANDABLE_QUOTE_*</code> live in their right homes, <code>session_map</code> duplication is deleted, and the <code>shell_commands ↔ shell_capture</code> circular import is broken via <code>shell_context.py</code>. The overall design remains <strong>healthy with localised cohesion problems</strong>.</p>
+
+<p>The single most important finding: <strong><code>message_queue.py</code> did not actually shrink</strong>. The <code>status_bubble.py</code> extraction pulled out only 81 lines (essentially just <code>build_status_keyboard</code>), but the 1132-line file absorbed a new concern — Claude tool-use batching — that embeds Claude-specific knowledge (<code>tool_use_id</code>, <code>TaskCreate</code>/<code>TaskUpdate</code> formatting) directly into the generic queue primitives. This is the user's "message batching feels wrong" pain: it is <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a> masquerading as a single module, and it is the most active source of cognitive load in the handler layer today.</p>
+
+<p>Four additional significant issues remain or emerged: toolbar dispatch blends TOML loading, key/text/builtin routing, and intrusive Claude pane-scraping in one 557-line module; the shell prompt-marker setup flow is scattered across five handlers with implicit ordering; <code>polling_coordinator.status_poll_loop</code> and <code>polling_strategies.py</code> still exhibit the god-loop + compat-wrapper-sprawl pair that Task 11 was meant to fix (deferral was deliberate, but the pain was confirmed by the user as still present); and the <code>WindowView</code> projection that was meant to relieve the state-shape cascade was introduced but adoption stalled — handler calls to <code>session_manager</code> grew from 62 to 77 across 26 files since the prior review.</p>
+
+<h2>Coupling Overview</h2>
+
+<table>
+<thead>
+<tr>
+<th>Integration</th>
+<th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th>
+<th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th>
+<th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+<th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>message_queue</code> (queue + batch + Claude formatting in one module)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> + <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a> (Claude tool schemas in generic queue)</td>
+<td>— (internal)</td>
+<td>High</td>
+<td><strong>No</strong> — internal <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a>, user-confirmed pain</td>
+</tr>
+<tr>
+<td><code>toolbar_callbacks</code> (TOML loader + dispatch + Claude mode-line scraping)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> + <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a> (pane scraping)</td>
+<td>— (internal) / High (Claude CLI)</td>
+<td>High (core) / Low (mode-line format)</td>
+<td><strong>No</strong> — mixed cohesion; scraping fragile</td>
+</tr>
+<tr>
+<td>Shell prompt-marker setup: 5 handlers + <code>shell_infra</code> with implicit order</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (duplicate triggering logic)</td>
+<td>Low</td>
+<td>Moderate</td>
+<td><strong>No</strong> — duplicated setup triggers</td>
+</tr>
+<tr>
+<td><code>polling_coordinator.status_poll_loop</code> → 9 handler modules</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> + temporal</td>
+<td>Low</td>
+<td>High</td>
+<td>Nominally yes, <strong>internal <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a></strong></td>
+</tr>
+<tr>
+<td><code>polling_strategies.py</code> → <code>topic_state_registry</code> via 20+ module-level wrappers</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a> (registry protocol can't bind instance methods)</td>
+<td>Low</td>
+<td>Moderate</td>
+<td>Yes mechanically, <strong>No</strong> aesthetically</td>
+</tr>
+<tr>
+<td>Handlers → <code>SessionManager</code> (26 files, 77 calls)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> + <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+<td>Low</td>
+<td>High (core)</td>
+<td>Borderline — <code>WindowView</code> exists but under-used</td>
+</tr>
+<tr>
+<td><code>screenshot_callbacks.py</code> (4 concerns in 764 lines)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (mixed)</td>
+<td>— (internal)</td>
+<td>Moderate</td>
+<td><strong>No</strong> — partial extraction, still a catch-all</td>
+</tr>
+<tr>
+<td>~20 module-level per-window dict singletons across handlers</td>
+<td>Low (independent)</td>
+<td>Low</td>
+<td>High</td>
+<td><strong>No</strong> — <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a>, pattern perpetuated by new <code>toolbar_callbacks.py</code></td>
+</tr>
+<tr>
+<td><code>session.py</code> → <code>thread_router.window_display_names[wid]</code> direct dict access (3 sites)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a> (private attr)</td>
+<td>Low</td>
+<td>Moderate</td>
+<td>Tolerable, but facade leak from inside the facade</td>
+</tr>
+<tr>
+<td><code>send_callbacks</code> → <code>send_command._upload_file</code> (private import)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a></td>
+<td>Low</td>
+<td>Low</td>
+<td>Neutralised by low <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatility</a></td>
+</tr>
+<tr>
+<td><code>directory_callbacks:593</code> — <code>provider_name == "claude"</code> leftover</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+<td>Low</td>
+<td>Low</td>
+<td>Neutralised — one missed site</td>
+</tr>
+<tr>
+<td><code>summarizer.py</code> — Claude JSONL hardcoded</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+<td>Low</td>
+<td>Low (no new provider planned)</td>
+<td>Neutralised by <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatility</a> — known, deferred</td>
+</tr>
+</tbody>
+</table>
+
+<div class="issue">
+<h2>Issue 1: <code>message_queue.py</code> — Tool-Use Batching Grafted onto Queue Primitives</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>message_queue.py</code> (1132 lines) internal cohesion &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>After the Apr 12 refactor, <code>message_queue.py</code> is supposed to own "queue primitives": per-user FIFO, worker task, merging, merge-at-dequeue, and rate limiting. It does all of those things. It also now owns, in the same module scope, a complete second subsystem — Claude Code tool-use batching:</p>
+<ul>
+<li><code>ToolBatchEntry</code>, <code>ToolBatch</code> dataclasses encoding <code>tool_use_id</code>, <code>tool_use_text</code>, <code>tool_result_text</code>, <code>tool_name</code> — all <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Claude-specific</a> concepts. Codex, Gemini, and shell providers do not emit tool_use/tool_result events at all.</li>
+<li><code>format_batch_message()</code>, <code>_format_task_create_batch()</code>, <code>_format_mixed_batch_lines()</code>, <code>_format_task_create_section()</code>, <code>_format_task_update_section()</code>, <code>_format_task_list_section()</code>, <code>_batch_result_prefix()</code>, <code>_format_batch_entry()</code>, <code>_extract_task_create_title()</code>, <code>_extract_task_tool_suffix()</code> — ~160 lines of pure presentation logic that knows which Claude Code tool names mean "a sub-task spawn" (<code>TaskCreate</code>, <code>TaskUpdate</code>, <code>TaskList</code>) and formats them differently.</li>
+<li><code>_process_batch_task()</code>, <code>_flush_batch()</code>, <code>_handle_content_task()</code>, <code>_active_batches</code> dict — state machine for "hold N tool calls, edit-in-place until the batch completes or fills".</li>
+</ul>
+
+<p>This is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> — the queue module has knowledge of how Claude's agent loop emits tool messages and how users expect them to be summarised. It is also <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">model coupling</a> — the Claude agent's task-tool vocabulary is embedded in the formatting code. None of this knowledge is documented at the module level; the file's docstring is "Per-user message queue management for ordered message delivery".</p>
+
+<p>The concern is not that batching exists — it's a useful feature and the user flagged it as "feeling wrong" rather than broken. The concern is that four distinct subsystems now share one module scope:</p>
+<ol>
+<li>Queue primitives (queue, worker, merge, rate limiting) — genuinely cohesive.</li>
+<li>Claude batch state machine (<code>ToolBatch</code>, <code>_active_batches</code>, <code>_process_batch_task</code>, <code>_flush_batch</code>).</li>
+<li>Claude batch presentation (<code>format_batch_message</code> + 9 helpers).</li>
+<li>Status-update send/clear (<code>_process_status_update_task</code>, <code>_process_status_clear_task</code>, <code>_do_send_status_message</code>, <code>_do_clear_status_message</code>, <code>_format_claude_task_status</code>).</li>
+</ol>
+
+<p>Additionally, <code>MessageTask</code> is a union-shaped dataclass with a <code>task_type: Literal["content", "status_update", "status_clear"]</code> discriminator and a grab-bag of optional fields (<code>tool_use_id</code>, <code>tool_name</code>, <code>parts</code>, <code>text</code>), where most fields only apply to a subset of task types. This is a <a href="https://coupling.dev/posts/related-topics/module-coupling/">common coupling</a> smell: readers must keep a mental model of which fields are legal in which states.</p>
+
+<h3>Complexity Impact</h3>
+<p>A developer trying to change batch-flush behaviour — for example, "flush when the user sends a reply" — must read the 1132-line file to figure out where queue state, batch state, and status state interact. The queue worker <code>_message_queue_worker</code> calls <code>_handle_content_task</code>, which calls either <code>_process_batch_task</code> or <code>_process_content_task</code>, and batch task processing internally calls <code>_do_clear_status_message</code> (which is in the status-update subsystem). These interleavings exceed the <a href="https://coupling.dev/posts/core-concepts/complexity/">cognitive capacity</a> of working memory (4±1 units) because a single change can ripple through all four subsystems.</p>
+
+<p>The Claude task-tool formatting helpers (<code>_format_task_create_section</code>, <code>_extract_task_tool_suffix</code> with its markdown-prefix regex parsing, <code>_TASK_TOOL_NAMES</code>) are particularly corrosive to cohesion: they parse presentation output from earlier in the pipeline (<code>build_response_parts</code>) back into structured form just to render it differently when batched. This is double parsing that exists only because the formatting logic lives in the wrong place — if it were in <code>status_bubble.py</code> or a new <code>tool_batch_view.py</code>, the original structured data would still be in scope.</p>
+
+<h3>Cascading Changes</h3>
+<p>Adding a new status message format (say, a "resuming session" preview) has to coexist with the batching state machine because both write to the same <code>_active_batches</code> space via <code>_do_clear_status_message</code>. Changing Claude's task-tool presentation (even a format tweak) requires editing queue code. Fixing a queue bug touches batch code. Every change in any of the four subsystems forces the developer to re-load the other three into working memory to verify nothing broke.</p>
+
+<p>The review plan's Task 6 promised that <code>message_queue.py</code> would be ~400–500 lines after status-bubble extraction. It is 1132. This is not an execution failure — the batching feature was added in the same commit and grew the module back. But it is a signal that <code>status_bubble.py</code> at 81 lines was not the real intended extraction: the right move was splitting queue from presentation from Claude-specific logic, not pulling out just the keyboard builder.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Break the four concerns apart. Concrete, in order of payoff-to-cost:</p>
+<ol>
+<li><strong>Extract <code>handlers/tool_batch.py</code>.</strong> Move <code>ToolBatchEntry</code>, <code>ToolBatch</code>, <code>_active_batches</code>, <code>_process_batch_task</code>, <code>_flush_batch</code>, <code>_handle_content_task</code>'s batch branch, <code>_is_batch_eligible</code>, <code>_should_batch</code>, <code>BATCH_MAX_ENTRIES</code>, <code>BATCH_MAX_LENGTH</code>, and every <code>_format_*</code> helper into it. The new module owns: "given a stream of Claude tool events, emit a rolling edit-in-place summary message". The queue module keeps the branch point (<code>if batch-eligible → tool_batch.process(...)</code> else → process normally). Expect ~350 lines moved.</li>
+<li><strong>Move <code>_format_claude_task_status</code>, <code>_do_send_status_message</code>, and <code>_do_clear_status_message</code> into <code>status_bubble.py</code>.</strong> These are status-bubble lifecycle operations. <code>message_queue</code> would import <code>status_bubble.send_status_text(...)</code> and <code>status_bubble.clear_status_text(...)</code> as <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a>. <code>status_bubble.py</code> grows from 81 to ~300 lines and becomes a real module instead of a stub.</li>
+<li><strong>Consider splitting <code>MessageTask</code> into three discriminated types</strong>: <code>ContentTask</code>, <code>StatusUpdateTask</code>, <code>StatusClearTask</code>. The worker's dispatcher becomes an explicit <code>match task:</code> and readers no longer have to remember which optional fields are legal when. This is a two-file change with low risk — mypy/pyright will catch the migration sites.</li>
+<li><strong>Do not touch merge or rate limiting.</strong> Those are the actual queue primitives and they are cohesive where they are.</li>
+</ol>
+
+<p>Trade-off: one more import in the callback-registry wire-up, one more file to open when reading the pipeline, and <code>MessageTask → ContentTask/StatusUpdateTask/StatusClearTask</code> adds ~40 lines of type definitions. Against that, <code>message_queue.py</code> drops to ~500 lines of genuine queue logic, the Claude-specific surface is visible and renameable, and adding a hypothetical batch format tweak no longer requires reading queue code. The most important gain: the user's "feels wrong" instinct gets vindicated by the module boundary matching the conceptual boundary.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 2: <code>toolbar_callbacks.py</code> — Three Concerns + Intrusive Claude Pane Scraping</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>toolbar_callbacks.py</code> (557 lines) internal cohesion + scraping → Claude pane text &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The toolbar is a new feature: TOML-configurable per-provider button grids, with "read-state" toggles that scrape the pane after a key press to reflect the agent's current mode. The module owns three distinct concerns:</p>
+<ol>
+<li><strong>Config plumbing</strong>: <code>_get_toolbar_config</code>, <code>reload_toolbar_config</code>, <code>build_toolbar_keyboard</code>, <code>_make_button</code>. Reads <code>toolbar_config.ToolbarConfig</code>, honours per-window label overrides from <code>_window_action_labels</code>, renders <code>InlineKeyboardMarkup</code>. This is UI rendering.</li>
+<li><strong>State scraping</strong>: <code>_scrape_current_mode</code>, <code>_find_mode_line</code>, <code>_mode_short_label</code>, <code>seed_button_states</code>, <code>_refresh_button_label</code>. Grabs the tmux pane text, runs regex against Claude Code's mode line ("auto-accept edits on", "Plan mode on", etc.), and maps the result to short button labels ("Edit", "Plan", "Full", "Def"). This is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive coupling</a> to Claude Code — it reads the internal text output of another process to infer its mode. The coupling is at the highest <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">integration strength</a> level because there is no contract: if Claude Code renames "auto-accept" to "auto-edit" in a future release, the toolbar breaks silently (wrong label, still works).</li>
+<li><strong>Action dispatch</strong>: <code>_dispatch_key</code>, <code>_dispatch_text</code>, <code>_builtin_screenshot</code>, <code>_builtin_ctrlc</code>, <code>_builtin_live</code>, <code>_builtin_send</code>, <code>_builtin_dismiss</code>, <code>_BUILTIN_DISPATCH</code>, <code>handle_toolbar_callback</code>, <code>_dispatch</code>, <code>_parse_callback_data</code>. Routes callback query → key send / text send / builtin function.</li>
+</ol>
+
+<p>The module also owns its own scattered per-window state (<code>_window_action_labels: dict[str, dict[str, str]]</code>), following the same pattern the morning review flagged as the #1 modularity issue. The pattern's severity is mitigated here by <code>@topic_state.register("window")</code> cleanup registration, but the instance of the pattern is fresh code — the new module imported the anti-pattern instead of avoiding it.</p>
+
+<p>The <strong>scraping</strong> concern in particular is coupling of the strongest kind — intrusive, implicit, and directed across a process boundary at an unstable text format. Claude Code's mode line is not a documented API. Gemini has a similar "YOLO" mode that would need its own scraping regex. Codex may or may not show a mode line at all. The current implementation restricts <code>_scrape_current_mode</code> to the <code>mode</code> action and silently does nothing for other toggles (YOLO, Think), but the pattern is there for any future toggle to copy, and the scraper already encodes three sentinel strings (<code>auto-accept edits</code>, <code>Plan mode</code>, <code>Full tool access</code>) specific to Claude's output format.</p>
+
+<h3>Complexity Impact</h3>
+<p>A developer adding a new toggle button (say, a "Bypass safety" toggle for a hypothetical provider) has to: (a) add an action in <code>toolbar.toml</code>, (b) add a scraping regex to <code>_find_mode_line</code>, (c) add a mapping in <code>_mode_short_label</code>, (d) add a new attribute to <code>ToolbarAction</code> (<code>read_state: bool</code>), (e) set it on the provider's action in TOML, (f) ensure <code>_refresh_button_label</code> handles it. None of this is obvious from the file layout — all three concerns share the same 557 lines with no section boundaries larger than a 10-line helper.</p>
+
+<p>A developer debugging "why does the button label not update" must chase across <code>seed_button_states</code> (called from <code>bot.toolbar_command</code>) → <code>_scrape_current_mode</code> (which does a pane capture + regex) → <code>_find_mode_line</code> (which looks at the bottom 15 lines of the pane) → <code>_mode_short_label</code> (which maps text to labels) → <code>_set_action_label</code> → <code>build_toolbar_keyboard</code> (which reads from <code>_get_action_label</code> inside <code>_make_button</code>). That's a 6-hop chain across three concerns.</p>
+
+<h3>Cascading Changes</h3>
+<p>Changes in Claude Code's mode-line output (either <code>claude</code> itself, or a wrapper like <code>cc-mirror</code> that injects headers) silently break the mode toggle's label — the button still works, the label is just wrong until the next read. Nothing in the system detects or surfaces this.</p>
+
+<p>Adding a new provider means also deciding how to handle its toggle state — either hardcode another scraping regex or give up and keep the static label. The <code>read_state: bool</code> flag and <code>_scrape_current_mode</code>'s hardcoded list of Claude sentinels is a local solution that doesn't scale without a provider-level callback for "return my current mode".</p>
+
+<h3>Recommended Improvement</h3>
+<p>Three steps, each independent:</p>
+<ol>
+<li><strong>Extract <code>handlers/toolbar_keyboard.py</code></strong> — move <code>build_toolbar_keyboard</code>, <code>_make_button</code>, <code>_window_action_labels</code>, <code>_set_action_label</code>, <code>_get_action_label</code>, <code>_clear_window_labels</code>, and the <code>@topic_state.register</code> cleanup. This is pure rendering + state.</li>
+<li><strong>Extract mode scraping to a provider-level capability.</strong> Add <code>AgentProvider.scrape_current_mode(window_id: str) -> str | None</code> to <code>providers/base.py</code>. Claude's implementation holds the regexes it owns. Codex/Gemini/Shell return <code>None</code>. <code>toolbar_callbacks._refresh_button_label</code> becomes: <code>label = await provider.scrape_current_mode(window_id) or action.default_label</code>. This converts <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive coupling</a> (direct pane scraping with hardcoded regexes) to <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> (provider method returning a string) and puts the Claude-specific knowledge where it belongs — in <code>providers/claude.py</code>. The user's "new provider is unlikely" answer downgrades urgency, but this refactor also localises the breakage radius when Claude Code changes its mode line.</li>
+<li><strong>Leave <code>toolbar_callbacks.py</code> as the dispatch module</strong> (Keyboard, callback parsing, <code>handle_toolbar_callback</code>, <code>_dispatch_key</code>/<code>_dispatch_text</code>/<code>_builtin_*</code>). Expect it to shrink to ~300 lines.</li>
+</ol>
+
+<p>Trade-off: one provider-protocol method addition, one new handler file. Against that, the <code>toolbar_*</code> code splits into three single-purpose files (keyboard, scraping, dispatch), scraping becomes provider-plug-in-able, and the TOML loader stays a small self-contained module. Most importantly, adding the next toggle is one TOML edit and one provider-method return value, not a 6-step cross-file scramble.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 3: Shell Prompt-Marker Setup — Distributed with Implicit Ordering</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>shell_infra.setup_shell_prompt</code> called from 5 handler modules &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The shell provider uses a prompt marker (<code>⌘N⌘</code> in wrap mode, <code>{prefix}:N❯</code> in replace mode) so that command output can be isolated and exit codes detected. <code>shell_infra.setup_shell_prompt</code> does the actual work: ensure idle shell, detect shell binary, pick wrap vs. replace, inject the setup commands, optionally clear scrollback. It is also idempotent — <code>has_prompt_marker</code> short-circuits if the marker is already present.</p>
+
+<p>The <em>decision</em> about when to call <code>setup_shell_prompt</code> — and in which of the two setup-offer flows ("auto" vs. "ask") — is scattered:</p>
+<ul>
+<li><code>handlers/directory_callbacks.py</code> (directory-browser → shell topic flow): calls setup immediately after window creation, "auto" mode.</li>
+<li><code>handlers/window_callbacks.py</code> (external window bind → shell detected): shows "Set up / Skip" keyboard, user choice.</li>
+<li><code>handlers/transcript_discovery.py</code> (runtime provider-switch detector): triggers the "ask" flow when an agent pane falls back to shell, and the re-offer on provider switch away and back.</li>
+<li><code>handlers/shell_commands.py::_ensure_prompt_marker</code>: lazy recovery on every command send. Checks if the marker disappeared (e.g., <code>exec bash</code>, profile reload) and re-runs setup. Honours the user's session-scoped "skip" choice.</li>
+<li><code>handlers/shell_capture.py</code>: reads the marker to parse output, implicitly depends on setup having run. Does not trigger setup itself but assumes a prior handler did.</li>
+</ul>
+
+<p>Five handlers encode slightly different variants of the same decision tree: "has the user skipped for this session?", "is this a re-bind?", "should we offer or just do it?". The CLAUDE.md documents the intended behaviour clearly, but the intent is distributed across the handlers that each participate in one entry point. There is no single <code>shell_setup_orchestrator</code> object that owns the state machine.</p>
+
+<p>The knowledge that leaks is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional</a>: "when do we need to re-run setup?" — duplicated across five callers that each re-derive the answer from local context (skip-flag, marker presence, provider name, last-run timestamp).</p>
+
+<h3>Complexity Impact</h3>
+<p>Changing the setup policy — for example, "never offer again once skipped, even on re-bind" — requires locating every caller and updating each one's predicate. Missing one caller leaves a subtle bug where the prompt-marker offer comes back in a path the user didn't expect. There is no single place to put a trace log of "who decided to run setup and why".</p>
+
+<p>The flow is additionally coupled to <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">runtime timing</a>: <code>setup_shell_prompt</code> awaits 0.1s + 0.3s hard sleeps after <code>C-c</code> and after injecting the setup command. The <code>_wait_for_shell_ready</code> helper in <code>directory_callbacks.py</code> does its own polling. The two timing strategies coexist because they were added in different commits; neither is wrong, but they mean setup latency depends on which caller invoked it.</p>
+
+<h3>Cascading Changes</h3>
+<p>Adding a new setup trigger (e.g., "re-setup if <code>tmux respawn-window</code> was used externally") means adding a 6th call site and deciding how its predicate relates to the existing 5. Removing an existing trigger requires reasoning about whether the others cover the same case. The CLAUDE.md's paragraph-long description of the decision tree is the only specification — no test enforces it.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Introduce a <code>ShellPromptCoordinator</code> (or a module <code>shell_prompt_orchestrator.py</code>) that owns the decision state: per-window <code>skip_flag</code>, <code>last_setup_ts</code>, <code>was_offered</code>, and a single <code>ensure_setup(window_id, trigger: Literal["auto", "ask", "lazy", "external_bind"]) -> None</code> entry point. Each of the five callers calls <code>ensure_setup(...)</code> with the trigger kind; the coordinator decides whether to offer, skip, or run silently, and returns. This converts <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> (duplicated predicates in 5 handlers) to <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> (single entry point with a documented trigger enum).</p>
+
+<p>Keep <code>shell_infra.setup_shell_prompt</code> exactly as it is — it is the right layer for "actually inject the commands". The coordinator sits on top and owns policy only.</p>
+
+<p>Trade-off: one new file (~100 lines), one new dict for per-window orchestration state (add to the existing scatter for now — or, preferably, fold into <code>WindowState</code> since it is window-scoped), and a migration of 5 call sites. Against that, the decision tree is in one place, testable end-to-end, and new triggers plug in at one point. The setup latency sleeps can also be refactored once, from one place.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 4: <code>polling_coordinator</code> Still a God Loop, <code>polling_strategies</code> Sprouts Compat Wrappers</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>polling_coordinator.py</code> (598 lines) + <code>polling_strategies.py</code> (653 lines) &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>Task 11 of the refactor plan (invert <code>polling_coordinator</code> to strategy-owned <code>tick()</code> methods) was deliberately deferred. The plan's justification was valid in the narrow: <code>status_poll_loop</code> itself is ~85 lines, the body is decomposed into named helpers (<code>_scan_window_panes</code>, <code>_maybe_check_passive_shell</code>, <code>_check_interactive_only</code>, <code>update_status_message</code>, <code>_handle_dead_window_notification</code>), and inverting would trade risk for cosmetic gain.</p>
+
+<p>But the user confirmed that "polling/status code is hard to follow" is still a top pain point, and that pain has a more specific source than the god-loop framing captured: <code>polling_strategies.py</code> grew to 653 lines and now contains a 20-plus-function compat-wrapper layer at the bottom of the file:</p>
+
+<pre><code># polling_strategies.py L566-652 — 20+ wrappers
+def clear_window_poll_state(window_id: str) -> None:
+    terminal_strategy.clear_state(window_id)
+
+def clear_screen_buffer(window_id: str) -> None:
+    terminal_strategy.clear_screen_buffer(window_id)
+
+def is_rc_active(window_id: str) -> bool:
+    return terminal_strategy.is_rc_active(window_id)
+
+# ... 17 more</code></pre>
+
+<p>The wrappers exist because <code>@topic_state.register</code> cannot bind instance methods — the cleanup registry needs free functions. So every class method that needs cleanup registration gets a module-level alias. The wrappers perform no logic; they are pure indirection.</p>
+
+<p>The wrappers are also where the actual cleanup registration lives — the <code>@topic_state.register("window")</code> decorators are on the free functions, not the strategy methods. A reader looking at <code>TerminalStatusStrategy.clear_state</code> has no indication that it is the implementation of a registered cleanup callback. The knowledge "this method is a cleanup hook" is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">implicitly</a> distributed: the decoration lives in one place, the implementation in another, and the only hint in the class method is the method name matching a free function below.</p>
+
+<p>Separately, <code>polling_coordinator.py</code> still imports from 9 handler modules and orchestrates them in a specific order. The plan's deferral note is correct that the helpers make the loop readable in isolation, but adding a new concern still requires deciding <em>where</em> in the sequence to inject it and <em>which</em> imports to add.</p>
+
+<h3>Complexity Impact</h3>
+<p>A developer debugging "cleanup not running on window close" must trace the cleanup registration from <code>topic_state.register("window")</code> → <code>clear_window_poll_state</code> (free function) → <code>terminal_strategy.clear_state</code> (instance method) → actual state dict clearing. The indirection serves the library constraint but obscures the logic.</p>
+
+<p>Reading <code>polling_strategies.py</code> end-to-end is also a cohesion test: <code>TerminalStatusStrategy</code> is 270 lines with 31 methods covering RC debounce, probe failures, startup grace, pane count cache, pyte parsing, screen buffer pooling, recent-activity check. Some of these are cohesive (the pyte parsing and screen buffer go together), but startup-grace, probe-failures, and RC debounce are three independent state machines with no particular reason to share a class.</p>
+
+<h3>Cascading Changes</h3>
+<p>Adding a new polling concern today means: (a) decide whether it goes in <code>status_poll_loop</code> as a new inline section or as its own <code>run_periodic_tasks</code> entry; (b) add imports to <code>polling_coordinator.py</code>; (c) if it has per-window state, add a method to one of the three strategies (which one?); (d) add a <code>@topic_state.register</code> wrapper function at the bottom of <code>polling_strategies.py</code>; (e) ensure the cleanup actually wires into the strategy method. Five steps across three files, with choices at each step.</p>
+
+<h3>Recommended Improvement</h3>
+<p>The plan's Task 11 framing (invert to strategy-owned <code>tick()</code>) is more ambitious than this review recommends. A smaller, targeted fix:</p>
+<ol>
+<li><strong>Let <code>topic_state.register</code> accept bound methods.</strong> The registry is in <code>topic_state_registry.py</code> — change it to accept a callable and optionally a bound-method owner object. Once that works, the 20+ compat wrappers at the bottom of <code>polling_strategies.py</code> disappear, and <code>@topic_state.register("window")</code> moves onto the strategy method where the implementation actually lives. Net: ~90 lines deleted, cleanup registration becomes locally visible at the point of implementation.</li>
+<li><strong>Split <code>TerminalStatusStrategy</code> into two classes</strong> along its natural seam: <code>TerminalScreenBuffer</code> (pyte parsing, screen buffer pool, pane count cache, rendered text) and <code>TerminalPollState</code> (RC debounce, probe failures, startup grace, unbound timers, seen-status tracking, recent-activity). They share nothing except being per-window. Expect <code>polling_strategies.py</code> to be slightly shorter and each class to be understandable in one read.</li>
+<li><strong>Leave <code>status_poll_loop</code> alone for now.</strong> The plan's deferral was right: the real friction was in the strategy layer, not the loop. Revisit if a future feature adds a 10th polling concern.</li>
+</ol>
+
+<p>Trade-off: a small change to <code>topic_state_registry</code> (maybe 10 lines), a class split, and a handful of import fixes. Against that: the strategy file drops ~90 lines of pure indirection, cleanup registration becomes visible in one place, and the "where does cleanup live" question has one answer instead of two.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 5: <code>WindowView</code> Projection Under-Adopted, Facade Surface Keeps Growing</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: Handlers → <code>session_manager</code> (26 files, 77 calls, up from 62 in the Apr 12 evening review) &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The Apr 12 refactor plan's Task 9 introduced <code>WindowView</code> as a <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> projection: a frozen dataclass exposing <code>window_id</code>, <code>cwd</code>, <code>provider_name</code>, <code>approval_mode</code>, <code>notification_mode</code>, <code>transcript_path</code>, with <code>session_manager.view_window(wid)</code> returning a snapshot. The goal was to decouple read-only handlers from the 39-method <code>SessionManager</code> facade so that shape changes to <code>WindowState</code> wouldn't cascade.</p>
+
+<p>The implementation landed (file exists, <code>view_window</code> method exists, <code>toolbar_callbacks._builtin_send</code> and <code>toolbar_callbacks._refresh_button_label</code> use it). But adoption plateaued at a handful of call sites. The current counts:</p>
+<ul>
+<li>27 files import <code>session_manager</code></li>
+<li>77 direct <code>session_manager.</code> calls across 26 handler files (up from 62)</li>
+<li><code>sync_command</code> (10 calls), <code>transcript_discovery</code> (7), <code>recovery_callbacks</code> (6), <code>directory_callbacks</code> (4), <code>restore_command</code> (5), <code>polling_coordinator</code> (5), <code>resume_command</code> (5), <code>command_orchestration</code> (4), etc.</li>
+</ul>
+
+<p>The facade is used as the default access point for everything window-related, including pure reads. New handlers (<code>send_command</code>, <code>toolbar_callbacks</code>, <code>message_routing</code>) import <code>session_manager</code> as a matter of habit. <code>WindowView</code> is a relief valve that only a few callers turn on.</p>
+
+<p>The ratio change (62 → 77) is significant because it means the refactor's <em>read-side</em> decoupling lost ground even as the <em>mutation-side</em> remained stable. This is <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">accidental volatility</a> — the write-volatility of <code>WindowState</code> shape is low, but the ease of "just reach into the facade" increases the read-side exposure with every new feature.</p>
+
+<h3>Complexity Impact</h3>
+<p>Renaming <code>WindowState.cwd</code> to <code>working_dir</code> today still cascades to ~20 handlers because most of them call <code>session_manager.get_window_state(wid).cwd</code> directly. The cascade is manageable with an IDE refactor, but every change to the facade pushes ripples across the entire handler layer, and a developer modifying <code>WindowState</code> cannot see at a glance which fields are safely read-only from which handlers.</p>
+
+<p><code>session.py</code> also reaches past its own facade: at three sites (L412, L414, L495) it accesses <code>thread_router.window_display_names[wid]</code> as a raw dict instead of calling <code>thread_router.set_display_name</code> / <code>thread_router.get_display_name</code>. This is a minor internal <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive coupling</a> smell — the facade leaks into its own implementation.</p>
+
+<h3>Cascading Changes</h3>
+<p>The user confirmed state-shape cascades are still a top-3 pain point. The <code>WindowView</code> mitigation exists on paper but is underused, so the pain persists. Adding a new field to <code>WindowState</code> means updating <code>WindowView</code> too (easy), but removing or renaming an existing field still cascades because most handlers go through the facade.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Two small, opportunistic moves:</p>
+<ol>
+<li><strong>Migrate one-call-read handlers to <code>view_window</code> as they are touched.</strong> The list from the Apr 12 evening review still applies: <code>file_handler</code>, <code>history</code>, <code>shell_commands</code>, <code>text_handler</code>, <code>send_command</code>, <code>screenshot_callbacks</code>, <code>topic_emoji</code>. Each is a 2-line change (<code>get_window_state(...).cwd</code> → <code>view_window(...).cwd</code>). Don't force a big migration; pair each with whatever you're already editing there. Track via <code>grep -c 'session_manager\.get_window_state' src/ccgram/handlers/*.py</code> — when it drops below 15, the cascade pain is gone.</li>
+<li><strong>Fix the three direct <code>thread_router.window_display_names</code> dict accesses inside <code>session.py</code>.</strong> Replace with the public <code>get_display_name</code> / <code>set_display_name</code> / <code>pop</code> helpers that already exist. Ten-minute change.</li>
+</ol>
+
+<p>Trade-off: the <code>WindowView</code> approach does not address mutation cascades, but the user's pain is read-side: "state shape changes cascade to 25+ handlers". Most of those 25 only read. Progress is measurable and reversible.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 6: <code>screenshot_callbacks.py</code> — Still 4 Concerns in One Module</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>screenshot_callbacks.py</code> (764 lines) &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The Apr 12 refactor extracted <code>toolbar_callbacks.py</code> from this module, dropping it from ~832 to 764 lines. But four concerns still coexist in the same scope:</p>
+<ol>
+<li><strong>Screenshot capture / refresh</strong>: <code>screenshot_command</code>, <code>_handle_refresh</code>, <code>_handle_pane_screenshot</code>, <code>_handle_status_screenshot</code>, <code>build_screenshot_keyboard</code>.</li>
+<li><strong>Live view</strong>: <code>_handle_live_start</code>, <code>_handle_live_stop</code>.</li>
+<li><strong>Status-bar actions that have nothing to do with screenshots</strong>: <code>_handle_notify_toggle</code> (notification mode cycling), <code>_handle_status_recall</code> (command history recall), <code>_handle_remote_control</code>, <code>_handle_status_esc</code>, <code>_handle_keys</code>, <code>_schedule_key_refresh</code>.</li>
+<li><strong>Multi-pane operations</strong>: <code>panes_command</code> (69 lines).</li>
+</ol>
+
+<p>The <code>_handle_status_*</code> family are the most out-of-place: they handle status-bubble button callbacks that have nothing intrinsically to do with screenshots. They live here because <code>build_screenshot_keyboard</code> historically returned a keyboard with control keys attached, and the callbacks landed wherever was convenient. The module now imports from <code>send_command</code>, <code>interactive_ui</code>, <code>polling_strategies</code>, <code>command_history</code>, <code>shell_capture</code>, <code>live_view</code>, <code>message_queue</code>, <code>history</code> (eight handler dependencies), and defines 34 imports total.</p>
+
+<h3>Complexity Impact</h3>
+<p>A developer working on "cycle notification mode when user taps the 🔔 button" has to read a 764-line file named "screenshot_callbacks". The naming lies: most of the file is not about screenshots. This is a <a href="https://coupling.dev/posts/core-concepts/balance/">low-cohesion</a> drift, not a coupling failure — distance is low, volatility moderate, strength normal — but it increases the cognitive cost of every edit.</p>
+
+<h3>Cascading Changes</h3>
+<p>Not much: the module is a catch-all but most of its pieces are independent. Adding a new status-bar action means adding a handler function in this file alongside unrelated screenshot logic. The cost is search-and-open-file friction, not cascading edits.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Finish the partial extraction:</p>
+<ol>
+<li><strong>Extract <code>handlers/status_bar_actions.py</code></strong> — <code>_handle_notify_toggle</code>, <code>_handle_status_recall</code>, <code>_handle_remote_control</code>, <code>_handle_status_esc</code>, <code>_handle_keys</code>, <code>_schedule_key_refresh</code>, <code>_pending_key_refreshes</code>, related <code>@topic_state.register</code> cleanup. ~200 lines out.</li>
+<li><strong>Consider merging <code>live_view.py</code> functionality in.</strong> Or leave it — <code>live_view.py</code> already owns its own state and lifecycle; the two <code>_handle_live_*</code> handlers could move there instead.</li>
+<li><strong>Result</strong>: <code>screenshot_callbacks.py</code> drops to ~350 lines covering only screenshot and pane-screenshot operations. Matches its name.</li>
+</ol>
+
+<p>Trade-off: one new handler file, one more <code>@register</code> import. Low risk, low payoff, do it next time the file is touched.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 7: Scattered Per-Window Module-Level Dicts — Pattern Perpetuated</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: ~20 <code>_prefixed</code> module-level dicts across handler modules &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-minor">Minor</span> (but the pattern persists as new handlers arrive)
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The Apr 12 morning review flagged this as the #1 issue ("scattered per-window handler state, 15+ modules"). The evening review demoted it to "still open — long-term direction". Today the pattern is unchanged in <em>structure</em> but stronger in <em>scope</em>:</p>
+
+<pre><code>command_history._history, toolbar_callbacks._window_action_labels,
+text_handler._bash_capture_tasks,
+interactive_ui._interactive_msgs, _interactive_mode, _send_cooldowns,
+shell_commands._shell_pending, _generation_counter,
+topic_emoji._topic_states, _pending_transitions, _topic_names,
+topic_orchestration._topic_create_retry_until,
+msg_telegram._loop_alert_pairs,
+message_sender._last_send_time, _rate_limit_locks,
+live_view._active_views,
+shell_capture._shell_monitor_state,
+message_queue._message_queues, _queue_workers, _queue_locks,
+  _tool_msg_ids, _status_msg_info, _active_batches,
+screenshot_callbacks._pending_key_refreshes,</code></pre>
+
+<p>That's ~24 scattered state dicts, and <code>toolbar_callbacks.py</code> (new this cycle) added one — the pattern reproduced. <code>topic_state_registry.py</code> event bus catches cleanup (26 <code>@register</code> call sites), but discovery of "what state exists for window @5" remains a manual grep.</p>
+
+<h3>Complexity Impact</h3>
+<p>Adding a new feature with per-window state means: create a new module-level dict, register a cleanup, trust that the cleanup wires correctly. Miss the registration and you leak state. The pattern works; it just doesn't scale as the handler count grows.</p>
+
+<h3>Cascading Changes</h3>
+<p>None directly. The scatter doesn't cause cascading edits — it causes a slow accumulation of state-discovery friction. The cost is moderate but monotonic.</p>
+
+<h3>Recommended Improvement</h3>
+<p>The morning review's <code>WindowContext</code> aggregation is still the correct long-term direction but the wrong investment <em>today</em>. Instead, adopt a <strong>stopping rule</strong>: no new <code>_per_window: dict[str, ...]</code> singletons in new handler modules. New per-window state goes into <code>WindowState</code> (for persistent) or a named dataclass held in one of the existing strategy singletons (for ephemeral).</p>
+
+<p>For <code>toolbar_callbacks._window_action_labels</code> specifically: it is small (one dict per window with one-or-two entries). Folding it into <code>WindowState</code> would be ~15 lines and remove one of the 24 singletons. Do it next time you touch toolbar state.</p>
+
+<p>Trade-off: <code>WindowState</code> grows; new features must pick a home consciously. Against that: the scatter stops increasing.</p>
+</div>
+
+<div class="issue">
+<h2>Issue 8: Residual Leaks from the Refactor</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: Scattered loose ends &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<p>Three small items the refactor plan missed or introduced. None are urgent; each is a 10-minute fix best done the next time the surrounding code is touched.</p>
+
+<ol>
+<li><p><strong><code>handlers/directory_callbacks.py:593</code></strong>: <code>if approval_mode == "yolo" and provider_name == "claude":</code><br>
+The plan's Task 8 (replace <code>provider_name ==</code> string checks with capability flags) found and fixed all but this one. Should be a <code>provider.capabilities.has_yolo_confirmation</code> or similar flag, or — given the user's "new provider unlikely" answer — left as-is with the same tolerance as the summarizer Claude-hardcoding.</p></li>
+
+<li><p><strong><code>session.py</code> L412, L414, L495</strong>: direct dict access <code>thread_router.window_display_names[wid]</code>.<br>
+Internal facade leak — SessionManager reaches past its own sub-object. Public helpers <code>get_display_name</code> / <code>set_display_name</code> / <code>pop_display_name</code> exist. 3-line fix.</p></li>
+
+<li><p><strong><code>handlers/send_callbacks.py:35</code></strong>: <code>from .send_command import _upload_file, build_file_browser</code>.<br>
+Private-name import (<code>_upload_file</code>). Either promote <code>_upload_file</code> to <code>upload_file</code> in <code>send_command.py</code> (it's already called from a sibling callback module, so it isn't really private) or move it into a shared <code>send_upload.py</code> alongside <code>build_file_browser</code>. The refactor plan promoted <code>open_file_browser</code> but missed <code>_upload_file</code>.</p></li>
+</ol>
+</div>
+
+<div class="issue">
+<h2>Issue 9: <code>summarizer.py</code> Still Claude-Hardcoded</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>llm/summarizer.py</code> → Claude JSONL transcript format &nbsp;•&nbsp; <strong>Severity</strong>: <span class="severity severity-minor">Minor</span> (neutralised by low <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatility</a>)
+</div>
+
+<p>The evening review flagged this as provider-abstraction leakage #3. The Apr 12 plan explicitly deferred it ("only matters once a second provider needs summaries"). That rationale is confirmed by the user's answer: a second provider is unlikely, so the Claude-hardcoded parsing (<code>type == "assistant"</code>, <code>type == "user"</code>, <code>tool_use</code>, <code>tool_result</code>, <code>content</code> blocks) is tolerable.</p>
+
+<p>Left in the review to document the trade-off: the design is wrong (summarisation is a provider capability, not a generic LLM helper), but the right-design fix is deferred until it pays back. If a second provider lands, expect a <code>AgentProvider.summarise_recent(entries) -> list[str]</code> addition and a one-week migration.</p>
+</div>
+
+<h2>Priority Ranking</h2>
+
+<p>Today's high-payoff work, roughly in order:</p>
+<ol>
+<li><strong>Break up <code>message_queue.py</code></strong> — extract <code>tool_batch.py</code> (~350 lines), grow <code>status_bubble.py</code> with status-send/clear helpers, optionally split <code>MessageTask</code> into discriminated types. <em>Payoff: addresses the top user-flagged pain directly.</em></li>
+<li><strong>Extract <code>handlers/toolbar_keyboard.py</code> + provider <code>scrape_current_mode</code> capability</strong> — three modules become three files with single concerns; mode scraping becomes provider-owned.</li>
+<li><strong>Introduce <code>shell_prompt_orchestrator</code></strong> — single decision point for the five setup triggers, predicate logic in one file.</li>
+<li><strong>Let <code>topic_state.register</code> accept bound methods; split <code>TerminalStatusStrategy</code></strong> — deletes ~90 lines of compat wrappers and improves cleanup visibility. Smaller and safer than the plan's Task 11 inversion.</li>
+<li><strong>Migrate 5–7 one-call-read handlers from <code>get_window_state</code> to <code>view_window</code></strong> — opportunistic, not a full migration.</li>
+</ol>
+
+<p>Do when touching the affected code:</p>
+<ol start="6">
+<li>Finish <code>screenshot_callbacks</code> extraction (status-bar actions out).</li>
+<li>Residual leaks — 3 small fixes.</li>
+<li>Stop adding new <code>_per_window: dict[...]</code> singletons in new modules.</li>
+</ol>
+
+<p>Don't do:</p>
+<ul>
+<li>Full handler-state aggregation into <code>WindowContext</code> — still a multi-week refactor with payoff dominated by items 1–4.</li>
+<li>Full provider extraction for <code>summarizer.py</code> — deferred correctly.</li>
+<li>Full <code>polling_coordinator</code> inversion to strategy <code>tick()</code> methods — the registry fix + class split captures most of the win for a fraction of the risk.</li>
+</ul>
+
+<h2>Summary</h2>
+
+<p>The Apr 12 refactor delivered on its quick wins. Half the evening review's issues are cleanly resolved. The three remaining pain points the user named — adding a provider, state-shape cascades, polling code — persist in modified form: adding a provider is now cheap enough given the "no new provider planned" constraint, state-shape cascades persist because <code>WindowView</code> adoption stalled, and polling pain is concentrated in <code>polling_strategies.py</code>'s compat-wrapper layer rather than in the loop itself. The three new pain points surfaced this review — message batching, toolbar dispatch, shell prompt-marker setup — were all introduced by the <code>/send</code> / toolbar / batching feature bundle in commit <code>42475db</code>. None require large structural rewrites. Every recommendation above is incremental, reversible, and addresses a coupling imbalance in the <a href="https://coupling.dev/posts/core-concepts/balance/">Balanced Coupling</a> sense rather than a matter of taste.</p>
+
+<div class="footer">
+<em>This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.</em>
+</div>
+
+</div>
+
+<script>
+  function getDefaultTheme() {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('modularity-review-theme', theme);
+    document.getElementById('theme-icon').textContent = theme === 'light' ? '☾' : '☀';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  const saved = localStorage.getItem('modularity-review-theme');
+  setTheme(saved || getDefaultTheme());
+</script>
+</body>
+</html>
