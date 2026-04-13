@@ -310,7 +310,7 @@ class TestShutdownNotificationLifecycle:
 
 class TestShellDetectionSafety:
     async def test_script_shell_not_interactive(self):
-        from ccgram.providers.shell import _is_interactive_shell
+        from ccgram.providers.shell_infra import _is_interactive_shell
 
         mock_tmux = MagicMock()
         mock_window = MagicMock()
@@ -328,7 +328,7 @@ class TestShellDetectionSafety:
             assert await _is_interactive_shell("@0") is False
 
     async def test_idle_shell_is_interactive(self):
-        from ccgram.providers.shell import _is_interactive_shell
+        from ccgram.providers.shell_infra import _is_interactive_shell
 
         mock_tmux = MagicMock()
         mock_window = MagicMock()
@@ -355,7 +355,7 @@ class TestShellDetectionSafety:
                 new_callable=AsyncMock,
             ) as mock_has_marker,
             patch(
-                "ccgram.providers.shell._is_interactive_shell",
+                "ccgram.providers.shell_infra._is_interactive_shell",
                 new_callable=AsyncMock,
             ),
         ):
@@ -370,7 +370,7 @@ class TestShellDetectionSafety:
         with (
             patch("ccgram.config.config") as mock_config,
             patch(
-                "ccgram.providers.shell._is_interactive_shell",
+                "ccgram.providers.shell_infra._is_interactive_shell",
                 new_callable=AsyncMock,
                 return_value=False,
             ),

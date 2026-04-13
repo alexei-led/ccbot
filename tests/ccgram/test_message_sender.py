@@ -11,8 +11,8 @@ from ccgram.handlers.message_sender import (
     edit_with_fallback,
     rate_limit_send,
 )
-from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
-from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END as EXP_END
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_START as EXP_START
 
 import pytest
 

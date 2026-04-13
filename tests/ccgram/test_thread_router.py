@@ -5,7 +5,11 @@ from ccgram.thread_router import ThreadRouter
 
 @pytest.fixture
 def router() -> ThreadRouter:
-    return ThreadRouter()
+    r = ThreadRouter()
+    # Tests use router in isolation (no SessionManager). Wire _schedule_save
+    # to a no-op so mutations don't trip the fail-loud default.
+    r._schedule_save = lambda: None
+    return r
 
 
 class TestBindThread:

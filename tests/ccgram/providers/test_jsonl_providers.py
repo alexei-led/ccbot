@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from ccgram.providers._jsonl import extract_content_blocks, parse_jsonl_line
-from ccgram.providers.base import EXPANDABLE_QUOTE_START
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_START
 from ccgram.providers.codex import (
     CodexProvider,
     _format_codex_tool_result,

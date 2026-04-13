@@ -1987,7 +1987,7 @@ class TestUpdateStatusMessageEdgeCases:
             patch("ccgram.tmux_manager.notify_vim_insert_seen") as mock_vim,
             patch("ccgram.tmux_manager._has_insert_indicator", return_value=True),
             patch("ccgram.handlers.polling_coordinator._send_typing_throttled"),
-            patch("ccgram.handlers.hook_events.get_subagent_names", return_value=[]),
+            patch("ccgram.claude_task_state.get_subagent_names", return_value=[]),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="\x1b[1mansi\x1b[0m")
@@ -2031,7 +2031,7 @@ class TestUpdateStatusMessageEdgeCases:
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
             patch("ccgram.handlers.polling_coordinator._send_typing_throttled"),
             patch(
-                "ccgram.handlers.hook_events.get_subagent_names",
+                "ccgram.claude_task_state.get_subagent_names",
                 return_value=["write-tests"],
             ),
         ):
@@ -2084,7 +2084,7 @@ class TestUpdateStatusMessageEdgeCases:
             patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
             patch("ccgram.handlers.polling_coordinator._send_typing_throttled"),
-            patch("ccgram.handlers.hook_events.get_subagent_names", return_value=[]),
+            patch("ccgram.claude_task_state.get_subagent_names", return_value=[]),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")
@@ -2129,7 +2129,7 @@ class TestUpdateStatusMessageEdgeCases:
             patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
             patch("ccgram.handlers.polling_coordinator._send_typing_throttled"),
-            patch("ccgram.handlers.hook_events.get_subagent_names", return_value=[]),
+            patch("ccgram.claude_task_state.get_subagent_names", return_value=[]),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="some output")

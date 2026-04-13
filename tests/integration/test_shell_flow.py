@@ -49,7 +49,7 @@ class TestRawCommandFlow:
         with (
             patch(f"{_MOD_CMD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD_CMD}.clear_probe_failures"),
-            patch(f"{_MOD_CMD}.session_manager"),
+            patch("ccgram.handlers.shell_context.session_manager"),
             patch(f"{_MOD_CMD}.thread_router") as mock_tr,
             patch(f"{_MOD_CMD}.tmux_manager") as mock_tm,
             patch(
@@ -221,7 +221,7 @@ class TestLlmCommandFlow:
             patch(f"{_MOD_CMD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD_CMD}.clear_probe_failures"),
             patch(f"{_MOD_CMD}.get_completer", return_value=None),
-            patch(f"{_MOD_CMD}.session_manager"),
+            patch("ccgram.handlers.shell_context.session_manager"),
             patch(f"{_MOD_CMD}.thread_router") as mock_tr,
             patch(
                 f"{_MOD_CMD}.send_to_window",

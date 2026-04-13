@@ -137,7 +137,7 @@ class TestExtractPreviewsHeadTail:
 
 class TestFormatExpandableQuote:
     def test_wraps_text_with_sentinel_markers(self) -> None:
-        from ccgram.providers.base import (
+        from ccgram.expandable_quote import (
             EXPANDABLE_QUOTE_END,
             EXPANDABLE_QUOTE_START,
             format_expandable_quote,

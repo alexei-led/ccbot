@@ -8,9 +8,9 @@ from ccgram.entity_formatting import (
     _truncate_quote_text,
     convert_to_entities,
 )
-from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
-from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
-from ccgram.providers.base import _EXPANDABLE_QUOTE_MAX_CHARS, format_expandable_quote
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END as EXP_END
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_START as EXP_START
+from ccgram.expandable_quote import _EXPANDABLE_QUOTE_MAX_CHARS, format_expandable_quote
 
 
 def _extract_utf16(text: str, offset: int, length: int) -> str:

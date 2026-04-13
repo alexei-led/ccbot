@@ -1,8 +1,8 @@
 """Tests for response_builder.build_response_parts."""
 
 from ccgram.handlers.response_builder import build_response_parts
-from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXP_END
-from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXP_START
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END as EXP_END
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_START as EXP_START
 
 
 class TestBuildResponseParts:

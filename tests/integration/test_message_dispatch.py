@@ -160,7 +160,7 @@ async def test_unknown_command_forwarded(app) -> None:
         patch("ccgram.bot.is_user_allowed", return_value=True),
         patch("ccgram.bot.thread_router.resolve_window_for_thread", return_value="@0"),
         patch(
-            "ccgram.bot.tmux_manager.find_window_by_id",
+            "ccgram.handlers.command_orchestration.tmux_manager.find_window_by_id",
             new_callable=AsyncMock,
             return_value=MagicMock(window_id="@0"),
         ),

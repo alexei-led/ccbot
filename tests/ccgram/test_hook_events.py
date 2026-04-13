@@ -7,14 +7,16 @@ from telegram import Bot
 from ccgram.claude_task_state import claude_task_state
 from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
 
-from ccgram.handlers.hook_events import (
-    HookEvent,
+from ccgram.claude_task_state import (
     _active_subagents,
-    _resolve_users_for_window_key,
     build_subagent_label,
     clear_subagents,
-    dispatch_hook_event,
     get_subagent_names,
+)
+from ccgram.handlers.hook_events import (
+    HookEvent,
+    _resolve_users_for_window_key,
+    dispatch_hook_event,
 )
 
 

@@ -240,6 +240,11 @@ class TestBuildToolbarKeyboard:
         assert any("Live" in label for label in row1_labels)
 
     def test_live_callback_data(self):
+        # After the toolbar refactor, all buttons use the single CB_TOOLBAR
+        # prefix; the suffix is "<window_id>:<action_name>". The live action
+        # dispatches internally to the screenshot handler with CB_LIVE_START.
+        from ccgram.handlers.callback_data import CB_TOOLBAR
+
         with patch(
             "ccgram.handlers.polling_strategies.is_rc_active", return_value=False
         ):
@@ -247,7 +252,7 @@ class TestBuildToolbarKeyboard:
         flat = [btn for row in kb.inline_keyboard for btn in row]
         live_btn = [btn for btn in flat if "Live" in btn.text][0]
         assert isinstance(live_btn.callback_data, str)
-        assert live_btn.callback_data.startswith(CB_LIVE_START)
+        assert live_btn.callback_data == f"{CB_TOOLBAR}@0:live"
 
 
 # ── Tick function ────────────────────────────────────────────────────────

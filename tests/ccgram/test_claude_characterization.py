@@ -15,7 +15,7 @@ from ccgram.terminal_parser import (
     extract_interactive_content,
     parse_status_line,
 )
-from ccgram.providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ccgram.providers.claude import ClaudeProvider
 from ccgram.transcript_parser import TranscriptParser
 

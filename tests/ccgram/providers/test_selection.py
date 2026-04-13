@@ -231,6 +231,7 @@ class TestHandleModeSelect:
         mock_registry.is_valid.return_value = True
         mock_provider = MagicMock()
         mock_provider.capabilities.supports_hook = False
+        mock_provider.capabilities.chat_first_command_path = False
         mock_registry.get.return_value = mock_provider
 
         mock_resolve_launch.return_value = (
@@ -287,6 +288,7 @@ class TestHandleModeSelect:
         mock_registry.is_valid.return_value = True
         mock_provider = MagicMock()
         mock_provider.capabilities.supports_hook = True
+        mock_provider.capabilities.chat_first_command_path = False
         mock_registry.get.return_value = mock_provider
 
         mock_resolve_launch.return_value = "claude --dangerously-skip-permissions"
@@ -344,6 +346,7 @@ class TestHandleModeSelect:
         mock_registry.is_valid.return_value = True
         mock_provider = MagicMock()
         mock_provider.capabilities.supports_hook = False
+        mock_provider.capabilities.chat_first_command_path = False
         mock_registry.get.return_value = mock_provider
 
         mock_resolve_launch.return_value = "claude"

@@ -547,6 +547,7 @@ class TestSendCommand:
             ws = MagicMock()
             ws.cwd = None  # overridden per test
             mock_sm.get_window_state.return_value = ws
+            mock_sm.view_window.return_value = ws
             self.ws = ws
             yield
 
@@ -577,6 +578,16 @@ class TestSendCommand:
 
     async def test_cwd_unavailable(self, tmp_path: Path) -> None:
         self.ws.cwd = str(tmp_path / "nonexistent")
+        update = _make_update()
+        ctx = _make_context()
+        await send_command(update, ctx)
+
+    async def test_view_window_returns_none_handled_gracefully(self) -> None:
+        # Window is bound (resolve_window_for_thread succeeds), but
+        # view_window returns None (window state was wiped after binding).
+        # The new None guard at send_command.py should reject cleanly
+        # instead of raising AttributeError.
+        self.mock_sm.view_window.return_value = None
         update = _make_update()
         ctx = _make_context()
         await send_command(update, ctx)

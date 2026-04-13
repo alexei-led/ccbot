@@ -1,7 +1,7 @@
 import pytest
 
-from ccgram.providers.base import EXPANDABLE_QUOTE_END as EXPQUOTE_END
-from ccgram.providers.base import EXPANDABLE_QUOTE_START as EXPQUOTE_START
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END as EXPQUOTE_END
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_START as EXPQUOTE_START
 from ccgram.transcript_parser import (
     ParsedMessage,
     TranscriptParser,
