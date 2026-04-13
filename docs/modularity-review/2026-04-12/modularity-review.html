@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --max-width: 820px;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eef1f5;
+    --text: #1a1a1a;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --accent: #2b6cb0;
+    --accent-light: #ebf4ff;
+    --severity-critical: #c53030;
+    --severity-critical-bg: #fff5f5;
+    --severity-significant: #c05621;
+    --severity-significant-bg: #fffaf0;
+    --severity-minor: #2b6cb0;
+    --severity-minor-bg: #ebf8ff;
+    --table-stripe: #f7fafc;
+    --link: #2b6cb0;
+    --link-hover: #1a4971;
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2e2e2e;
+    --text: #e2e2e2;
+    --text-secondary: #a0a0a0;
+    --text-muted: #717171;
+    --border: #333333;
+    --accent: #b0b0b0;
+    --accent-light: #2a2a2a;
+    --severity-critical: #fc8181;
+    --severity-critical-bg: #2d1b1b;
+    --severity-significant: #f6ad55;
+    --severity-significant-bg: #2d2415;
+    --severity-minor: #a0a0a0;
+    --severity-minor-bg: #282828;
+    --table-stripe: #222222;
+    --link: #e0c97f;
+    --link-hover: #f0dca0;
+    --shadow: rgba(0, 0, 0, 0.2);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 2rem 1.5rem;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  /* Typography */
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem 0;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.6rem 0;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link-hover);
+  }
+
+  /* Metadata */
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta strong {
+    color: var(--text-secondary);
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--table-stripe);
+  }
+
+  /* Severity badges */
+  .severity {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .severity-critical {
+    color: var(--severity-critical);
+    background: var(--severity-critical-bg);
+  }
+
+  .severity-significant {
+    color: var(--severity-significant);
+    background: var(--severity-significant-bg);
+  }
+
+  .severity-minor {
+    color: var(--severity-minor);
+    background: var(--severity-minor-bg);
+  }
+
+  /* Issue cards */
+  .issue {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .issue h2 {
+    margin-top: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .issue h3 {
+    font-size: 1rem;
+  }
+
+  .issue-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  /* Lists */
+  ul, ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  /* Code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  /* Horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .footer a {
+    color: var(--text-muted);
+    border-bottom-color: var(--border);
+  }
+
+  .footer a:hover {
+    color: var(--link);
+  }
+
+  /* Print */
+  @media print {
+    .theme-toggle { display: none; }
+    body { padding: 0; }
+    .issue { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <span id="theme-icon"></span>
+</button>
+
+<div class="container">
+  <h1>Modularity Review</h1>
+
+<div class="meta">
+<strong>Scope</strong>: Entire ccgram codebase &mdash; core modules, handlers, providers, LLM, whisper, messaging subsystem<br>
+<strong>Date</strong>: 2026-04-12
+</div>
+
+<h2>Executive Summary</h2>
+
+<p>ccgram is a Telegram bot that bridges agent CLIs (Claude Code, Codex, Gemini, shell) to Telegram Forum topics via tmux, with each topic bound to one tmux window running one agent session. The overall modularity is <strong>healthy with localized concerns</strong>: the provider abstraction, LLM/whisper layers, security pipeline, and cleanup event bus are well-designed boundaries. However, the review identified one <strong>unbalanced</strong> integration &mdash; per-window handler state scattered across 30+ module-level singleton dicts &mdash; and four cohesion issues that increase cognitive load as new features are added. For a solo developer working in a <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatile core domain</a>, the primary risk is not tight coupling (which is <a href="https://coupling.dev/posts/core-concepts/balance/">balanced</a> at low <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a>) but <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a> in the handler layer, where related state and behavior are dispersed across many files with no unifying abstraction.</p>
+
+<h2>Coupling Overview</h2>
+
+<table>
+<thead>
+<tr>
+<th>Integration</th>
+<th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th>
+<th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th>
+<th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+<th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Handlers &rarr; SessionManager (39 methods)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+<td>Low (same process)</td>
+<td>High (core domain)</td>
+<td>Yes &mdash; but god-object cohesion concern</td>
+</tr>
+<tr>
+<td>screenshot_callbacks (4 concerns, 21 prefixes, 832 lines)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> + <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a> (private imports)</td>
+<td>Low</td>
+<td>High</td>
+<td>Yes &mdash; but catch-all cohesion concern</td>
+</tr>
+<tr>
+<td>polling_coordinator &rarr; 12 handler modules</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+<td>Low</td>
+<td>Moderate</td>
+<td>Yes (deliberate design)</td>
+</tr>
+<tr>
+<td>providers &harr; session (circular lazy imports)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+<td>Low</td>
+<td>High</td>
+<td>Yes &mdash; but fragile architecture</td>
+</tr>
+<tr>
+<td><strong>Handler state: 30+ module-level singleton dicts</strong></td>
+<td><strong>Low (independent dicts)</strong></td>
+<td><strong>Low</strong></td>
+<td><strong>High</strong></td>
+<td><strong>No &mdash; <a href="https://coupling.dev/posts/core-concepts/balance/">low cohesion</a></strong></td>
+</tr>
+<tr>
+<td>bot.py: composition root with business logic</td>
+<td>Mixed</td>
+<td>Low</td>
+<td>Moderate</td>
+<td>Yes &mdash; but misplaced logic</td>
+</tr>
+<tr>
+<td>message_queue &rarr; UI builder (build_status_keyboard)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+<td>Low</td>
+<td>Moderate</td>
+<td>Yes &mdash; but mixed concerns</td>
+</tr>
+<tr>
+<td>sync_command &harr; topic_orchestration (bidirectional)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+<td>Low</td>
+<td>Low</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>/send &rarr; screenshot_callbacks (private function imports)</td>
+<td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a></td>
+<td>Low</td>
+<td>High</td>
+<td>Yes &mdash; but private API dependency</td>
+</tr>
+</tbody>
+</table>
+
+<div class="issue">
+<h2>Issue: Scattered Per-Window Handler State</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: 15+ handler modules, each owning independent module-level singleton dicts keyed by window/topic/user<br>
+<strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+
+<p>Each handler that needs per-window state creates its own module-level dictionary: <code>interactive_ui</code> owns <code>_interactive_msgs</code>, <code>_interactive_mode</code>, <code>_send_cooldowns</code>; <code>live_view</code> owns <code>_active_views</code>; <code>message_queue</code> owns per-user queues and status tracking; <code>hook_events</code> owns <code>_active_subagents</code>; <code>shell_capture</code> owns <code>_shell_monitor_state</code>; <code>shell_commands</code> owns <code>_shell_pending</code>; <code>polling_strategies</code> owns three strategy singletons; <code>topic_emoji</code> owns four dicts; <code>msg_delivery</code> owns <code>delivery_strategy</code>; <code>msg_telegram</code> owns <code>_loop_alert_pairs</code>; <code>command_history</code> owns <code>_history</code>; and <code>message_sender</code> owns rate-limit tracking.</p>
+
+<p>The knowledge of "what state exists for a given window" is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">implicitly</a> distributed across all these modules. There is no single place to answer "what is the complete state of window @5?" &mdash; you must grep for <code>topic_state.register</code> across the entire handler layer and manually aggregate.</p>
+
+<h3>Complexity Impact</h3>
+
+<p>When a new feature is added (like <code>/send</code> was), the developer must decide where to put its per-window state &mdash; and the answer is always "a new module-level dict in the new handler module." This is <a href="https://coupling.dev/posts/core-concepts/complexity/">accidental complexity</a>: the pattern works, but it fragments the system's state model. A developer modifying window lifecycle (creation, teardown, re-binding) must understand 15+ cleanup registrations across 15+ files to ensure nothing leaks. The <code>topic_state_registry</code> event bus mitigates this somewhat &mdash; cleanup is self-registered &mdash; but discovery of what state exists remains a manual search.</p>
+
+<p>Some singletons are not registered for cleanup at all (<code>message_sender</code>'s rate-limit dicts, <code>cc_commands</code>'s <code>_name_map</code> cache), creating indefinite accumulation in long-running bot instances.</p>
+
+<h3>Cascading Changes</h3>
+
+<p>Adding a new per-window concern (e.g., per-window upload history for <code>/send</code>) requires: (1) a new module-level dict, (2) a <code>@topic_state.register</code> cleanup function, (3) manual verification that the new state is cleared on topic close, window re-bind, and bot restart. Omitting step 2 or 3 produces silent state leaks that only manifest after hours of uptime. Changing the window ID scheme (e.g., supporting multi-server tmux) would require updating every singleton's key format independently.</p>
+
+<h3>Recommended Improvement</h3>
+
+<p>Introduce a <code>WindowContext</code> dataclass that aggregates per-window ephemeral state into a single, typed structure. Instead of each handler owning <code>_my_state: dict[str, MyData]</code>, they access <code>window_contexts[window_id].my_field</code>. The <code>WindowContext</code> is created when a window is bound, passed to handlers that need it, and destroyed atomically on teardown &mdash; eliminating the scattered cleanup registrations for per-window state.</p>
+
+<p>This is a <a href="https://coupling.dev/posts/core-concepts/balance/">cohesion</a> improvement: it co-locates related data (all per-window state) without increasing <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">integration strength</a> &mdash; handlers still only access the fields they need. The tradeoff is a larger shared type that must be extended for each new feature, but this is preferable to the current implicit scatter because the type definition documents all per-window state in one place.</p>
+
+<p>This change is substantial. A practical incremental step: start with the highest-churn state (interactive UI, live view, shell monitor) and leave stable singletons (polling strategies, message sender rate limits) where they are. Migrate opportunistically as handlers are modified.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: screenshot_callbacks.py &mdash; Four Concerns in One Module</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: screenshot_callbacks.py &harr; send_command, interactive_ui, live_view, polling_strategies, message_queue, history, command_history, shell_capture (8 handler dependencies)<br>
+<strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+
+<p><code>screenshot_callbacks.py</code> (832 lines, 21 callback prefixes) handles four distinct concerns: (1) screenshot capture and refresh, (2) toolbar buttons for all four providers (13 actions), (3) status bar button actions, and (4) pane-level operations. It imports <code>send_command._cache_browser_state</code> and <code>send_command.build_file_browser</code> &mdash; accessing a private function across handler boundaries &mdash; to implement the toolbar "Send" button. It also imports from <code>polling_strategies</code>, <code>interactive_ui</code>, <code>command_history</code>, <code>shell_capture</code>, <code>message_queue</code>, and <code>history</code>.</p>
+
+<p>This module has <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive knowledge</a> of the <code>/send</code> feature's internal state management (<code>_cache_browser_state</code> caches 5 <code>user_data</code> keys), and <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional knowledge</a> of how every provider's toolbar buttons map to tmux key sequences.</p>
+
+<h3>Complexity Impact</h3>
+
+<p>Every new feature that needs a toolbar button must be implemented here. The <code>/send</code> feature required adding <code>_handle_toolbar_send</code> (which imports from <code>send_command</code>) alongside completely unrelated handlers like <code>_handle_toolbar_ctrlc</code> and <code>_handle_pane_screenshot</code>. A developer working on toolbar behavior must load the entire 832-line file into working memory even when their change affects only one provider's buttons. This exceeds the <a href="https://coupling.dev/posts/core-concepts/complexity/">cognitive capacity</a> threshold &mdash; the file contains 18 handler functions with no internal sectioning.</p>
+
+<h3>Cascading Changes</h3>
+
+<p>Adding a new provider (e.g., Aider) with custom toolbar buttons requires modifying <code>build_toolbar_keyboard()</code>, adding new <code>CB_TOOLBAR_*</code> constants in <code>callback_data.py</code>, adding new handler functions in <code>screenshot_callbacks.py</code>, and registering them. All of this happens in a single file that also handles unrelated screenshot and status-bar concerns. A bug in the new toolbar handler could affect screenshot refresh behavior because they share the same module scope and the same <code>@register</code> dispatch.</p>
+
+<h3>Recommended Improvement</h3>
+
+<p>Extract toolbar handling into a dedicated <code>toolbar_callbacks.py</code> module. Move <code>build_toolbar_keyboard()</code>, all <code>_handle_toolbar_*</code> functions, and <code>_send_toolbar_key()</code> into it. The toolbar module would own the provider&rarr;button mapping and the tmux key-send logic, while <code>screenshot_callbacks.py</code> shrinks to its natural scope: screenshot capture, refresh, and live view.</p>
+
+<p>The <code>/send</code> toolbar integration should be inverted: instead of <code>screenshot_callbacks</code> importing <code>send_command._cache_browser_state</code>, the <code>send_command</code> module should expose a public <code>open_browser(update, context, window_id, cwd)</code> function that <code>toolbar_callbacks</code> calls. This converts <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive coupling</a> (private import) to <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> (public interface).</p>
+
+<p>The tradeoff is one more handler file and one more <code>@register</code> import in <code>callback_registry.load_handlers()</code>. This is negligible &mdash; the system already has 35+ handler modules.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: SessionManager God Object</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: 39 public methods consumed by virtually every handler and core module<br>
+<strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+
+<p><code>SessionManager</code> (1076 lines, 39 public methods) is a facade that mixes four levels of concern: (1) state CRUD &mdash; <code>get_window_state</code>, <code>set_window_provider</code>, <code>get_display_name</code>; (2) mode settings &mdash; <code>get_approval_mode</code>, <code>cycle_notification_mode</code>, <code>set_batch_mode</code>; (3) persistence and sync &mdash; <code>resolve_stale_ids</code>, <code>load_session_map</code>, <code>flush_state</code>, <code>prune_*</code>; and (4) session resolution &mdash; <code>resolve_session_for_window</code>, <code>get_recent_messages</code>. Callers import <code>session_manager</code> for any of these purposes and receive access to all of them.</p>
+
+<p>Additionally, <code>session_resolver.py</code> accesses <code>window_store._schedule_save()</code> directly (a private attribute), and <code>session_map.py</code> mutates <code>thread_router.window_display_names</code> (bypassing the public <code>set_display_name()</code> method). These are boundary violations where modules reach past the facade into its wired sub-objects.</p>
+
+<h3>Complexity Impact</h3>
+
+<p>The wide surface area means <code>session_manager</code> is imported by nearly every module in the codebase. Any change to its interface (renaming a method, changing a return type) has broad ripple effects. However, for a solo developer at low <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a>, these ripples are manageable with IDE refactoring tools. The cognitive cost is moderate: a developer must remember which of the 39 methods to call, but the method names are descriptive and grouped by prefix (<code>get_*</code>, <code>set_*</code>, <code>prune_*</code>).</p>
+
+<h3>Cascading Changes</h3>
+
+<p>Adding a new per-window setting requires: adding the setting to <code>WindowState</code>, adding getter/setter methods to <code>SessionManager</code>, updating <code>state_persistence</code> serialization, and wiring any UI toggle. This is a 4-file change for what is conceptually a single concern. However, the current rate of new settings is low, making this tolerable.</p>
+
+<h3>Recommended Improvement</h3>
+
+<p>The immediate fixes are the two boundary violations:</p>
+<ol>
+<li>Replace <code>session_resolver.py</code>'s direct <code>window_store._schedule_save()</code> calls with a public <code>window_store.update_cwd(window_id, cwd)</code> method.</li>
+<li>Replace <code>session_map.py</code>'s direct <code>thread_router.window_display_names[wid] = name</code> mutation with <code>thread_router.set_display_name(wid, name)</code>.</li>
+</ol>
+
+<p>The broader decomposition (splitting SessionManager into separate state-access and lifecycle-management interfaces) is not recommended at this time. The <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatility</a> of the facade's surface is moderate (new methods are additive, not breaking), and the <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a> is low. The cost of refactoring a 39-method class into smaller interfaces would not pay for itself until either team size increases or the method count exceeds ~50.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: Circular Dependency &mdash; Providers &harr; Session</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>providers/__init__.py</code> &rarr; <code>session.session_manager</code> &rarr; <code>session_resolver</code> &rarr; <code>providers/__init__.py</code><br>
+<strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+
+<p><code>get_provider_for_window(window_id)</code> in <code>providers/__init__.py</code> needs to know the window's <code>provider_name</code>, which lives in <code>WindowState</code> managed by <code>session_manager</code>. Meanwhile, <code>session_resolver</code> needs to call <code>get_provider_for_window()</code> to get the correct transcript parser. This creates a cycle where the provider layer has <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional knowledge</a> of session management and vice versa.</p>
+
+<p>The cycle is broken by lazy imports &mdash; <code>from ccgram.session import session_manager</code> appears inside the function body of <code>get_provider_for_window()</code>, not at module level. This is stable at runtime but invisible to static analysis tools and fragile to refactoring.</p>
+
+<h3>Complexity Impact</h3>
+
+<p>The lazy import pattern means the dependency is invisible at the module level. A developer reading <code>providers/__init__.py</code> sees no import from <code>session</code> and may not realize the coupling exists. Moving the lazy import to module level (a natural refactoring) would crash the application at startup with a circular import error. This is a <a href="https://coupling.dev/posts/core-concepts/complexity/">complexity</a> trap &mdash; the system works, but the reason it works is non-obvious.</p>
+
+<h3>Cascading Changes</h3>
+
+<p>Adding a new provider does not trigger this cycle (providers register via <code>registry.py</code> which has no session dependency). The cycle only matters when changing how provider resolution works &mdash; e.g., adding multi-session-per-window support or changing the window state schema. These changes are infrequent.</p>
+
+<h3>Recommended Improvement</h3>
+
+<p>Pass <code>provider_name: str</code> as a parameter to <code>get_provider_for_window()</code> instead of having it look up the name from <code>session_manager</code>. Callers already have access to <code>window_id</code> and can trivially obtain <code>provider_name</code> from <code>window_store.get_window_state(window_id).provider_name</code>. This breaks the cycle by making the provider layer a pure lookup (name &rarr; instance) with no knowledge of session management.</p>
+
+<p>The tradeoff: callers must pass one additional argument. This is a minor inconvenience that eliminates a fragile architectural cycle. The ~20 call sites can be updated mechanically.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: Business Logic in Composition Root (bot.py)</h2>
+<div class="issue-meta">
+<strong>Integration</strong>: <code>bot.py</code> (1089 lines) &harr; 24 handler modules + core modules<br>
+<strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+
+<p><code>bot.py</code> serves as the composition root (<code>create_bot()</code> wires all handlers), but it also contains substantive business logic: <code>handle_new_message</code> (122 lines of notification filtering, thinking-block gating, interactive-tool detection, offset tracking, and queue management), <code>screenshot_command</code> (tmux capture + image rendering + Telegram upload), <code>toolbar_command</code>, <code>recall_command</code>, <code>panes_command</code>, and topic lifecycle handlers (<code>topic_closed_handler</code>, <code>topic_edited_handler</code>). These functions have <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional knowledge</a> of message processing, terminal rendering, and topic lifecycle &mdash; concerns that belong in the handler layer.</p>
+
+<h3>Complexity Impact</h3>
+
+<p>A developer looking for "where is the screenshot command implemented?" must check both <code>screenshot_callbacks.py</code> and <code>bot.py</code>. The composition root's dual role as wiring hub and business logic container means any change to message handling requires reading a 1089-line file that is mostly unrelated handler registration. The notification-mode filtering in <code>handle_new_message</code> is particularly subtle &mdash; it gates which inbound messages reach the user based on per-window settings &mdash; and its placement in <code>bot.py</code> makes it easy to overlook.</p>
+
+<h3>Cascading Changes</h3>
+
+<p>Adding a new command handler requires modifying <code>bot.py</code> to register it (expected for a composition root). But if the new command is similar to existing ones defined inline in <code>bot.py</code> (screenshot, toolbar, panes), the developer faces a style choice: define it inline here, or in a dedicated handler module. The inconsistency creates drift toward an ever-larger <code>bot.py</code>.</p>
+
+<h3>Recommended Improvement</h3>
+
+<p>Extract the business logic functions into their existing handler modules: move <code>screenshot_command</code> into <code>screenshot_callbacks.py</code>, <code>handle_new_message</code> into a new <code>message_routing.py</code> or into <code>text_handler.py</code> (which already handles text routing), and topic lifecycle handlers into <code>topic_lifecycle.py</code>. Leave <code>bot.py</code> as a pure composition root: <code>create_bot()</code> builds the application, registers handlers, and returns.</p>
+
+<p>The tradeoff is splitting what is currently a single "entry point" file into composition-only wiring plus distributed logic. For a solo developer this is low priority &mdash; the current structure works &mdash; but it prevents <code>bot.py</code> from growing further as new commands are added.</p>
+</div>
+
+<hr>
+
+<div class="footer">
+This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.
+</div>
+</div>
+
+<script>
+  function getDefaultTheme() {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('modularity-review-theme', theme);
+    document.getElementById('theme-icon').textContent = theme === 'light' ? '☾' : '☀';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  const saved = localStorage.getItem('modularity-review-theme');
+  setTheme(saved || getDefaultTheme());
+</script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+# ccgram toolbar configuration — example
+#
+# Save this file as ~/.ccgram/toolbar.toml (auto-detected) or set
+# CCGRAM_TOOLBAR_CONFIG=/path/to/toolbar.toml to override the path.
+#
+# Two top-level sections:
+#   [actions.NAME]   — define a new button or override a built-in
+#   [providers.NAME] — pick a per-provider grid + rendering style
+#
+# Built-in actions (always available, no need to redefine):
+#
+#   screen ctrlc live send close       (builtin handlers)
+#   mode think yolo                    (toggle keys with state readback)
+#   esc enter tab eof susp             (plain key sends)
+#
+# All built-in actions are listed in src/ccgram/toolbar_config.py:BUILTIN_ACTIONS.
+# Three rendering styles per provider: "emoji" | "text" | "emoji_text" (default).
+
+
+# ──────────────────────────────────────────────────────────────────────
+# User-defined actions
+# ──────────────────────────────────────────────────────────────────────
+
+# A "text" action types literal text + Enter into the agent CLI.
+# Useful for slash commands the agent itself interprets (e.g. Claude's /clear).
+[actions.clear]
+emoji = "🧹"
+text  = "Clear"
+type  = "text"
+payload = "/clear"
+
+[actions.compact]
+emoji = "📦"
+text  = "Pack"
+type  = "text"
+payload = "/compact"
+
+# A "key" action sends a tmux key sequence (no Enter).
+# Set literal=true for raw byte sequences like Shift-Tab.
+# Set read_state=true to capture the pane after the key and surface the
+# resulting mode-line in the answer toast (useful for toggle keys).
+[actions.deepthink]
+emoji = "🧠"
+text  = "Deep"
+type  = "key"
+payload = "Tab"
+read_state = true
+
+# Override a built-in action by reusing its name. Here we replace
+# the default "mode" action with a custom key sequence.
+# Note: literal escape sequences (\x1b[Z = Shift-Tab) need TOML LITERAL
+# strings — single-quoted, NOT double-quoted.
+[actions.mode]
+emoji = "🆕"
+text  = "Mode"
+type  = "key"
+payload = '\x1b[Z'
+literal = true
+read_state = true
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Per-provider layouts
+# ──────────────────────────────────────────────────────────────────────
+#
+# Each provider has a grid of action names. The grid can be any shape
+# (rows × cols) — Telegram's only hard limit is 8 cells per row.
+# Providers absent from this file keep their built-in defaults.
+
+[providers.claude]
+style = "emoji_text"
+buttons = [
+  ["screen",   "ctrlc",  "live"     ],
+  ["mode",     "think",  "deepthink"],
+  ["clear",    "compact","esc"      ],
+  ["send",     "enter",  "close"    ],
+]
+
+[providers.codex]
+style = "emoji_text"
+buttons = [
+  ["screen", "ctrlc", "live"],
+  ["esc",    "enter", "tab" ],
+  ["send",   "clear", "close"],
+]
+
+# Use "text" style to drop emojis when labels would otherwise truncate.
+[providers.shell]
+style = "text"
+buttons = [
+  ["screen", "ctrlc", "live" ],
+  ["enter",  "eof",   "susp" ],
+  ["send",   "clear", "close"],
+]

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Modularity Review — Evening Update (2026-04-12)</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; color: #24292e; }
+h1 { border-bottom: 2px solid #0366d6; padding-bottom: 0.4rem; }
+h2 { border-bottom: 1px solid #e1e4e8; padding-bottom: 0.3rem; margin-top: 2rem; }
+h3 { margin-top: 1.4rem; color: #24292e; }
+code, pre { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 0.9em; }
+pre { background: #f6f8fa; padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; }
+code { background: #f6f8fa; padding: 0.1em 0.3em; border-radius: 3px; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+th, td { border: 1px solid #d0d7de; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+th { background: #f6f8fa; }
+.severity-sig { color: #b08800; font-weight: 600; }
+.severity-min { color: #57606a; font-weight: 600; }
+blockquote { border-left: 4px solid #0366d6; margin: 1rem 0; padding: 0.25rem 1rem; background: #f6f8fa; color: #24292e; }
+a { color: #0366d6; text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr { border: none; border-top: 1px solid #e1e4e8; margin: 2rem 0; }
+.meta { color: #57606a; font-size: 0.95em; }
+</style>
+</head>
+<body>
+
+<h1>Modularity Review — Evening Update</h1>
+
+<p class="meta">
+<strong>Scope</strong>: Entire ccgram codebase (incremental review)<br>
+<strong>Date</strong>: 2026-04-12 (20:15 GMT+3)<br>
+<strong>Context</strong>: Follow-up to the morning review (<code>modularity-review.md</code>) after a series of refactors committed today.
+</p>
+
+<h2>Context and Status of Prior Review</h2>
+
+<p>Several issues flagged in the morning review have been partially or fully resolved today. This update tracks the delta and surfaces what remains.</p>
+
+<table>
+<thead><tr><th>Prior Issue</th><th>Status</th><th>What changed</th></tr></thead>
+<tbody>
+<tr><td><code>screenshot_callbacks</code> — four concerns in one</td><td>Partially resolved</td><td>Toolbar handlers extracted to <code>toolbar_callbacks.py</code>. Screenshot/status/live still live together.</td></tr>
+<tr><td><code>/send</code> intrusive import from <code>screenshot_cb</code></td><td>Resolved</td><td><code>send_command.open_file_browser()</code> is now a public API (<code>c9a87a3</code>).</td></tr>
+<tr><td>SessionManager boundary violations</td><td>Resolved</td><td><code>session_resolver.py</code> uses <code>window_store.update_cwd()</code>; <code>session_map.py</code> uses <code>thread_router.set_display_name</code>.</td></tr>
+<tr><td>Business logic in <code>bot.py</code></td><td>Partially resolved</td><td><code>handle_new_message</code> extracted to <code>message_routing.py</code>. Topic lifecycle moved to <code>topic_lifecycle.py</code>.</td></tr>
+<tr><td>Scattered per-window singleton dicts</td><td>Still open</td><td>No change — <code>WindowContext</code> aggregation stands as long-term direction.</td></tr>
+<tr><td>SessionManager god-object</td><td>Still open</td><td>See Issue 5 — re-scoped to write-surface problem.</td></tr>
+<tr><td>Providers ↔ session circular import</td><td>Still open</td><td>Lazy import still in <code>providers/__init__.py</code>.</td></tr>
+</tbody>
+</table>
+
+<p>This update focuses on the issues the user explicitly flagged as painful — <strong>adding a provider</strong>, <strong>changing state shape</strong>, and <strong>polling/status code</strong>.</p>
+
+<h2>Coupling Overview (delta)</h2>
+
+<table>
+<thead><tr><th>Integration</th><th>Strength</th><th>Distance</th><th>Volatility</th><th>Balanced?</th></tr></thead>
+<tbody>
+<tr><td>Handlers → <code>session_manager</code> (25 handlers, 62 calls)</td><td>Functional + Model</td><td>Low</td><td>High</td><td>Borderline — read-heavy, no projection type</td></tr>
+<tr><td><code>polling_coordinator.status_poll_loop</code> → 9 handler modules</td><td>Functional + temporal</td><td>Low</td><td>High</td><td>Balanced by rule, low cohesion inside module</td></tr>
+<tr><td>Provider abstraction leaks</td><td>Model + Intrusive</td><td>Low</td><td>High</td><td><strong>No</strong> — bypassed in several paths</td></tr>
+<tr><td><code>hook_events</code> ↔ <code>message_queue</code></td><td>Functional</td><td>Low</td><td>Moderate</td><td>Signals misplaced code</td></tr>
+<tr><td><code>shell_commands</code> ↔ <code>shell_capture</code></td><td>Functional</td><td>Low</td><td>Moderate</td><td>Signals misplaced code</td></tr>
+<tr><td><code>message_queue.py</code> (1184 lines, 6 concerns)</td><td>Internal (mixed)</td><td>—</td><td>Moderate</td><td>Cohesion problem</td></tr>
+<tr><td>Deferred <code>_schedule_save</code> wiring</td><td>Implicit globals</td><td>Low</td><td>Low</td><td>Testability hazard</td></tr>
+</tbody>
+</table>
+
+<h2>Issue 1: Provider Abstraction Leaks <span class="severity-sig">— Significant</span></h2>
+
+<p><strong>User pain</strong>: "Adding a provider is painful."</p>
+
+<h3>Knowledge leakage</h3>
+<ol>
+<li><strong><code>providers/base.py</code> contains Telegram-specific constants.</strong> <code>EXPANDABLE_QUOTE_START/END</code> and <code>format_expandable_quote()</code> are Telegram blockquote syntax in a pure protocol file.</li>
+<li><strong><code>providers/shell.py</code> exports module-level infrastructure.</strong> <code>match_prompt</code>, <code>setup_shell_prompt</code>, <code>detect_pane_shell</code>, <code>KNOWN_SHELLS</code>, <code>PromptMatch</code> are consumed directly by handlers, bypassing the provider abstraction.</li>
+<li><strong><code>llm/summarizer.py</code> hardcodes Claude JSONL format.</strong> Parses message blocks directly instead of going through <code>AgentProvider.parse_transcript_entries()</code>.</li>
+<li><strong><code>providers/claude.py</code> imports <code>ccgram.hook.UUID_RE</code>.</strong> Should be in <code>base.py</code> next to <code>RESUME_ID_RE</code>.</li>
+<li><strong>Handlers check provider names as strings</strong> in <code>transcript_discovery</code>, <code>recovery_callbacks</code>, <code>window_callbacks</code>. Capability flags were meant to eliminate this.</li>
+</ol>
+
+<h3>Recommended improvement</h3>
+<p>Practical, in order of payoff-to-cost ratio:</p>
+<ol>
+<li><strong>Move <code>EXPANDABLE_QUOTE_*</code> out of <code>providers/base.py</code></strong> into a telegram formatting module. Thirty-minute change.</li>
+<li><strong>Move <code>UUID_RE</code> into <code>providers/base.py</code></strong>. Fifteen-minute change.</li>
+<li><strong>Grep for <code>provider_name ==</code> string checks</strong>; add capability flags as needed.</li>
+<li><strong>Extract <code>providers/shell_infra.py</code></strong> — slim <code>shell.py</code> to just <code>ShellProvider</code>, move infrastructure elsewhere.</li>
+<li><strong>Route <code>summarizer.py</code> through the provider</strong> — add <code>AgentProvider.summarize_recent()</code>.</li>
+</ol>
+
+<p>Don't attempt all five at once. The first two are cheap wins; others can happen opportunistically.</p>
+
+<h2>Issue 2: <code>polling_coordinator</code> is a God Loop <span class="severity-sig">— Significant</span></h2>
+
+<p><strong>User pain</strong>: "Polling/status code is hard to follow."</p>
+
+<h3>Knowledge leakage</h3>
+<p><code>status_poll_loop</code> (598 lines) orchestrates ten concerns in sequence: terminal status, pane scanning, shell output capture, RC debounce, unbound TTL, dead detection, autoclose, broker delivery, live view, transcript discovery, topic emoji. Imports nine handler modules. Ordering matters (e.g., transcript discovery must precede status scanning).</p>
+
+<p>By the Balance Rule, "high strength + low distance" is nominally balanced. But internal cohesion is low — ten unrelated concerns share one function scope. The pain is internal low cohesion, not cross-module coupling.</p>
+
+<h3>Recommended improvement</h3>
+<p>Invert control without introducing a framework:</p>
+<ol>
+<li>Give each strategy a <code>tick(tick_ctx)</code> async method.</li>
+<li>Replace the inlined per-binding loop with a dispatcher that calls <code>strategy.tick(ctx)</code> for each registered strategy.</li>
+<li>Move <code>run_periodic_tasks</code> / <code>run_lifecycle_tasks</code> contents into strategy <code>tick()</code> methods.</li>
+</ol>
+<p>Same 1-second cadence. No DI. Coordinator shrinks to ~100 lines. Adding a new polling concern becomes "add a strategy, register it" instead of "edit the god loop."</p>
+
+<h2>Issue 3: <code>message_queue.py</code> mixes six concerns (1184 lines) <span class="severity-sig">— Significant</span></h2>
+
+<h3>Knowledge leakage</h3>
+<p>This file owns per-user FIFO queues, the worker task, merging / batching, the pinned status-bubble rendering, tool_use↔tool_result pairing, and the status inline keyboard builder.</p>
+
+<p>The circular import <code>hook_events ↔ message_queue</code> exists because <code>message_queue</code> needs <code>build_subagent_label</code> / <code>get_subagent_names</code> from <code>hook_events</code>, and <code>hook_events</code> needs <code>enqueue_status_update</code> from <code>message_queue</code>. Subagent labels are metadata about <code>claude_task_state</code>, not hook events.</p>
+
+<h3>Recommended improvement</h3>
+<ol>
+<li><strong>Extract <code>status_bubble.py</code></strong> — <code>build_status_keyboard</code>, status-bubble edit/send, text rendering.</li>
+<li><strong>Move <code>build_subagent_label</code> / <code>get_subagent_names</code> into <code>claude_task_state.py</code></strong>. Breaks the circular import.</li>
+<li><strong>Leave queue primitives in <code>message_queue.py</code></strong>. Should be ~400–500 lines after extraction.</li>
+</ol>
+
+<h2>Issue 4: Circular Dependencies Signal Misplaced Code <span class="severity-min">— Minor (as signal: Moderate)</span></h2>
+
+<ul>
+<li><code>hook_events ↔ message_queue</code> — addressed by Issue 3.</li>
+<li><code>shell_commands ↔ shell_capture</code> — these two modules are effectively one subsystem split for file-size reasons.</li>
+</ul>
+
+<h3>Recommended improvement</h3>
+<p>Extract <code>shell_context.py</code> with <code>gather_llm_context</code>, <code>redact_for_llm</code>, <code>mark_telegram_command</code>, and pending-command tracking. Both <code>shell_commands</code> (approval) and <code>shell_capture</code> (relay) depend on <code>shell_context</code> but not on each other.</p>
+
+<h2>Issue 5: SessionManager Write Surface <span class="severity-sig">— Significant (re-scoped)</span></h2>
+
+<p><strong>User pain</strong>: "State shape changes cascade to 25+ handlers."</p>
+
+<h3>Knowledge leakage</h3>
+<p>25 handlers, 62 direct calls. The widest consumers (<code>sync_command</code>: 10, <code>transcript_discovery</code>: 7, <code>recovery_callbacks</code>: 6) are legitimate window lifecycle managers. But seven handlers have exactly one call that returns a <code>WindowState</code> for a single-field read:</p>
+
+<ul>
+<li><code>file_handler</code>, <code>shell_commands</code>, <code>text_handler</code>, <code>send_command</code> — read <code>cwd</code></li>
+<li><code>history</code> — reads <code>transcript_path</code></li>
+<li><code>screenshot_callbacks</code> — reads <code>notification_mode</code></li>
+<li><code>topic_emoji</code> — reads <code>approval_mode</code></li>
+</ul>
+
+<p>These handlers depend on the whole facade shape for a single scalar.</p>
+
+<h3>Recommended improvement</h3>
+<p>Don't split <code>SessionManager</code>. Introduce a read-only projection:</p>
+
+<pre><code>@dataclass(frozen=True)
+class WindowView:
+    window_id: str
+    cwd: str
+    provider_name: str
+    approval_mode: str
+    notification_mode: str
+    transcript_path: Path | None
+</code></pre>
+
+<p>Add <code>session_manager.view_window(wid) -&gt; WindowView | None</code>. Handlers that only read migrate to this. Gives an explicit projection contract, a testability win (tests build <code>WindowView</code> literals), and no behavior change. Migrate one handler at a time.</p>
+
+<h2>Issue 6: Duplicated <code>session_map</code> Logic <span class="severity-min">— Minor</span></h2>
+
+<p><code>session.py</code> still contains full copies of <code>load_session_map</code>, <code>register_hookless_session</code>, <code>write_hookless_session_map</code>, <code>prune_session_map</code> that also exist in <code>session_map.py</code>. Incomplete extraction.</p>
+
+<h3>Recommended improvement</h3>
+<p>Delete the copies in <code>session.py</code>. <code>SessionManager</code> methods become thin delegators to <code>session_map_sync</code>. Verify with tests, then delete.</p>
+
+<h2>Issue 7: Deferred <code>_schedule_save</code> Wiring Is a Silent-Failure Trap <span class="severity-min">— Minor</span></h2>
+
+<p>Four singletons initialize with <code>_schedule_save = lambda: None</code>. <code>SessionManager.__post_init__()</code> replaces them. Tests that mutate state without first instantiating <code>SessionManager</code> silently lose the save path.</p>
+
+<h3>Recommended improvement</h3>
+<ol>
+<li>Replace the no-op lambda with <code>None</code> and raise <code>RuntimeError("SessionManager not initialized")</code> on call.</li>
+<li>Centralize the wiring in a single visible place — a <code>wire_singletons(sm)</code> helper called from <code>__post_init__</code>.</li>
+</ol>
+
+<h2>Priority Ranking (Practical)</h2>
+
+<h3>Do first — high payoff, low cost</h3>
+<ol>
+<li>Move <code>EXPANDABLE_QUOTE_*</code> and <code>UUID_RE</code> out of <code>providers/base.py</code> / <code>providers/claude.py</code>.</li>
+<li>Delete <code>session_map</code> duplicates from <code>session.py</code>.</li>
+<li>Extract <code>status_bubble.py</code> and move subagent label helpers out of <code>hook_events</code>.</li>
+<li>Fail-loud <code>_schedule_save</code> defaults.</li>
+</ol>
+
+<h3>Do when touching the affected code</h3>
+<ol start="5">
+<li>Introduce <code>WindowView</code> and migrate handlers opportunistically.</li>
+<li>Extract <code>shell_context.py</code>.</li>
+<li>Replace handler <code>provider_name ==</code> checks with capability flags.</li>
+</ol>
+
+<h3>Do before the next big feature in that area</h3>
+<ol start="8">
+<li>Invert <code>polling_coordinator</code> into strategy-owned <code>tick()</code> methods.</li>
+<li>Extract <code>providers/shell_infra.py</code> before adding the next provider.</li>
+</ol>
+
+<h3>Don't do</h3>
+<ul>
+<li>Splitting <code>SessionManager</code> into multiple classes.</li>
+<li>Full dependency injection framework.</li>
+<li>Full <code>WindowContext</code> aggregation for scattered state — still valid, but lower priority.</li>
+<li>Decomposing into separate services or packages.</li>
+</ul>
+
+<h2>Summary</h2>
+
+<p>Today's refactors resolved or partially resolved five of the six morning-review issues. Remaining work concentrates in three specific places:</p>
+
+<ul>
+<li><strong>Provider abstraction leakage</strong> — protocol is sound; leaks are small and individually fixable.</li>
+<li><strong>Polling coordination</strong> — internal low cohesion, not cross-module coupling. Invert without ceremony.</li>
+<li><strong>SessionManager write surface</strong> — projection-type problem, not god-object problem. <code>WindowView</code> solves it.</li>
+</ul>
+
+<p>None require large structural rewrites. All are incremental refactors that improve testability and cohesion without increasing effective distance.</p>
+
+<hr>
+
+<p class="meta"><em>This analysis uses the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>. See <code>modularity-review.md</code> for the morning baseline analysis.</em></p>
+
+</body>
+</html>
