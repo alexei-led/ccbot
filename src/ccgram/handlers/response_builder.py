@@ -10,7 +10,7 @@ Key function:
   - build_response_parts: Build paginated response messages
 """
 
-from ..providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
+from ..expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ..telegram_sender import split_message
 
 # Max length for user messages before truncation

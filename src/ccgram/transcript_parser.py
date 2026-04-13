@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ccgram.providers.base import EXPANDABLE_QUOTE_START, format_expandable_quote
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_START, format_expandable_quote
 
 
 @dataclass

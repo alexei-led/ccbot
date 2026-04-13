@@ -10,9 +10,8 @@ require Config (doctor, status).
 import structlog
 import os
 
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ccgram.providers.base import (
-    EXPANDABLE_QUOTE_END,
-    EXPANDABLE_QUOTE_START,
     AgentMessage,
     AgentProvider,
     DiscoveredCommand,

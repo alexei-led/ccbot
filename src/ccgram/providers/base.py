@@ -25,30 +25,8 @@ ContentType = Literal["text", "thinking", "tool_use", "tool_result", "local_comm
 # Alphanumeric + hyphens/underscores — rejects shell metacharacters.
 RESUME_ID_RE = re.compile(r"^[\w-]+$")
 
-# ── Sentinel constants for expandable quotes ─────────────────────────────
-# Canonical source of truth — imported by transcript_parser.py and consumers.
-EXPANDABLE_QUOTE_START = "\x02EXPQUOTE_START\x02"
-EXPANDABLE_QUOTE_END = "\x02EXPQUOTE_END\x02"
-
-
-_EXPANDABLE_QUOTE_MAX_CHARS = 3500
-
-
-def format_expandable_quote(text: str) -> str:
-    """Wrap text with sentinel markers for a Telegram expandable blockquote.
-
-    Truncates content exceeding the budget to stay within Telegram's 4096 char
-    message limit (quote + stats line + sentinels must all fit).
-    The actual formatting (expandable_blockquote entity) is done
-    in convert_to_entities() after telegramify processes the surrounding content.
-    """
-    if len(text) > _EXPANDABLE_QUOTE_MAX_CHARS:
-        text = (
-            text[:_EXPANDABLE_QUOTE_MAX_CHARS]
-            + f"\n\n\u2026 (truncated, {len(text)} chars total)"
-        )
-    return f"{EXPANDABLE_QUOTE_START}{text}{EXPANDABLE_QUOTE_END}"
-
+# Strict UUID v4 form for Claude session ids (validated in hook payloads + resume).
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 # ── Event types ──────────────────────────────────────────────────────────
 
@@ -147,6 +125,10 @@ class ProviderCapabilities:
     supports_mailbox_delivery: bool = (
         True  # False for shell (no agent to receive send_keys)
     )
+    # True for shell-like providers that route inbound text through an LLM
+    # → command flow with a prompt-marker terminal loop. Used by handlers to
+    # gate shell-specific behavior without checking ``provider_name == "shell"``.
+    chat_first_command_path: bool = False
 
 
 # ── Provider protocol ────────────────────────────────────────────────────

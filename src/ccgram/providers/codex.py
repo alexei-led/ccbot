@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from ccgram.expandable_quote import format_expandable_quote
 from ccgram.providers.codex_format import format_codex_interactive_prompt
 from ccgram.providers._jsonl import JsonlProvider
 from ccgram.providers.base import (
@@ -26,7 +27,6 @@ from ccgram.providers.base import (
     ProviderCapabilities,
     SessionStartEvent,
     StatusUpdate,
-    format_expandable_quote,
 )
 from ccgram.terminal_parser import extract_interactive_content
 

@@ -9,7 +9,7 @@ import os
 from typing import Any, cast
 
 from ccgram.cc_commands import CC_BUILTINS
-from ccgram.hook import UUID_RE
+from ccgram.providers.base import UUID_RE
 from ccgram.providers.base import (
     AgentMessage,
     ContentType,

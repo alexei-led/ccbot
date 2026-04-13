@@ -13,7 +13,7 @@ from typing import Any
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
-from ..providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
+from ..expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ..session import session_manager
 from ..user_preferences import user_preferences
 from ..thread_router import thread_router
