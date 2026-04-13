@@ -176,6 +176,28 @@ class TestIsGitignored:
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert is_gitignored(f, tmp_path) is False
 
+    def test_fatal_git_error_falls_back_to_pathspec(self, tmp_path: Path) -> None:
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("*.log\n", encoding="utf-8")
+        f = tmp_path / "debug.log"
+        f.touch()
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        with patch("subprocess.run", return_value=mock_result):
+            assert is_gitignored(f, tmp_path) is True
+
+    def test_fatal_git_error_non_matching_falls_back_to_pathspec(
+        self, tmp_path: Path
+    ) -> None:
+        gitignore = tmp_path / ".gitignore"
+        gitignore.write_text("*.log\n", encoding="utf-8")
+        f = tmp_path / "main.py"
+        f.touch()
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        with patch("subprocess.run", return_value=mock_result):
+            assert is_gitignored(f, tmp_path) is False
+
 
 class TestCheckGitleaksRules:
     def test_no_toml_returns_none(self, tmp_path: Path) -> None:

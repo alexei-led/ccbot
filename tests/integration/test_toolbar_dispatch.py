@@ -77,7 +77,9 @@ def _reset_toolbar_config():
 @pytest.fixture
 async def app():
     """Real PTB Application with the callback_registry dispatch installed."""
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        pytest.skip("TELEGRAM_BOT_TOKEN not set")
     application = Application.builder().token(token).build()
     load_handlers()
     application.add_handler(CallbackQueryHandler(callback_dispatch))

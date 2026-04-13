@@ -484,7 +484,7 @@ class SessionMapSync:
         if new_transcript and state.transcript_path != new_transcript:
             state.transcript_path = new_transcript
             changed = True
-        new_provider = info.get("provider_name", "")
+        new_provider = info.get("provider_name", "").lower()
         if new_provider and state.provider_name != new_provider:
             state.provider_name = new_provider
             changed = True

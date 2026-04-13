@@ -110,6 +110,10 @@ def _gitignored_by_pathspec(path: Path, cwd: Path) -> bool:
             return False
 
         spec = pathspec.PathSpec.from_lines("gitignore", lines)
+        # Match against the full path relative to cwd, not to the individual
+        # .gitignore file's directory.  This is intentionally coarser than
+        # git's own per-directory scoping: it is a last-resort fallback used
+        # only when git is unavailable, so false-negatives are acceptable.
         try:
             rel = path.relative_to(cwd)
         except ValueError:

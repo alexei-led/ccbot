@@ -303,6 +303,7 @@ async def _upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> No
                     photo=fh,
                     filename=path.name,
                     message_thread_id=thread_id,
+                    read_timeout=300,
                 )
             else:
                 await bot.send_document(
@@ -310,6 +311,7 @@ async def _upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> No
                     document=fh,
                     filename=path.name,
                     message_thread_id=thread_id,
+                    read_timeout=300,
                 )
     except TelegramError:
         logger.exception("Failed to upload file", path=str(path))

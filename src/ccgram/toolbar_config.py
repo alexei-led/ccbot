@@ -269,8 +269,8 @@ def _parse_action(name: str, raw: object) -> ToolbarAction | None:
         return None
     if action_type == "builtin":
         logger.warning(
-            "Toolbar config: action %r type=builtin is reserved for built-ins, "
-            "users cannot define new builtin actions",
+            "Toolbar config: action %r type=builtin is reserved for built-ins; "
+            "use type=key or type=text instead",
             name,
         )
         return None
