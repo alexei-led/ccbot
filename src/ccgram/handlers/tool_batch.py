@@ -1,0 +1,499 @@
+"""Claude tool-use batching — state machine, formatting, edit-in-place delivery.
+
+Accumulates consecutive tool_use / tool_result messages into compact batch
+messages displayed as a single Telegram message that is edited in place as
+results arrive.  Overflow (entry count or character budget) triggers a flush
+and a new batch.
+
+Key components:
+  - ToolBatchEntry / ToolBatch: batch state dataclasses
+  - process_tool_event: state-machine entry point (add tool_use or tool_result)
+  - flush_batch: finalize and send the last edit for a batch
+  - is_batch_eligible: predicate combining task eligibility and window mode
+  - format_batch_message: render batch entries as compact text
+"""
+
+import re
+from dataclasses import dataclass, field
+
+import structlog
+from telegram import Bot
+
+from ..session import session_manager
+from ..thread_router import thread_router
+from ..topic_state_registry import topic_state
+from .message_sender import edit_with_fallback, rate_limit_send_message
+
+logger = structlog.get_logger()
+
+BATCH_MAX_LENGTH = 2800
+BATCH_MAX_ENTRIES = 10
+
+
+@dataclass
+class ToolBatchEntry:
+    """A single tool call entry within a batch."""
+
+    tool_use_id: str | None
+    tool_use_text: str  # Formatted summary from build_response_parts
+    tool_result_text: str | None = None  # None until result arrives
+    tool_name: str | None = None
+
+
+@dataclass
+class ToolBatch:
+    """Accumulator for consecutive tool calls to batch into one Telegram message."""
+
+    window_id: str
+    thread_id: int  # thread_id_or_0
+    entries: list[ToolBatchEntry] = field(default_factory=list)
+    telegram_msg_id: int | None = None
+    total_length: int = 0
+
+
+# Active tool batches: (user_id, thread_id_or_0) -> ToolBatch
+_active_batches: dict[tuple[int, int], ToolBatch] = {}
+
+_MARKDOWN_TOOL_PREFIX_RE = re.compile(r"^\*\*([^*]+)\*\*(.*)$")
+_PLAIN_TASK_CREATE_RE = re.compile(r"^TaskCreate\s+(.+)$")
+_TASK_TOOL_NAMES = frozenset({"TaskCreate", "TaskUpdate", "TaskList"})
+_MIN_BACKTICK_WRAPPED_LENGTH = 2
+
+_BATCH_ERROR_RE = re.compile(
+    r"\b(error|FAILED|fail(ed|ure[s]?)?|Exception|Traceback|exit code [1-9]\d*)\b",
+    re.IGNORECASE,
+)
+_BATCH_SUCCESS_RE = re.compile(r"\b(passed|success|exit code 0)\b", re.IGNORECASE)
+
+
+# ---------------------------------------------------------------------------
+# Public predicates
+# ---------------------------------------------------------------------------
+
+
+def is_batch_eligible(task: "MessageTask", window_id: str) -> bool:
+    """Check if a task should go through the batching pipeline."""
+    return _is_batch_eligible(task) and _should_batch(window_id)
+
+
+def _is_batch_eligible(task: "MessageTask") -> bool:
+    """Check if a task is eligible for tool call batching."""
+    return task.task_type == "content" and task.content_type in (
+        "tool_use",
+        "tool_result",
+    )
+
+
+def _should_batch(window_id: str) -> bool:
+    """Check if batching is enabled for a window."""
+    return session_manager.get_batch_mode(window_id) == "batched"
+
+
+# ---------------------------------------------------------------------------
+# Formatting
+# ---------------------------------------------------------------------------
+
+
+def format_batch_message(
+    entries: list[ToolBatchEntry], subagent_label: str | None = None
+) -> str:
+    """Render a batch of tool calls as a single compact message.
+
+    Format:
+        ⚡ 3 tool calls [🤖 write-tests]
+        📖 Read  src/foo.py       ⎿  42 lines
+        ✏️ Edit  src/foo.py       ⎿  +3 −1
+        ⚡ Bash  make test        ⏳
+    """
+    task_create_message = _format_task_create_batch(entries, subagent_label)
+    if task_create_message is not None:
+        return task_create_message
+
+    count = len(entries)
+    label = "tool call" if count == 1 else "tool calls"
+    header = f"\u26a1 {count} {label}"
+    has_task_tools = any(entry.tool_name in _TASK_TOOL_NAMES for entry in entries)
+    if subagent_label and not has_task_tools:
+        header = f"{header} [{subagent_label}]"
+    lines = [header]
+    if subagent_label and has_task_tools:
+        lines.append(subagent_label)
+
+    lines.extend(_format_mixed_batch_lines(entries))
+
+    return "\n".join(lines)
+
+
+def _format_task_create_batch(
+    entries: list[ToolBatchEntry], subagent_label: str | None
+) -> str | None:
+    """Render TaskCreate bursts as a numbered task list."""
+    if not entries or any(entry.tool_name != "TaskCreate" for entry in entries):
+        return None
+
+    titles = [_extract_task_create_title(entry) for entry in entries]
+    if any(not title for title in titles):
+        return None
+
+    action = (
+        "Created"
+        if all(entry.tool_result_text is not None for entry in entries)
+        else "Creating"
+    )
+    task_label = "task" if len(entries) == 1 else "tasks"
+    lines: list[str] = []
+    if subagent_label:
+        lines.append(subagent_label)
+    if action == "Creating":
+        lines.append(f"{action} {len(entries)} {task_label}\u2026")
+    else:
+        lines.append(f"{action} {len(entries)} {task_label}")
+    lines.extend(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    return "\n".join(lines)
+
+
+def _format_mixed_batch_lines(entries: list[ToolBatchEntry]) -> list[str]:
+    """Render batch body lines, grouping task-tool runs into task sections."""
+    lines: list[str] = []
+    index = 0
+
+    while index < len(entries):
+        entry = entries[index]
+        if entry.tool_name == "TaskCreate":
+            task_entries: list[ToolBatchEntry] = []
+            while index < len(entries) and entries[index].tool_name == "TaskCreate":
+                task_entries.append(entries[index])
+                index += 1
+            section = _format_task_create_section(task_entries)
+            if section:
+                lines.extend(section)
+            else:
+                lines.extend(_format_batch_entry(task) for task in task_entries)
+            continue
+        if entry.tool_name == "TaskUpdate":
+            update_entries: list[ToolBatchEntry] = []
+            while index < len(entries) and entries[index].tool_name == "TaskUpdate":
+                update_entries.append(entries[index])
+                index += 1
+            section = _format_task_update_section(update_entries)
+            if section:
+                lines.extend(section)
+            else:
+                lines.extend(_format_batch_entry(task) for task in update_entries)
+            continue
+        if entry.tool_name == "TaskList":
+            lines.extend(_format_task_list_section(entry))
+            index += 1
+            continue
+
+        lines.append(_format_batch_entry(entry))
+        index += 1
+
+    return lines
+
+
+def _format_task_create_section(entries: list[ToolBatchEntry]) -> list[str]:
+    """Render a contiguous TaskCreate run inside a mixed batch."""
+    if not entries:
+        return []
+
+    titles = [_extract_task_create_title(entry) for entry in entries]
+    if any(not title for title in titles):
+        return []
+
+    action = (
+        "Created"
+        if all(entry.tool_result_text is not None for entry in entries)
+        else "Creating"
+    )
+    task_label = "task" if len(entries) == 1 else "tasks"
+    heading = (
+        f"{action} {len(entries)} {task_label}\u2026"
+        if action == "Creating"
+        else f"{action} {len(entries)} {task_label}"
+    )
+    return [
+        heading,
+        *(f"{index}. {title}" for index, title in enumerate(titles, start=1)),
+    ]
+
+
+def _format_task_update_section(entries: list[ToolBatchEntry]) -> list[str]:
+    """Render a contiguous TaskUpdate run inside a mixed batch."""
+    if not entries:
+        return []
+
+    labels = [_extract_task_tool_suffix(entry) for entry in entries]
+    if any(not label for label in labels):
+        return []
+
+    action = (
+        "Updated"
+        if all(entry.tool_result_text is not None for entry in entries)
+        else "Updating"
+    )
+    task_label = "task" if len(entries) == 1 else "tasks"
+    heading = (
+        f"{action} {len(entries)} {task_label}\u2026"
+        if action == "Updating"
+        else f"{action} {len(entries)} {task_label}"
+    )
+    return [heading, *(f"- {label}" for label in labels)]
+
+
+def _format_task_list_section(entry: ToolBatchEntry) -> list[str]:
+    """Render TaskList as task-list sync progress."""
+    summary = _extract_task_tool_suffix(entry)
+    heading = (
+        "Synced task list"
+        if entry.tool_result_text is not None
+        else "Refreshing task list\u2026"
+    )
+    if summary and summary != "refresh":
+        heading = f"{heading} ({summary})"
+    return [heading]
+
+
+def _batch_result_prefix(result_text: str) -> str:
+    """Choose a result indicator prefix based on content."""
+    if _BATCH_ERROR_RE.search(result_text):
+        return "\u274c"
+    if _BATCH_SUCCESS_RE.search(result_text):
+        return "\u2705"
+    return "\u23bf"
+
+
+def _format_batch_entry(entry: ToolBatchEntry) -> str:
+    """Render one standard batch row."""
+    line = entry.tool_use_text
+    if entry.tool_result_text is not None:
+        prefix = _batch_result_prefix(entry.tool_result_text)
+        return f"{line}  {prefix}  {entry.tool_result_text}"
+    return f"{line}  \u23f3"
+
+
+def _extract_task_create_title(entry: ToolBatchEntry) -> str:
+    """Extract the visible title from a TaskCreate summary."""
+    return _extract_task_tool_suffix(entry)
+
+
+def _extract_task_tool_suffix(entry: ToolBatchEntry) -> str:
+    """Extract the summary text after a markdown/plain task-tool prefix."""
+    text = entry.tool_use_text.strip()
+    if not text:
+        return ""
+
+    markdown_match = _MARKDOWN_TOOL_PREFIX_RE.match(text)
+    if markdown_match:
+        _tool_name, suffix = markdown_match.groups()
+        stripped = suffix.strip()
+        if (
+            stripped.startswith("`")
+            and stripped.endswith("`")
+            and len(stripped) >= _MIN_BACKTICK_WRAPPED_LENGTH
+        ):
+            stripped = stripped[1:-1].strip()
+        return stripped
+
+    plain_match = _PLAIN_TASK_CREATE_RE.match(text)
+    if plain_match:
+        return plain_match.group(1).strip()
+
+    return text
+
+
+# ---------------------------------------------------------------------------
+# State machine — process_tool_event / flush_batch
+# ---------------------------------------------------------------------------
+
+
+def _send_kwargs(thread_id: int | None) -> dict[str, int]:
+    """Build message_thread_id kwargs for bot.send_message()."""
+    if thread_id is not None:
+        return {"message_thread_id": thread_id}
+    return {}
+
+
+async def _send_or_edit_batch(
+    bot: Bot,
+    user_id: int,
+    batch: ToolBatch,
+    chat_id: int,
+    raw_thread_id: int | None,
+    thread_id_or_0: int,
+) -> None:
+    """Send a new batch message or edit the existing one in place."""
+    from ..claude_task_state import build_subagent_label, get_subagent_names
+    from .message_queue import _do_clear_status_message
+
+    subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
+    batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
+
+    if batch.telegram_msg_id is None:
+        await _do_clear_status_message(bot, user_id, thread_id_or_0)
+        sent = await rate_limit_send_message(
+            bot,
+            chat_id,
+            batch_text,
+            **_send_kwargs(raw_thread_id),  # type: ignore[arg-type]
+        )
+        if sent:
+            batch.telegram_msg_id = sent.message_id
+    else:
+        await edit_with_fallback(
+            bot,
+            chat_id,
+            batch.telegram_msg_id,
+            batch_text,
+        )
+
+
+async def _handle_tool_result(
+    bot: Bot,
+    user_id: int,
+    task: "MessageTask",
+    batch: ToolBatch | None,
+    thread_id: int,
+) -> ToolBatch | None:
+    """Process a tool_result event, updating the matching batch entry."""
+    from .message_queue import _process_content_task
+
+    if not task.tool_use_id or not batch:
+        await _process_content_task(bot, user_id, task)
+        return None
+    for entry in batch.entries:
+        if entry.tool_use_id == task.tool_use_id:
+            result_text = task.text or ""
+            first_line = result_text.split("\n", 1)[0][:200]
+            entry.tool_result_text = first_line
+            return batch
+    await flush_batch(bot, user_id, thread_id)
+    await _process_content_task(bot, user_id, task)
+    return None
+
+
+def _add_tool_use_entry(
+    task: "MessageTask",
+    batch: ToolBatch,
+) -> bool:
+    """Append a tool_use entry to the batch. Returns True if overflow occurred."""
+    entry_text = task.text or "\n".join(task.parts) or "tool call"
+    entry = ToolBatchEntry(
+        tool_use_id=task.tool_use_id,
+        tool_use_text=entry_text,
+        tool_name=task.tool_name,
+    )
+    batch.entries.append(entry)
+    batch.total_length += len(entry_text)
+
+    if len(batch.entries) >= BATCH_MAX_ENTRIES or batch.total_length > BATCH_MAX_LENGTH:
+        batch.entries.pop()
+        batch.total_length -= len(entry_text)
+        return True
+    return False
+
+
+async def process_tool_event(
+    bot: Bot,
+    user_id: int,
+    task: "MessageTask",
+) -> None:
+    """Add a tool_use or tool_result to the active batch, send/edit the batch message."""
+    from .message_queue import _process_content_task
+
+    window_id = task.window_id or ""
+    thread_id = task.thread_id or 0
+    bkey = (user_id, thread_id)
+    chat_id = thread_router.resolve_chat_id(user_id, task.thread_id)
+    batch = _active_batches.get(bkey)
+
+    if task.content_type == "tool_result":
+        batch = await _handle_tool_result(bot, user_id, task, batch, thread_id)
+        if batch is None:
+            return
+    elif task.content_type == "tool_use":
+        batch = await _handle_tool_use_event(
+            bot, user_id, task, batch, window_id, thread_id, bkey
+        )
+    else:
+        await _process_content_task(bot, user_id, task)
+        return
+
+    await _send_or_edit_batch(bot, user_id, batch, chat_id, task.thread_id, thread_id)
+
+
+async def _handle_tool_use_event(
+    bot: Bot,
+    user_id: int,
+    task: "MessageTask",
+    batch: ToolBatch | None,
+    window_id: str,
+    thread_id: int,
+    bkey: tuple[int, int],
+) -> ToolBatch:
+    """Process a tool_use event, creating/flushing batches as needed."""
+    if batch and batch.window_id != window_id:
+        await flush_batch(bot, user_id, thread_id)
+        batch = None
+
+    if not batch:
+        batch = ToolBatch(window_id=window_id, thread_id=thread_id)
+        _active_batches[bkey] = batch
+
+    overflow = _add_tool_use_entry(task, batch)
+    if overflow:
+        await flush_batch(bot, user_id, thread_id)
+        batch = ToolBatch(window_id=window_id, thread_id=thread_id)
+        _add_tool_use_entry(task, batch)
+        _active_batches[bkey] = batch
+
+    return batch
+
+
+async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
+    """Finalize the active batch: do a final edit and clear state."""
+    bkey = (user_id, thread_id_or_0)
+    batch = _active_batches.pop(bkey, None)
+    if not batch or not batch.entries:
+        return
+
+    thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+
+    from ..claude_task_state import build_subagent_label, get_subagent_names
+
+    subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
+    batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
+
+    if batch.telegram_msg_id is None:
+        await rate_limit_send_message(
+            bot,
+            chat_id,
+            batch_text,
+            **_send_kwargs(thread_id),  # type: ignore[arg-type]
+        )
+        return
+
+    await edit_with_fallback(
+        bot,
+        chat_id,
+        batch.telegram_msg_id,
+        batch_text,
+    )
+
+
+def has_active_batch(user_id: int, thread_id_or_0: int) -> bool:
+    """Check if there is an active batch for a (user, thread) pair."""
+    return (user_id, thread_id_or_0) in _active_batches
+
+
+@topic_state.register("topic")
+def clear_batch_for_topic(user_id: int, thread_id: int | None = None) -> None:
+    """Clear active batch for a specific topic (called on topic cleanup)."""
+    _active_batches.pop((user_id, thread_id or 0), None)
+
+
+from typing import TYPE_CHECKING  # noqa: E402
+
+if TYPE_CHECKING:
+    from .message_queue import MessageTask

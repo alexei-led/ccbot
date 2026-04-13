@@ -201,16 +201,16 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Create: `tests/ccgram/handlers/test_tool_batch.py`
 - Modify: `tests/ccgram/handlers/test_message_queue.py` (update imports)
 
-- [ ] create `src/ccgram/handlers/tool_batch.py` with module docstring: "Claude tool-use batching — state machine, formatting, edit-in-place delivery"
-- [ ] move to `tool_batch.py`: `BATCH_MAX_ENTRIES`, `BATCH_MAX_LENGTH`, `_TASK_TOOL_NAMES`, `ToolBatchEntry`, `ToolBatch`, `_active_batches`, `_is_batch_eligible`, `_should_batch`, `_process_batch_task` → renamed `process_tool_event`, `_flush_batch` → renamed `flush_batch`, `format_batch_message`, `_format_task_create_batch`, `_format_mixed_batch_lines`, `_format_task_create_section`, `_format_task_update_section`, `_format_task_list_section`, `_batch_result_prefix`, `_format_batch_entry`, `_extract_task_create_title`, `_extract_task_tool_suffix`
-- [ ] add public `is_batch_eligible(task, window_id) -> bool` wrapper combining `_is_batch_eligible(task) and _should_batch(window_id)`
-- [ ] register `@topic_state.register("topic")` cleanup on the `_active_batches` (moved from message_queue)
-- [ ] update `message_queue._handle_content_task` to branch via `if tool_batch.is_batch_eligible(task, window_id): await tool_batch.process_tool_event(bot, user_id, task)` instead of inline check
-- [ ] update `message_queue.py` imports to reference `tool_batch` for the branch function; remove moved symbols
-- [ ] write unit tests in `test_tool_batch.py` covering: `format_batch_message` for single/multiple/task-tool batches, `_extract_task_create_title` markdown and plain variants, `is_batch_eligible` predicate, `_batch_result_prefix` ok/error, `ToolBatchEntry` + `ToolBatch` dataclass construction
-- [ ] write integration test: enqueue tool_use + tool_result, verify batch message is sent then edited
-- [ ] update `test_message_queue.py` imports (functions now live in `tool_batch`)
-- [ ] run `make check` — must be green before Task 2
+- [x] create `src/ccgram/handlers/tool_batch.py` with module docstring: "Claude tool-use batching — state machine, formatting, edit-in-place delivery"
+- [x] move to `tool_batch.py`: `BATCH_MAX_ENTRIES`, `BATCH_MAX_LENGTH`, `_TASK_TOOL_NAMES`, `ToolBatchEntry`, `ToolBatch`, `_active_batches`, `_is_batch_eligible`, `_should_batch`, `_process_batch_task` → renamed `process_tool_event`, `_flush_batch` → renamed `flush_batch`, `format_batch_message`, `_format_task_create_batch`, `_format_mixed_batch_lines`, `_format_task_create_section`, `_format_task_update_section`, `_format_task_list_section`, `_batch_result_prefix`, `_format_batch_entry`, `_extract_task_create_title`, `_extract_task_tool_suffix`
+- [x] add public `is_batch_eligible(task, window_id) -> bool` wrapper combining `_is_batch_eligible(task) and _should_batch(window_id)`
+- [x] register `@topic_state.register("topic")` cleanup on the `_active_batches` (moved from message_queue)
+- [x] update `message_queue._handle_content_task` to branch via `if tool_batch.is_batch_eligible(task, window_id): await tool_batch.process_tool_event(bot, user_id, task)` instead of inline check
+- [x] update `message_queue.py` imports to reference `tool_batch` for the branch function; remove moved symbols
+- [x] write unit tests in `test_tool_batch.py` covering: `format_batch_message` for single/multiple/task-tool batches, `_extract_task_create_title` markdown and plain variants, `is_batch_eligible` predicate, `_batch_result_prefix` ok/error, `ToolBatchEntry` + `ToolBatch` dataclass construction
+- [x] write integration test: enqueue tool_use + tool_result, verify batch message is sent then edited (covered by existing test_tool_batching.py TestProcessBatchTask which was updated to use new imports)
+- [x] update `test_message_queue.py` imports (functions now live in `tool_batch`; test_tool_batching.py updated with new import paths and patch targets)
+- [x] run `make check` — must be green before Task 2
 
 ### Task 2: Expand `handlers/status_bubble.py` with status I/O
 
