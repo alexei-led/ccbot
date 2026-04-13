@@ -406,12 +406,8 @@ class SessionManager:
             return offsets_changed
 
         for wid in stale_display:
-            logger.info(
-                "Pruning stale display name: %s (%s)",
-                wid,
-                thread_router.window_display_names[wid],
-            )
-            del thread_router.window_display_names[wid]
+            name = thread_router.pop_display_name(wid)
+            logger.info("Pruning stale display name: %s (%s)", wid, name)
         for key in stale_chat:
             logger.info("Pruning stale group_chat_id: %s", key)
             del thread_router.group_chat_ids[key]
@@ -492,7 +488,7 @@ class SessionManager:
         in_use = set(self.window_states.keys()) | bound_window_ids
         for wid in thread_router.window_display_names:
             if wid not in live_window_ids and wid not in in_use:
-                name = thread_router.window_display_names[wid]
+                name = thread_router.get_display_name(wid)
                 issues.append(
                     AuditIssue(
                         category="orphaned_display_name",

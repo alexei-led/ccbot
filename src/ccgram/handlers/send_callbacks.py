@@ -32,7 +32,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .send_command import _upload_file, build_file_browser
+from .send_command import upload_file, build_file_browser
 from .send_security import is_path_contained, validate_sendable
 from .user_state import (
     SEND_CWD_KEY,
@@ -146,7 +146,7 @@ async def _handle_file(
         return
 
     try:
-        await _upload_file(context.bot, chat_id, thread_id, path)
+        await upload_file(context.bot, chat_id, thread_id, path)
     except TelegramError as exc:
         await query.answer(f"Upload failed: {exc}", show_alert=True)
         return

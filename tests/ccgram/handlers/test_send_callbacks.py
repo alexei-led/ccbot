@@ -140,7 +140,7 @@ class TestHandleFile:
                 "ccgram.handlers.send_callbacks.validate_sendable", return_value=None
             ),
             patch(
-                "ccgram.handlers.send_callbacks._upload_file", new_callable=AsyncMock
+                "ccgram.handlers.send_callbacks.upload_file", new_callable=AsyncMock
             ) as mock_upload,
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
@@ -168,7 +168,7 @@ class TestHandleFile:
                 return_value="access denied",
             ),
             patch(
-                "ccgram.handlers.send_callbacks._upload_file", new_callable=AsyncMock
+                "ccgram.handlers.send_callbacks.upload_file", new_callable=AsyncMock
             ) as mock_upload,
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"

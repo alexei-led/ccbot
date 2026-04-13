@@ -455,14 +455,14 @@ Skip `screenshot_callbacks.py` (mutates via `cycle_notification_mode`).
 - Modify: `src/ccgram/handlers/send_callbacks.py`
 - Modify: corresponding tests
 
-- [ ] in `session.py` L412, L414: replace `thread_router.window_display_names[wid]` with `thread_router.get_display_name(wid)` / `pop_display_name(wid)` — verify which semantics the current code needs at each site
-- [ ] in `session.py` L495: replace `thread_router.window_display_names[wid]` with `thread_router.get_display_name(wid)` (read-only)
-- [ ] verify: `rg "thread_router\.window_display_names\[" src/ccgram/` — zero matches expected
-- [ ] in `send_command.py`, rename `_upload_file` → `upload_file` (promote to public)
-- [ ] in `send_callbacks.py`, update the import: `from .send_command import upload_file, build_file_browser`
-- [ ] grep: `rg "_upload_file" src/ccgram/` and `rg "upload_file" src/ccgram/` — verify no other callers leaked
-- [ ] update tests: `test_session.py` for the display-name path (existing tests should stay green); `test_send_command.py` / `test_send_callbacks.py` for the renamed function
-- [ ] run `make check` — must be green before verification
+- [x] in `session.py` L412, L414: replace `thread_router.window_display_names[wid]` with `thread_router.pop_display_name(wid)` (read + delete in one call)
+- [x] in `session.py` L495: replace `thread_router.window_display_names[wid]` with `thread_router.get_display_name(wid)` (read-only)
+- [x] verify: `rg "thread_router\.window_display_names\[" src/ccgram/` — zero matches expected
+- [x] in `send_command.py`, rename `_upload_file` → `upload_file` (promote to public)
+- [x] in `send_callbacks.py`, update the import: `from .send_command import upload_file, build_file_browser`
+- [x] grep: `rg "_upload_file" src/ccgram/` and `rg "upload_file" src/ccgram/` — verify no other callers leaked
+- [x] update tests: `test_session.py` for the display-name path (existing tests should stay green); `test_send_command.py` / `test_send_callbacks.py` for the renamed function
+- [x] run `make check` — must be green before verification
 
 ### Task 14: Verify acceptance criteria
 

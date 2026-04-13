@@ -7,7 +7,7 @@ Provides utilities for the /send Telegram command:
   - _format_file_label: human-readable inline keyboard button labels
   - build_file_browser: build paginated inline keyboard for directory browsing
   - build_search_results: build inline keyboard for search result selection
-  - _upload_file: send a file to Telegram (photo or document)
+  - upload_file: send a file to Telegram (photo or document)
   - send_command: handle the /send command
 """
 
@@ -294,7 +294,7 @@ def build_search_results(
     return header, InlineKeyboardMarkup(buttons), shown
 
 
-async def _upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> None:
+async def upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> None:
     """Send *path* to the given Telegram chat/thread as photo or document."""
     try:
         with path.open("rb") as fh:
@@ -358,7 +358,7 @@ async def _upload_with_feedback(
 ) -> None:
     """Upload *path*, replying with a human-readable error on TelegramError."""
     try:
-        await _upload_file(context.bot, chat_id, thread_id, path)
+        await upload_file(context.bot, chat_id, thread_id, path)
     except TelegramError as exc:
         await safe_reply(update.message, f"Upload failed: {exc}")  # type: ignore[arg-type]
 
