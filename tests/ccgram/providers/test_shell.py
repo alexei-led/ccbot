@@ -142,7 +142,9 @@ class TestDetectPaneShell:
 
     async def test_falls_back_to_env_when_pane_not_found(self, mock_tmux) -> None:
         mock_tmux.find_window_by_id = AsyncMock(return_value=None)
-        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/zsh"):
+        with patch(
+            "ccgram.providers.shell_infra.os.environ.get", return_value="/bin/zsh"
+        ):
             assert await detect_pane_shell("@0") == "zsh"
 
     async def test_falls_back_to_env_when_command_not_a_shell(self, mock_tmux) -> None:
@@ -154,7 +156,9 @@ class TestDetectPaneShell:
                 pane_current_command="python",
             )
         )
-        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/fish"):
+        with patch(
+            "ccgram.providers.shell_infra.os.environ.get", return_value="/bin/fish"
+        ):
             assert await detect_pane_shell("@0") == "fish"
 
     async def test_falls_back_to_env_when_command_empty(self, mock_tmux) -> None:
@@ -166,7 +170,9 @@ class TestDetectPaneShell:
                 pane_current_command="",
             )
         )
-        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/bash"):
+        with patch(
+            "ccgram.providers.shell_infra.os.environ.get", return_value="/bin/bash"
+        ):
             assert await detect_pane_shell("@0") == "bash"
 
     async def test_whitespace_only_command_falls_back(self, mock_tmux) -> None:
@@ -178,7 +184,9 @@ class TestDetectPaneShell:
                 pane_current_command="   ",
             )
         )
-        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/zsh"):
+        with patch(
+            "ccgram.providers.shell_infra.os.environ.get", return_value="/bin/zsh"
+        ):
             assert await detect_pane_shell("@0") == "zsh"
 
 
@@ -188,7 +196,7 @@ class TestSetupShellPrompt:
         with (
             patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.providers.shell._is_interactive_shell",
+                "ccgram.providers.shell_infra._is_interactive_shell",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
@@ -282,7 +290,9 @@ class TestGetShellName:
     def test_returns_basename_of_shell_env(self) -> None:
         from ccgram.providers.shell import get_shell_name
 
-        with patch("ccgram.providers.shell.os.environ.get", return_value="/bin/zsh"):
+        with patch(
+            "ccgram.providers.shell_infra.os.environ.get", return_value="/bin/zsh"
+        ):
             assert get_shell_name() == "zsh"
 
     def test_returns_empty_when_shell_unset(self) -> None:
@@ -295,7 +305,7 @@ class TestGetShellName:
         from ccgram.providers.shell import get_shell_name
 
         with patch(
-            "ccgram.providers.shell.os.environ.get",
+            "ccgram.providers.shell_infra.os.environ.get",
             return_value="/opt/homebrew/bin/fish",
         ):
             assert get_shell_name() == "fish"
@@ -396,7 +406,7 @@ class TestWrapModeSetup:
         with (
             patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.providers.shell._is_interactive_shell",
+                "ccgram.providers.shell_infra._is_interactive_shell",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
@@ -473,22 +483,22 @@ class TestWrapModeSetup:
 class TestGetPromptMode:
     def test_defaults_to_wrap(self) -> None:
         from ccgram.config import config
-        from ccgram.providers.shell import _get_prompt_mode
+        from ccgram.providers.shell_infra import _get_prompt_mode
 
         config.prompt_mode = "wrap"
         assert _get_prompt_mode() == "wrap"
 
     def test_returns_replace(self) -> None:
         from ccgram.config import config
-        from ccgram.providers.shell import _get_prompt_mode
+        from ccgram.providers.shell_infra import _get_prompt_mode
 
         config.prompt_mode = "replace"
         assert _get_prompt_mode() == "replace"
 
     def test_invalid_mode_defaults_to_wrap(self) -> None:
-        import ccgram.providers.shell as shell_mod
+        import ccgram.providers.shell_infra as shell_mod
         from ccgram.config import config
-        from ccgram.providers.shell import _get_prompt_mode
+        from ccgram.providers.shell_infra import _get_prompt_mode
 
         original_warned = shell_mod._WARNED_INVALID_MODE
         shell_mod._WARNED_INVALID_MODE = False
@@ -500,7 +510,7 @@ class TestGetPromptMode:
 
     def test_empty_string_defaults_to_wrap(self) -> None:
         from ccgram.config import config
-        from ccgram.providers.shell import _get_prompt_mode
+        from ccgram.providers.shell_infra import _get_prompt_mode
 
         config.prompt_mode = ""
         assert _get_prompt_mode() == "wrap"
@@ -572,12 +582,12 @@ class TestWrapSetupCommands:
         ],
     )
     def test_wrap_command_contains(self, shell: str, expected: str) -> None:
-        from ccgram.providers.shell import _wrap_setup_commands
+        from ccgram.providers.shell_infra import _wrap_setup_commands
 
         assert expected in _wrap_setup_commands(shell)
 
     def test_zsh_wrap_command_uses_real_escape_sequence(self) -> None:
-        from ccgram.providers.shell import _wrap_setup_commands
+        from ccgram.providers.shell_infra import _wrap_setup_commands
 
         cmd = _wrap_setup_commands("zsh")
         assert "$'%{\\e[2m%}⌘%?⌘%{\\e[0m%} '" in cmd
@@ -585,7 +595,7 @@ class TestWrapSetupCommands:
         assert "\\033[0m" not in cmd
 
     def test_unknown_shell_falls_back_to_posix(self) -> None:
-        from ccgram.providers.shell import _wrap_setup_commands
+        from ccgram.providers.shell_infra import _wrap_setup_commands
 
         cmd = _wrap_setup_commands("unknown_shell")
         assert "⌘0⌘" in cmd
@@ -603,18 +613,18 @@ class TestReplaceSetupCommands:
         ids=["fish", "bash", "zsh", "tcsh"],
     )
     def test_replace_command_contains(self, shell: str, expected: str) -> None:
-        from ccgram.providers.shell import _replace_setup_commands
+        from ccgram.providers.shell_infra import _replace_setup_commands
 
         assert expected in _replace_setup_commands(shell, "ccgram")
 
     def test_custom_prefix(self) -> None:
-        from ccgram.providers.shell import _replace_setup_commands
+        from ccgram.providers.shell_infra import _replace_setup_commands
 
         cmd = _replace_setup_commands("bash", "mybot")
         assert "mybot:$?❯" in cmd
 
     def test_unknown_shell_falls_back_to_bash(self) -> None:
-        from ccgram.providers.shell import _replace_setup_commands
+        from ccgram.providers.shell_infra import _replace_setup_commands
 
         cmd = _replace_setup_commands("unknown_shell", "ccgram")
         assert "PS1=" in cmd
@@ -626,7 +636,7 @@ class TestSetupShellPromptClearsBefore:
         with (
             patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.providers.shell._is_interactive_shell",
+                "ccgram.providers.shell_infra._is_interactive_shell",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
