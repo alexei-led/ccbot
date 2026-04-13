@@ -229,7 +229,6 @@ async def _scan_window_panes(
     if terminal_screen_buffer.is_single_pane_cached(window_id):
         return
 
-    now = time.monotonic()
     panes = await tmux_manager.list_panes(window_id)
     terminal_screen_buffer.update_pane_count_cache(window_id, len(panes))
     live_pane_ids = {p.pane_id for p in panes}
