@@ -42,7 +42,8 @@ async def clear_topic_state(
     registered as simple callbacks.
 
     Args:
-        window_dead: When False, skip qualified-scope cleanup (delivery state,
+        window_dead: When False, skip window-scope and qualified-scope cleanup
+            (shell prompt state, monitor state, task state, delivery state,
             peer metadata, spawn requests) because the tmux window is still
             alive.  Callers that keep the window running (topic close, /unbind)
             should pass ``window_dead=False``.
@@ -70,11 +71,14 @@ async def clear_topic_state(
     else:
         clear_status_msg_info(user_id, thread_id)
 
-    # Registry dispatch — all module-specific per-topic/window/chat state
+    # Registry dispatch — all module-specific per-topic/window/chat state.
+    # window_id is omitted when the window is still alive (window_dead=False)
+    # to avoid wiping shell prompt skip state, monitor state, and task state
+    # that belong to the running window, not the closing topic.
     topic_state.clear_all(
         user_id,
         thread_id,
-        window_id=window_id,
+        window_id=window_id if window_dead else None,
         qualified_id=qualified_id,
         chat_id=chat_id,
     )
