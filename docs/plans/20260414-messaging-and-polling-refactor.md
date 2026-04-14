@@ -337,11 +337,11 @@ async def status_poll_loop(bot: Bot) -> None:
 - Create: `src/ccgram/handlers/window_tick.py`
 - Create: `tests/ccgram/handlers/test_window_tick.py`
 
-- [ ] create `src/ccgram/handlers/window_tick.py` with module docstring per project convention
-- [ ] declare `async def tick_window(bot, user_id, thread_id, window_id, window) -> None` as the only public function
-- [ ] in the initial commit, have `tick_window` import the existing per-window helpers from `polling_coordinator` and call them — this is a thin wrapper for one commit, before the move
-- [ ] write a smoke test in `tests/ccgram/handlers/test_window_tick.py` that asserts `tick_window` exists and is callable
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 8
+- [x] create `src/ccgram/handlers/window_tick.py` with module docstring per project convention
+- [x] declare `async def tick_window(bot, user_id, thread_id, window_id, window) -> None` as the only public function
+- [x] in the initial commit, have `tick_window` import the existing per-window helpers from `polling_coordinator` and call them — this is a thin wrapper for one commit, before the move
+- [x] write a smoke test in `tests/ccgram/handlers/test_window_tick.py` that asserts `tick_window` exists and is callable
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 8
 
 #### Task 8: Move per-window helpers from `polling_coordinator.py` into `window_tick.py`
 
