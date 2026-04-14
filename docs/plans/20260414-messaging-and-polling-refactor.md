@@ -372,15 +372,15 @@ async def status_poll_loop(bot: Bot) -> None:
 - Modify: `src/ccgram/handlers/polling_coordinator.py`
 - Modify: `tests/ccgram/handlers/test_polling_coordinator.py`
 
-- [ ] simplify `status_poll_loop` body to: enumerate windows + external → build lookup → `run_periodic_tasks` → for each binding `await window_tick.tick_window(...)` → `run_lifecycle_tasks` → backoff handling
-- [ ] delete now-unused imports: `claude_task_state`, `providers`, `providers.base`, `session`, `session_monitor`, `cleanup`, `interactive_ui`, `message_queue`, `message_sender`, `polling_strategies`, `recovery_callbacks`, `topic_emoji`, `transcript_discovery`
-- [ ] keep imports: `window_tick`, `periodic_tasks`, `tmux_manager`, `thread_router`, `config`, `utils`, `structlog`, `telegram.error`
-- [ ] verify the file is now ≤ 120 lines
-- [ ] add the line-count canary test `test_module_line_count_under_ceiling` per design's `polling_coordinator/tests.md`
-- [ ] add the import whitelist test `test_imports_are_minimal`
-- [ ] update `tests/ccgram/handlers/test_polling_coordinator.py` to mock `window_tick.tick_window` and assert iteration / periodic tasks / backoff (no per-window behavior tests left here — those live in `test_window_tick.py`)
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 10
-- [ ] run `make test-integration` — must pass
+- [x] simplify `status_poll_loop` body to: enumerate windows + external → build lookup → `run_periodic_tasks` → for each binding `await window_tick.tick_window(...)` → `run_lifecycle_tasks` → backoff handling
+- [x] delete now-unused imports: `claude_task_state`, `providers`, `providers.base`, `session`, `session_monitor`, `cleanup`, `interactive_ui`, `message_queue`, `message_sender`, `polling_strategies`, `recovery_callbacks`, `topic_emoji`, `transcript_discovery`
+- [x] keep imports: `window_tick`, `periodic_tasks`, `tmux_manager`, `thread_router`, `config`, `utils`, `structlog`, `telegram.error`
+- [x] verify the file is now ≤ 120 lines
+- [x] add the line-count canary test `test_module_line_count_under_ceiling` per design's `polling_coordinator/tests.md`
+- [x] add the import whitelist test `test_imports_are_minimal`
+- [x] update `tests/ccgram/handlers/test_polling_coordinator.py` to mock `window_tick.tick_window` and assert iteration / periodic tasks / backoff (no per-window behavior tests left here — those live in `test_window_tick.py`)
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 10
+- [x] run `make test-integration` — must pass
 
 #### Task 10: Phase 2 acceptance verification
 

@@ -1,182 +1,333 @@
-"""Tests for the polling coordinator loop and orchestration functions."""
-
-import time
+import ast
+import asyncio
+import contextlib
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from telegram import Bot
-from telegram.error import BadRequest
+from telegram.error import TelegramError
 
-from ccgram.handlers.topic_lifecycle import (
-    check_autoclose_timers,
-    check_unbound_window_ttl,
-    probe_topic_existence,
-    prune_stale_state,
-)
 from ccgram.handlers.polling_coordinator import (
     _BACKOFF_MAX,
     _BACKOFF_MIN,
-)
-from ccgram.handlers.window_tick import _handle_dead_window_notification
-from ccgram.handlers.polling_strategies import (
-    lifecycle_strategy,
-    terminal_poll_state,
+    status_poll_loop,
 )
 
-
-@pytest.fixture(autouse=True)
-def _clean_strategy_state():
-    """Reset all strategy state between tests."""
-    terminal_poll_state._states.clear()
-    lifecycle_strategy._states.clear()
-    lifecycle_strategy._dead_notified.clear()
-    yield
-    terminal_poll_state._states.clear()
-    lifecycle_strategy._states.clear()
-    lifecycle_strategy._dead_notified.clear()
+SRC_FILE = (
+    Path(__file__).resolve().parents[3]
+    / "src"
+    / "ccgram"
+    / "handlers"
+    / "polling_coordinator.py"
+)
 
 
-class TestCheckAutocloseTimers:
-    @pytest.mark.asyncio
-    async def test_no_topics_is_noop(self):
-        bot = AsyncMock(spec=Bot)
-        await check_autoclose_timers(bot)
-        bot.delete_forum_topic.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_expired_done_topic_gets_closed(self):
-        bot = AsyncMock(spec=Bot)
-        bot.delete_forum_topic = AsyncMock()
-        user_id, thread_id = 1, 100
-        lifecycle_strategy.start_autoclose_timer(
-            user_id, thread_id, "done", time.monotonic() - 99999
-        )
-        with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
-            patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
-                new_callable=AsyncMock,
-            ),
-        ):
-            mock_config.autoclose_done_minutes = 1
-            mock_router.resolve_chat_id.return_value = 42
-            mock_router.get_window_for_thread.return_value = "@0"
-            await check_autoclose_timers(bot)
-        bot.delete_forum_topic.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_not_yet_expired_topic_stays(self):
-        bot = AsyncMock(spec=Bot)
-        user_id, thread_id = 1, 100
-        lifecycle_strategy.start_autoclose_timer(
-            user_id, thread_id, "done", time.monotonic()
-        )
-        with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
-            mock_config.autoclose_done_minutes = 60
-            await check_autoclose_timers(bot)
-        bot.delete_forum_topic.assert_not_called()
+def _make_window(window_id: str, window_name: str = "test") -> MagicMock:
+    w = MagicMock()
+    w.window_id = window_id
+    w.window_name = window_name
+    return w
 
 
-class TestCheckUnboundWindowTtl:
-    @pytest.mark.asyncio
-    async def test_no_timeout_is_noop(self):
-        with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
-            mock_config.autoclose_done_minutes = 0
-            await check_unbound_window_ttl([])
-
-    @pytest.mark.asyncio
-    async def test_bound_window_timer_cleared(self):
-        ws = terminal_poll_state.get_state("@0")
-        ws.unbound_timer = time.monotonic() - 100
-        mock_window = MagicMock(window_id="@0", window_name="test")
-        with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
-        ):
-            mock_config.autoclose_done_minutes = 1
-            mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
-            await check_unbound_window_ttl([mock_window])
-        assert ws.unbound_timer is None
+class _LoopCtx:
+    mocks: dict[str, Any]
 
 
-class TestHandleDeadWindowNotification:
-    @pytest.mark.asyncio
-    async def test_sends_notification_once(self):
-        bot = AsyncMock(spec=Bot)
-        bot.send_message = AsyncMock(return_value=MagicMock())
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_router,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch(
-                "ccgram.handlers.window_tick.update_topic_emoji",
-                new_callable=AsyncMock,
-            ),
-            patch("ccgram.handlers.window_tick.clear_tool_msg_ids_for_topic"),
-            patch(
-                "ccgram.handlers.window_tick.rate_limit_send_message",
-                new_callable=AsyncMock,
-            ) as mock_send,
-        ):
-            mock_router.resolve_chat_id.return_value = 42
-            mock_router.get_display_name.return_value = "test"
-            mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp")
-            mock_send.return_value = MagicMock()
+def _patch_loop_deps(
+    bindings: list[tuple[int, int, str]] | None = None,
+    windows: list[MagicMock] | None = None,
+    external: list[MagicMock] | None = None,
+) -> Any:
+    bindings = bindings or []
+    windows = windows or []
+    external = external or []
 
-            await _handle_dead_window_notification(bot, 1, 100, "@0")
-            assert (1, 100, "@0") in lifecycle_strategy._dead_notified
+    patches: dict[str, Any] = {
+        "thread_router": patch("ccgram.handlers.polling_coordinator.thread_router"),
+        "tmux_manager": patch("ccgram.handlers.polling_coordinator.tmux_manager"),
+        "tick_window": patch(
+            "ccgram.handlers.polling_coordinator.window_tick.tick_window",
+            new_callable=AsyncMock,
+        ),
+        "run_periodic": patch(
+            "ccgram.handlers.polling_coordinator.run_periodic_tasks",
+            new_callable=AsyncMock,
+        ),
+        "run_lifecycle": patch(
+            "ccgram.handlers.polling_coordinator.run_lifecycle_tasks",
+            new_callable=AsyncMock,
+        ),
+        "config": patch("ccgram.config.config"),
+        "log_throttled": patch("ccgram.handlers.polling_coordinator.log_throttled"),
+    }
 
-            mock_send.reset_mock()
-            await _handle_dead_window_notification(bot, 1, 100, "@0")
-            mock_send.assert_not_called()
+    ctx = _LoopCtx()
 
+    @contextlib.contextmanager
+    def combined():
+        mocks: dict[str, Any] = {}
+        with contextlib.ExitStack() as stack:
+            for name, p in patches.items():
+                mocks[name] = stack.enter_context(p)
 
-class TestPruneStaleState:
-    @pytest.mark.asyncio
-    async def test_syncs_display_names(self):
-        mock_window = MagicMock(window_id="@0", window_name="test")
-        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
-            await prune_stale_state([mock_window])
-            mock_sm.sync_display_names.assert_called_once_with([("@0", "test")])
-            mock_sm.prune_stale_state.assert_called_once_with({"@0"})
-
-
-class TestProbeTopicExistence:
-    @pytest.mark.asyncio
-    async def test_deleted_topic_unbinds(self):
-        bot = AsyncMock(spec=Bot)
-        bot.unpin_all_forum_topic_messages = AsyncMock(
-            side_effect=BadRequest("Topic_id_invalid")
-        )
-        with (
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
-            patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
-                new_callable=AsyncMock,
-            ),
-        ):
-            mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
-            mock_router.resolve_chat_id.return_value = 42
-            mock_tmux.find_window_by_id = AsyncMock(
-                return_value=MagicMock(window_id="@0")
+            mocks["tmux_manager"].list_windows = AsyncMock(return_value=windows)
+            mocks["tmux_manager"].discover_external_sessions = AsyncMock(
+                return_value=external
             )
-            mock_tmux.kill_window = AsyncMock()
-            await probe_topic_existence(bot)
-            mock_router.unbind_thread.assert_called_once_with(1, 100)
+            mocks["thread_router"].iter_thread_bindings.return_value = bindings
+            mocks["config"].status_poll_interval = 1.0
 
-    @pytest.mark.asyncio
-    async def test_suspended_probe_skipped(self):
+            ctx.mocks = mocks
+            yield ctx
+
+    return combined, ctx
+
+
+async def _run_loop_once(bot: Bot, **kwargs: Any) -> _LoopCtx:
+    combined, ctx = _patch_loop_deps(**kwargs)
+
+    async def _stop_after_one(_delay: float) -> None:
+        raise asyncio.CancelledError
+
+    with (
+        combined(),
+        patch(
+            "ccgram.handlers.polling_coordinator.asyncio.sleep",
+            side_effect=_stop_after_one,
+        ),
+        contextlib.suppress(asyncio.CancelledError),
+    ):
+        await status_poll_loop(bot)
+    return ctx
+
+
+class TestStatusPollLoopIteratesAllBindings:
+    async def test_ticks_all_bindings(self):
         bot = AsyncMock(spec=Bot)
-        ws = terminal_poll_state.get_state("@0")
-        ws.probe_failures = 999
-        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router:
-            mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
-            await probe_topic_existence(bot)
-        bot.unpin_all_forum_topic_messages.assert_not_called()
+        w0, w1, w2 = _make_window("@0"), _make_window("@1"), _make_window("@2")
+        bindings = [(1, 100, "@0"), (2, 200, "@1"), (3, 300, "@2")]
+
+        ctx = await _run_loop_once(bot, bindings=bindings, windows=[w0, w1, w2])
+
+        tick = ctx.mocks["tick_window"]
+        assert tick.call_count == 3
+        for i, (uid, tid, wid) in enumerate(bindings):
+            call_args = tick.call_args_list[i]
+            assert call_args[0][0] is bot
+            assert call_args[0][1] == uid
+            assert call_args[0][2] == tid
+            assert call_args[0][3] == wid
+
+
+class TestStatusPollLoopDelegatesPeriodicTasks:
+    async def test_periodic_and_lifecycle_called(self):
+        bot = AsyncMock(spec=Bot)
+        ctx = await _run_loop_once(bot, bindings=[], windows=[])
+
+        ctx.mocks["run_periodic"].assert_called_once()
+        ctx.mocks["run_lifecycle"].assert_called_once()
+
+
+class TestStatusPollLoopPassesWindowLookup:
+    async def test_lookup_provides_correct_window(self):
+        bot = AsyncMock(spec=Bot)
+        w_a = _make_window("@A", "proj-a")
+        w_b = _make_window("@B", "proj-b")
+        bindings = [(1, 100, "@A")]
+
+        ctx = await _run_loop_once(bot, bindings=bindings, windows=[w_a, w_b])
+
+        tick = ctx.mocks["tick_window"]
+        assert tick.call_count == 1
+        assert tick.call_args[0][4] is w_a
+
+
+class TestStatusPollLoopHandlesExternalSessions:
+    async def test_external_windows_in_lookup(self):
+        bot = AsyncMock(spec=Bot)
+        ext = _make_window("emdash-claude-main-abc:@0", "emdash")
+        bindings = [(1, 100, "emdash-claude-main-abc:@0")]
+
+        ctx = await _run_loop_once(bot, bindings=bindings, external=[ext])
+
+        tick = ctx.mocks["tick_window"]
+        assert tick.call_count == 1
+        assert tick.call_args[0][4] is ext
+
+
+class TestStatusPollLoopRespectsConfigInterval:
+    async def test_sleeps_with_config_interval(self):
+        bot = AsyncMock(spec=Bot)
+        combined, ctx = _patch_loop_deps(bindings=[], windows=[])
+        sleep_delays: list[float] = []
+
+        async def _capture_sleep(delay: float) -> None:
+            sleep_delays.append(delay)
+            raise asyncio.CancelledError
+
+        with combined():
+            ctx.mocks["config"].status_poll_interval = 2.5
+            with (
+                patch(
+                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    side_effect=_capture_sleep,
+                ),
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await status_poll_loop(bot)
+
+        assert sleep_delays == [2.5]
+
+
+class TestBackoffOnTelegramError:
+    async def test_backoff_doubles_on_error(self):
+        bot = AsyncMock(spec=Bot)
+        combined, ctx = _patch_loop_deps(bindings=[], windows=[])
+        sleep_delays: list[float] = []
+        call_count = 0
+
+        async def _capture_sleep(delay: float) -> None:
+            nonlocal call_count
+            sleep_delays.append(delay)
+            call_count += 1
+            if call_count >= 3:
+                raise asyncio.CancelledError
+
+        with combined():
+            ctx.mocks["tmux_manager"].list_windows = AsyncMock(
+                side_effect=[
+                    TelegramError("err"),
+                    TelegramError("err"),
+                    TelegramError("err"),
+                ]
+            )
+            with (
+                patch(
+                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    side_effect=_capture_sleep,
+                ),
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await status_poll_loop(bot)
+
+        assert sleep_delays[0] == _BACKOFF_MIN
+        assert sleep_delays[1] == _BACKOFF_MIN * 2
+
+    def test_backoff_bounded_by_max(self):
+        for streak in range(20):
+            delay = min(_BACKOFF_MAX, _BACKOFF_MIN * (2**streak))
+            assert delay <= _BACKOFF_MAX
+
+
+class TestPerBindingError:
+    async def test_error_does_not_abort_loop(self):
+        bot = AsyncMock(spec=Bot)
+        w0, w1, w2 = _make_window("@0"), _make_window("@1"), _make_window("@2")
+        bindings = [(1, 100, "@0"), (2, 200, "@1"), (3, 300, "@2")]
+
+        combined, ctx = _patch_loop_deps(bindings=bindings, windows=[w0, w1, w2])
+        call_order: list[str] = []
+
+        async def _tick_side_effect(
+            _bot: Bot, uid: int, tid: int, wid: str, _w: Any
+        ) -> None:
+            call_order.append(wid)
+            if wid == "@1":
+                raise TelegramError("boom")
+
+        with combined():
+            ctx.mocks["tick_window"].side_effect = _tick_side_effect
+
+            async def _stop_sleep(_delay: float) -> None:
+                raise asyncio.CancelledError
+
+            with (
+                patch(
+                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    side_effect=_stop_sleep,
+                ),
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await status_poll_loop(bot)
+
+        assert call_order == ["@0", "@1", "@2"]
 
 
 class TestBackoffConstants:
     def test_backoff_bounds(self):
         assert _BACKOFF_MIN == 2.0
         assert _BACKOFF_MAX == 30.0
+
+
+class TestImportsAreMinimal:
+    def test_only_allowed_imports(self):
+        source = SRC_FILE.read_text()
+        tree = ast.parse(source)
+        allowed_modules = {
+            "asyncio",
+            "typing",
+            "structlog",
+            "telegram.error",
+            "telegram",
+            "..thread_router",
+            "..tmux_manager",
+            "..utils",
+            "..config",
+            ".window_tick",
+            ".periodic_tasks",
+        }
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert alias.name in allowed_modules, (
+                        f"Unexpected import: {alias.name}"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                level = node.level or 0
+                rel = "." * level + mod
+                if rel in allowed_modules:
+                    continue
+                if not mod:
+                    for alias in node.names:
+                        fq = "." * level + alias.name
+                        assert fq in allowed_modules, (
+                            f"Unexpected import: from {rel} import {alias.name}"
+                        )
+                else:
+                    assert rel in allowed_modules or any(
+                        mod.startswith(a.lstrip(".")) for a in allowed_modules
+                    ), f"Unexpected import from: {rel}"
+
+
+class TestDoesNotImportPerWindowModules:
+    def test_no_per_window_imports(self):
+        source = SRC_FILE.read_text()
+        banned = {
+            "interactive_ui",
+            "message_queue",
+            "message_sender",
+            "topic_emoji",
+            "transcript_discovery",
+            "recovery_callbacks",
+            "claude_task_state",
+            "session_monitor",
+            "polling_strategies",
+            "cleanup",
+        }
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                for b in banned:
+                    assert b not in mod, f"polling_coordinator must not import {b}"
+
+
+class TestModuleLineCountUnderCeiling:
+    def test_under_120_lines(self):
+        lines = SRC_FILE.read_text().splitlines()
+        assert len(lines) <= 120, (
+            f"polling_coordinator.py is {len(lines)} lines, ceiling is 120"
+        )
