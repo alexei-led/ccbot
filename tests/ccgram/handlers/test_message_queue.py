@@ -1,16 +1,24 @@
+import ast
 import asyncio
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ccgram.handlers.message_queue import (
     MERGE_MAX_LENGTH,
-    MessageTask,
     _can_merge_tasks,
     _coalesce_status_updates,
+    _dispatch,
     _merge_content_tasks,
     get_or_create_queue,
     shutdown_workers,
+)
+from ccgram.handlers.message_task import (
+    ContentTask,
+    ContentType,
+    StatusClearTask,
+    StatusUpdateTask,
 )
 
 
@@ -32,14 +40,13 @@ def lock():
 def _content_task(
     text: str = "hello",
     window_id: str = "@0",
-    content_type: str = "text",
+    content_type: ContentType = "text",
     thread_id: int | None = 42,
     tool_use_id: str | None = None,
-) -> MessageTask:
-    return MessageTask(
-        task_type="content",
+) -> ContentTask:
+    return ContentTask(
         window_id=window_id,
-        parts=[text],
+        parts=(text,),
         content_type=content_type,
         thread_id=thread_id,
         tool_use_id=tool_use_id,
@@ -50,10 +57,19 @@ def _status_task(
     text: str = "Thinking...",
     window_id: str = "@0",
     thread_id: int | None = 42,
-) -> MessageTask:
-    return MessageTask(
-        task_type="status_update",
+) -> StatusUpdateTask:
+    return StatusUpdateTask(
         text=text,
+        window_id=window_id,
+        thread_id=thread_id,
+    )
+
+
+def _clear_task(
+    window_id: str = "@0",
+    thread_id: int | None = 42,
+) -> StatusClearTask:
+    return StatusClearTask(
         window_id=window_id,
         thread_id=thread_id,
     )
@@ -125,7 +141,7 @@ class TestMergeContentTasks:
         merged, count = await _merge_content_tasks(queue, first, lock)
 
         assert count == 2
-        assert merged.parts == ["first", "second", "third"]
+        assert merged.parts == ("first", "second", "third")
 
     async def test_stops_on_tool_use(self, queue, lock):
         queue.put_nowait(_content_task("second"))
@@ -136,7 +152,7 @@ class TestMergeContentTasks:
         merged, count = await _merge_content_tasks(queue, first, lock)
 
         assert count == 1
-        assert merged.parts == ["first", "second"]
+        assert merged.parts == ("first", "second")
         assert queue.qsize() == 2
 
     async def test_stops_at_length_limit(self, queue, lock):
@@ -147,7 +163,7 @@ class TestMergeContentTasks:
         merged, count = await _merge_content_tasks(queue, first, lock)
 
         assert count == 0
-        assert merged.parts == [big_text]
+        assert merged.parts == (big_text,)
         assert queue.qsize() == 1
 
     async def test_no_merge_returns_zero(self, queue, lock):
@@ -170,10 +186,133 @@ class TestCoalesceStatusUpdates:
         assert selected.text == "Writing..."
         assert dropped == 2
 
-    async def test_non_status_passthrough(self, queue, lock):
-        task = _content_task("hello")
+    async def test_preserves_non_status_tasks(self, queue, lock):
+        queue.put_nowait(_content_task("hello"))
+        queue.put_nowait(_status_task("Writing..."))
+        first = _status_task("Reading...")
 
-        selected, dropped = await _coalesce_status_updates(queue, task, lock)
+        selected, dropped = await _coalesce_status_updates(queue, first, lock)
 
-        assert selected is task
-        assert dropped == 0
+        assert selected.text == "Writing..."
+        assert dropped == 1
+        assert queue.qsize() == 1
+
+
+class TestDispatch:
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=False)
+    async def test_content_task_dispatch(
+        self, mock_eligible, mock_flush, mock_process, bot, queue, lock
+    ):
+        ct = _content_task("hello")
+        extra = await _dispatch(bot, 1, ct, queue, lock)
+        assert extra == 0
+        mock_flush.assert_awaited_once_with(bot, 1, ct)
+        mock_process.assert_awaited_once()
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    async def test_content_task_batch_eligible(
+        self, mock_eligible, mock_tool_event, mock_process, bot, queue, lock
+    ):
+        ct = _content_task("tool", content_type="tool_use")
+        mock_tool_event.return_value = None
+        extra = await _dispatch(bot, 1, ct, queue, lock)
+        assert extra == 0
+        mock_tool_event.assert_awaited_once_with(bot, 1, ct)
+        mock_process.assert_not_awaited()
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    async def test_content_task_batch_with_followup(
+        self, mock_eligible, mock_tool_event, mock_process, bot, queue, lock
+    ):
+        ct = _content_task("tool", content_type="tool_use")
+        followup = _content_task("overflow")
+        mock_tool_event.return_value = followup
+        await _dispatch(bot, 1, ct, queue, lock)
+        mock_process.assert_awaited_once_with(bot, 1, followup)
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch(
+        "ccgram.handlers.message_queue.process_status_update", new_callable=AsyncMock
+    )
+    @patch(
+        "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
+    )
+    async def test_status_update_dispatch(
+        self, mock_flush, mock_status, mock_process, bot, queue, lock
+    ):
+        st = _status_task("Working...")
+        mock_status.return_value = None
+        extra = await _dispatch(bot, 1, st, queue, lock)
+        assert extra == 0
+        mock_flush.assert_awaited_once_with(1, st, bot)
+        mock_status.assert_awaited_once()
+        mock_process.assert_not_awaited()
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch(
+        "ccgram.handlers.message_queue.process_status_update", new_callable=AsyncMock
+    )
+    @patch(
+        "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
+    )
+    async def test_status_update_with_followup(
+        self, mock_flush, mock_status, mock_process, bot, queue, lock
+    ):
+        st = _status_task("Working...")
+        followup = _content_task("promoted")
+        mock_status.return_value = followup
+        await _dispatch(bot, 1, st, queue, lock)
+        mock_process.assert_awaited_once_with(bot, 1, followup)
+
+    @patch("ccgram.handlers.message_queue.process_status_clear", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
+    )
+    async def test_status_clear_dispatch(
+        self, mock_flush, mock_clear, bot, queue, lock
+    ):
+        cl = _clear_task()
+        extra = await _dispatch(bot, 1, cl, queue, lock)
+        assert extra == 0
+        mock_flush.assert_awaited_once_with(1, cl, bot)
+        mock_clear.assert_awaited_once_with(bot, 1, cl)
+
+
+class TestNoBackEdgeImports:
+    def _get_imports(self, filepath: Path) -> set[str]:
+        tree = ast.parse(filepath.read_text())
+        modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                modules.add(node.module)
+        return modules
+
+    def test_tool_batch_does_not_import_message_queue(self):
+        src = Path("src/ccgram/handlers/tool_batch.py")
+        imports = self._get_imports(src)
+        assert not any("message_queue" in m for m in imports), (
+            f"tool_batch.py must not import from message_queue: {imports}"
+        )
+
+    def test_status_bubble_does_not_import_message_queue(self):
+        src = Path("src/ccgram/handlers/status_bubble.py")
+        imports = self._get_imports(src)
+        assert not any("message_queue" in m for m in imports), (
+            f"status_bubble.py must not import from message_queue: {imports}"
+        )

@@ -8,8 +8,6 @@ tool-use batching lives in ``tool_batch``.
 
 import asyncio
 import contextlib
-from dataclasses import dataclass, field
-from typing import Literal
 
 import structlog
 from telegram import Bot
@@ -19,6 +17,14 @@ from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import task_done_callback
 from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
+from .message_task import (
+    ContentTask,
+    ContentType,
+    MessageTask,
+    StatusClearTask,
+    StatusUpdateTask,
+    thread_key,
+)
 from .status_bubble import (
     clear_status_message,
     convert_status_to_content,
@@ -28,6 +34,7 @@ from .status_bubble import (
 from .tool_batch import (
     clear_all_batches,
     flush_batch,
+    flush_if_active,
     has_active_batch,
     is_batch_eligible,
     process_tool_event,
@@ -37,28 +44,12 @@ logger = structlog.get_logger()
 
 MERGE_MAX_LENGTH = 3800  # Leave room within Telegram's 4096 char message limit
 
-
-@dataclass
-class MessageTask:
-    """Message task for queue processing."""
-
-    task_type: Literal["content", "status_update", "status_clear"]
-    text: str | None = None
-    window_id: str | None = None
-    # content type fields
-    parts: list[str] = field(default_factory=list)
-    tool_use_id: str | None = None
-    tool_name: str | None = None
-    content_type: str = "text"
-    thread_id: int | None = None  # Telegram topic thread_id for targeted send
-
-
 # Per-user message queues and worker tasks
 _message_queues: dict[int, asyncio.Queue[MessageTask]] = {}
 _queue_workers: dict[int, asyncio.Task[None]] = {}
 _queue_locks: dict[int, asyncio.Lock] = {}  # Protect drain/refill operations
 
-# Map (tool_use_id, user_id, thread_id_or_0) -> telegram message_id
+# Map (tool_use_id, user_id, thread_key) -> telegram message_id
 # for editing tool_use messages with results
 _tool_msg_ids: dict[tuple[str, int, int], int] = {}
 
@@ -103,15 +94,12 @@ def _inspect_queue(queue: asyncio.Queue[MessageTask]) -> list[MessageTask]:
     return items
 
 
-def _can_merge_tasks(base: MessageTask, candidate: MessageTask) -> bool:
+def _can_merge_tasks(base: ContentTask, candidate: MessageTask) -> bool:
     """Check if two content tasks can be merged."""
+    if not isinstance(candidate, ContentTask):
+        return False
     if base.window_id != candidate.window_id:
         return False
-    if candidate.task_type != "content":
-        return False
-    # tool_use/tool_result break merge chain
-    # - tool_use: will be edited later by tool_result
-    # - tool_result: edits previous message, merging would cause order issues
     if base.content_type in ("tool_use", "tool_result"):
         return False
     return candidate.content_type not in ("tool_use", "tool_result")
@@ -119,9 +107,9 @@ def _can_merge_tasks(base: MessageTask, candidate: MessageTask) -> bool:
 
 async def _merge_content_tasks(
     queue: asyncio.Queue[MessageTask],
-    first: MessageTask,
+    first: ContentTask,
     lock: asyncio.Lock,
-) -> tuple[MessageTask, int]:
+) -> tuple[ContentTask, int]:
     """Merge consecutive content tasks from queue.
 
     Returns: (merged_task, merge_count) where merge_count is the number of
@@ -143,14 +131,12 @@ async def _merge_content_tasks(
 
         for i, task in enumerate(items):
             if not _can_merge_tasks(first, task):
-                # Can't merge, keep this and all remaining items
                 remaining = items[i:]
                 break
 
-            # Check length before merging
+            assert isinstance(task, ContentTask)
             task_length = sum(len(p) for p in task.parts)
             if current_length + task_length > MERGE_MAX_LENGTH:
-                # Too long, stop merging
                 remaining = items[i:]
                 break
 
@@ -158,21 +144,17 @@ async def _merge_content_tasks(
             current_length += task_length
             merge_count += 1
 
-        # Put remaining items back into the queue
         for item in remaining:
             queue.put_nowait(item)
-            # Compensate: this item was already counted when first enqueued,
-            # put_nowait adds a duplicate count that must be removed
             queue.task_done()
 
     if merge_count == 0:
         return first, 0
 
     return (
-        MessageTask(
-            task_type="content",
+        ContentTask(
             window_id=first.window_id,
-            parts=merged_parts,
+            parts=tuple(merged_parts),
             tool_use_id=first.tool_use_id,
             content_type=first.content_type,
             thread_id=first.thread_id,
@@ -183,32 +165,28 @@ async def _merge_content_tasks(
 
 async def _coalesce_status_updates(
     queue: asyncio.Queue[MessageTask],
-    first: MessageTask,
+    first: StatusUpdateTask,
     lock: asyncio.Lock,
-) -> tuple[MessageTask, int]:
+) -> tuple[StatusUpdateTask, int]:
     """Keep only the latest pending status_update for the same topic/window.
 
     Returns: (selected_task, dropped_count) where dropped_count is the number
     of queued tasks removed and already accounted for.
     """
-    if first.task_type != "status_update":
-        return first, 0
-
     selected = first
     dropped = 0
-    key = (first.thread_id or 0, first.window_id or "")
+    key = (thread_key(first.thread_id), first.window_id)
 
     async with lock:
         items = _inspect_queue(queue)
         remaining: list[MessageTask] = []
 
         for task in items:
-            if task.task_type != "status_update":
+            if not isinstance(task, StatusUpdateTask):
                 remaining.append(task)
                 continue
-            task_key = (task.thread_id or 0, task.window_id or "")
+            task_key = (thread_key(task.thread_id), task.window_id)
             if task_key == key:
-                # Same topic/window status update; keep latest only.
                 selected = task
                 dropped += 1
             else:
@@ -224,7 +202,7 @@ async def _coalesce_status_updates(
 async def _handle_content_task(
     bot: Bot,
     user_id: int,
-    task: MessageTask,
+    task: ContentTask,
     queue: asyncio.Queue[MessageTask],
     lock: asyncio.Lock,
 ) -> int:
@@ -232,20 +210,18 @@ async def _handle_content_task(
 
     Returns the number of additional merged tasks (caller must call task_done for each).
     """
-    if task.window_id and is_batch_eligible(task, task.window_id):  # type: ignore[arg-type]
-        await process_tool_event(bot, user_id, task)  # type: ignore[arg-type]
+    if is_batch_eligible(task):
+        followup = await process_tool_event(bot, user_id, task)
+        if followup is not None:
+            await _process_content_task(bot, user_id, followup)
         return 0
 
-    # Non-tool content: flush any active batch first
-    thread_id = task.thread_id or 0
-    if has_active_batch(user_id, thread_id):
-        await flush_batch(bot, user_id, thread_id)
+    await flush_if_active(bot, user_id, task)
 
-    # Try to merge consecutive content tasks
     merged_task, merge_count = await _merge_content_tasks(queue, task, lock)
     if merge_count > 0:
         logger.debug("Merged %d tasks for user %s", merge_count, user_id)
-    await process_content_task(bot, user_id, merged_task)
+    await _process_content_task(bot, user_id, merged_task)
     return merge_count
 
 
@@ -255,6 +231,40 @@ def _is_ghost_window_task_at_enqueue(window_id: str) -> bool:
         logger.debug("Skipping enqueue for unbound window %s", window_id)
         return True
     return False
+
+
+async def _flush_batch_for_task(user_id: int, task: MessageTask, bot: Bot) -> None:
+    """Flush any active batch for the topic that owns this task."""
+    tkey = thread_key(task.thread_id)
+    if has_active_batch(user_id, tkey):
+        await flush_batch(bot, user_id, tkey)
+
+
+async def _dispatch(
+    bot: Bot,
+    user_id: int,
+    task: MessageTask,
+    queue: asyncio.Queue[MessageTask],
+    lock: asyncio.Lock,
+) -> int:
+    """Dispatch a task by type. Returns extra task_done count for merged tasks."""
+    match task:
+        case ContentTask() as ct:
+            return await _handle_content_task(bot, user_id, ct, queue, lock)
+        case StatusUpdateTask() as st:
+            await _flush_batch_for_task(user_id, st, bot)
+            collapsed_task, dropped = await _coalesce_status_updates(queue, st, lock)
+            if dropped > 0:
+                for _ in range(dropped):
+                    queue.task_done()
+            followup = await process_status_update(bot, user_id, collapsed_task)
+            if followup is not None:
+                await _process_content_task(bot, user_id, followup)
+            return 0
+        case StatusClearTask() as cl:
+            await _flush_batch_for_task(user_id, cl, bot)
+            await process_status_clear(bot, user_id, cl)
+            return 0
 
 
 async def _message_queue_worker(bot: Bot, user_id: int) -> None:
@@ -269,29 +279,9 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
             try:
                 while True:
                     try:
-                        if task.task_type == "content":
-                            extra = await _handle_content_task(
-                                bot, user_id, task, queue, lock
-                            )
-                            for _ in range(extra):
-                                queue.task_done()
-                        elif task.task_type == "status_update":
-                            # Flush batch before status
-                            thread_id = task.thread_id or 0
-                            if has_active_batch(user_id, thread_id):
-                                await flush_batch(bot, user_id, thread_id)
-                            collapsed_task, dropped = await _coalesce_status_updates(
-                                queue, task, lock
-                            )
-                            if dropped > 0:
-                                for _ in range(dropped):
-                                    queue.task_done()
-                            await process_status_update(bot, user_id, collapsed_task)  # type: ignore[arg-type]  # Task 4 migrates to sum type
-                        elif task.task_type == "status_clear":
-                            thread_id = task.thread_id or 0
-                            if has_active_batch(user_id, thread_id):
-                                await flush_batch(bot, user_id, thread_id)
-                            await process_status_clear(bot, user_id, task)  # type: ignore[arg-type]  # Task 4 migrates to sum type
+                        extra = await _dispatch(bot, user_id, task, queue, lock)
+                        for _ in range(extra):
+                            queue.task_done()
                         break
                     except RetryAfter as e:
                         retry_secs = min(
@@ -312,7 +302,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                 logger.exception(
                     "Error processing message task for user %s (thread %s)",
                     user_id,
-                    task.thread_id,
+                    getattr(task, "thread_id", None),
                 )
             finally:
                 queue.task_done()
@@ -320,28 +310,22 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
             logger.debug("Message queue worker cancelled for user %s", user_id)
             break
         except Exception:
-            # Catch-all: any error (network, programming, etc.) must not kill
-            # the queue worker — log and continue processing next message.
             logger.exception(
                 "Unexpected error in queue worker for user %s",
                 user_id,
             )
 
 
-async def process_content_task(bot: Bot, user_id: int, task: MessageTask) -> None:
+async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> None:
     """Process a content message task."""
-    window_id = task.window_id or ""
-    thread_id = task.thread_id or 0
+    tkey = thread_key(task.thread_id)
     chat_id = thread_router.resolve_chat_id(user_id, task.thread_id)
 
-    # 1. Handle tool_result editing (merged parts are edited together)
     if task.content_type == "tool_result" and task.tool_use_id:
-        _tkey = (task.tool_use_id, user_id, thread_id)
+        _tkey = (task.tool_use_id, user_id, tkey)
         edit_msg_id = _tool_msg_ids.pop(_tkey, None)
         if edit_msg_id is not None:
-            # Clear status message first
-            await clear_status_message(bot, user_id, thread_id)
-            # Join all parts for editing (merged content goes together)
+            await clear_status_message(bot, user_id, tkey)
             full_text = "\n\n".join(task.parts)
             success = await edit_with_fallback(
                 bot,
@@ -350,25 +334,21 @@ async def process_content_task(bot: Bot, user_id: int, task: MessageTask) -> Non
                 full_text,
             )
             if success:
-                # Status will be recreated by the poll loop — no eager send.
                 return
             logger.debug("Failed to edit tool msg %s, sending new", edit_msg_id)
-            # Fall through to send as new message
 
-    # 2. Send content messages, converting status message to first content part
     first_part = True
     last_msg_id: int | None = None
     for part in task.parts:
         sent = None
 
-        # For first part, try to convert status message to content (edit instead of delete)
         if first_part:
             first_part = False
             converted_msg_id = await convert_status_to_content(
                 bot,
                 user_id,
-                thread_id,
-                window_id,
+                tkey,
+                task.window_id,
                 part,
             )
             if converted_msg_id is not None:
@@ -385,12 +365,8 @@ async def process_content_task(bot: Bot, user_id: int, task: MessageTask) -> Non
         if sent:
             last_msg_id = sent.message_id
 
-    # 3. Record tool_use message ID for later editing
     if last_msg_id and task.tool_use_id and task.content_type == "tool_use":
-        _tool_msg_ids[(task.tool_use_id, user_id, thread_id)] = last_msg_id
-
-    # Status will be recreated by the 1-second poll loop — no need to
-    # eagerly send a new status message here (doing so caused pile-up).
+        _tool_msg_ids[(task.tool_use_id, user_id, tkey)] = last_msg_id
 
 
 async def enqueue_content_message(
@@ -400,8 +376,7 @@ async def enqueue_content_message(
     parts: list[str],
     tool_use_id: str | None = None,
     tool_name: str | None = None,
-    content_type: str = "text",
-    text: str | None = None,
+    content_type: ContentType = "text",
     thread_id: int | None = None,
 ) -> None:
     """Enqueue a content message task."""
@@ -409,11 +384,9 @@ async def enqueue_content_message(
         return
     queue = get_or_create_queue(bot, user_id)
 
-    task = MessageTask(
-        task_type="content",
-        text=text,
+    task = ContentTask(
         window_id=window_id,
-        parts=parts,
+        parts=tuple(parts),
         tool_use_id=tool_use_id,
         tool_name=tool_name,
         content_type=content_type,
@@ -429,19 +402,17 @@ async def enqueue_status_update(
     status_text: str | None,
     thread_id: int | None = None,
 ) -> None:
-    """Enqueue status update."""
+    """Enqueue status update or clear."""
     queue = get_or_create_queue(bot, user_id)
 
     if status_text:
-        task = MessageTask(
-            task_type="status_update",
-            text=status_text,
+        task: MessageTask = StatusUpdateTask(
             window_id=window_id,
+            text=status_text,
             thread_id=thread_id,
         )
     else:
-        task = MessageTask(
-            task_type="status_clear",
+        task = StatusClearTask(
             window_id=window_id,
             thread_id=thread_id,
         )
@@ -455,10 +426,9 @@ def clear_tool_msg_ids_for_topic(user_id: int, thread_id: int | None = None) -> 
 
     Removes all entries in _tool_msg_ids that match the given user and thread.
     """
-    thread_id_or_0 = thread_id or 0
-    # Find and remove all matching keys
+    tkey = thread_key(thread_id)
     keys_to_remove = [
-        key for key in _tool_msg_ids if key[1] == user_id and key[2] == thread_id_or_0
+        key for key in _tool_msg_ids if key[1] == user_id and key[2] == tkey
     ]
     for key in keys_to_remove:
         _tool_msg_ids.pop(key, None)

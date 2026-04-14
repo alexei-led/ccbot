@@ -286,18 +286,18 @@ async def status_poll_loop(bot: Bot) -> None:
 - Modify: `src/ccgram/handlers/message_queue.py`
 - Modify: `tests/ccgram/handlers/test_message_queue.py`
 
-- [ ] delete the local `@dataclass class MessageTask` from `message_queue.py`
-- [ ] import `ContentTask, StatusUpdateTask, StatusClearTask, MessageTask, thread_key` from `.message_task`
-- [ ] rewrite the worker `_dispatch` (or equivalent) as a `match` over the sum type per the design's dispatcher contract
-- [ ] in the `ContentTask` branch: call `tool_batch.is_batch_eligible(ct)`; if True, await `process_tool_event` and if it returns a followup, run `_process_content_task(followup)`; otherwise await `tool_batch.flush_if_active(ct)` then `_process_content_task(ct)`
-- [ ] in the `StatusUpdateTask` branch: await `status_bubble.process_status_update`; if it returns a followup, run `_process_content_task(followup)`
-- [ ] in the `StatusClearTask` branch: await `status_bubble.process_status_clear`
-- [ ] update all `enqueue_*` helpers to construct the correct concrete dataclass (no more grab-bag `MessageTask(task_type=...)`)
-- [ ] update merge logic (`_can_merge_tasks`, `_collect_mergeable_tasks`) to take and return `ContentTask` only — status tasks never merge
-- [ ] use `thread_key(task.thread_id)` for `_tool_msg_ids` keys
-- [ ] update `tests/ccgram/handlers/test_message_queue.py` to use concrete dataclasses; cover all four dispatch branches per design's `message_queue/tests.md`
-- [ ] add the AST guard test `test_no_back_edge_imports` (walks `tool_batch.py` and `status_bubble.py`)
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 5
+- [x] delete the local `@dataclass class MessageTask` from `message_queue.py`
+- [x] import `ContentTask, StatusUpdateTask, StatusClearTask, MessageTask, thread_key` from `.message_task`
+- [x] rewrite the worker `_dispatch` (or equivalent) as a `match` over the sum type per the design's dispatcher contract
+- [x] in the `ContentTask` branch: call `tool_batch.is_batch_eligible(ct)`; if True, await `process_tool_event` and if it returns a followup, run `_process_content_task(followup)`; otherwise await `tool_batch.flush_if_active(ct)` then `_process_content_task(ct)`
+- [x] in the `StatusUpdateTask` branch: await `status_bubble.process_status_update`; if it returns a followup, run `_process_content_task(followup)`
+- [x] in the `StatusClearTask` branch: await `status_bubble.process_status_clear`
+- [x] update all `enqueue_*` helpers to construct the correct concrete dataclass (no more grab-bag `MessageTask(task_type=...)`)
+- [x] update merge logic (`_can_merge_tasks`, `_collect_mergeable_tasks`) to take and return `ContentTask` only — status tasks never merge
+- [x] use `thread_key(task.thread_id)` for `_tool_msg_ids` keys
+- [x] update `tests/ccgram/handlers/test_message_queue.py` to use concrete dataclasses; cover all four dispatch branches per design's `message_queue/tests.md`
+- [x] add the AST guard test `test_no_back_edge_imports` (walks `tool_batch.py` and `status_bubble.py`)
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 5
 
 #### Task 5: Update all `enqueue_*` call sites and integration tests
 

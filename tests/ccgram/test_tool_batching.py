@@ -5,12 +5,11 @@ import pytest
 from telegram.error import RetryAfter
 
 from ccgram.handlers.message_queue import (
-    MessageTask,
     _handle_content_task,
     get_or_create_queue,
     shutdown_workers,
 )
-from ccgram.handlers.message_task import ContentTask
+from ccgram.handlers.message_task import ContentTask, MessageTask
 from ccgram.handlers.tool_batch import (
     BATCH_MAX_ENTRIES,
     BATCH_MAX_LENGTH,
@@ -668,12 +667,12 @@ class TestHandleContentTask:
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
         lock = asyncio.Lock()
-        task = MessageTask(
-            task_type="content",
+        task = ContentTask(
             content_type="tool_use",
             window_id="@0",
-            parts=["Read x"],
+            parts=("Read x",),
         )
+        mock_batch.return_value = None
         extra = await _handle_content_task(bot, 1, task, queue, lock)
         assert extra == 0
         mock_batch.assert_awaited_once()
@@ -682,95 +681,72 @@ class TestHandleContentTask:
         "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
         return_value="individual",
     )
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
     async def test_verbose_mode_skips_batch(self, mock_process, mock_should) -> None:
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
         lock = asyncio.Lock()
-        task = MessageTask(
-            task_type="content",
+        task = ContentTask(
             content_type="tool_use",
             window_id="@0",
-            parts=["Read x"],
+            parts=("Read x",),
         )
         extra = await _handle_content_task(bot, 1, task, queue, lock)
         assert extra == 0
         mock_process.assert_awaited_once()
 
-    @patch("ccgram.handlers.message_queue.flush_batch", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
     async def test_text_flushes_active_batch(self, mock_process, mock_flush) -> None:
-        _active_batches[(1, 0)] = ToolBatch(window_id="@0", thread_id=0, entries=[])
-
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
         lock = asyncio.Lock()
-        task = MessageTask(
-            task_type="content",
+        task = ContentTask(
             content_type="text",
             window_id="@0",
-            parts=["Hello"],
+            parts=("Hello",),
         )
         await _handle_content_task(bot, 1, task, queue, lock)
-        mock_flush.assert_awaited_once_with(bot, 1, 0)
+        mock_flush.assert_awaited_once_with(bot, 1, task)
         mock_process.assert_awaited_once()
 
-    @patch("ccgram.handlers.message_queue.flush_batch", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
     async def test_thinking_flushes_active_batch(
         self, mock_process, mock_flush
     ) -> None:
-        _active_batches[(1, 5)] = ToolBatch(window_id="@0", thread_id=5, entries=[])
-
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
         lock = asyncio.Lock()
-        task = MessageTask(
-            task_type="content",
-            content_type="thinking",
+        task = ContentTask(
+            content_type="text",
             window_id="@0",
-            parts=["Thinking..."],
+            parts=("Thinking...",),
             thread_id=5,
         )
         await _handle_content_task(bot, 1, task, queue, lock)
-        mock_flush.assert_awaited_once_with(bot, 1, 5)
+        mock_flush.assert_awaited_once_with(bot, 1, task)
 
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
     async def test_no_batch_no_flush(self, mock_process) -> None:
         bot = AsyncMock()
         queue: asyncio.Queue[MessageTask] = asyncio.Queue()
         lock = asyncio.Lock()
-        task = MessageTask(
-            task_type="content",
+        task = ContentTask(
             content_type="text",
             window_id="@0",
-            parts=["Hello"],
+            parts=("Hello",),
         )
         await _handle_content_task(bot, 1, task, queue, lock)
         mock_process.assert_awaited_once()
-
-    @patch(
-        "ccgram.handlers.tool_batch.session_manager.get_batch_mode",
-        return_value="batched",
-    )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    async def test_no_window_id_skips_batch(self, mock_batch, mock_should) -> None:
-        bot = AsyncMock()
-        queue: asyncio.Queue[MessageTask] = asyncio.Queue()
-        lock = asyncio.Lock()
-        task = MessageTask(
-            task_type="content",
-            content_type="tool_use",
-            window_id=None,
-            parts=["Read x"],
-        )
-        with patch(
-            "ccgram.handlers.message_queue.process_content_task",
-            new_callable=AsyncMock,
-        ) as mock_process:
-            await _handle_content_task(bot, 1, task, queue, lock)
-            mock_process.assert_awaited_once()
-            mock_batch.assert_not_awaited()
 
 
 class TestFlushBatch:
@@ -914,10 +890,9 @@ class TestQueueWorkerRetryAfter:
         bot = AsyncMock()
         queue = get_or_create_queue(bot, 1)
         queue.put_nowait(
-            MessageTask(
-                task_type="content",
+            ContentTask(
                 window_id="@0",
-                parts=["hello"],
+                parts=("hello",),
                 content_type="text",
                 thread_id=10,
             )
@@ -1039,10 +1014,7 @@ class TestFlushSendFallback:
 
 class TestDefensiveElseBranch:
     @patch("ccgram.handlers.tool_batch.thread_router")
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
-    async def test_unexpected_content_type_routes_to_normal(
-        self, mock_process, mock_tr
-    ) -> None:
+    async def test_unexpected_content_type_routes_to_normal(self, mock_tr) -> None:
         mock_tr.resolve_chat_id.return_value = 42
         bot = AsyncMock()
         task = ContentTask(

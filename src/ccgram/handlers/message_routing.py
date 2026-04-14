@@ -116,8 +116,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
                 parts=parts,
                 tool_use_id=msg.tool_use_id,
                 tool_name=msg.tool_name,
-                content_type=msg.content_type,
-                text=msg.text,
+                content_type=msg.content_type,  # type: ignore[arg-type]  # NewMessage.content_type is str, narrows at runtime
                 thread_id=thread_id,
             )
 
