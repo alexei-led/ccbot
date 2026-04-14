@@ -74,13 +74,8 @@ _BATCH_SUCCESS_RE = re.compile(r"\b(passed|success|exit code 0)\b", re.IGNORECAS
 # ---------------------------------------------------------------------------
 
 
-def is_batch_eligible(task: ContentTask, _window_id: str | None = None) -> bool:
-    """Check if a task should go through the batching pipeline.
-
-    ``_window_id`` is accepted but ignored — kept for backward compatibility
-    with callers that have not yet migrated to the new signature (removed in
-    Task 5).
-    """
+def is_batch_eligible(task: ContentTask) -> bool:
+    """Check if a task should go through the batching pipeline."""
     return (
         task.content_type in ("tool_use", "tool_result")
         and session_manager.get_batch_mode(task.window_id) == "batched"

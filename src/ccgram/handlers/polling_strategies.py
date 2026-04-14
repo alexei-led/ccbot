@@ -541,10 +541,6 @@ class TopicLifecycleStrategy:
         for ts in self._states.values():
             ts.last_typing_sent = None
 
-    def clear_seen_status(self, window_id: str) -> None:
-        """Clear startup status tracking for a window."""
-        self._poll_state.clear_seen_status(window_id)
-
     def reset_seen_status_state(self) -> None:
         """Reset all startup status tracking (for testing)."""
         self._poll_state.reset_all_seen_status()

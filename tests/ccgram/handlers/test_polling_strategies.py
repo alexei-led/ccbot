@@ -361,14 +361,6 @@ class TestTopicLifecycleStrategy:
         self.strategy.clear_typing_state(1, 42)
         assert ts.last_typing_sent is None
 
-    def test_clear_seen_status(self):
-        ws = self.poll_state.get_state("@0")
-        ws.has_seen_status = True
-        ws.startup_time = 100.0
-        self.strategy.clear_seen_status("@0")
-        assert not ws.has_seen_status
-        assert ws.startup_time is None
-
     def test_reset_autoclose_state_clears_all(self):
         self.strategy.start_autoclose_timer(1, 42, "done", 100.0)
         self.strategy.start_autoclose_timer(2, 43, "dead", 200.0)

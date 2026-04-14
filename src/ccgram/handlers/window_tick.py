@@ -158,7 +158,7 @@ async def _handle_no_status(
     if is_shell_prompt(pane_current_command):
         terminal_poll_state.cancel_startup_timer(window_id)
         state = session_manager.get_window_state(window_id)
-        raw_provider = getattr(state, "provider_name", "")
+        raw_provider = state.provider_name or ""
         provider_name = raw_provider.lower() if isinstance(raw_provider, str) else ""
         if provider_name in ("codex", "gemini", "shell"):
             terminal_poll_state.mark_seen_status(window_id)

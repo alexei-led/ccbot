@@ -580,13 +580,15 @@ class TestContractTests:
         tree = ast.parse(source)
         window_tick_imports = []
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.ImportFrom)
-                and node.module
-                and "window_tick" in node.module
-            ):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.module and "window_tick" in node.module:
                 for alias in node.names:
                     window_tick_imports.append(alias.name)
+            elif node.level and node.level > 0 and node.module is None:
+                for alias in node.names:
+                    if alias.name == "window_tick":
+                        window_tick_imports.append(alias.name)
         assert window_tick_imports == [] or all(
             name == "window_tick" for name in window_tick_imports
         ), f"Unexpected imports from window_tick: {window_tick_imports}"

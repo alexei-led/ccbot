@@ -34,7 +34,7 @@ from ccgram.transcript_parser import TranscriptParser
 
 _log = structlog.get_logger(__name__)
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 _MODE_MARKERS: tuple[str, ...] = ("\u23f5\u23f5", "\u23f8")
 _MODE_HINTS: tuple[str, ...] = (
     "auto mode",

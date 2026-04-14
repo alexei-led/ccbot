@@ -8,6 +8,7 @@ tool-use batching lives in ``tool_batch``.
 
 import asyncio
 import contextlib
+from typing import assert_never
 
 import structlog
 from telegram import Bot
@@ -263,6 +264,8 @@ async def _dispatch(
             await _flush_batch_for_task(user_id, cl, bot)
             await process_status_clear(bot, user_id, cl)
             return 0
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 async def _message_queue_worker(bot: Bot, user_id: int) -> None:
