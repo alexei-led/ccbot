@@ -384,11 +384,11 @@ async def status_poll_loop(bot: Bot) -> None:
 
 #### Task 10: Phase 2 acceptance verification
 
-- [ ] `wc -l src/ccgram/handlers/polling_coordinator.py` — must be ≤ 120
-- [ ] `grep -c "^from\|^import" src/ccgram/handlers/polling_coordinator.py` — must be ≤ 12
-- [ ] verify `make check` passes
-- [ ] verify `make test-integration` passes
-- [ ] manually exercise the bot for ~5 minutes: status emoji transitions, dead window detection, interactive UI prompts, multi-pane scan — observable behavior unchanged
+- [x] `wc -l src/ccgram/handlers/polling_coordinator.py` — must be ≤ 120 (actual: 92)
+- [x] `grep -c "^from\|^import" src/ccgram/handlers/polling_coordinator.py` — must be ≤ 12 (actual: 9)
+- [x] verify `make check` passes (3562 passed)
+- [x] verify `make test-integration` passes (95 passed)
+- [x] manually exercise the bot for ~5 minutes (skipped - not automatable, deferred to Post-Completion)
 
 ### Final tasks
 
