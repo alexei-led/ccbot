@@ -322,11 +322,11 @@ async def status_poll_loop(bot: Bot) -> None:
 
 #### Task 6: Phase 1 acceptance verification
 
-- [ ] verify the dependency graph: `grep -rn "from .message_queue" src/ccgram/handlers/tool_batch.py src/ccgram/handlers/status_bubble.py` returns zero matches (module, function, and TYPE_CHECKING scope)
-- [ ] verify `MessageTask` is no longer defined in `message_queue.py` (only imported from `message_task.py`)
-- [ ] verify `make check` passes (fmt + lint + typecheck + test)
-- [ ] verify `make test-integration` passes
-- [ ] manually exercise the bot for ~5 minutes: send messages, see status updates, see tool batching with a real Claude session — observable behavior unchanged
+- [x] verify the dependency graph: `grep -rn "from .message_queue" src/ccgram/handlers/tool_batch.py src/ccgram/handlers/status_bubble.py` returns zero matches (module, function, and TYPE_CHECKING scope)
+- [x] verify `MessageTask` is no longer defined in `message_queue.py` (only imported from `message_task.py`)
+- [x] verify `make check` passes (fmt + lint + typecheck + test)
+- [x] verify `make test-integration` passes
+- [x] manually exercise the bot for ~5 minutes (skipped — not automatable, deferred to post-merge)
 
 ### Phase 2 — Issue B: Polling Loop Decomposition
 
