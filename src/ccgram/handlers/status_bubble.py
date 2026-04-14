@@ -2,23 +2,19 @@
 
 Owns the per-topic status message lifecycle: keyboard layout, send/edit/clear
 I/O, Claude task-list formatting, and status-to-content conversion.  The queue
-worker in ``message_queue`` delegates ``status_update`` / ``status_clear``
-tasks here; ``process_content_task`` calls ``convert_status_to_content`` and
-``clear_status_message`` for the edit-in-place optimisation.
+worker in ``message_queue`` delegates ``StatusUpdateTask`` / ``StatusClearTask``
+here; this module returns data (``ContentTask | None``) instead of calling back.
 """
 
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING
 
 import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-if TYPE_CHECKING:
-    from .message_queue import MessageTask
-
+from .message_task import ContentTask, StatusClearTask, StatusUpdateTask, thread_key
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ..session import session_manager
 from ..thread_router import thread_router
@@ -38,7 +34,7 @@ logger = structlog.get_logger()
 # State
 # ---------------------------------------------------------------------------
 
-# Status message tracking: (user_id, thread_id_or_0) -> (message_id, window_id, last_text, chat_id)
+# Status message tracking: (user_id, thread_key) -> (message_id, window_id, last_text, chat_id)
 _status_msg_info: dict[tuple[int, int], tuple[int, str, str, int]] = {}
 
 
@@ -276,36 +272,37 @@ async def convert_status_to_content(
 # ---------------------------------------------------------------------------
 
 
-async def process_status_update_task(
+async def process_status_update(
     bot: Bot,
     user_id: int,
-    task: "MessageTask",
-) -> None:
-    """Process a status update task."""
-    window_id = task.window_id or ""
-    thread_id = task.thread_id or 0
-    status_text = format_claude_task_status(window_id, task.text)
+    task: StatusUpdateTask,
+) -> ContentTask | None:
+    """Update the status bubble.  Returns a ``ContentTask`` when the bubble
+    was promoted to content, ``None`` when the update was absorbed in place."""
+    tkey = thread_key(task.thread_id)
+    status_text = format_claude_task_status(task.window_id, task.text)
 
     if not status_text:
-        await clear_status_message(bot, user_id, thread_id)
-        return
+        await clear_status_message(bot, user_id, tkey)
+        return None
 
-    await send_status_text(bot, user_id, thread_id, window_id, status_text)
+    await send_status_text(bot, user_id, tkey, task.window_id, status_text)
+    return None
 
 
-async def process_status_clear_task(
+async def process_status_clear(
     bot: Bot,
     user_id: int,
-    task: "MessageTask",
+    task: StatusClearTask,
 ) -> None:
-    """Delete or re-render a status message after a clear request."""
+    """Clear the status bubble — re-render with task list or delete."""
     window_id = task.window_id or ""
-    thread_id = task.thread_id or 0
+    tkey = thread_key(task.thread_id)
     status_text = format_claude_task_status(window_id, None)
     if status_text and window_id:
-        await send_status_text(bot, user_id, thread_id, window_id, status_text)
+        await send_status_text(bot, user_id, tkey, window_id, status_text)
         return
-    await clear_status_message(bot, user_id, thread_id)
+    await clear_status_message(bot, user_id, tkey)
 
 
 # ---------------------------------------------------------------------------
@@ -323,5 +320,5 @@ def clear_status_msg_info(user_id: int, thread_id: int | None = None) -> None:
     with the registry would pop the entry before the worker runs, preventing
     the actual Telegram delete.
     """
-    skey = (user_id, thread_id or 0)
+    skey = (user_id, thread_key(thread_id))
     _status_msg_info.pop(skey, None)

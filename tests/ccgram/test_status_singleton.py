@@ -11,11 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ccgram.claude_task_state import claude_task_state
-from ccgram.handlers.message_queue import MessageTask
+from ccgram.handlers.message_task import StatusClearTask, StatusUpdateTask
 from ccgram.handlers.status_bubble import (
     _status_msg_info,
-    process_status_clear_task,
-    process_status_update_task,
+    process_status_clear,
+    process_status_update,
     send_status_text,
 )
 
@@ -33,9 +33,10 @@ def _clear_status_tracking():
     _status_msg_info.pop(SKEY, None)
 
 
-def _status_task(text: str = "running...", window_id: str = WINDOW_ID) -> MessageTask:
-    return MessageTask(
-        task_type="status_update",
+def _status_task(
+    text: str = "running...", window_id: str = WINDOW_ID
+) -> StatusUpdateTask:
+    return StatusUpdateTask(
         text=text,
         window_id=window_id,
         thread_id=THREAD_ID,
@@ -63,7 +64,7 @@ class TestEditFailureNoNewMessage:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
 
         bot = AsyncMock()
-        await process_status_update_task(bot, USER_ID, _status_task("new text"))
+        await process_status_update(bot, USER_ID, _status_task("new text"))
 
         # A new message should be sent to recover from the failed edit
         mock_send.assert_called_once()
@@ -84,7 +85,7 @@ class TestEditFailureNoNewMessage:
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
 
         bot = AsyncMock()
-        await process_status_update_task(bot, USER_ID, _status_task("new text"))
+        await process_status_update(bot, USER_ID, _status_task("new text"))
 
         # Tracking should be updated with new text, same message id
         assert _status_msg_info[SKEY] == (100, WINDOW_ID, "new text", CHAT_ID)
@@ -132,7 +133,7 @@ class TestEditFailureNoNewMessage:
         )
 
         bot = AsyncMock()
-        await process_status_update_task(bot, USER_ID, _status_task("Working"))
+        await process_status_update(bot, USER_ID, _status_task("Working"))
 
         sent_text = mock_send.call_args[0][2]
         assert sent_text.startswith("Working")
@@ -176,12 +177,10 @@ class TestEditFailureNoNewMessage:
         )
 
         bot = AsyncMock()
-        await process_status_clear_task(
+        await process_status_clear(
             bot,
             USER_ID,
-            MessageTask(
-                task_type="status_clear", thread_id=THREAD_ID, window_id=WINDOW_ID
-            ),
+            StatusClearTask(thread_id=THREAD_ID, window_id=WINDOW_ID),
         )
 
         sent_text = mock_edit.call_args[0][3]

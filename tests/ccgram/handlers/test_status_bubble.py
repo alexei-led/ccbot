@@ -1,13 +1,18 @@
+import ast
+import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ccgram.handlers.message_task import StatusClearTask, StatusUpdateTask
 from ccgram.handlers.status_bubble import (
     _status_msg_info,
     clear_status_message,
     clear_status_msg_info,
     convert_status_to_content,
     format_claude_task_status,
+    process_status_clear,
+    process_status_update,
     send_status_text,
 )
 
@@ -187,3 +192,102 @@ class TestClearStatusMsgInfo:
 
     def test_noop_when_not_tracked(self):
         clear_status_msg_info(USER_ID, THREAD_ID)
+
+
+class TestProcessStatusUpdate:
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch(
+        "ccgram.handlers.status_bubble.rate_limit_send_message",
+        new_callable=AsyncMock,
+    )
+    async def test_returns_none_when_absorbed(self, mock_send, mock_router):
+        mock_router.resolve_chat_id.return_value = CHAT_ID
+        sent = MagicMock()
+        sent.message_id = 99
+        mock_send.return_value = sent
+
+        bot = AsyncMock()
+        task = StatusUpdateTask(
+            window_id=WINDOW_ID, text="thinking", thread_id=THREAD_ID
+        )
+        result = await process_status_update(bot, USER_ID, task)
+
+        assert result is None
+        mock_send.assert_called_once()
+
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.status_bubble.rate_limit_send_message",
+        new_callable=AsyncMock,
+    )
+    async def test_clears_when_no_status_text(self, mock_send, mock_edit, mock_router):
+        _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
+
+        bot = AsyncMock()
+        task = StatusUpdateTask(window_id=WINDOW_ID, text=None, thread_id=THREAD_ID)
+        with patch(
+            "ccgram.handlers.status_bubble.format_claude_task_status", return_value=None
+        ):
+            result = await process_status_update(bot, USER_ID, task)
+
+        assert result is None
+        assert (USER_ID, THREAD_ID) not in _status_msg_info
+
+    async def test_uses_thread_key_for_none_thread(self):
+        task = StatusUpdateTask(window_id=WINDOW_ID, text="running", thread_id=None)
+        from ccgram.handlers.message_task import thread_key
+
+        assert thread_key(task.thread_id) == 0
+
+
+class TestProcessStatusClear:
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    async def test_re_renders_with_task_snapshot(self, mock_edit, mock_router):
+        mock_router.resolve_chat_id.return_value = CHAT_ID
+        mock_edit.return_value = True
+        _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
+
+        bot = AsyncMock()
+        task = StatusClearTask(window_id=WINDOW_ID, thread_id=THREAD_ID)
+        with patch(
+            "ccgram.handlers.status_bubble.format_claude_task_status",
+            return_value="1 tasks (1 done, 0 open)",
+        ):
+            await process_status_clear(bot, USER_ID, task)
+
+        mock_edit.assert_called_once()
+
+    async def test_deletes_when_no_snapshot(self):
+        _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
+
+        bot = AsyncMock()
+        task = StatusClearTask(window_id=WINDOW_ID, thread_id=THREAD_ID)
+        with patch(
+            "ccgram.handlers.status_bubble.format_claude_task_status",
+            return_value=None,
+        ):
+            await process_status_clear(bot, USER_ID, task)
+
+        bot.delete_message.assert_called_once_with(chat_id=CHAT_ID, message_id=50)
+        assert (USER_ID, THREAD_ID) not in _status_msg_info
+
+
+class TestNoImportFromMessageQueue:
+    def test_no_import_from_message_queue(self) -> None:
+        import ccgram.handlers.status_bubble as mod
+
+        source = inspect.getsource(mod)
+        tree = ast.parse(source)
+        violations: list[str] = []
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and "message_queue" in node.module
+            ):
+                violations.append(f"line {node.lineno}: from {node.module} import ...")
+        assert violations == [], (
+            f"status_bubble imports from message_queue: {violations}"
+        )

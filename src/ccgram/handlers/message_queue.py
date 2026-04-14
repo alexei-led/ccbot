@@ -22,8 +22,8 @@ from .message_sender import edit_with_fallback, rate_limit_send_message, send_kw
 from .status_bubble import (
     clear_status_message,
     convert_status_to_content,
-    process_status_clear_task,
-    process_status_update_task,
+    process_status_clear,
+    process_status_update,
 )
 from .tool_batch import (
     clear_all_batches,
@@ -286,14 +286,12 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
                             if dropped > 0:
                                 for _ in range(dropped):
                                     queue.task_done()
-                            await process_status_update_task(
-                                bot, user_id, collapsed_task
-                            )
+                            await process_status_update(bot, user_id, collapsed_task)  # type: ignore[arg-type]  # Task 4 migrates to sum type
                         elif task.task_type == "status_clear":
                             thread_id = task.thread_id or 0
                             if has_active_batch(user_id, thread_id):
                                 await flush_batch(bot, user_id, thread_id)
-                            await process_status_clear_task(bot, user_id, task)
+                            await process_status_clear(bot, user_id, task)  # type: ignore[arg-type]  # Task 4 migrates to sum type
                         break
                     except RetryAfter as e:
                         retry_secs = min(

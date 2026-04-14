@@ -269,15 +269,15 @@ async def status_poll_loop(bot: Bot) -> None:
 - Modify: `src/ccgram/handlers/status_bubble.py`
 - Modify: `tests/ccgram/handlers/test_status_bubble.py`
 
-- [ ] in `status_bubble.py`, replace TYPE_CHECKING import of `MessageTask` with `from .message_task import ContentTask, StatusUpdateTask, StatusClearTask`
-- [ ] change `process_status_update_task(bot, user_id, task: MessageTask)` → `process_status_update(bot, user_id, task: StatusUpdateTask) -> ContentTask | None`
-- [ ] change `process_status_clear_task` → `process_status_clear(bot, user_id, task: StatusClearTask) -> None`
-- [ ] in `convert_status_to_content`, return a `ContentTask` instead of calling `process_content_task` directly
-- [ ] use `thread_key(task.thread_id)` for `_status_msg_info` keys
-- [ ] verify no `from .message_queue` lines remain anywhere in `status_bubble.py`
-- [ ] update `tests/ccgram/handlers/test_status_bubble.py` to call the new signatures
-- [ ] add the AST guard test `test_no_import_from_message_queue` per design's `status_bubble/tests.md`
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 4
+- [x] in `status_bubble.py`, replace TYPE_CHECKING import of `MessageTask` with `from .message_task import ContentTask, StatusUpdateTask, StatusClearTask`
+- [x] change `process_status_update_task(bot, user_id, task: MessageTask)` → `process_status_update(bot, user_id, task: StatusUpdateTask) -> ContentTask | None`
+- [x] change `process_status_clear_task` → `process_status_clear(bot, user_id, task: StatusClearTask) -> None`
+- [x] in `convert_status_to_content`, return a `ContentTask` instead of calling `process_content_task` directly
+- [x] use `thread_key(task.thread_id)` for `_status_msg_info` keys
+- [x] verify no `from .message_queue` lines remain anywhere in `status_bubble.py`
+- [x] update `tests/ccgram/handlers/test_status_bubble.py` to call the new signatures
+- [x] add the AST guard test `test_no_import_from_message_queue` per design's `status_bubble/tests.md`
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 4
 
 #### Task 4: Rewrite `message_queue.py` worker dispatcher and delete the old `MessageTask`
 
