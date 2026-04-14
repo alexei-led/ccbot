@@ -313,12 +313,12 @@ async def status_poll_loop(bot: Bot) -> None:
 - Modify: `tests/integration/test_message_dispatch.py` (if it constructs `MessageTask` directly)
 - Modify: `tests/ccgram/test_status_singleton.py`, `tests/ccgram/test_status_polling.py`, `tests/ccgram/test_status_buttons.py`, `tests/ccgram/test_status_recall_callback.py`, `tests/ccgram/test_tool_batching.py` (if any reference `MessageTask` fields directly)
 
-- [ ] grep for `MessageTask(` and `task_type=` across `src/` and `tests/`; update each call site to construct the right concrete dataclass
-- [ ] grep for `task.tool_use_id`, `task.parts`, `task.text` on union typed values; ensure each access is inside a branch that has narrowed the type
-- [ ] verify pyright `--strict` is happy with all narrowing (no `reportOptionalMemberAccess` warnings on the new dataclasses)
-- [ ] update any test that constructs a `MessageTask` directly to use the right concrete dataclass instead
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 6
-- [ ] run `make test-integration` — must pass
+- [x] grep for `MessageTask(` and `task_type=` across `src/` and `tests/`; update each call site to construct the right concrete dataclass
+- [x] grep for `task.tool_use_id`, `task.parts`, `task.text` on union typed values; ensure each access is inside a branch that has narrowed the type
+- [x] verify pyright `--strict` is happy with all narrowing (no `reportOptionalMemberAccess` warnings on the new dataclasses)
+- [x] update any test that constructs a `MessageTask` directly to use the right concrete dataclass instead
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 6
+- [x] run `make test-integration` — must pass
 
 #### Task 6: Phase 1 acceptance verification
 
