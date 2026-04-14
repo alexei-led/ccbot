@@ -137,14 +137,15 @@ async def _show_offer_keyboard(
             ]
         ]
     )
-    st.was_offered = True
-    await safe_send(
+    sent = await safe_send(
         bot,
         chat_id,
         "Shell prompt marker helps ccgram detect command output. Set up now?",
         message_thread_id=thread_id,
         reply_markup=keyboard,
     )
+    if sent is not None:
+        st.was_offered = True
 
 
 @register(CB_SHELL_SETUP, CB_SHELL_SKIP)
