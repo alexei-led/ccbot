@@ -351,19 +351,19 @@ async def status_poll_loop(bot: Bot) -> None:
 - Modify: `src/ccgram/handlers/window_tick.py`
 - Modify: `tests/ccgram/handlers/test_window_tick.py`
 
-- [ ] move `_send_typing_throttled` from `polling_coordinator` into `window_tick` (private helper)
-- [ ] move `_parse_with_pyte` similarly
-- [ ] move `_check_transcript_activity`, `_transition_to_idle`, `_handle_no_status` similarly
-- [ ] move `_scan_window_panes`, `_check_interactive_only`, `_maybe_check_passive_shell` similarly
-- [ ] move `_handle_dead_window_notification` similarly
-- [ ] move `update_status_message` and rename to `_update_status` (private to `window_tick`)
-- [ ] update `window_tick.tick_window` body to inline the per-binding logic that currently lives in `status_poll_loop`'s inner loop (dead detection → transcript discovery → queue check → interactive-only or status-update branch → pane scan → passive shell)
-- [ ] update imports in `window_tick.py`: it now needs `claude_task_state`, `providers`, `tmux_manager`, `cleanup`, `interactive_ui`, `message_queue`, `message_sender`, `polling_strategies`, `recovery_callbacks`, `topic_emoji`, `transcript_discovery`, `thread_router`, `session`
-- [ ] update imports in `polling_coordinator.py`: delete all of the above; add `from . import window_tick`
-- [ ] write tests in `test_window_tick.py` per the design doc's per-branch unit tests (state machine branches, interactive precedence, queue-non-empty fast path, dead window, etc.)
-- [ ] move relevant test cases from `tests/ccgram/test_status_polling.py` into `test_window_tick.py` where they exercise per-window behavior
-- [ ] add the contract tests: `test_tick_window_is_sole_public_function`, `test_polling_coordinator_imports_only_tick_window`, `test_polling_coordinator_does_not_import_per_window_collaborators`
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 9
+- [x] move `_send_typing_throttled` from `polling_coordinator` into `window_tick` (private helper)
+- [x] move `_parse_with_pyte` similarly
+- [x] move `_check_transcript_activity`, `_transition_to_idle`, `_handle_no_status` similarly
+- [x] move `_scan_window_panes`, `_check_interactive_only`, `_maybe_check_passive_shell` similarly
+- [x] move `_handle_dead_window_notification` similarly
+- [x] move `update_status_message` and rename to `_update_status` (private to `window_tick`)
+- [x] update `window_tick.tick_window` body to inline the per-binding logic that currently lives in `status_poll_loop`'s inner loop (dead detection → transcript discovery → queue check → interactive-only or status-update branch → pane scan → passive shell)
+- [x] update imports in `window_tick.py`: it now needs `claude_task_state`, `providers`, `tmux_manager`, `cleanup`, `interactive_ui`, `message_queue`, `message_sender`, `polling_strategies`, `recovery_callbacks`, `topic_emoji`, `transcript_discovery`, `thread_router`, `session`
+- [x] update imports in `polling_coordinator.py`: delete all of the above; add `from . import window_tick`
+- [x] write tests in `test_window_tick.py` per the design doc's per-branch unit tests (state machine branches, interactive precedence, queue-non-empty fast path, dead window, etc.)
+- [x] move relevant test cases from `tests/ccgram/test_status_polling.py` into `test_window_tick.py` where they exercise per-window behavior
+- [x] add the contract tests: `test_tick_window_is_sole_public_function`, `test_polling_coordinator_imports_only_tick_window`, `test_polling_coordinator_does_not_import_per_window_collaborators`
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 9
 
 #### Task 9: Reduce `polling_coordinator.status_poll_loop` to outer-shell form
 

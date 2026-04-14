@@ -16,8 +16,8 @@ from ccgram.handlers.topic_lifecycle import (
 from ccgram.handlers.polling_coordinator import (
     _BACKOFF_MAX,
     _BACKOFF_MIN,
-    _handle_dead_window_notification,
 )
+from ccgram.handlers.window_tick import _handle_dead_window_notification
 from ccgram.handlers.polling_strategies import (
     lifecycle_strategy,
     terminal_poll_state,
@@ -106,15 +106,15 @@ class TestHandleDeadWindowNotification:
         bot = AsyncMock(spec=Bot)
         bot.send_message = AsyncMock(return_value=MagicMock())
         with (
-            patch("ccgram.handlers.polling_coordinator.thread_router") as mock_router,
-            patch("ccgram.handlers.polling_coordinator.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.thread_router") as mock_router,
+            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
             patch(
-                "ccgram.handlers.polling_coordinator.update_topic_emoji",
+                "ccgram.handlers.window_tick.update_topic_emoji",
                 new_callable=AsyncMock,
             ),
-            patch("ccgram.handlers.polling_coordinator.clear_tool_msg_ids_for_topic"),
+            patch("ccgram.handlers.window_tick.clear_tool_msg_ids_for_topic"),
             patch(
-                "ccgram.handlers.polling_coordinator.rate_limit_send_message",
+                "ccgram.handlers.window_tick.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
