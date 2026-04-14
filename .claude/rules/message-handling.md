@@ -7,6 +7,8 @@ Per-user message queues + worker pattern for all send tasks:
 - Status messages always follow content messages
 - Multi-user concurrent processing without interference
 
+**Module layout**: Task types (`ContentTask`, `StatusTask`, `ToolResultTask`) live in `message_task.py` — a dependency-free sum type imported by `message_queue.py`, `tool_batch.py`, and `status_bubble.py` without circular imports. Inbound message routing (SessionMonitor → Telegram topics) lives in `message_routing.py`.
+
 **Message merging**: The worker automatically merges consecutive mergeable content messages on dequeue:
 - Content messages for the same window can be merged (including text, thinking)
 - tool_use breaks the merge chain and is sent separately (message ID recorded for later editing)

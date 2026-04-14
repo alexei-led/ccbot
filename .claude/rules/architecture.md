@@ -151,13 +151,15 @@ graph TB
 | `message_queue.py`         | Per-user FIFO queue + worker — merge, status dedup, tool-use batching delegation                                                                  |
 | `message_routing.py`     | Inbound message routing — routes new assistant messages from SessionMonitor to Telegram topics                                                     |
 | `message_sender.py`        | safe_reply/safe_edit/safe_send + rate_limit_send                                                                                                  |
+| `message_task.py`          | Message task sum type — frozen dataclasses (ContentTask, StatusTask, ToolResultTask) shared by queue, tool_batch, and status_bubble without circular imports |
 | `msg_broker.py`            | Broker delivery: idle detection, send_keys injection, rate limiting, loop detection                                                               |
 | `msg_delivery.py`          | Message delivery state: per-window tracking, rate limiting, loop detection (extracted from msg_broker)                                            |
 | `msg_spawn.py`             | Agent spawn requests with Telegram approval flow and auto-topic creation                                                                          |
 | `msg_telegram.py`          | Telegram notifications for inter-agent messages (silent, grouped, edit-in-place)                                                                  |
 | `periodic_tasks.py`        | Periodic task orchestration: broker delivery, mailbox sweep, spawn processing, lifecycle, live view                                               |
-| `polling_coordinator.py`   | Background status polling loop (1s), delegates to strategy classes                                                                                |
+| `polling_coordinator.py`   | Polling coordinator — iterates thread bindings, delegates per-window work to window_tick, runs periodic/lifecycle tasks                                                                                |
 | `polling_strategies.py`    | Polling strategy classes: TerminalScreenBuffer, TerminalPollState, InteractiveUIStrategy, TopicLifecycleStrategy — decomposed from monolithic polling                     |
+| `window_tick.py`           | Per-window poll cycle — dead-window detection, transcript discovery, interactive UI, status updates, multi-pane scanning, passive shell relay      |
 | `recovery_callbacks.py`    | Dead window recovery callbacks (fresh, continue, resume)                                                                                          |
 | `response_builder.py`      | Response pagination and formatting                                                                                                                |
 | `restore_command.py`       | /restore command: recover dead topics via recovery keyboard                                                                                       |

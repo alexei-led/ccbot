@@ -403,10 +403,10 @@ async def status_poll_loop(bot: Bot) -> None:
 
 #### Task 12: Update documentation
 
-- [ ] update `.claude/rules/architecture.md` Module Inventory table to reflect new modules (`message_task.py`, `window_tick.py`) and the slimmed `polling_coordinator.py`
-- [ ] update `.claude/rules/message-handling.md` if the message queue's behavior description is now stale
-- [ ] add a "Resolution" section to `docs/modularity-review/2026-04-14/modularity-review.md` linking back to this plan
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update `.claude/rules/architecture.md` Module Inventory table to reflect new modules (`message_task.py`, `window_tick.py`) and the slimmed `polling_coordinator.py`
+- [x] update `.claude/rules/message-handling.md` if the message queue's behavior description is now stale
+- [x] add a "Resolution" section to `docs/modularity-review/2026-04-14/modularity-review.md` linking back to this plan
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
