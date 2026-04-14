@@ -243,42 +243,19 @@ class TestDispatch:
         mock_process.assert_awaited_once_with(bot, 1, followup)
 
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
-    @patch(
         "ccgram.handlers.message_queue.process_status_update", new_callable=AsyncMock
     )
     @patch(
         "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
     )
     async def test_status_update_dispatch(
-        self, mock_flush, mock_status, mock_process, bot, queue, lock
+        self, mock_flush, mock_status, bot, queue, lock
     ):
         st = _status_task("Working...")
-        mock_status.return_value = None
         extra = await _dispatch(bot, 1, st, queue, lock)
         assert extra == 0
         mock_flush.assert_awaited_once_with(1, st, bot)
         mock_status.assert_awaited_once()
-        mock_process.assert_not_awaited()
-
-    @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
-    )
-    @patch(
-        "ccgram.handlers.message_queue.process_status_update", new_callable=AsyncMock
-    )
-    @patch(
-        "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
-    )
-    async def test_status_update_with_followup(
-        self, mock_flush, mock_status, mock_process, bot, queue, lock
-    ):
-        st = _status_task("Working...")
-        followup = _content_task("promoted")
-        mock_status.return_value = followup
-        await _dispatch(bot, 1, st, queue, lock)
-        mock_process.assert_awaited_once_with(bot, 1, followup)
 
     @patch("ccgram.handlers.message_queue.process_status_clear", new_callable=AsyncMock)
     @patch(

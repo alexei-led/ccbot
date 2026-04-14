@@ -14,7 +14,7 @@ import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-from .message_task import ContentTask, StatusClearTask, StatusUpdateTask, thread_key
+from .message_task import StatusClearTask, StatusUpdateTask, thread_key
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ..session import session_manager
 from ..thread_router import thread_router
@@ -276,18 +276,16 @@ async def process_status_update(
     bot: Bot,
     user_id: int,
     task: StatusUpdateTask,
-) -> ContentTask | None:
-    """Update the status bubble.  Returns a ``ContentTask`` when the bubble
-    was promoted to content, ``None`` when the update was absorbed in place."""
+) -> None:
+    """Update the status bubble in place."""
     tkey = thread_key(task.thread_id)
     status_text = format_claude_task_status(task.window_id, task.text)
 
     if not status_text:
         await clear_status_message(bot, user_id, tkey)
-        return None
+        return
 
     await send_status_text(bot, user_id, tkey, task.window_id, status_text)
-    return None
 
 
 async def process_status_clear(

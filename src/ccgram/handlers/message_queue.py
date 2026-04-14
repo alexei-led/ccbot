@@ -257,9 +257,7 @@ async def _dispatch(
             if dropped > 0:
                 for _ in range(dropped):
                     queue.task_done()
-            followup = await process_status_update(bot, user_id, collapsed_task)
-            if followup is not None:
-                await _process_content_task(bot, user_id, followup)
+            await process_status_update(bot, user_id, collapsed_task)
             return 0
         case StatusClearTask() as cl:
             await _flush_batch_for_task(user_id, cl, bot)

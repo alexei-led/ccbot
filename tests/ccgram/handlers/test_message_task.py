@@ -129,10 +129,12 @@ class TestModuleImports:
         src = Path("src/ccgram/handlers/message_task.py").read_text()
         tree = ast.parse(src)
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                assert not node.module.startswith("ccgram.handlers"), (
-                    f"forbidden import: from {node.module}"
-                )
-                assert not node.module.startswith(".") or node.module in (".",), (
-                    f"forbidden relative import: from {node.module}"
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.module and node.module.startswith("ccgram.handlers"):
+                raise AssertionError(f"forbidden import: from {node.module}")
+            if node.level and node.level > 0:
+                mod = node.module or ""
+                raise AssertionError(
+                    f"forbidden relative import: from {'.' * node.level}{mod}"
                 )
