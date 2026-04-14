@@ -1,7 +1,7 @@
 """Tests for status message singleton behavior (no pile-up).
 
 Verifies three invariants:
-1. Edit failure does NOT send a new status message (clears tracking only).
+1. Edit failure recovers by sending a new status message (no ghost messages).
 2. Content delivery does NOT eagerly recreate status (poll loop handles it).
 3. send_status_text edits existing status instead of sending new.
 """
@@ -43,18 +43,21 @@ def _status_task(text: str = "running...", window_id: str = WINDOW_ID) -> Messag
 
 
 class TestEditFailureNoNewMessage:
-    """Change 1: edit failure clears tracking, does NOT send a new message."""
+    """Edit failure recovers by sending a new message (no ghost messages)."""
 
     @patch("ccgram.handlers.status_bubble.thread_router")
     @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     @patch(
         "ccgram.handlers.status_bubble.rate_limit_send_message", new_callable=AsyncMock
     )
-    async def test_edit_failure_clears_tracking_no_send(
+    async def test_edit_failure_recovers_with_new_send(
         self, mock_send, mock_edit, mock_tr
     ) -> None:
         mock_tr.resolve_chat_id.return_value = 42
         mock_edit.return_value = False  # edit fails
+        sent_msg = MagicMock()
+        sent_msg.message_id = 200
+        mock_send.return_value = sent_msg
 
         # Pre-populate: existing status message tracked
         _status_msg_info[SKEY] = (100, WINDOW_ID, "old text", CHAT_ID)
@@ -62,11 +65,10 @@ class TestEditFailureNoNewMessage:
         bot = AsyncMock()
         await process_status_update_task(bot, USER_ID, _status_task("new text"))
 
-        # Tracking should be cleared
-        assert SKEY not in _status_msg_info
-
-        # No new message should be sent
-        mock_send.assert_not_called()
+        # A new message should be sent to recover from the failed edit
+        mock_send.assert_called_once()
+        # Tracking updated to new message
+        assert _status_msg_info[SKEY][2] == "new text"
 
     @patch("ccgram.handlers.status_bubble.thread_router")
     @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)

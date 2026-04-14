@@ -17,6 +17,15 @@ from ccgram.handlers.polling_strategies import (
     WindowPollState,
     is_shell_prompt,
 )
+from ccgram.topic_state_registry import topic_state
+
+
+@pytest.fixture(autouse=True)
+def _reset_topic_state_registry():
+    snapshot = {scope: list(bucket) for scope, bucket in topic_state._cleanups.items()}
+    yield
+    for scope, bucket in topic_state._cleanups.items():
+        bucket[:] = snapshot[scope]
 
 
 class TestTerminalScreenBuffer:

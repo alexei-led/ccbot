@@ -64,6 +64,11 @@ class TopicStateRegistry:
         if method not in bucket:
             bucket.append(method)
 
+    def _reset_for_testing(self) -> None:
+        """Clear all registered callbacks.  Only for use in tests."""
+        for bucket in self._cleanups.values():
+            bucket.clear()
+
     # -- dispatch helpers --------------------------------------------------
 
     def clear_topic(self, user_id: int, thread_id: int) -> None:

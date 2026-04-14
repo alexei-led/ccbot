@@ -47,9 +47,7 @@ _state: dict[str, _OrchestratorState] = {}
 
 
 def _get_state(window_id: str) -> _OrchestratorState:
-    if window_id not in _state:
-        _state[window_id] = _OrchestratorState()
-    return _state[window_id]
+    return _state.setdefault(window_id, _OrchestratorState())
 
 
 async def ensure_setup(
@@ -139,15 +137,14 @@ async def _show_offer_keyboard(
             ]
         ]
     )
-    result = await safe_send(
+    st.was_offered = True
+    await safe_send(
         bot,
         chat_id,
         "Shell prompt marker helps ccgram detect command output. Set up now?",
         message_thread_id=thread_id,
         reply_markup=keyboard,
     )
-    if result is not None:
-        st.was_offered = True
 
 
 @register(CB_SHELL_SETUP, CB_SHELL_SKIP)

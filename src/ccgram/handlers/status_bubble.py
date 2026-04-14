@@ -284,44 +284,13 @@ async def process_status_update_task(
     """Process a status update task."""
     window_id = task.window_id or ""
     thread_id = task.thread_id or 0
-    skey = (user_id, thread_id)
     status_text = format_claude_task_status(window_id, task.text)
 
     if not status_text:
         await clear_status_message(bot, user_id, thread_id)
         return
 
-    current_info = _status_msg_info.get(skey)
-
-    if current_info:
-        msg_id, stored_wid, last_text, stored_chat_id = current_info
-
-        if stored_wid != window_id:
-            await clear_status_message(bot, user_id, thread_id)
-            await send_status_text(bot, user_id, thread_id, window_id, status_text)
-        elif status_text == last_text:
-            pass
-        else:
-            history = _get_idle_history(user_id, thread_id, status_text)
-            keyboard = build_status_keyboard(window_id, history=history)
-            success = await edit_with_fallback(
-                bot,
-                stored_chat_id,
-                msg_id,
-                status_text,
-                reply_markup=keyboard,
-            )
-            if success:
-                _status_msg_info[skey] = (
-                    msg_id,
-                    window_id,
-                    status_text,
-                    stored_chat_id,
-                )
-            else:
-                _status_msg_info.pop(skey, None)
-    else:
-        await send_status_text(bot, user_id, thread_id, window_id, status_text)
+    await send_status_text(bot, user_id, thread_id, window_id, status_text)
 
 
 async def process_status_clear_task(
