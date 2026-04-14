@@ -394,12 +394,12 @@ async def status_poll_loop(bot: Bot) -> None:
 
 #### Task 11: Verify acceptance criteria
 
-- [ ] all Issue A goals from `architecture.md` met (zero back-edges, sum type adopted, `thread_key` helper landed)
-- [ ] all Issue B goals met (`polling_coordinator` ≤ 120 lines, 13 imports deleted, `window_tick` is the only entry point)
-- [ ] full test suite green: `make check`
-- [ ] integration tests green: `make test-integration`
-- [ ] no `MessageTask(` constructor calls remain in the codebase
-- [ ] no `from .message_queue import` lines in `tool_batch.py` or `status_bubble.py`
+- [x] all Issue A goals from `architecture.md` met (zero back-edges, sum type adopted, `thread_key` helper landed)
+- [x] all Issue B goals met (`polling_coordinator` ≤ 120 lines, 13 imports deleted, `window_tick` is the only entry point)
+- [x] full test suite green: `make check`
+- [x] integration tests green: `make test-integration`
+- [x] no `MessageTask(` constructor calls remain in the codebase
+- [x] no `from .message_queue import` lines in `tool_batch.py` or `status_bubble.py`
 
 #### Task 12: Update documentation
 
