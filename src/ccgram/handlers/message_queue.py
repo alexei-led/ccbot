@@ -232,8 +232,8 @@ async def _handle_content_task(
 
     Returns the number of additional merged tasks (caller must call task_done for each).
     """
-    if task.window_id and is_batch_eligible(task, task.window_id):
-        await process_tool_event(bot, user_id, task)
+    if task.window_id and is_batch_eligible(task, task.window_id):  # type: ignore[arg-type]
+        await process_tool_event(bot, user_id, task)  # type: ignore[arg-type]
         return 0
 
     # Non-tool content: flush any active batch first

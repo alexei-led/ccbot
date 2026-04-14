@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 import structlog
 from telegram import Bot
@@ -26,9 +25,7 @@ from ..session import session_manager
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
-
-if TYPE_CHECKING:
-    from .message_queue import MessageTask
+from .message_task import ContentTask, thread_key
 
 logger = structlog.get_logger()
 
@@ -77,12 +74,16 @@ _BATCH_SUCCESS_RE = re.compile(r"\b(passed|success|exit code 0)\b", re.IGNORECAS
 # ---------------------------------------------------------------------------
 
 
-def is_batch_eligible(task: MessageTask, window_id: str) -> bool:
-    """Check if a task should go through the batching pipeline."""
+def is_batch_eligible(task: ContentTask, _window_id: str | None = None) -> bool:
+    """Check if a task should go through the batching pipeline.
+
+    ``_window_id`` is accepted but ignored — kept for backward compatibility
+    with callers that have not yet migrated to the new signature (removed in
+    Task 5).
+    """
     return (
-        task.task_type == "content"
-        and task.content_type in ("tool_use", "tool_result")
-        and session_manager.get_batch_mode(window_id) == "batched"
+        task.content_type in ("tool_use", "tool_result")
+        and session_manager.get_batch_mode(task.window_id) == "batched"
     )
 
 
@@ -341,33 +342,33 @@ async def _send_or_edit_batch(
 async def _handle_tool_result(
     bot: Bot,
     user_id: int,
-    task: MessageTask,
+    task: ContentTask,
     batch: ToolBatch | None,
-    thread_id: int,
-) -> ToolBatch | None:
-    """Process a tool_result event, updating the matching batch entry."""
-    from .message_queue import process_content_task
+    thread_id_or_0: int,
+) -> tuple[ToolBatch | None, ContentTask | None]:
+    """Process a tool_result event, updating the matching batch entry.
 
+    Returns (updated_batch, followup) — followup is non-None when the result
+    could not be absorbed into the batch and should be delivered as content.
+    """
     if not task.tool_use_id or not batch:
-        await process_content_task(bot, user_id, task)
-        return None
+        return None, task
     for entry in batch.entries:
         if entry.tool_use_id == task.tool_use_id:
-            result_text = task.text or ""
-            first_line = result_text.split("\n", 1)[0][:200]
+            text = "\n".join(task.parts) if task.parts else ""
+            first_line = text.split("\n", 1)[0][:200]
             entry.tool_result_text = first_line
-            return batch
-    await flush_batch(bot, user_id, thread_id)
-    await process_content_task(bot, user_id, task)
-    return None
+            return batch, None
+    await flush_batch(bot, user_id, thread_id_or_0)
+    return None, task
 
 
 def _add_tool_use_entry(
-    task: MessageTask,
+    task: ContentTask,
     batch: ToolBatch,
 ) -> bool:
     """Append a tool_use entry to the batch. Returns True if overflow occurred."""
-    entry_text = task.text or "\n".join(task.parts) or "tool call"
+    entry_text = "\n".join(task.parts) if task.parts else "tool call"
     entry = ToolBatchEntry(
         tool_use_id=task.tool_use_id,
         tool_use_text=entry_text,
@@ -386,66 +387,83 @@ def _add_tool_use_entry(
 async def process_tool_event(
     bot: Bot,
     user_id: int,
-    task: MessageTask,
-) -> None:
-    """Add a tool_use or tool_result to the active batch, send/edit the batch message."""
-    from .message_queue import process_content_task
+    task: ContentTask,
+) -> ContentTask | None:
+    """Add a tool_use or tool_result to the active batch, send/edit the batch message.
 
-    window_id = task.window_id or ""
-    thread_id = task.thread_id or 0
-    bkey = (user_id, thread_id)
+    Returns None if absorbed into the batch; returns a ContentTask if the queue
+    worker should deliver it as regular content (overflow, unmatched result, etc).
+    """
+    window_id = task.window_id
+    thread_id_or_0 = thread_key(task.thread_id)
+    bkey = (user_id, thread_id_or_0)
     chat_id = thread_router.resolve_chat_id(user_id, task.thread_id)
     batch = _active_batches.get(bkey)
 
     if task.content_type == "tool_result":
-        batch = await _handle_tool_result(bot, user_id, task, batch, thread_id)
-        if batch is None:
-            return
-    elif task.content_type == "tool_use":
-        batch = await _handle_tool_use_event(
-            bot, user_id, task, batch, window_id, thread_id, bkey
+        batch, followup = await _handle_tool_result(
+            bot, user_id, task, batch, thread_id_or_0
         )
         if batch is None:
-            return
+            return followup
+    elif task.content_type == "tool_use":
+        result = await _handle_tool_use_event(
+            bot, user_id, task, batch, window_id, thread_id_or_0, bkey
+        )
+        if isinstance(result, ContentTask):
+            return result
+        if result is None:
+            return None
+        batch = result
     else:
-        await process_content_task(bot, user_id, task)
-        return
+        return task
 
-    await _send_or_edit_batch(bot, user_id, batch, chat_id, task.thread_id, thread_id)
+    await _send_or_edit_batch(
+        bot, user_id, batch, chat_id, task.thread_id, thread_id_or_0
+    )
+    return None
 
 
 async def _handle_tool_use_event(
     bot: Bot,
     user_id: int,
-    task: MessageTask,
+    task: ContentTask,
     batch: ToolBatch | None,
     window_id: str,
-    thread_id: int,
+    thread_id_or_0: int,
     bkey: tuple[int, int],
-) -> ToolBatch | None:
-    """Process a tool_use event, creating/flushing batches as needed."""
+) -> ToolBatch | ContentTask | None:
+    """Process a tool_use event, creating/flushing batches as needed.
+
+    Returns a ToolBatch to continue with send/edit, a ContentTask if the caller
+    should deliver it as regular content (double-overflow), or None on error.
+    """
     if batch and batch.window_id != window_id:
-        await flush_batch(bot, user_id, thread_id)
+        await flush_batch(bot, user_id, thread_id_or_0)
         batch = None
 
     if not batch:
-        batch = ToolBatch(window_id=window_id, thread_id=thread_id)
+        batch = ToolBatch(window_id=window_id, thread_id=thread_id_or_0)
         _active_batches[bkey] = batch
 
     overflow = _add_tool_use_entry(task, batch)
     if overflow:
-        await flush_batch(bot, user_id, thread_id)
-        batch = ToolBatch(window_id=window_id, thread_id=thread_id)
+        await flush_batch(bot, user_id, thread_id_or_0)
+        batch = ToolBatch(window_id=window_id, thread_id=thread_id_or_0)
         still_overflow = _add_tool_use_entry(task, batch)
         _active_batches[bkey] = batch
         if still_overflow:
-            from .message_queue import process_content_task
-
             _active_batches.pop(bkey, None)
-            await process_content_task(bot, user_id, task)
-            return None
+            return task
 
     return batch
+
+
+async def flush_if_active(bot: Bot, user_id: int, task: ContentTask) -> None:
+    """Flush any active batch for the same topic before delivering non-batchable content."""
+    thread_id_or_0 = thread_key(task.thread_id)
+    if has_active_batch(user_id, thread_id_or_0):
+        await flush_batch(bot, user_id, thread_id_or_0)
 
 
 async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
@@ -488,7 +506,7 @@ def has_active_batch(user_id: int, thread_id_or_0: int) -> bool:
 @topic_state.register("topic")
 def clear_batch_for_topic(user_id: int, thread_id: int | None = None) -> None:
     """Clear active batch for a specific topic (called on topic cleanup)."""
-    _active_batches.pop((user_id, thread_id or 0), None)
+    _active_batches.pop((user_id, thread_key(thread_id)), None)
 
 
 def clear_all_batches() -> None:

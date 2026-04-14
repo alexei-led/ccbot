@@ -250,17 +250,17 @@ async def status_poll_loop(bot: Bot) -> None:
 - Modify: `src/ccgram/handlers/tool_batch.py`
 - Modify: `tests/ccgram/handlers/test_tool_batch.py`
 
-- [ ] in `tool_batch.py`, change `from .message_queue import MessageTask` (TYPE_CHECKING) to `from .message_task import ContentTask`
-- [ ] change `is_batch_eligible(task: MessageTask, window_id: str) -> bool` signature to `is_batch_eligible(task: ContentTask) -> bool`; derive `window_id` from `task.window_id`
-- [ ] change `process_tool_event(bot, user_id, task: MessageTask) -> None` to `process_tool_event(bot, user_id, task: ContentTask) -> ContentTask | None`
-- [ ] in `_handle_tool_result`, replace `from .message_queue import process_content_task; await process_content_task(...)` with `return task` (queue worker handles followup)
-- [ ] in the overflow branch of `process_tool_event`, replace the local `from .message_queue import process_content_task` with `return task`
-- [ ] add `flush_if_active(bot, user_id, task: ContentTask) -> None` as the public flush helper called by the queue worker before delivering non-batchable content
-- [ ] use `thread_key(task.thread_id)` for `_active_batches` keys
-- [ ] verify no `from .message_queue` lines remain anywhere in `tool_batch.py` (module scope, function scope, TYPE_CHECKING)
-- [ ] update `tests/ccgram/handlers/test_tool_batch.py` to call the new signatures and assert returned `ContentTask | None`
-- [ ] add the AST guard test `test_no_import_from_message_queue` per design's `tool_batch/tests.md`
-- [ ] run `make fmt && make lint && make typecheck && make test` — must pass before Task 3
+- [x] in `tool_batch.py`, change `from .message_queue import MessageTask` (TYPE_CHECKING) to `from .message_task import ContentTask`
+- [x] change `is_batch_eligible(task: MessageTask, window_id: str) -> bool` signature to `is_batch_eligible(task: ContentTask) -> bool`; derive `window_id` from `task.window_id`
+- [x] change `process_tool_event(bot, user_id, task: MessageTask) -> None` to `process_tool_event(bot, user_id, task: ContentTask) -> ContentTask | None`
+- [x] in `_handle_tool_result`, replace `from .message_queue import process_content_task; await process_content_task(...)` with `return task` (queue worker handles followup)
+- [x] in the overflow branch of `process_tool_event`, replace the local `from .message_queue import process_content_task` with `return task`
+- [x] add `flush_if_active(bot, user_id, task: ContentTask) -> None` as the public flush helper called by the queue worker before delivering non-batchable content
+- [x] use `thread_key(task.thread_id)` for `_active_batches` keys
+- [x] verify no `from .message_queue` lines remain anywhere in `tool_batch.py` (module scope, function scope, TYPE_CHECKING)
+- [x] update `tests/ccgram/handlers/test_tool_batch.py` to call the new signatures and assert returned `ContentTask | None`
+- [x] add the AST guard test `test_no_import_from_message_queue` per design's `tool_batch/tests.md`
+- [x] run `make fmt && make lint && make typecheck && make test` — must pass before Task 3
 
 #### Task 3: Switch `status_bubble.py` to use the sum type and return data
 

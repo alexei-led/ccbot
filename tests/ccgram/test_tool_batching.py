@@ -10,6 +10,7 @@ from ccgram.handlers.message_queue import (
     get_or_create_queue,
     shutdown_workers,
 )
+from ccgram.handlers.message_task import ContentTask
 from ccgram.handlers.tool_batch import (
     BATCH_MAX_ENTRIES,
     BATCH_MAX_LENGTH,
@@ -235,21 +236,15 @@ class TestIsBatchEligible:
     @patch("ccgram.handlers.tool_batch.session_manager")
     def test_tool_types_eligible(self, mock_sm, content_type: str) -> None:
         mock_sm.get_batch_mode.return_value = "batched"
-        task = MessageTask(task_type="content", content_type=content_type, parts=["x"])
-        assert is_batch_eligible(task, "@0") is True
+        task = ContentTask(window_id="@0", parts=("x",), content_type=content_type)  # type: ignore[arg-type]
+        assert is_batch_eligible(task) is True
 
     @pytest.mark.parametrize("content_type", ["text", "thinking", "assistant"])
-    def test_non_tool_types_not_eligible(self, content_type: str) -> None:
-        task = MessageTask(task_type="content", content_type=content_type, parts=["x"])
-        assert is_batch_eligible(task, "@0") is False
-
-    def test_status_update_not_eligible(self) -> None:
-        task = MessageTask(task_type="status_update", text="working")
-        assert is_batch_eligible(task, "@0") is False
-
-    def test_status_clear_not_eligible(self) -> None:
-        task = MessageTask(task_type="status_clear", text="clear")
-        assert is_batch_eligible(task, "@0") is False
+    @patch("ccgram.handlers.tool_batch.session_manager")
+    def test_non_tool_types_not_eligible(self, mock_sm, content_type: str) -> None:
+        mock_sm.get_batch_mode.return_value = "batched"
+        task = ContentTask(window_id="@0", parts=("x",))
+        assert is_batch_eligible(task) is False
 
 
 class TestBatchDataStructures:
@@ -377,15 +372,13 @@ def _make_tool_use(
     text: str = "Read src/foo.py",
     tool_name: str | None = None,
     thread_id: int | None = 10,
-) -> MessageTask:
-    return MessageTask(
-        task_type="content",
-        content_type="tool_use",
+) -> ContentTask:
+    return ContentTask(
         window_id=window_id,
+        parts=(text,),
+        content_type="tool_use",
         tool_use_id=tool_use_id,
         tool_name=tool_name,
-        text=text,
-        parts=[text],
         thread_id=thread_id,
     )
 
@@ -395,14 +388,12 @@ def _make_tool_result(
     text: str = "42 lines",
     thread_id: int | None = 10,
     window_id: str = "@0",
-) -> MessageTask:
-    return MessageTask(
-        task_type="content",
-        content_type="tool_result",
+) -> ContentTask:
+    return ContentTask(
         window_id=window_id,
+        parts=(text,),
+        content_type="tool_result",
         tool_use_id=tool_use_id,
-        text=text,
-        parts=[text],
         thread_id=thread_id,
     )
 
@@ -556,9 +547,8 @@ class TestProcessBatchTask:
     )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
     @patch("ccgram.handlers.tool_batch.flush_batch", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_tool_result_no_matching_entry_flushes(
-        self, mock_process, mock_flush, mock_clear, mock_should, mock_send, mock_tr
+        self, mock_flush, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
         mock_tr.resolve_chat_id.return_value = 42
         sent_msg = MagicMock()
@@ -567,9 +557,11 @@ class TestProcessBatchTask:
 
         bot = AsyncMock()
         await process_tool_event(bot, 1, _make_tool_use(tool_use_id="tu1"))
-        await process_tool_event(bot, 1, _make_tool_result(tool_use_id="tu_unknown"))
+        followup = await process_tool_event(
+            bot, 1, _make_tool_result(tool_use_id="tu_unknown")
+        )
         mock_flush.assert_awaited_once()
-        mock_process.assert_awaited_once()
+        assert followup is not None
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
@@ -947,15 +939,14 @@ class TestToolResultNotDropped:
         return_value="batched",
     )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_tool_result_no_active_batch_falls_through(
-        self, mock_process, mock_clear, mock_should, mock_send, mock_tr
+        self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
         mock_tr.resolve_chat_id.return_value = 42
         bot = AsyncMock()
         task = _make_tool_result(tool_use_id="tu1", text="result text")
-        await process_tool_event(bot, 1, task)
-        mock_process.assert_awaited_once_with(bot, 1, task)
+        result = await process_tool_event(bot, 1, task)
+        assert result == task
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
@@ -964,9 +955,8 @@ class TestToolResultNotDropped:
         return_value="batched",
     )
     @patch("ccgram.handlers.status_bubble.clear_status_message", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.process_content_task", new_callable=AsyncMock)
     async def test_tool_result_none_tool_use_id_falls_through(
-        self, mock_process, mock_clear, mock_should, mock_send, mock_tr
+        self, mock_clear, mock_should, mock_send, mock_tr
     ) -> None:
         mock_tr.resolve_chat_id.return_value = 42
         sent_msg = MagicMock()
@@ -976,8 +966,8 @@ class TestToolResultNotDropped:
         bot = AsyncMock()
         await process_tool_event(bot, 1, _make_tool_use(tool_use_id="tu1"))
         task = _make_tool_result(tool_use_id=None, text="result text")
-        await process_tool_event(bot, 1, task)
-        mock_process.assert_awaited_once_with(bot, 1, task)
+        result = await process_tool_event(bot, 1, task)
+        assert result == task
         assert (1, 10) in _active_batches
         assert len(_active_batches[(1, 10)].entries) == 1
 
@@ -1055,15 +1045,14 @@ class TestDefensiveElseBranch:
     ) -> None:
         mock_tr.resolve_chat_id.return_value = 42
         bot = AsyncMock()
-        task = MessageTask(
-            task_type="content",
-            content_type="text",
+        task = ContentTask(
             window_id="@0",
-            parts=["hello"],
+            parts=("hello",),
+            content_type="text",
             thread_id=10,
         )
-        await process_tool_event(bot, 1, task)
-        mock_process.assert_awaited_once_with(bot, 1, task)
+        result = await process_tool_event(bot, 1, task)
+        assert result == task
 
 
 class TestDifferentUsersIsolation:
