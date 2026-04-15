@@ -1,238 +1,283 @@
-# Modularity Review
+# Modularity Review — ccgram
 
-**Scope**: Entire codebase — all components (handlers, providers, core modules, LLM, messaging)
-**Date**: 2026-04-15
+**Date:** 2026-04-15  
+**Scope:** Entire codebase (`src/ccgram/` — 90 Python files, ~18,000 lines)  
+**Model:** Balanced Coupling (Strength × Distance × Volatility)
 
 ---
 
 ## Executive Summary
 
-ccgram is a Telegram-to-tmux bridge that lets users control AI coding agent CLIs (Claude Code, Codex, Gemini, Shell) from Telegram Forum topics. Each topic binds to one tmux window; the bot routes messages, captures terminal output, and surfaces agent status in real time. The overall modularity status **needs attention**: the infrastructure and provider abstraction layers are well-designed and exhibit low [coupling](https://coupling.dev/posts/core-concepts/coupling/), but the session management and polling subsystems have evolved into high-complexity coordination hubs whose coupling surface creates the two confirmed pain points — cascading changes on any `session_manager` touch, and fragility in the polling cycle. One confirmed architectural layer violation (provider layer reaching up to session layer) and three modules sharing write authority over the same mutable singleton represent the most urgent issues to address.
-
-### Scores
-
-| Dimension                                                                                           | Score      | Notes                                                                                                                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cohesion**                                                                                        | 5 / 10     | `session_manager` (46 methods, 804 lines) and `session_monitor.py` (5 responsibilities, 891 lines) are low-cohesion hubs. `window_tick.py` 30-import fan-out is a secondary symptom.                                                              |
-| **[Integration Strength](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)** | 6 / 10     | Most handler→session coupling is functional (appropriate for same-service). Infrastructure singletons (config, thread_router, state_persistence) exhibit clean contract coupling. The layer violation in providers is the critical outlier.       |
-| **Layer Integrity**                                                                                 | 5 / 10     | One confirmed inversion (`providers/__init__` → `session_manager`); one directional mismatch (`window_state_store` → `providers.registry`). The `WindowView` projection exists as a decoupling mechanism but is adopted in only 8% of call sites. |
-| **State Encapsulation**                                                                             | 4 / 10     | Three module-level singletons with distributed write authority (`claude_task_state`). `session_manager` accessed directly at 103 call sites across 27 handler files rather than through a bounded interface.                                      |
-| **[Volatility](https://coupling.dev/posts/dimensions-of-coupling/volatility/)-adjusted coupling**   | 6 / 10     | High-volatility core subsystems (hook events, polling) have tolerable coupling individually; the god object accumulates the cost. Infrastructure and LLM layers are well-isolated at appropriate volatility levels.                               |
-| **[Modularity](https://coupling.dev/posts/core-concepts/modularity/) overall**                      | **5 / 10** | Structurally sound at the macro level (handlers / providers / core / infra separation). Critical coupling debt concentrated in session management and the polling loop — the two areas confirmed as active pain points.                           |
+| Dimension                 | Score    | Notes                                                                                                                  |
+| ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Cohesion**              | 6/10     | Most modules focused; `window_tick.py` (616 lines, 24 imports) and `hook_events.py` (15 modules) are outliers          |
+| **Encapsulation**         | 4/10     | Private functions accessed cross-module; internal dicts bypassed in 5 places                                           |
+| **Coupling Strength**     | 6/10     | Mostly functional coupling; `session_map` → `window_store` is intrusive; `status_bubble` knows task schema internals   |
+| **Subsystem Boundaries**  | 5/10     | Three confirmed layer violations: display→polling, hook→polling, poll→session-monitor                                  |
+| **Dependency Graph**      | 5/10     | Active circular dependency (shell_capture ↔ shell_commands); ~6 structural cycles suppressed via deferred imports      |
+| **State Ownership**       | 6/10     | `parse_session_map` duplicated across two files; `window_store.window_states` public dict bypassed by external callers |
+| **AI Context Efficiency** | 5/10     | `window_tick.py` requires loading 24 modules to safely edit; hook event changes cascade into 15 modules                |
+| **Overall**               | **5/10** | Active refactoring trajectory is positive; five high-priority structural issues remain                                 |
 
 ---
 
-## Coupling Overview
+## System Overview
 
-| Integration                                                                 | [Strength](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)               | [Distance](https://coupling.dev/posts/dimensions-of-coupling/distance/) | [Volatility](https://coupling.dev/posts/dimensions-of-coupling/volatility/) | [Balanced?](https://coupling.dev/posts/core-concepts/balance/)               |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 27 handler files → `session_manager` (103 call sites)                       | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)             | Low (same service)                                                      | **High**                                                                    | ⚠ Technically balanced per model; low cohesion drives unbounded accumulation |
-| `providers/__init__` → `session.session_manager` (lazy)                     | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)             | **High** (wrong layer direction)                                        | **High**                                                                    | ❌ Unbalanced — layer violation                                              |
-| `window_state_store` → `providers.registry`                                 | [Contract](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)               | Low (same service)                                                      | Low                                                                         | ⚠ Direction inverted; tolerable due to low volatility                        |
-| `session_monitor` (file watcher + 4 other roles)                            | Internal — low-cohesion module                                                                    | —                                                                       | **High**                                                                    | ❌ High-volatility responsibilities co-located without separation            |
-| `hook_events` → 10+ sibling handlers (lazy imports)                         | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)             | Low (same layer)                                                        | **High**                                                                    | ✅ Balanced; lazy imports mask true fan-out                                  |
-| `claude_task_state` ← `session_monitor` + `hook_events` + `topic_lifecycle` | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/) (3 writers) | Low                                                                     | **High**                                                                    | ❌ Unbalanced — shared authority, no coordinator                             |
-| `window_tick` → 30 imports                                                  | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)             | Low                                                                     | **High**                                                                    | ⚠ Balanced individually; excessive fan-out signals low cohesion              |
-| `hook_events` → `llm.summarizer`                                            | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)             | Low (same service)                                                      | High                                                                        | ✅ Balanced; synchronous concern noted separately                            |
-| `config` → (nothing internal)                                               | —                                                                                                 | —                                                                       | Low                                                                         | ✅ Exemplary                                                                 |
-| `providers/base` + `providers/registry` → (nothing internal)                | —                                                                                                 | —                                                                       | Medium                                                                      | ✅ Clean foundation                                                          |
-| `status_bubble` ← `message_queue` + `tool_batch`                            | [Functional](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/)             | Low                                                                     | High                                                                        | ⚠ Triangular dependency; `tool_batch` → `status_bubble` unplanned            |
+ccgram is a Python Telegram bot that multiplexes AI coding agent CLIs (Claude, Codex, Gemini, Shell) over tmux sessions. It is a **single-service, single-process** system — all components share one Python process and a common set of global singletons.
+
+**Subsystems identified:**
+
+| Subsystem             | Key Files                                                                                                          | Domain Classification                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| Provider abstraction  | `providers/` (12 files)                                                                                            | Core — competitive advantage, evolving |
+| Session monitoring    | `session_monitor.py`, `event_reader.py`, `session_lifecycle.py`, `transcript_reader.py`, `idle_tracker.py`         | Core — actively evolving               |
+| Polling loop          | `handlers/polling_coordinator.py`, `window_tick.py`, `polling_strategies.py`                                       | Supporting — stable design             |
+| Message delivery      | `handlers/message_queue.py`, `status_bubble.py`, `tool_batch.py`, `message_sender.py`                              | Supporting — stable                    |
+| Handler layer         | ~50 handler modules                                                                                                | Supporting — frequently extended       |
+| Core state            | `session.py`, `thread_router.py`, `window_state_store.py`, `session_map.py`                                        | Supporting — schema-stable             |
+| Shell provider        | `providers/shell_infra.py`, `handlers/shell_commands.py`, `handlers/shell_capture.py`, `handlers/shell_context.py` | Supporting — actively developed        |
+| Inter-agent messaging | `mailbox.py`, `msg_cmd.py`, `handlers/msg_broker.py`, `handlers/msg_spawn.py`, `handlers/msg_telegram.py`          | Core — new feature under development   |
+
+**Strengths identified:**
+
+- `message_task.py` — pure frozen dataclass sum type, zero project imports, textbook data contract
+- `polling_coordinator.py` — 87 lines, thin orchestration shell, recent successful refactor
+- `spawn_request.py` — pure functions and dataclasses, no handler dependencies
+- `providers/__init__.py` — clean lazy-registration facade, no circular deps
+- The recent session_monitor refactoring (extracting EventReader, IdleTracker, SessionLifecycle, TranscriptReader) reduced the monolith by 42% — demonstrates the team's ability to improve modularity
 
 ---
 
-<div class="issue">
+## Issues
 
-## Issue 1: Provider Layer Reaches Up to Session Layer
+### Issue 1 — `window_tick.py` is a God Module for Per-Window Polling (Critical)
 
-**Integration**: `providers/__init__.get_provider_for_window()` → `session.session_manager`
-**Severity**: Critical
+**Files:** `handlers/window_tick.py` (616 lines)  
+**What knowledge is shared:** window_tick imports from 24 distinct modules and makes 6 identical calls to `get_provider_for_window(window_id, provider_name=session_manager.get_window_provider(window_id))`.
 
-### Knowledge Leakage
+**Coupling analysis:**
 
-`get_provider_for_window(window_id)` — the canonical provider resolution function — lazily imports `session_manager` from `session.py` and reads `session_manager.window_states[window_id].provider_name` to decide which provider to instantiate. This means the [provider layer](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/) (infrastructure, stable) has [functional coupling](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/) to the session layer (business state, volatile). The provider layer now knows about: the `WindowState` data structure, the `window_states` dict key format, and the meaning of `provider_name` as a session concept. These are session-layer implementation details leaking downward into a layer that should only know about its own provider protocol.
+- **Strength:** HIGH — imports private functions (`_has_insert_indicator`, `notify_vim_insert_seen`) from `tmux_manager`; reads `get_active_monitor()` from `session_monitor`; orchestrates interactive UI, recovery, transcript discovery, status display, passive shell relay, and multi-pane scanning all in one file
+- **Distance:** LOW (same service, adjacent modules)
+- **Volatility:** HIGH — per-window behavior is the core of every new feature; every provider capability change, new UI element, and status update passes through here
 
-### Complexity Impact
+**Balance:** HIGH strength × LOW distance = technically balanced by the rule. But the private API access (`_has_insert_indicator`) creates an intrusive coupling that violates encapsulation regardless of distance.
 
-This creates a latent circular dependency held apart only by Python's lazy import mechanism. `session.py` imports `window_state_store`, which imports `providers.registry`. `providers/__init__` imports `session_manager`. The cycle exists at runtime; a future eager import — or any module restructuring — will surface it as an `ImportError`. Developers working on either `session.py` or `providers/` cannot reason about their module boundary in isolation: the provider resolution function's behavior depends on session state that is mutated from 27 other places.
-
-### Cascading Changes
-
-- Adding a new per-window state field to `WindowState` for provider selection (e.g., model variant, provider config override) requires editing both `session.py` and `providers/__init__`, which live at different conceptual layers.
-- Refactoring provider instantiation (e.g., lazy singletons → per-call instances) must account for session state read patterns.
-- Testing `get_provider_for_window()` in isolation requires constructing a real or mocked `session_manager` — the unit test boundary is broken.
-
-### Recommended Improvement
-
-Invert the dependency: pass `provider_name` into the resolution function as an explicit parameter instead of having it read from `session_manager`. The call sites in handlers already know the window context; they can pass the provider name obtained from `session_manager.get_window_provider(window_id)` directly:
+**The 6-call duplication (window_tick.py lines 152, 205, 226, 325, 448, 557):**
 
 ```python
-# Before (providers/__init__.py reading session layer)
-def get_provider_for_window(window_id: str) -> AgentProvider:
-    from ccgram.session import session_manager  # layer violation
-    provider_name = session_manager.window_states[window_id].provider_name
-    return registry.get(provider_name)
-
-# After (caller supplies provider_name — session layer stays at the call site)
-def get_provider(provider_name: str | None) -> AgentProvider:
-    return registry.get(provider_name or config.default_provider)
+# This pattern appears 6 times with no variation:
+provider = get_provider_for_window(
+    window_id, provider_name=session_manager.get_window_provider(window_id)
+)
 ```
 
-The trade-off is minor: call sites become `get_provider(session_manager.get_window_provider(window_id))` instead of `get_provider_for_window(window_id)`. This makes the session dependency visible at each call site — which is the correct place for it, since the call site is already in the handler layer where `session_manager` belongs. It also makes `providers/__init__` independently testable.
+Each copy is a context-loading event for an AI making a change in this file. A helper `_get_provider(window_id)` would reduce blast radius.
 
-</div>
-
-<div class="issue">
-
-## Issue 2: `session_manager` as an Unbounded God Object
-
-**Integration**: 27 handler files → `session.session_manager` (103 call sites, 46 methods)
-**Severity**: Critical
-
-### Knowledge Leakage
-
-`session_manager` (804 lines, 46 public methods) accumulates every per-window and per-user state operation: approval mode, notification mode, batch mode, display names, thread bindings, session map sync, history retrieval, state auditing, orphan pruning, group ID management. Every handler that needs anything about a window calls `session_manager` directly — there is no interface boundary, no projection, and no ownership model. The 103 call sites share knowledge of the full method surface across 27 files. A `WindowView` frozen projection was introduced as a decoupling mechanism but adopted in only 6 of 77 eligible call sites (8%).
-
-### Complexity Impact
-
-[Functional coupling](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/) at this scale exceeds the [cognitive capacity](https://coupling.dev/posts/core-concepts/complexity/) a developer can hold in working memory. When modifying `session_manager`, the developer must mentally trace 27 import sites and 103 call patterns to understand impact. Conversely, when modifying a handler, the developer must know which of the 46 `session_manager` methods are appropriate for the operation — there is no scoped interface to constrain the choice. This is confirmed as an active pain point: any `session_manager` touch cascades through many handler files.
-
-### Cascading Changes
-
-- Renaming or splitting any `session_manager` method (e.g., extracting `get_window_display_name` from the combined `window_display_names` dict access) requires updating all 103 call sites.
-- Adding a new per-window state field — inevitable as new provider capabilities are added — means adding it to `WindowState`, adding a getter/setter to `WindowStateStore`, adding a delegation method to `session_manager`, and updating every handler that needs the new field.
-- The `WindowState` dataclass field names are the true shared data model: 27 files depend on them by name. A field rename is a 27-file change.
-
-### Recommended Improvement
-
-Apply progressive encapsulation in two phases, without a big-bang rewrite:
-
-**Phase 1 — increase `WindowView` adoption.** The `WindowView` frozen projection already exists. Enforce its use in read-only handlers: audit the 71 call sites that access `session_manager.get_window_state()` instead of `session_manager.view_window()`, and migrate read-only access. This constrains the shared knowledge surface to `WindowView`'s 6 fields for most handlers.
-
-**Phase 2 — introduce scoped facades.** Group the 46 methods by domain:
-
-- `WindowStateManager` — approval/notification/batch mode, provider assignment
-- `SessionBindingManager` — thread bindings, window display names, session map sync
-- `HistoryManager` — per-window message history
-
-Each facade exposes a narrow, named interface. `bot.py` wires them together; handlers import only the facade they need. The god object becomes a coordinator of typed sub-managers rather than a single unbounded surface.
-
-The trade-off: Phase 1 is low-risk and can be done incrementally per-handler. Phase 2 requires a cohesive refactor of `session.py` and `bot.py` wiring. Both phases reduce the blast radius of future changes to the session layer significantly.
-
-</div>
-
-<div class="issue">
-
-## Issue 3: `session_monitor.py` — Five Responsibilities in One Module
-
-**Integration**: `session_monitor` (internal low-cohesion) — file watching + hook event parsing + session mapping + idle timing + window lifecycle detection
-**Severity**: Significant
-
-### Knowledge Leakage
-
-At 891 lines, `session_monitor.py` is the largest file in the project and conflates five distinct responsibilities:
-
-1. **File watching** — polling JSONL transcript files for new lines (byte-offset tracking)
-2. **Hook event parsing** — reading `events.jsonl` and deserializing `HookEvent` objects
-3. **Session map management** — reading `session_map.json` and reconciling window state
-4. **Idle timer management** — tracking per-session inactivity and emitting idle events
-5. **Window lifecycle detection** — detecting new windows, replaced sessions, deleted windows
-
-Each responsibility leaks its internals into the others through shared instance variables (`self._tracked_sessions`, `self._last_mtime`, `self._idle_timers`), making it impossible to reason about or test them independently. Changes to hook event parsing affect the idle timer cadence because they share the same poll loop.
-
-### Complexity Impact
-
-Because the file watcher, event parser, and lifecycle detector are co-located, [accidental volatility](https://coupling.dev/posts/dimensions-of-coupling/volatility/) accumulates: a change to support a new hook event type (e.g., adding `TeammateIdle` handling) requires navigating 891 lines and understanding how idle timers interact with the event dispatch path. The module also acts as a second cleanup controller alongside `hook_events.py` and `topic_lifecycle.py` — three modules share write authority over `claude_task_state` with no single coordinator, creating a distributed state management problem.
-
-### Cascading Changes
-
-- Adding a new Claude Code hook event type requires editing `session_monitor.py` (to parse the new event from `events.jsonl`) and `hook_events.py` (to dispatch it) — split responsibility across two files.
-- The idle timer logic is interleaved with the transcript-reading loop. Changing the poll interval or the idle threshold requires understanding both systems simultaneously.
-- The three-writer pattern on `claude_task_state` means any change to task state lifecycle must be traced through three files: `session_monitor.py`, `hook_events.py` (`SessionEnd`), and `topic_lifecycle.py`.
-
-### Recommended Improvement
-
-Extract the five responsibilities into three focused classes/modules, keeping `session_monitor.py` as a thin coordinator:
-
-1. **`event_reader.py`** — reads `events.jsonl` incrementally by byte offset, deserializes `HookEvent` objects, emits raw events to a callback. Pure I/O; no state.
-2. **`session_lifecycle.py`** — reconciles `session_map.json` against live tmux windows; detects new/replaced/deleted sessions; emits lifecycle events. Owns the single authoritative cleanup path for `claude_task_state`.
-3. **`idle_tracker.py`** — per-session idle timer with configurable threshold; receives "activity" signals from event_reader; emits idle callbacks. No I/O.
-4. **`session_monitor.py`** (coordinator, ~100 lines) — wires the three above, owns the poll loop, exposes the existing `NewMessage` / `NewWindowEvent` / `HookEvent` callback API unchanged.
-
-This refactor eliminates the three-writer problem: `session_lifecycle.py` becomes the single authority for `claude_task_state` cleanup, with `hook_events.py` and `topic_lifecycle.py` delegating to it.
-
-</div>
-
-<div class="issue">
-
-## Issue 4: `window_tick.py` as Secondary Coordination Hub
-
-**Integration**: `window_tick` → 30 imports (session, providers, session_monitor, message_queue, message_sender, polling_strategies, interactive_ui, cleanup, topic_emoji, recovery_callbacks, transcript_discovery, ...)
-**Severity**: Significant
-
-### Knowledge Leakage
-
-`window_tick.py` (535 lines) is the per-window poll cycle — conceptually a single function that decides what to do for one window on each tick. In practice it has become a coordination hub that touches every subsystem: it reads terminal state via pyte/tmux, checks session monitor activity timestamps via `get_active_monitor()`, dispatches interactive UI prompts, queues status updates, updates topic emoji, triggers transcript discovery, and builds recovery keyboards. Each of these is a separate concern imported as a direct dependency. The module knows the internal timing model of `session_monitor` (accessing `get_last_activity()` on the singleton) — a cross-subsystem runtime coupling.
-
-### Complexity Impact
-
-With 30 imports, any change to how any of those 30 dependencies behaves — a new argument, a renamed function, a changed return type — has a chance of requiring a `window_tick.py` edit. Because `window_tick` is on the hot path (runs every 1 second per active window), it is also the most common site for performance regressions. Adding a new status indicator or new provider behavior requires understanding the full 30-dependency graph to know where to insert the new logic without breaking existing paths.
-
-### Cascading Changes
-
-- Changing the `polling_strategies` API (e.g., changing `TerminalPollState` to a dataclass instead of a class) requires updating `window_tick`'s 7 call sites to those strategies.
-- Adding multi-pane support for a new provider requires editing `window_tick` to know about the new pane scanning pattern — even though pane scanning belongs to the provider abstraction.
-- The `get_active_monitor().get_last_activity(session_id)` call couples the tick cycle to `session_monitor`'s internal data model. If the monitor's tracking changes (e.g., tracking activity per-pane rather than per-session), `window_tick` must change too.
-
-### Recommended Improvement
-
-Decompose the tick into a coordinator with scoped delegates:
-
-1. **Terminal state capture** — already partially in `polling_strategies.py`. Complete the extraction: `TerminalStateCapture` returns a snapshot (clean lines, spinner state, interactive prompt detected). No decisions, just observation.
-2. **Status decision** — given current snapshot and last-known state, decide: emit status update? trigger idle transition? open recovery keyboard? This is pure logic — no I/O — and can be unit-tested without mocks.
-3. **Effect dispatch** — apply the decision: enqueue the right message, call the right UI function. This thin layer is the only one that needs 30 imports.
-
-This pattern (observe → decide → act) reduces `window_tick`'s I/O surface and makes the decision logic testable. The `get_active_monitor()` coupling can be resolved by passing activity timestamps into the tick function as a parameter — `polling_coordinator.py` already polls the monitor and can supply the value.
-
-</div>
-
-<div class="issue">
-
-## Issue 5: `window_state_store` Depends on `providers.registry`
-
-**Integration**: `window_state_store.set_window_provider()` → `providers.registry.is_known()`
-**Severity**: Minor
-
-### Knowledge Leakage
-
-`WindowStateStore` imports `from .providers import registry` to validate `provider_name` strings before persisting them. The state persistence layer exercises domain validation logic from the provider registry: if the registry doesn't know a provider name, the setter refuses the value. This couples a persistence concern (write a validated string to a dict and save) to a business concern (what provider names are valid). The direction is wrong: the provider registry should not be a dependency of the state store.
-
-### Complexity Impact
-
-Adding a new provider requires: registering it in `providers/registry.py`, and ensuring the registry import in `window_state_store.py` resolves correctly. While the coupling is low-strength ([contract coupling](https://coupling.dev/posts/dimensions-of-coupling/integration-strength/) — only `is_known()` is called), the architectural direction creates a latent circular dependency path: `session.py` → `window_state_store` → `providers.registry` → `providers.__init__` → (lazy) `session.session_manager`. Any eager resolution along this chain surfaces as an import cycle.
-
-### Cascading Changes
-
-This issue is low-[volatility](https://coupling.dev/posts/dimensions-of-coupling/volatility/) in practice — provider names rarely change. The risk is structural: the coupling makes the import graph harder to reason about and contributes to the circular dependency path described in Issue 1.
-
-### Recommended Improvement
-
-Remove the provider registry dependency from `window_state_store`. Validate `provider_name` at the call site in `session.py` (the layer that already imports both `window_state_store` and `providers`), or use a simple allowlist of known provider name strings passed in as a constructor argument to `WindowStateStore`. This keeps the state layer unaware of the provider domain:
+**Private API access (window_tick.py:335):**
 
 ```python
-# session.py constructs WindowStateStore with known provider names
-store = WindowStateStore(known_providers=set(registry.list_names()))
-
-# window_state_store.py — no providers import needed
-def set_window_provider(self, window_id: str, provider_name: str | None) -> None:
-    if provider_name and provider_name not in self._known_providers:
-        raise ValueError(f"Unknown provider: {provider_name}")
-    ...
+from ..tmux_manager import _has_insert_indicator, notify_vim_insert_seen
 ```
 
-The trade-off is minimal: the validation is pushed one layer up where both dependencies already exist, and the state store becomes independently instantiable for testing.
+`_has_insert_indicator` is a private function. This creates a hidden contract: refactoring vim-insert detection in `tmux_manager` will silently break `window_tick`. Either promote these to public API or move the vim detection logic into the polling layer.
 
-</div>
+**Why it matters for AI context efficiency:** Any change to per-window polling behavior requires loading window_tick.py's full context alongside 24 other modules. The 6 duplicated provider calls mean every reader must resolve the same pattern 6 times.
+
+**Recommendation:** Extract a `VimInsertDetector` or make `_has_insert_indicator` and `notify_vim_insert_seen` public. Extract the repeated `_get_provider(window_id)` helper. Consider whether the passive shell relay logic (currently embedded) could move to `shell_capture.py`.
 
 ---
 
-_This analysis was performed using the [Balanced Coupling](https://coupling.dev) model by [Vlad Khononov](https://vladikk.com)._
+### Issue 2 — `hook_events.py` Has 15 Module Dependencies, Half Hidden (High)
+
+**Files:** `handlers/hook_events.py` (385 lines)  
+**What knowledge is shared:** This file dispatches Claude Code hook events (Stop, StopFailure, SessionEnd, Notification, SubagentStart/Stop, TeammateIdle, TaskCompleted) to the handler layer. To do so, it imports from 15 distinct modules — 9 of which are deferred (inside function bodies).
+
+**Coupling analysis:**
+
+- **Strength:** HIGH — directly calls `claude_task_state.set_wait_header()`, `format_completion_text()`, `mark_task_completed()`; calls `run_broker_cycle()` from `periodic_tasks` immediately after a Stop event; calls `terminal_poll_state.clear_seen_status()` from `polling_strategies`
+- **Distance:** LOW (same service)
+- **Volatility:** HIGH — hook events are the primary mechanism for real-time agent feedback; new hook types are added as Claude Code evolves; each new event requires changes here
+
+**Balance:** HIGH strength × HIGH volatility × LOW distance → UNBALANCED. This is the highest-volatility module in the codebase and it has the broadest import surface.
+
+**The deferred import pattern hides the real dependency graph:**
+
+```python
+# Inside _handle_stop():
+from .periodic_tasks import run_broker_cycle
+run_broker_cycle(bot, user_id, thread_id)
+```
+
+This crosses a subsystem boundary: hook_events (event dispatch) reaches into periodic_tasks (polling infrastructure). The Stop event handler should emit a signal (e.g., via the existing callback registry or a simple queue) rather than directly invoking polling infrastructure.
+
+**The same module imported 4 times in different functions:**
+
+```python
+# hook_events.py:60, :129, :236, :315 — all deferred
+from .message_queue import enqueue_status_update
+```
+
+This is hidden fan-out: static analysis tools and AI context scanners will only see this import if they inspect all function bodies.
+
+**Why it matters for AI context efficiency:** Adding a new hook event type requires understanding hook_events.py + its 15 dependencies, half of which are only visible at runtime. A developer (human or AI) must scan every function body to build the full dependency picture.
+
+**Recommendation:** Move `asyncio` to a top-level import (it's stdlib, no circular risk). Consolidate deferred `message_queue` imports to top-level. Replace the `run_broker_cycle` direct call with a registered callback or a simple event emission to break the hook→polling boundary crossing.
+
+---
+
+### Issue 3 — `session_map.py` Bypasses `WindowStateStore` and `ThreadRouter` APIs (High)
+
+**Files:** `session_map.py`, `window_state_store.py`, `thread_router.py`  
+**What knowledge is shared:** `session_map.py` accesses the internal `window_states` dict of `WindowStateStore` directly, bypassing the store's own rich API.
+
+**Evidence (5 direct dict accesses):**
+
+```python
+session_map.py:194  for w in window_store.window_states          # iteration
+session_map.py:199  window_store.window_states[w].session_id     # field read
+session_map.py:204  del window_store.window_states[wid]          # deletion
+session_map.py:294  if window_id in window_store.window_states:  # membership test
+session_map.py:295  del window_store.window_states[window_id]    # deletion
+```
+
+And for `ThreadRouter`:
+
+```python
+session_map.py:188  for user_bindings in thread_router.thread_bindings.values()
+```
+
+**Coupling analysis:**
+
+- **Strength:** HIGH (intrusive) — reads and modifies internal data structures directly, bypassing mutation methods
+- **Distance:** LOW (same service)
+- **Volatility:** MEDIUM — `WindowState` schema is relatively stable; `thread_bindings` dict structure is stable
+
+**Balance:** The low volatility partially excuses this, but `window_store` has `clear_window_session()`, `prune_stale_window_states()`, and `get_window_state()` — all purpose-built for exactly these operations. The direct access creates an implicit contract on the dict's shape that the store's API would abstract away.
+
+**Root cause:** `window_states` is declared as a public attribute (no underscore) on `WindowStateStore`, inviting direct access. This is a leaking abstraction by design.
+
+**Why it matters:** If `WindowStateStore` ever needs to add side effects on window removal (e.g., invalidating a cache, notifying a listener), the 5 direct deletions in `session_map.py` will silently bypass that logic.
+
+**Recommendation:** Make `window_states` private (`_window_states`). Add `remove_window(window_id)` and `iter_window_ids()` methods to `WindowStateStore`. Replace direct dict access in `session_map.py` with these methods. Similarly, expose `ThreadRouter.iter_bound_windows()` rather than allowing direct iteration of `thread_bindings`.
+
+---
+
+### Issue 4 — `parse_session_map` Logic Duplicated Across Two Files (Medium)
+
+**Files:** `session.py` (lines 50–88), `session_map.py` (lines 34–72)  
+**What knowledge is shared:** Both files define `parse_session_map()` and `parse_emdash_provider()` with identical implementations.
+
+**Evidence:**
+
+- `session.py:50` — `def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, str]]:`
+- `session_map.py:34` — same function signature and body
+- `session.py:80` — `def parse_emdash_provider(session_name: str) -> str:`
+- `session_map.py:72` — same
+
+**Coupling analysis:**
+
+- **Strength:** HIGH (code duplication — identical logic in two places)
+- **Distance:** LOW
+- **Volatility:** MEDIUM — emdash session name parsing would need to change if emdash's naming convention changes; duplicate means two change sites
+
+**Balance:** Duplication is a cohesion failure. `session_map.py` is the canonical home for session-map parsing. `session.py` imports from `session_map.py` but still defines its own copies.
+
+**Why it matters:** A change to the emdash session name format (e.g., a new `-chat-` variant) must be applied to both copies or behavior diverges. For an AI making a targeted change, discovering the duplicate requires searching for both definition sites.
+
+**Recommendation:** Delete `parse_session_map` and `parse_emdash_provider` from `session.py`. Update `session_monitor.py` (which imports `parse_session_map` from `session`) to import from `session_map.py` directly.
+
+---
+
+### Issue 5 — `status_bubble.py` Crosses Subsystem Boundary into Polling Layer (Medium)
+
+**Files:** `handlers/status_bubble.py`, `handlers/polling_strategies.py`  
+**What knowledge is shared:** `status_bubble.py` (message delivery subsystem) imports `terminal_screen_buffer` from `polling_strategies.py` (polling subsystem) to check `is_rc_active(window_id)` when building the status keyboard.
+
+**Evidence (status_bubble.py:189–195):**
+
+```python
+from .polling_strategies import terminal_screen_buffer
+
+keyboard = build_status_keyboard(
+    window_id,
+    history=history,
+    rc_active=terminal_screen_buffer.is_rc_active(window_id),
+)
+```
+
+**Coupling analysis:**
+
+- **Strength:** LOW-MEDIUM (single function call for a boolean flag)
+- **Distance:** MEDIUM (different subsystems: display/delivery vs. polling state)
+- **Volatility:** LOW (RC badge is a stable feature)
+
+**Balance:** Low volatility makes this tolerable, but the cross-subsystem dependency is architecturally surprising. `is_rc_active()` is polling state — `status_bubble` shouldn't know it exists.
+
+**A second issue in the same file:** `status_bubble.py:138–162` accesses 4 internal fields of `ClaudeTaskSnapshot` (`total_count`, `done_count`, `open_count`, `items`). This model coupling means any change to the snapshot's field names or types will break status display.
+
+**Why it matters for AI context efficiency:** Understanding status_bubble's keyboard layout now requires loading `polling_strategies.py`. A change to RC detection logic must check whether `status_bubble` is affected.
+
+**Recommendation:** Pass `rc_active: bool` as a parameter to `build_status_keyboard()`. The caller (which already knows the polling state) supplies it — status_bubble remains blind to how it's determined. For the snapshot coupling: consider adding a `format_task_summary() -> str` method to `ClaudeTaskSnapshot` or `ClaudeTaskState` to encapsulate the display logic.
+
+---
+
+### Issue 6 — `shell_capture ↔ shell_commands` Mutual Circular Dependency (Medium)
+
+**Files:** `handlers/shell_capture.py`, `handlers/shell_commands.py`, `handlers/shell_context.py`  
+**What knowledge is shared:** `shell_capture._maybe_suggest_fix()` calls `shell_commands.show_command_approval()` via a deferred runtime import. `shell_commands` imports from `shell_context` (which was extracted to break an earlier cycle). The extraction broke the static cycle but the runtime mutual dependency persists.
+
+**Coupling analysis:**
+
+- **Strength:** HIGH — mutual functional dependency where each module calls the other's logic
+- **Distance:** LOW (same package, adjacent files)
+- **Volatility:** MEDIUM — shell NL-command flow evolves; error suggestion UX may change
+
+**Balance:** HIGH strength × LOW distance = technically balanced. But the circular call creates a hidden runtime coupling that static analysis (including AI file readers) cannot see without executing the code.
+
+**The `asyncio.create_subprocess_exec` duplication in shell_capture:**
+
+```python
+# shell_capture.py calls tmux directly, bypassing tmux_manager:
+proc = await asyncio.create_subprocess_exec("tmux", "capture-pane", ...)
+```
+
+This duplicates tmux interaction logic that lives in `tmux_manager.py`, creating two independent tmux access paths.
+
+**Recommendation:** Introduce a `CommandApprovalCallback` protocol or callable type. `shell_capture` accepts this as a constructor/call parameter rather than importing `shell_commands` at runtime. This eliminates the circular dependency architecturally. For the tmux bypass: route `capture-pane` calls through `tmux_manager`.
+
+---
+
+## Summary Matrix
+
+| Issue                                         | Files Affected                                           | Strength | Volatility | Priority |
+| --------------------------------------------- | -------------------------------------------------------- | -------- | ---------- | -------- |
+| window_tick.py god module + private API       | window_tick.py, tmux_manager.py                          | HIGH     | HIGH       | Critical |
+| hook_events.py broad imports + layer crossing | hook_events.py, periodic_tasks.py, polling_strategies.py | HIGH     | HIGH       | High     |
+| session_map bypasses store APIs               | session_map.py, window_state_store.py, thread_router.py  | HIGH     | MEDIUM     | High     |
+| parse_session_map duplicated                  | session.py, session_map.py                               | HIGH     | MEDIUM     | Medium   |
+| status_bubble crosses into polling layer      | status_bubble.py, polling_strategies.py                  | LOW      | LOW        | Medium   |
+| shell_capture ↔ shell_commands circular       | shell_capture.py, shell_commands.py                      | HIGH     | MEDIUM     | Medium   |
+
+---
+
+## What Is Working Well
+
+| Pattern              | Where                               | Why It Works                                                                           |
+| -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------- |
+| Data contract module | `message_task.py`                   | Pure frozen dataclasses, zero project imports — any module can import without risk     |
+| Thin orchestrator    | `polling_coordinator.py` (87 lines) | Delegates all work, no logic leakage — result of recent successful refactoring         |
+| Clean data ownership | `spawn_request.py`                  | Pure CRUD with no handler/Telegram/config dependencies                                 |
+| Provider facade      | `providers/__init__.py`             | Lazy registration avoids circular imports; detection/factory/launch cleanly separated  |
+| Registry pattern     | `topic_state_registry.py`           | Self-registration decorator replaces 14+ lazy imports in cleanup.py                    |
+| Shell extraction     | `shell_context.py`                  | Correctly extracted to break static circular dependency (though runtime cycle remains) |
+
+---
+
+## Recommended Priorities
+
+1. **Promote or relocate private tmux functions** in `window_tick.py` — this is the clearest encapsulation violation with the widest blast radius per change (window_tick touches 24 modules)
+2. **Extract `_get_provider(window_id)` helper** in `window_tick.py` — eliminates 6 duplicate 3-line expressions, reduces reading burden for AI-assisted changes
+3. **Delete `parse_session_map` duplicate** from `session.py` — one-line fix with zero risk; reduces emdash change-site count from 2 to 1
+4. **Make `window_store.window_states` private** — forces session_map.py to use the store's existing `clear_window_session()` and `prune_stale_window_states()` methods
+5. **Pass `rc_active` as a parameter to `build_status_keyboard()`** — cleanly severs the status_bubble → polling_strategies dependency
