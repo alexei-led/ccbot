@@ -3,7 +3,8 @@
 Owns the per-topic status message lifecycle: keyboard layout, send/edit/clear
 I/O, Claude task-list formatting, and status-to-content conversion.  The queue
 worker in ``message_queue`` delegates ``StatusUpdateTask`` / ``StatusClearTask``
-here; status-to-content conversion remains in ``message_queue._process_content_task``.
+here; ``convert_status_to_content`` is defined here and imported by
+``message_queue._process_content_task``.
 """
 
 from __future__ import annotations

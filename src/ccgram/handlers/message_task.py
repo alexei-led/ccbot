@@ -6,9 +6,9 @@ keeping the dependency graph acyclic.
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeAlias
 
-ContentType = Literal["text", "tool_use", "tool_result"]
+ContentType: TypeAlias = Literal["text", "tool_use", "tool_result"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +40,7 @@ class StatusClearTask:
     thread_id: int | None = None
 
 
-MessageTask = ContentTask | StatusUpdateTask | StatusClearTask
+MessageTask: TypeAlias = ContentTask | StatusUpdateTask | StatusClearTask
 
 
 def thread_key(thread_id: int | None) -> int:

@@ -8,9 +8,9 @@ strategy classes:
   - TopicLifecycleStrategy: autoclose timers, dead notification tracking, probe failures
 
 Each strategy owns its state and state management methods. Domain-specific
-async functions (which depend on tmux, Telegram, providers, etc.) remain in
-polling_coordinator.py and use these strategies for state access. This separation
-enables independent testing of state logic without mocking external deps.
+async functions (which depend on tmux, Telegram, providers, etc.) live in
+window_tick.py (per-window logic) and topic_lifecycle.py (lifecycle checks).
+This separation enables independent testing of state logic without mocking external deps.
 """
 
 import structlog
@@ -93,8 +93,8 @@ class TerminalScreenBuffer:
     """Pyte screen buffer, RC debounce, pane count cache, content-hash cache.
 
     Reads WindowPollState from a shared TerminalPollState instance for
-    screen-buffer fields. Domain-specific parsing functions remain in
-    polling_coordinator.py.
+    screen-buffer fields. Domain-specific parsing functions live in
+    window_tick.py.
     """
 
     def __init__(self, poll_state: "TerminalPollState") -> None:
@@ -393,8 +393,8 @@ class TerminalPollState:
 class InteractiveUIStrategy:
     """Pane alert hash state for multi-pane interactive prompt deduplication.
 
-    Async scanning functions (scan_window_panes, check_interactive_only) remain
-    in polling_coordinator.py and access state through this strategy.
+    Async scanning functions (scan_window_panes, check_interactive_only) live
+    in window_tick.py and access state through this strategy.
     """
 
     def __init__(self) -> None:
@@ -446,9 +446,9 @@ class InteractiveUIStrategy:
 class TopicLifecycleStrategy:
     """Autoclose timers, dead notification tracking, probe failure state.
 
-    Async lifecycle functions (check_autoclose_timers, handle_dead_window_notification,
-    probe_topic_existence, etc.) remain in polling_coordinator.py and access state through
-    this strategy.
+    Async lifecycle functions (check_autoclose_timers, probe_topic_existence) live in
+    topic_lifecycle.py; handle_dead_window_notification lives in window_tick.py.
+    Both access state through this strategy.
     """
 
     def __init__(self, poll_state: TerminalPollState) -> None:

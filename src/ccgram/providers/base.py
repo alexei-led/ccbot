@@ -85,7 +85,7 @@ class DiscoveredCommand:
 # ── Hook events ─────────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class HookEvent:
     """A structured event from the hook event log."""
 
