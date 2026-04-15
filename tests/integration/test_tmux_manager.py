@@ -327,6 +327,33 @@ async def test_accept_yolo_confirmation_detects_prompt(tmux, tmp_path) -> None:
     assert result is True
 
 
+async def test_create_window_with_special_char_launch_command(tmux, tmp_path) -> None:
+    """Launch command containing = and / is sent literally (regression for Gemini bug).
+
+    Gemini's hardened launch command is `env VAR=/path/to/file gemini`.
+    Without literal=True in pane.send_keys, the = and / are misinterpreted
+    as tmux key sequences and the command is corrupted.
+    """
+    marker = "CCGRAM_LAUNCH_TEST_MARKER"
+    launch_cmd = (
+        f"env {marker}=special/path/value sh -c 'echo ${{CCGRAM_LAUNCH_TEST_MARKER}}'"
+    )
+    ok, _msg, _name, window_id = await tmux.create_window(
+        str(tmp_path),
+        window_name="literal-launch",
+        start_agent=True,
+        launch_command=launch_cmd,
+    )
+    assert ok
+
+    await asyncio.sleep(1.0)
+    output = await tmux.capture_pane(window_id)
+    assert output is not None
+    assert "special/path/value" in output, (
+        f"Launch command with = and / was not sent literally. Pane output: {output!r}"
+    )
+
+
 async def test_accept_yolo_confirmation_timeout_on_no_prompt(tmux, tmp_path) -> None:
     from unittest.mock import patch
 

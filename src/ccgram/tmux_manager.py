@@ -1013,7 +1013,7 @@ class TmuxManager:
         cmd = launch_command
         if agent_args:
             cmd = f"{cmd} {agent_args}"
-        pane.send_keys(cmd, enter=True)
+        pane.send_keys(cmd, enter=True, literal=True)
 
     async def create_window(
         self,
