@@ -29,7 +29,7 @@ from .event_reader import read_new_events
 from .idle_tracker import IdleTracker
 from .monitor_state import MonitorState
 from .providers import get_provider_for_window, registry  # noqa: F401 (used by test patches)
-from .session import parse_session_map
+from .session_map import parse_session_map
 from .session_lifecycle import session_lifecycle
 from .tmux_manager import tmux_manager
 from .transcript_reader import NewMessage, NewWindowEvent, SessionInfo, TranscriptReader

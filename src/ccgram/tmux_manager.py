@@ -51,7 +51,7 @@ _VIM_PROBE_DELAY = 0.12
 _VIM_INSERT_RE = re.compile(r"^--\s*INSERT\s*--\s*$")
 
 
-def _has_insert_indicator(pane_text: str) -> bool:
+def has_insert_indicator(pane_text: str) -> bool:
     """Check if vim's ``-- INSERT --`` appears in the last 3 lines of pane text.
 
     Only matches lines where ``-- INSERT --`` is the sole content (with optional
@@ -585,7 +585,7 @@ class TmuxManager:
         if not pane_text:
             return
 
-        if _has_insert_indicator(pane_text):
+        if has_insert_indicator(pane_text):
             _vim_state[window_id] = True
             return
 
@@ -605,7 +605,7 @@ class TmuxManager:
             # Transient capture failure — leave state unchanged, don't backspace
             return
 
-        if _has_insert_indicator(pane_text):
+        if has_insert_indicator(pane_text):
             # Vim is on — we just entered INSERT mode
             _vim_state[window_id] = True
             return

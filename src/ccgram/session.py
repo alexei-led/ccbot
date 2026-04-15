@@ -44,51 +44,6 @@ from .window_state_store import (
 logger = structlog.get_logger()
 
 
-_LEGACY_SESSION_PREFIX = "ccbot:"
-
-
-def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, str]]:
-    """Parse session_map.json entries matching a tmux session prefix.
-
-    Also matches legacy "ccbot:" prefix keys when the current prefix is "ccgram:".
-    Returns {window_name: {"session_id": ..., "cwd": ...}} for matching entries.
-    """
-    result: dict[str, dict[str, str]] = {}
-    # Also accept legacy "ccbot:" prefix keys when session is "ccgram"
-    legacy_prefix = _LEGACY_SESSION_PREFIX if prefix.startswith("ccgram:") else ""
-    for key, info in raw.items():
-        if key.startswith(prefix):
-            window_name = key[len(prefix) :]
-        elif legacy_prefix and key.startswith(legacy_prefix):
-            window_name = key[len(legacy_prefix) :]
-        else:
-            continue
-        if not isinstance(info, dict):
-            continue
-        session_id = info.get("session_id", "")
-        if session_id:
-            result[window_name] = {
-                "session_id": session_id,
-                "cwd": info.get("cwd", ""),
-                "window_name": info.get("window_name", ""),
-                "transcript_path": info.get("transcript_path", ""),
-                "provider_name": info.get("provider_name", ""),
-            }
-    return result
-
-
-def parse_emdash_provider(session_name: str) -> str:
-    """Extract provider name from emdash session name.
-
-    Format: emdash-{provider}-main-{id} or emdash-{provider}-chat-{id}
-    """
-    for sep in ("-main-", "-chat-"):
-        if sep in session_name:
-            prefix = session_name.split(sep)[0]
-            return prefix.removeprefix(EMDASH_SESSION_PREFIX)
-    return ""
-
-
 @dataclass
 class AuditIssue:
     """A single issue found during state audit."""

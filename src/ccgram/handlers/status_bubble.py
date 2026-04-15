@@ -28,6 +28,7 @@ from .callback_data import (
     NOTIFY_MODE_ICONS,
 )
 from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
+from .polling_strategies import terminal_screen_buffer
 
 logger = structlog.get_logger()
 
@@ -186,7 +187,6 @@ async def send_status_text(
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-    from .polling_strategies import terminal_screen_buffer
 
     history = _get_idle_history(user_id, thread_id_or_0, text)
     keyboard = build_status_keyboard(

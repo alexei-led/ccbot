@@ -168,6 +168,25 @@ class WindowStateStore:
         state = self.window_states.get(window_id)
         return state.session_id if state and state.session_id else None
 
+    def has_window(self, window_id: str) -> bool:
+        """Return True if window_id has a tracked state entry."""
+        return window_id in self.window_states
+
+    def iter_window_ids(self) -> list[str]:
+        """Return all tracked window IDs as a snapshot list."""
+        return list(self.window_states)
+
+    def remove_window(self, window_id: str) -> bool:
+        """Remove window state entry and schedule persistence.
+
+        Returns True if the entry existed and was removed.
+        """
+        if window_id not in self.window_states:
+            return False
+        del self.window_states[window_id]
+        self._schedule_save()
+        return True
+
     # ------------------------------------------------------------------
     # Provider management
     # ------------------------------------------------------------------

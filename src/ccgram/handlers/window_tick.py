@@ -55,9 +55,16 @@ from .transcript_discovery import discover_and_register_transcript
 if TYPE_CHECKING:
     from telegram import Bot
 
+    from ..providers.base import AgentProvider
     from ..tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()
+
+
+def _get_provider(window_id: str) -> "AgentProvider":
+    return get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
 
 
 # ── Typing throttle ─────────────────────────────────────────────────────
@@ -149,9 +156,7 @@ async def _scan_window_panes(
         if not pane_text:
             continue
 
-        provider = get_provider_for_window(
-            window_id, provider_name=session_manager.get_window_provider(window_id)
-        )
+        provider = _get_provider(window_id)
         status = provider.parse_terminal_status(pane_text, pane_title="")
         if status is None or not status.is_interactive:
             interactive_strategy.remove_pane_alert(pane.pane_id)
@@ -202,9 +207,7 @@ async def _check_interactive_only(
 
     if status is None:
         clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-        provider = get_provider_for_window(
-            window_id, provider_name=session_manager.get_window_provider(window_id)
-        )
+        provider = _get_provider(window_id)
         pane_title = ""
         if provider.capabilities.uses_pane_title:
             pane_title = await tmux_manager.get_pane_title(w.window_id)
@@ -223,9 +226,7 @@ async def _check_interactive_only(
 async def _maybe_check_passive_shell(
     bot: Bot, user_id: int, window_id: str, thread_id: int
 ) -> None:
-    if not get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
-    ).capabilities.chat_first_command_path:
+    if not _get_provider(window_id).capabilities.chat_first_command_path:
         return
     ws = terminal_poll_state.get_state(window_id)
     rendered = ws.last_rendered_text
@@ -322,9 +323,7 @@ async def _resolve_status(
     if status is not None:
         return status
     clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-    provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
-    )
+    provider = _get_provider(window_id)
     pane_title = ""
     if provider.capabilities.uses_pane_title:
         pane_title = await tmux_manager.get_pane_title(w.window_id)
@@ -332,10 +331,10 @@ async def _resolve_status(
 
 
 def _check_vim_insert(window_id: str, pane_text: str, w: TmuxWindow) -> None:
-    from ..tmux_manager import _has_insert_indicator, notify_vim_insert_seen
+    from ..tmux_manager import has_insert_indicator, notify_vim_insert_seen
 
     vim_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-    if _has_insert_indicator(vim_text):
+    if has_insert_indicator(vim_text):
         notify_vim_insert_seen(w.window_id)
 
 
@@ -445,10 +444,7 @@ async def _apply_done_transition(
     )
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
     await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
-    if not get_provider_for_window(
-        window_id,
-        provider_name=session_manager.get_window_provider(window_id),
-    ).capabilities.supports_hook:
+    if not _get_provider(window_id).capabilities.supports_hook:
         terminal_poll_state.mark_seen_status(window_id)
 
 
@@ -554,9 +550,7 @@ async def _update_status(
 
     resolved_status_text = _build_status_line(status)
     ws = terminal_poll_state.peek_state(window_id)
-    provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
-    )
+    provider = _get_provider(window_id)
     ctx = TickContext(
         window_id=window_id,
         resolved_status_text=resolved_status_text,

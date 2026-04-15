@@ -191,17 +191,17 @@ class SessionMapSync:
         }
         stale_wids = [
             w
-            for w in window_store.window_states
+            for w in window_store.iter_window_ids()
             if (
                 w
                 and w not in valid_wids
                 and w not in bound_wids
-                and window_store.window_states[w].session_id not in old_format_sids
+                and window_store.get_session_id_for_window(w) not in old_format_sids
             )
         ]
         for wid in stale_wids:
             logger.info("Removing stale window_state: %s", wid)
-            del window_store.window_states[wid]
+            window_store.remove_window(wid)
         return bool(stale_wids)
 
     def _purge_old_format_keys(
@@ -291,8 +291,8 @@ class SessionMapSync:
                 "Pruning dead session_map entry: %s (window %s)", key, window_id
             )
             del raw[key]
-            if window_id in window_store.window_states:
-                del window_store.window_states[window_id]
+            if window_store.has_window(window_id):
+                window_store.remove_window(window_id)
                 changed_state = True
 
         atomic_write_json(config.session_map_file, raw)
