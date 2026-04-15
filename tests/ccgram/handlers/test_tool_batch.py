@@ -204,7 +204,7 @@ class TestBatchDataStructures:
         assert batch.total_length == 0
 
     def test_constants(self) -> None:
-        assert BATCH_MAX_ENTRIES == 10
+        assert BATCH_MAX_ENTRIES == 9
         assert BATCH_MAX_LENGTH == 2800
 
 

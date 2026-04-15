@@ -81,9 +81,10 @@ def get_or_create_queue(bot: Bot, user_id: int) -> asyncio.Queue[MessageTask]:
 
 
 def _drain_queue(queue: asyncio.Queue[MessageTask]) -> list[MessageTask]:
-    """Non-destructively inspect all items in queue.
+    """Drain all items from the queue and return them as a list.
 
-    Drains the queue and returns all items. Caller must refill.
+    Destructive: the queue is empty after this call. Caller is responsible
+    for re-enqueueing any items that should not be discarded.
     """
     items: list[MessageTask] = []
     while not queue.empty():
@@ -405,7 +406,7 @@ async def enqueue_status_update(
     """Enqueue status update or clear."""
     queue = get_or_create_queue(bot, user_id)
 
-    if status_text:
+    if status_text is not None:
         task: MessageTask = StatusUpdateTask(
             window_id=window_id,
             text=status_text,

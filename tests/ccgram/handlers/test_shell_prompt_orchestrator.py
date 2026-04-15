@@ -121,11 +121,13 @@ async def test_dispatch_setup_button(mock_setup, mock_has_marker):
 
     query = AsyncMock()
     query.data = f"{CB_SHELL_SETUP}@5"
+    query.from_user.id = 1
     update = AsyncMock()
     update.callback_query = query
     context = AsyncMock()
 
-    await _dispatch(update, context)
+    with patch("ccgram.handlers.callback_helpers.user_owns_window", return_value=True):
+        await _dispatch(update, context)
 
     query.answer.assert_awaited_once()
     mock_setup.assert_awaited_once_with("@5", clear=False)
@@ -138,11 +140,13 @@ async def test_dispatch_skip_button():
 
     query = AsyncMock()
     query.data = f"{CB_SHELL_SKIP}@5"
+    query.from_user.id = 1
     update = AsyncMock()
     update.callback_query = query
     context = AsyncMock()
 
-    await _dispatch(update, context)
+    with patch("ccgram.handlers.callback_helpers.user_owns_window", return_value=True):
+        await _dispatch(update, context)
 
     query.answer.assert_awaited_once()
     assert _state["@5"].skip_flag is True

@@ -152,14 +152,24 @@ async def _show_offer_keyboard(
 @register(CB_SHELL_SETUP, CB_SHELL_SKIP)
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG001
     """Handle Set up / Skip button presses."""
+    from .callback_helpers import user_owns_window
+
     query = update.callback_query
     if not query or not query.data:
         return
-    await query.answer()
 
     data = query.data
-    if data.startswith(CB_SHELL_SETUP):
-        window_id = data[len(CB_SHELL_SETUP) :]
+    is_setup = data.startswith(CB_SHELL_SETUP)
+    window_id = data[len(CB_SHELL_SETUP) :] if is_setup else data[len(CB_SHELL_SKIP) :]
+
+    user = query.from_user
+    if user is None or not user_owns_window(user.id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+
+    await query.answer()
+
+    if is_setup:
         try:
             await accept_offer(window_id)
             await query.edit_message_text("✅ Shell prompt marker configured")
@@ -173,8 +183,7 @@ async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await query.edit_message_text(
                     "❌ Setup failed — window may have closed"
                 )
-    elif data.startswith(CB_SHELL_SKIP):
-        window_id = data[len(CB_SHELL_SKIP) :]
+    else:
         record_skip(window_id)
         with contextlib.suppress(TelegramError):
             await query.edit_message_text("⏭ Skipped — send ! prefix for raw commands")

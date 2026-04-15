@@ -30,7 +30,7 @@ from .message_task import ContentTask, thread_key
 logger = structlog.get_logger()
 
 BATCH_MAX_LENGTH = 2800
-BATCH_MAX_ENTRIES = 10
+BATCH_MAX_ENTRIES = 9
 
 
 @dataclass
@@ -365,7 +365,7 @@ def _add_tool_use_entry(
     """Append a tool_use entry to the batch. Returns True if overflow occurred."""
     entry_text = "\n".join(task.parts) if task.parts else "tool call"
     if (
-        len(batch.entries) >= BATCH_MAX_ENTRIES - 1
+        len(batch.entries) >= BATCH_MAX_ENTRIES
         or batch.total_length + len(entry_text) > BATCH_MAX_LENGTH
     ):
         return True

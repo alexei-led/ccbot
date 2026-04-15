@@ -267,7 +267,7 @@ class TestBatchDataStructures:
         assert batch.total_length == sum(len(f"Read file{i}.py") for i in range(5))
 
     def test_constants(self) -> None:
-        assert BATCH_MAX_ENTRIES == 10
+        assert BATCH_MAX_ENTRIES == 9
         assert BATCH_MAX_LENGTH == 2800
 
 
@@ -601,15 +601,15 @@ class TestProcessBatchTask:
         mock_send.return_value = sent_msg
 
         bot = AsyncMock()
-        for i in range(BATCH_MAX_ENTRIES + 1):
+        for i in range(BATCH_MAX_ENTRIES + 2):
             await process_tool_event(
                 bot, 1, _make_tool_use(tool_use_id=f"tu{i}", text=f"Tool {i}")
             )
 
         batch = _active_batches[(1, 10)]
         assert len(batch.entries) == 2
-        assert batch.entries[0].tool_use_id == f"tu{BATCH_MAX_ENTRIES - 1}"
-        assert batch.entries[1].tool_use_id == f"tu{BATCH_MAX_ENTRIES}"
+        assert batch.entries[0].tool_use_id == f"tu{BATCH_MAX_ENTRIES}"
+        assert batch.entries[1].tool_use_id == f"tu{BATCH_MAX_ENTRIES + 1}"
 
     @patch("ccgram.handlers.tool_batch.thread_router")
     @patch("ccgram.handlers.tool_batch.rate_limit_send_message")

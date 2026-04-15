@@ -57,19 +57,6 @@ def is_shell_prompt(pane_current_command: str) -> bool:
     return cmd in SHELL_COMMANDS
 
 
-# ── Shared result dataclass ─────────────────────────────────────────────
-
-
-@dataclass
-class PollResult:
-    """Shared result returned by polling strategies."""
-
-    status_text: str | None = None
-    emoji_state: str | None = None
-    is_interactive: bool = False
-    skip_status: bool = False
-
-
 # ── Per-window / per-topic state ────────────────────────────────────────
 
 
@@ -526,10 +513,6 @@ class TopicLifecycleStrategy:
         """Reset probe failure counter for a window."""
         self._poll_state.reset_probe_failures(window_id)
 
-    def reset_probe_failures_state(self) -> None:
-        """Reset all probe failure tracking (for testing)."""
-        self._poll_state.reset_all_probe_failures()
-
     def clear_typing_state(self, user_id: int, thread_id: int) -> None:
         """Clear typing indicator throttle for a topic."""
         ts = self._states.get((user_id, thread_id))
@@ -540,10 +523,6 @@ class TopicLifecycleStrategy:
         """Reset all typing indicator tracking (for testing)."""
         for ts in self._states.values():
             ts.last_typing_sent = None
-
-    def reset_seen_status_state(self) -> None:
-        """Reset all startup status tracking (for testing)."""
-        self._poll_state.reset_all_seen_status()
 
     def record_typing_sent(self, user_id: int, thread_id: int) -> None:
         """Stamp the current time as the last typing indicator sent."""
