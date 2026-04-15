@@ -10,12 +10,12 @@ here; ``convert_status_to_content`` is defined here and imported by
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 
 import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-from .message_task import StatusClearTask, StatusUpdateTask, thread_key
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ..session import session_manager
 from ..thread_router import thread_router
@@ -28,9 +28,32 @@ from .callback_data import (
     NOTIFY_MODE_ICONS,
 )
 from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
-from .polling_strategies import terminal_screen_buffer
+from .message_task import StatusClearTask, StatusUpdateTask, thread_key
 
 logger = structlog.get_logger()
+
+
+# ---------------------------------------------------------------------------
+# RC-active provider (dependency injection — severs polling_strategies import)
+# ---------------------------------------------------------------------------
+
+
+def _rc_active_default(_window_id: str) -> bool:
+    return False
+
+
+_rc_active_fn: Callable[[str], bool] = _rc_active_default
+
+
+def register_rc_active_provider(fn: Callable[[str], bool]) -> None:
+    """Wire the polling-layer RC-active lookup (called once from bot.py setup).
+
+    Avoids a direct status_bubble → polling_strategies import by accepting
+    a callable rather than importing terminal_screen_buffer directly.
+    """
+    global _rc_active_fn
+    _rc_active_fn = fn
+
 
 # ---------------------------------------------------------------------------
 # State
@@ -192,7 +215,7 @@ async def send_status_text(
     keyboard = build_status_keyboard(
         window_id,
         history=history,
-        rc_active=terminal_screen_buffer.is_rc_active(window_id),
+        rc_active=_rc_active_fn(window_id),
     )
 
     existing = _status_msg_info.get(skey)

@@ -7,7 +7,7 @@ import pytest
 from ccgram.tmux_manager import (
     TmuxManager,
     _VIM_PROBE_DELAY,
-    _has_insert_indicator,
+    has_insert_indicator,
     _vim_locks,
     _vim_state,
     clear_vim_state,
@@ -23,44 +23,44 @@ def _reset():
     reset_vim_state()
 
 
-# ── _has_insert_indicator ──────────────────────────────────────────────
+# ── has_insert_indicator ──────────────────────────────────────────────
 
 
 class TestHasInsertIndicator:
     def test_insert_on_last_line(self):
         pane = "some output\nprompt> hello\n-- INSERT --"
-        assert _has_insert_indicator(pane) is True
+        assert has_insert_indicator(pane) is True
 
     def test_insert_second_to_last(self):
         pane = "line1\n-- INSERT --\nlast line"
-        assert _has_insert_indicator(pane) is True
+        assert has_insert_indicator(pane) is True
 
     def test_insert_third_to_last(self):
         pane = "-- INSERT --\nsecond\nthird"
-        assert _has_insert_indicator(pane) is True
+        assert has_insert_indicator(pane) is True
 
     def test_no_insert_indicator(self):
         pane = "some output\nprompt> hello\n"
-        assert _has_insert_indicator(pane) is False
+        assert has_insert_indicator(pane) is False
 
     def test_insert_too_far_up(self):
         pane = "-- INSERT --\nline2\nline3\nline4"
-        assert _has_insert_indicator(pane) is False
+        assert has_insert_indicator(pane) is False
 
     def test_empty_pane(self):
-        assert _has_insert_indicator("") is False
+        assert has_insert_indicator("") is False
 
     def test_insert_with_surrounding_text(self):
         pane = "output\nstatus: -- INSERT -- (paste)\ndone"
-        assert _has_insert_indicator(pane) is False
+        assert has_insert_indicator(pane) is False
 
     def test_insert_with_whitespace(self):
         pane = "output\n  -- INSERT --  \ndone"
-        assert _has_insert_indicator(pane) is True
+        assert has_insert_indicator(pane) is True
 
     def test_claude_status_bar_insert(self):
         pane = "output\n-- INSERT -- ⏸ plan mode on (shift+tab to cycle)\ndone"
-        assert _has_insert_indicator(pane) is False
+        assert has_insert_indicator(pane) is False
 
 
 # ── notify / clear / reset ─────────────────────────────────────────────

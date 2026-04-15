@@ -145,10 +145,8 @@ class TestHandleStop:
                 "ccgram.handlers.hook_events.session_manager.get_notification_mode",
                 return_value="all",
             ),
-            patch("ccgram.handlers.topic_emoji.update_topic_emoji") as mock_emoji,
-            patch(
-                "ccgram.handlers.message_queue.enqueue_status_update"
-            ) as mock_enqueue,
+            patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
+            patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
         ):
             event = _make_event(event_type="Stop", data={"stop_reason": "done"})
             await dispatch_hook_event(event, bot)
@@ -171,10 +169,8 @@ class TestHandleStop:
                 "ccgram.handlers.hook_events.session_manager.get_notification_mode",
                 return_value=mode,
             ),
-            patch("ccgram.handlers.topic_emoji.update_topic_emoji") as mock_emoji,
-            patch(
-                "ccgram.handlers.message_queue.enqueue_status_update"
-            ) as mock_enqueue,
+            patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
+            patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
         ):
             event = _make_event(event_type="Stop", data={"stop_reason": "done"})
             await dispatch_hook_event(event, bot)
@@ -188,9 +184,7 @@ class TestHandleStop:
             lambda: iter([]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update"
-        ) as mock_enqueue:
+        with patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue:
             event = _make_event(event_type="Stop")
             await dispatch_hook_event(event, bot)
             mock_enqueue.assert_not_called()
@@ -214,9 +208,7 @@ class TestEnhanceWithLlmSummary:
                 "ccgram.handlers.hook_events.session_manager.view_window",
                 return_value=mock_state,
             ),
-            patch(
-                "ccgram.handlers.message_queue.enqueue_status_update"
-            ) as mock_enqueue,
+            patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
             patch(
                 "ccgram.llm.summarizer.summarize_completion",
                 new_callable=AsyncMock,
@@ -252,9 +244,7 @@ class TestEnhanceWithLlmSummary:
                 "ccgram.handlers.hook_events.session_manager.view_window",
                 return_value=mock_state,
             ),
-            patch(
-                "ccgram.handlers.message_queue.enqueue_status_update"
-            ) as mock_enqueue,
+            patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
             patch(
                 "ccgram.llm.summarizer.summarize_completion",
                 new_callable=AsyncMock,
@@ -290,7 +280,7 @@ class TestEnhanceWithLlmSummary:
                 "ccgram.handlers.hook_events.session_manager.view_window",
                 return_value=mock_state,
             ),
-            patch("ccgram.handlers.message_queue.enqueue_status_update"),
+            patch("ccgram.handlers.hook_events.enqueue_status_update"),
             patch(
                 "ccgram.llm.summarizer.summarize_completion",
                 new_callable=AsyncMock,
@@ -317,14 +307,14 @@ class TestHandleNotification:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.interactive_ui.get_interactive_window",
+                "ccgram.handlers.hook_events.get_interactive_window",
                 return_value=None,
             ),
             patch(
-                "ccgram.handlers.interactive_ui.set_interactive_mode",
+                "ccgram.handlers.hook_events.set_interactive_mode",
             ) as mock_set,
             patch(
-                "ccgram.handlers.interactive_ui.handle_interactive_ui",
+                "ccgram.handlers.hook_events.handle_interactive_ui",
                 return_value=True,
             ) as mock_handle,
             patch("asyncio.sleep"),
@@ -346,11 +336,11 @@ class TestHandleNotification:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.interactive_ui.get_interactive_window",
+                "ccgram.handlers.hook_events.get_interactive_window",
                 return_value="@0",
             ),
             patch(
-                "ccgram.handlers.interactive_ui.handle_interactive_ui",
+                "ccgram.handlers.hook_events.handle_interactive_ui",
             ) as mock_handle,
         ):
             event = _make_event(event_type="Notification")
@@ -365,16 +355,16 @@ class TestHandleNotification:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.interactive_ui.get_interactive_window",
+                "ccgram.handlers.hook_events.get_interactive_window",
                 return_value=None,
             ),
-            patch("ccgram.handlers.interactive_ui.set_interactive_mode"),
+            patch("ccgram.handlers.hook_events.set_interactive_mode"),
             patch(
-                "ccgram.handlers.interactive_ui.handle_interactive_ui",
+                "ccgram.handlers.hook_events.handle_interactive_ui",
                 return_value=False,
             ),
             patch(
-                "ccgram.handlers.interactive_ui.clear_interactive_mode",
+                "ccgram.handlers.hook_events.clear_interactive_mode",
             ) as mock_clear,
             patch("asyncio.sleep"),
         ):
@@ -392,17 +382,17 @@ class TestHandleNotification:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.interactive_ui.get_interactive_window",
+                "ccgram.handlers.hook_events.get_interactive_window",
                 return_value=None,
             ),
-            patch("ccgram.handlers.interactive_ui.set_interactive_mode"),
+            patch("ccgram.handlers.hook_events.set_interactive_mode"),
             patch(
-                "ccgram.handlers.interactive_ui.handle_interactive_ui",
+                "ccgram.handlers.hook_events.handle_interactive_ui",
                 return_value=False,
             ),
-            patch("ccgram.handlers.interactive_ui.clear_interactive_mode"),
+            patch("ccgram.handlers.hook_events.clear_interactive_mode"),
             patch(
-                "ccgram.handlers.message_queue.enqueue_status_update",
+                "ccgram.handlers.hook_events.enqueue_status_update",
                 new_callable=AsyncMock,
             ) as mock_enqueue,
             patch("asyncio.sleep"),
@@ -480,7 +470,7 @@ class TestHandleSubagentStart:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.message_queue.enqueue_status_update"):
+        with patch("ccgram.handlers.hook_events.enqueue_status_update"):
             event = _make_event(
                 event_type="SubagentStart",
                 data={"subagent_id": "sub-1", "name": "   ", "description": "real"},
@@ -494,7 +484,7 @@ class TestHandleSubagentStart:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.message_queue.enqueue_status_update"):
+        with patch("ccgram.handlers.hook_events.enqueue_status_update"):
             event = _make_event(
                 event_type="SubagentStart",
                 data={"subagent_id": "", "name": "", "description": ""},
@@ -576,9 +566,7 @@ class TestHandleTeammateIdle:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update"
-        ) as mock_enqueue:
+        with patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue:
             event = _make_event(
                 event_type="TeammateIdle",
                 data={"teammate_name": "reviewer"},
@@ -598,9 +586,7 @@ class TestHandleTeammateIdle:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update"
-        ) as mock_enqueue:
+        with patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue:
             event = _make_event(event_type="TeammateIdle", data={})
             await dispatch_hook_event(event, bot)
             assert "unknown" in mock_enqueue.call_args[0][3]
@@ -613,9 +599,7 @@ class TestHandleTaskCompleted:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update"
-        ) as mock_enqueue:
+        with patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue:
             event = _make_event(
                 event_type="TaskCompleted",
                 data={"task_subject": "write tests", "teammate_name": "coder"},
@@ -631,9 +615,7 @@ class TestHandleTaskCompleted:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update"
-        ) as mock_enqueue:
+        with patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue:
             event = _make_event(
                 event_type="TaskCompleted",
                 data={"task_subject": "deploy"},
@@ -686,7 +668,7 @@ class TestHandleTaskCompleted:
         )
         bot = AsyncMock(spec=Bot)
         with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update",
+            "ccgram.handlers.hook_events.enqueue_status_update",
             new_callable=AsyncMock,
         ) as mock_enqueue:
             event = _make_event(
@@ -763,10 +745,8 @@ class TestHandleSessionEnd:
             patch(
                 "ccgram.handlers.hook_events.session_manager.clear_window_session",
             ) as mock_clear_session,
-            patch("ccgram.handlers.topic_emoji.update_topic_emoji") as mock_emoji,
-            patch(
-                "ccgram.handlers.message_queue.enqueue_status_update"
-            ) as mock_enqueue,
+            patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
+            patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
             patch(
                 "ccgram.handlers.polling_strategies.terminal_poll_state.clear_seen_status"
             ) as mock_clear,
@@ -821,8 +801,8 @@ class TestHandleSessionEnd:
                 return_value="project",
             ),
             patch("ccgram.handlers.hook_events.session_manager.clear_window_session"),
-            patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
-            patch("ccgram.handlers.message_queue.enqueue_status_update"),
+            patch("ccgram.handlers.hook_events.update_topic_emoji"),
+            patch("ccgram.handlers.hook_events.enqueue_status_update"),
             patch(
                 "ccgram.handlers.polling_strategies.terminal_poll_state.clear_seen_status"
             ),
@@ -851,8 +831,8 @@ class TestHandleSessionEnd:
             patch(
                 "ccgram.handlers.hook_events.session_manager.clear_window_session",
             ),
-            patch("ccgram.handlers.topic_emoji.update_topic_emoji"),
-            patch("ccgram.handlers.message_queue.enqueue_status_update"),
+            patch("ccgram.handlers.hook_events.update_topic_emoji"),
+            patch("ccgram.handlers.hook_events.enqueue_status_update"),
             patch(
                 "ccgram.handlers.polling_strategies.terminal_poll_state.clear_seen_status"
             ),
@@ -867,9 +847,7 @@ class TestHandleSessionEnd:
             lambda: iter([]),
         )
         bot = AsyncMock(spec=Bot)
-        with patch(
-            "ccgram.handlers.message_queue.enqueue_status_update"
-        ) as mock_enqueue:
+        with patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue:
             event = _make_event(event_type="SessionEnd", data={"reason": "logout"})
             await dispatch_hook_event(event, bot)
             mock_enqueue.assert_not_called()

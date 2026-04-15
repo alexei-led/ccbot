@@ -1866,7 +1866,7 @@ class TestUpdateStatusMessageEdgeCases:
                 return_value=pyte_status,
             ),
             patch("ccgram.tmux_manager.notify_vim_insert_seen") as mock_vim,
-            patch("ccgram.tmux_manager._has_insert_indicator", return_value=True),
+            patch("ccgram.tmux_manager.has_insert_indicator", return_value=True),
             patch("ccgram.handlers.window_tick._send_typing_throttled"),
             patch("ccgram.claude_task_state.get_subagent_names", return_value=[]),
         ):
@@ -1908,7 +1908,7 @@ class TestUpdateStatusMessageEdgeCases:
                 "ccgram.handlers.window_tick._parse_with_pyte",
                 return_value=pyte_status,
             ),
-            patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
+            patch("ccgram.tmux_manager.has_insert_indicator", return_value=False),
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
             patch("ccgram.handlers.window_tick._send_typing_throttled"),
             patch(
@@ -1962,7 +1962,7 @@ class TestUpdateStatusMessageEdgeCases:
                 "ccgram.handlers.window_tick._parse_with_pyte",
                 return_value=pyte_status,
             ),
-            patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
+            patch("ccgram.tmux_manager.has_insert_indicator", return_value=False),
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
             patch("ccgram.handlers.window_tick._send_typing_throttled"),
             patch("ccgram.claude_task_state.get_subagent_names", return_value=[]),
@@ -2007,7 +2007,7 @@ class TestUpdateStatusMessageEdgeCases:
                 "ccgram.handlers.window_tick.clear_interactive_msg",
                 new_callable=AsyncMock,
             ) as mock_clear,
-            patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
+            patch("ccgram.tmux_manager.has_insert_indicator", return_value=False),
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
             patch("ccgram.handlers.window_tick._send_typing_throttled"),
             patch("ccgram.claude_task_state.get_subagent_names", return_value=[]),
@@ -2053,7 +2053,7 @@ class TestUpdateStatusMessageEdgeCases:
                 "ccgram.handlers.window_tick.handle_interactive_ui",
                 new_callable=AsyncMock,
             ) as mock_handle,
-            patch("ccgram.tmux_manager._has_insert_indicator", return_value=False),
+            patch("ccgram.tmux_manager.has_insert_indicator", return_value=False),
             patch("ccgram.tmux_manager.notify_vim_insert_seen"),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)

@@ -870,6 +870,7 @@ class TestRelayOutputTruncation:
 class TestMaybeSuggestFix:
     async def test_calls_llm_and_shows_approval_on_error(self) -> None:
         from ccgram.handlers.shell_capture import _maybe_suggest_fix
+        from ccgram.handlers.shell_commands import show_command_approval
 
         bot = AsyncMock(spec=Bot)
         mock_completer = AsyncMock()
@@ -888,7 +889,7 @@ class TestMaybeSuggestFix:
                 return_value=mock_completer,
             ),
             patch(
-                "ccgram.handlers.shell_commands.gather_llm_context",
+                "ccgram.handlers.shell_context.gather_llm_context",
                 new_callable=AsyncMock,
                 return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
             ),
@@ -896,6 +897,7 @@ class TestMaybeSuggestFix:
                 "ccgram.handlers.shell_commands.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
+            patch(f"{_MOD}._approval_callback", new=show_command_approval),
         ):
             await _maybe_suggest_fix(
                 bot,

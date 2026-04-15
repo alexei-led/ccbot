@@ -666,6 +666,12 @@ class SessionManager:
         """Delegate to session_map_sync — see session_map.py for implementation."""
         session_map_sync.clear_session_map_entry(window_id)
 
+    def set_window_cwd(self, window_id: str, cwd: str) -> None:
+        """Set the working directory for a window and persist state."""
+        state = self.get_window_state(window_id)
+        state.cwd = cwd
+        self._save_state()
+
     def get_approval_mode(self, window_id: str) -> str:
         """Get approval mode for a window (default: 'normal')."""
         state = self.window_states.get(window_id)

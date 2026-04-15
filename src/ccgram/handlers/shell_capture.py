@@ -18,19 +18,61 @@ Key components:
   - strip_terminal_glyphs: Remove Nerd Font / PUA characters
 """
 
-import asyncio
 import re
 import structlog
 from dataclasses import dataclass
+from typing import Any, Protocol
 
 from telegram import Bot
 
 from ..providers.shell import match_prompt
 from ..thread_router import thread_router
+from ..tmux_manager import tmux_manager
 from .message_sender import edit_with_fallback, rate_limit_send_message
 from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()
+
+
+class CommandApprovalCallback(Protocol):
+    """Callable that shows a command-approval keyboard in a Telegram topic.
+
+    Matches the signature of ``shell_commands.show_command_approval``.
+    """
+
+    async def __call__(
+        self,
+        bot: Bot,
+        chat_id: int,
+        thread_id: int,
+        window_id: str,
+        result: Any,
+        user_id: int,
+    ) -> bool: ...
+
+
+async def _approval_noop(  # type: ignore[misc]
+    _bot: Any,
+    _chat_id: Any,
+    _thread_id: Any,
+    _window_id: Any,
+    _result: Any,
+    _user_id: Any,
+) -> bool:
+    return False
+
+
+_approval_callback: CommandApprovalCallback = _approval_noop  # type: ignore[assignment]
+
+
+def register_approval_callback(fn: CommandApprovalCallback) -> None:
+    """Wire show_command_approval from shell_commands (called once from bot.py setup).
+
+    Avoids the shell_capture ↔ shell_commands runtime circular import.
+    """
+    global _approval_callback
+    _approval_callback = fn
+
 
 # Maximum characters per message (fits Telegram 4096-char limit with margin)
 _OUTPUT_LIMIT = 3800
@@ -47,44 +89,8 @@ _SCROLLBACK_LINES = 200
 async def _capture_with_scrollback(
     window_id: str, history: int = _SCROLLBACK_LINES
 ) -> str | None:
-    """Capture pane text including scrollback history.
-
-    Uses ``tmux capture-pane -p -J -S -{history}`` to get *history* lines of
-    scrollback.  ``-J`` joins wrapped lines so prompt markers are never
-    split across two lines on narrow terminals.
-    """
-    proc: asyncio.subprocess.Process | None = None
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "tmux",
-            "capture-pane",
-            "-p",
-            "-J",
-            "-S",
-            f"-{history}",
-            "-t",
-            window_id,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        async with asyncio.timeout(5.0):
-            stdout, _ = await proc.communicate()
-        text = stdout.decode("utf-8", errors="replace").rstrip()
-        return text if text else None
-    except TimeoutError:
-        if proc:
-            import contextlib
-
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
-                await proc.wait()
-        logger.debug("capture_with_scrollback timed out", window_id=window_id)
-        return None
-    except OSError as exc:
-        logger.debug(
-            "capture_with_scrollback failed", window_id=window_id, error=str(exc)
-        )
-        return None
+    """Capture pane text including scrollback history via tmux_manager."""
+    return await tmux_manager.capture_pane_scrollback(window_id, history)
 
 
 @dataclass
@@ -371,9 +377,7 @@ async def _maybe_suggest_fix(
     if not result.command or result.command == command:
         return
 
-    from .shell_commands import show_command_approval
-
-    await show_command_approval(bot, chat_id, thread_id, window_id, result, user_id)
+    await _approval_callback(bot, chat_id, thread_id, window_id, result, user_id)
 
 
 # ── Shell output monitoring ───────────────────────────────────────────

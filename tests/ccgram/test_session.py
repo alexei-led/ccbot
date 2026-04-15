@@ -213,7 +213,7 @@ class TestLoadSessionMapDisplayName:
 
 class TestParseSessionMap:
     def test_filters_by_prefix(self) -> None:
-        from ccgram.session import parse_session_map
+        from ccgram.session_map import parse_session_map
 
         raw = {
             "ccgram:win-a": {"session_id": "s1", "cwd": "/a"},
@@ -224,18 +224,18 @@ class TestParseSessionMap:
         assert "win-b" not in result
 
     def test_skips_empty_session_id(self) -> None:
-        from ccgram.session import parse_session_map
+        from ccgram.session_map import parse_session_map
 
         raw = {"ccgram:win-a": {"session_id": "", "cwd": "/a"}}
         assert parse_session_map(raw, "ccgram:") == {}
 
     def test_empty_input(self) -> None:
-        from ccgram.session import parse_session_map
+        from ccgram.session_map import parse_session_map
 
         assert parse_session_map({}, "ccgram:") == {}
 
     def test_extracts_cwd(self) -> None:
-        from ccgram.session import parse_session_map
+        from ccgram.session_map import parse_session_map
 
         raw = {"ccgram:win-a": {"session_id": "s1", "cwd": "/home/user/proj"}}
         result = parse_session_map(raw, "ccgram:")
@@ -251,7 +251,7 @@ class TestParseSessionMap:
         ],
     )
     def test_non_dict_values_skipped(self, bad_value) -> None:
-        from ccgram.session import parse_session_map
+        from ccgram.session_map import parse_session_map
 
         raw = {
             "ccgram:good": {"session_id": "s1", "cwd": "/a"},

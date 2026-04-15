@@ -556,8 +556,7 @@ async def _create_window_and_bind(
         return
 
     user_preferences.update_user_mru(user_id, selected_path)
-    window_state = session_manager.get_window_state(created_wid)
-    window_state.cwd = selected_path
+    session_manager.set_window_cwd(created_wid, selected_path)
     session_manager.set_window_provider(created_wid, provider_name)
     session_manager.set_window_approval_mode(created_wid, approval_mode)
     logger.info(

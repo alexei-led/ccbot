@@ -333,6 +333,46 @@ class TmuxManager:
 
         return await self._capture_pane_plain(window_id)
 
+    async def capture_pane_scrollback(
+        self, window_id: str, history: int = 200
+    ) -> str | None:
+        """Capture pane text including scrollback history.
+
+        Uses ``tmux capture-pane -p -J -S -{history}``. The ``-J`` flag joins
+        wrapped lines so prompt markers are never split across lines on narrow
+        terminals. Returns stripped text or None on failure.
+        """
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "capture-pane",
+                "-p",
+                "-J",
+                "-S",
+                f"-{history}",
+                "-t",
+                window_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            async with asyncio.timeout(5.0):
+                stdout, _ = await proc.communicate()
+            text = stdout.decode("utf-8", errors="replace").rstrip()
+            return text if text else None
+        except TimeoutError:
+            if proc:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                    await proc.wait()
+            logger.debug("capture_pane_scrollback timed out", window_id=window_id)
+            return None
+        except OSError as exc:
+            logger.debug(
+                "capture_pane_scrollback failed", window_id=window_id, error=str(exc)
+            )
+            return None
+
     async def capture_pane_raw(self, window_id: str) -> tuple[str, int, int] | None:
         """Capture pane text with ANSI escapes and pane dimensions.
 

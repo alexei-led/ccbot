@@ -1,11 +1,11 @@
-"""Session lifecycle management — single authority for claude_task_state.clear_window().
+"""Session lifecycle management — single authority for all claude_task_state cleanup.
 
 Owns the session_map diff logic: compares old vs. new session_map to detect
 session changes and deleted windows. Returns a structured result so the
 coordinator (SessionMonitor) can clean up its own per-session state.
 
-Also provides handle_session_end() for hook_events.py to call instead of
-touching claude_task_state directly.
+Provides handle_session_end() as the single cleanup point for hook_events.py:
+callers must NOT touch claude_task_state or subagent state directly.
 
 Key class: SessionLifecycle. Module-level singleton: session_lifecycle.
 """
@@ -17,7 +17,7 @@ import structlog
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .claude_task_state import claude_task_state
+from .claude_task_state import clear_subagents, claude_task_state
 
 if TYPE_CHECKING:
     from .idle_tracker import IdleTracker
@@ -103,8 +103,9 @@ class SessionLifecycle:
         return result
 
     def handle_session_end(self, window_id: str) -> None:
-        """Called by hook_events on SessionEnd — clears task state for the window."""
+        """Called by hook_events on SessionEnd — clears all task and subagent state."""
         claude_task_state.clear_window(window_id)
+        clear_subagents(window_id)
 
     def initialize(self, session_map: dict[str, dict[str, str]]) -> None:
         """Set initial session_map (called once at monitor startup)."""

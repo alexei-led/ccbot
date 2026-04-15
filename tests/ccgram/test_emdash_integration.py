@@ -8,11 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ccgram.handlers.directory_browser import _window_label, build_window_picker
-from ccgram.session import (
-    SessionManager,
-    WindowState,
-    parse_emdash_provider,
-)
+from ccgram.session import SessionManager, WindowState
+from ccgram.session_map import parse_emdash_provider
 from ccgram.thread_router import thread_router
 from ccgram.window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window
 
