@@ -180,15 +180,15 @@ class TestPerWindowProviderResolution:
         new_messages = []
         with (
             patch(
-                "ccgram.session_monitor.get_provider_for_window",
+                "ccgram.transcript_reader.get_provider_for_window",
                 return_value=ClaudeProvider(),
             ),
             patch(
-                "ccgram.session_monitor.registry.is_valid",
+                "ccgram.transcript_reader.registry.is_valid",
                 return_value=True,
             ),
             patch(
-                "ccgram.session_monitor.registry.get",
+                "ccgram.transcript_reader.registry.get",
                 return_value=CodexProvider(),
             ),
         ):
@@ -433,7 +433,10 @@ class TestCheckForUpdates:
                 return_value={resolved},
             ),
             patch.object(
-                monitor, "_read_new_lines", spec=True, new_callable=AsyncMock
+                monitor._transcript_reader,
+                "_read_new_lines",
+                spec=True,
+                new_callable=AsyncMock,
             ) as mock_read,
         ):
             await monitor.check_for_updates(current_map)
@@ -476,7 +479,10 @@ class TestCheckForUpdates:
             },
         }
         with patch.object(
-            monitor, "_read_new_lines", spec=True, new_callable=AsyncMock
+            monitor._transcript_reader,
+            "_read_new_lines",
+            spec=True,
+            new_callable=AsyncMock,
         ) as mock_read:
             await monitor.check_for_updates(current_map)
 
@@ -794,7 +800,7 @@ class TestWholeFileTranscriptReading:
         )
 
         with patch(
-            "ccgram.session_monitor.get_provider_for_window",
+            "ccgram.transcript_reader.get_provider_for_window",
             return_value=_make_gemini_provider(),
         ):
             entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
@@ -822,7 +828,7 @@ class TestWholeFileTranscriptReading:
         transcript.write_text(json.dumps(data))
 
         with patch(
-            "ccgram.session_monitor.get_provider_for_window",
+            "ccgram.transcript_reader.get_provider_for_window",
             return_value=_make_gemini_provider(),
         ):
             entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
@@ -848,7 +854,7 @@ class TestWholeFileTranscriptReading:
 
         new_messages: list = []
         with patch(
-            "ccgram.session_monitor.get_provider_for_window",
+            "ccgram.transcript_reader.get_provider_for_window",
             return_value=_make_gemini_provider(),
         ):
             await monitor._process_session_file(

@@ -427,7 +427,7 @@ class TestGlobFallbackCwdUpdate:
 
         monkeypatch.setattr(
             "ccgram.session_resolver.get_provider_for_window",
-            lambda _wid: ClaudeProvider(),
+            lambda _wid, provider_name=None: ClaudeProvider(),
         )
 
     async def test_glob_fallback_updates_cwd_when_dir_exists(
@@ -704,7 +704,7 @@ class TestResolveSessionForWindow:
         )
         monkeypatch.setattr(
             "ccgram.session_resolver.get_provider_for_window",
-            lambda _wid: SimpleNamespace(
+            lambda _wid, provider_name=None: SimpleNamespace(
                 capabilities=SimpleNamespace(supports_hook=False)
             ),
         )
@@ -727,7 +727,7 @@ class TestResolveSessionForWindow:
         )
         monkeypatch.setattr(
             "ccgram.session_resolver.get_provider_for_window",
-            lambda _wid: SimpleNamespace(
+            lambda _wid, provider_name=None: SimpleNamespace(
                 capabilities=SimpleNamespace(supports_hook=False)
             ),
         )
@@ -753,7 +753,7 @@ class TestResolveSessionForWindow:
         )
         monkeypatch.setattr(
             "ccgram.session_resolver.get_provider_for_window",
-            lambda _wid: SimpleNamespace(
+            lambda _wid, provider_name=None: SimpleNamespace(
                 capabilities=SimpleNamespace(supports_hook=True)
             ),
         )

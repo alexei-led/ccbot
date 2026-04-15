@@ -95,6 +95,8 @@ max-statements = 60
 "src/ccgram/session.py" = ["C901", "PLR0912", "PLR0915"]
 # Session monitor: filesystem scan with many validation branches
 "src/ccgram/session_monitor.py" = ["C901", "PLR0912"]
+# Transcript reader: filesystem scan and JSONL reading with many validation branches (extracted from session_monitor)
+"src/ccgram/transcript_reader.py" = ["C901", "PLR0912"]
 # Bot: callback dispatch and message routing are inherently branchy
 "src/ccgram/bot.py" = ["C901", "PLR0912"]
 # Hook: CLI dispatch with multiple subcommands

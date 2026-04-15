@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --max-width: 820px;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eef1f5;
+    --text: #1a1a1a;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --accent: #2b6cb0;
+    --accent-light: #ebf4ff;
+    --severity-critical: #c53030;
+    --severity-critical-bg: #fff5f5;
+    --severity-significant: #c05621;
+    --severity-significant-bg: #fffaf0;
+    --severity-minor: #2b6cb0;
+    --severity-minor-bg: #ebf8ff;
+    --table-stripe: #f7fafc;
+    --link: #2b6cb0;
+    --link-hover: #1a4971;
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2e2e2e;
+    --text: #e2e2e2;
+    --text-secondary: #a0a0a0;
+    --text-muted: #717171;
+    --border: #333333;
+    --accent: #b0b0b0;
+    --accent-light: #2a2a2a;
+    --severity-critical: #fc8181;
+    --severity-critical-bg: #2d1b1b;
+    --severity-significant: #f6ad55;
+    --severity-significant-bg: #2d2415;
+    --severity-minor: #a0a0a0;
+    --severity-minor-bg: #282828;
+    --table-stripe: #222222;
+    --link: #e0c97f;
+    --link-hover: #f0dca0;
+    --shadow: rgba(0, 0, 0, 0.2);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 2rem 1.5rem;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  .theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem 0;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.6rem 0;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link-hover);
+  }
+
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta strong {
+    color: var(--text-secondary);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--table-stripe);
+  }
+
+  .severity {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .severity-critical {
+    color: var(--severity-critical);
+    background: var(--severity-critical-bg);
+  }
+
+  .severity-significant {
+    color: var(--severity-significant);
+    background: var(--severity-significant-bg);
+  }
+
+  .severity-minor {
+    color: var(--severity-minor);
+    background: var(--severity-minor-bg);
+  }
+
+  .issue {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .issue h2 {
+    margin-top: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .issue h3 {
+    font-size: 1rem;
+  }
+
+  .issue-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  ul, ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  pre {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .footer a {
+    color: var(--text-muted);
+    border-bottom-color: var(--border);
+  }
+
+  .footer a:hover {
+    color: var(--link);
+  }
+
+  @media print {
+    .theme-toggle { display: none; }
+    body { padding: 0; }
+    .issue { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <span id="theme-icon"></span>
+</button>
+
+<div class="container">
+  <h1>Modularity Review</h1>
+
+  <div class="meta">
+    <strong>Scope</strong>: Entire codebase — all components (handlers, providers, core modules, LLM, messaging)<br>
+    <strong>Date</strong>: 2026-04-15
+  </div>
+
+  <h2>Executive Summary</h2>
+
+  <p>ccgram is a Telegram-to-tmux bridge that lets users control AI coding agent CLIs (Claude Code, Codex, Gemini, Shell) from Telegram Forum topics. Each topic binds to one tmux window; the bot routes messages, captures terminal output, and surfaces agent status in real time. The overall modularity status <strong>needs attention</strong>: the infrastructure and provider abstraction layers are well-designed and exhibit low <a href="https://coupling.dev/posts/core-concepts/coupling/">coupling</a>, but the session management and polling subsystems have evolved into high-complexity coordination hubs whose coupling surface creates the two confirmed pain points — cascading changes on any <code>session_manager</code> touch, and fragility in the polling cycle. One confirmed architectural layer violation (provider layer reaching up to session layer) and three modules sharing write authority over the same mutable singleton represent the most urgent issues to address.</p>
+
+  <h3>Scores</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Dimension</th>
+        <th>Score</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Cohesion</strong></td>
+        <td>5 / 10</td>
+        <td><code>session_manager</code> (46 methods, 804 lines) and <code>session_monitor.py</code> (5 responsibilities, 891 lines) are low-cohesion hubs. <code>window_tick.py</code> 30-import fan-out is a secondary symptom.</td>
+      </tr>
+      <tr>
+        <td><strong><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Integration Strength</a></strong></td>
+        <td>6 / 10</td>
+        <td>Most handler→session coupling is functional (appropriate for same-service). Infrastructure singletons (config, thread_router, state_persistence) exhibit clean contract coupling. The layer violation in providers is the critical outlier.</td>
+      </tr>
+      <tr>
+        <td><strong>Layer Integrity</strong></td>
+        <td>5 / 10</td>
+        <td>One confirmed inversion (<code>providers/__init__</code> → <code>session_manager</code>); one directional mismatch (<code>window_state_store</code> → <code>providers.registry</code>). The <code>WindowView</code> projection exists as a decoupling mechanism but is adopted in only 8% of call sites.</td>
+      </tr>
+      <tr>
+        <td><strong>State Encapsulation</strong></td>
+        <td>4 / 10</td>
+        <td>Three module-level singletons with distributed write authority (<code>claude_task_state</code>). <code>session_manager</code> accessed directly at 103 call sites across 27 handler files rather than through a bounded interface.</td>
+      </tr>
+      <tr>
+        <td><strong><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a>-adjusted coupling</strong></td>
+        <td>6 / 10</td>
+        <td>High-volatility core subsystems (hook events, polling) have tolerable coupling individually; the god object accumulates the cost. Infrastructure and LLM layers are well-isolated at appropriate volatility levels.</td>
+      </tr>
+      <tr>
+        <td><strong><a href="https://coupling.dev/posts/core-concepts/modularity/">Modularity</a> overall</strong></td>
+        <td><strong>5 / 10</strong></td>
+        <td>Structurally sound at the macro level (handlers / providers / core / infra separation). Critical coupling debt concentrated in session management and the polling loop — the two areas confirmed as active pain points.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Coupling Overview</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Integration</th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+        <th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>27 handler files → <code>session_manager</code> (103 call sites)</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td>Low (same service)</td>
+        <td><strong>High</strong></td>
+        <td>⚠ Technically balanced per model; low cohesion drives unbounded accumulation</td>
+      </tr>
+      <tr>
+        <td><code>providers/__init__</code> → <code>session.session_manager</code> (lazy)</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td><strong>High</strong> (wrong layer direction)</td>
+        <td><strong>High</strong></td>
+        <td>❌ Unbalanced — layer violation</td>
+      </tr>
+      <tr>
+        <td><code>window_state_store</code> → <code>providers.registry</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td>
+        <td>Low (same service)</td>
+        <td>Low</td>
+        <td>⚠ Direction inverted; tolerable due to low volatility</td>
+      </tr>
+      <tr>
+        <td><code>session_monitor</code> (file watcher + 4 other roles)</td>
+        <td>Internal — low-cohesion module</td>
+        <td>—</td>
+        <td><strong>High</strong></td>
+        <td>❌ High-volatility responsibilities co-located without separation</td>
+      </tr>
+      <tr>
+        <td><code>hook_events</code> → 10+ sibling handlers (lazy imports)</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td>Low (same layer)</td>
+        <td><strong>High</strong></td>
+        <td>✅ Balanced; lazy imports mask true fan-out</td>
+      </tr>
+      <tr>
+        <td><code>claude_task_state</code> ← <code>session_monitor</code> + <code>hook_events</code> + <code>topic_lifecycle</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (3 writers)</td>
+        <td>Low</td>
+        <td><strong>High</strong></td>
+        <td>❌ Unbalanced — shared authority, no coordinator</td>
+      </tr>
+      <tr>
+        <td><code>window_tick</code> → 30 imports</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td>Low</td>
+        <td><strong>High</strong></td>
+        <td>⚠ Balanced individually; excessive fan-out signals low cohesion</td>
+      </tr>
+      <tr>
+        <td><code>hook_events</code> → <code>llm.summarizer</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td>Low (same service)</td>
+        <td>High</td>
+        <td>✅ Balanced; synchronous concern noted separately</td>
+      </tr>
+      <tr>
+        <td><code>config</code> → (nothing internal)</td>
+        <td>—</td>
+        <td>—</td>
+        <td>Low</td>
+        <td>✅ Exemplary</td>
+      </tr>
+      <tr>
+        <td><code>providers/base</code> + <code>providers/registry</code> → (nothing internal)</td>
+        <td>—</td>
+        <td>—</td>
+        <td>Medium</td>
+        <td>✅ Clean foundation</td>
+      </tr>
+      <tr>
+        <td><code>status_bubble</code> ← <code>message_queue</code> + <code>tool_batch</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td>Low</td>
+        <td>High</td>
+        <td>⚠ Triangular dependency; <code>tool_batch</code> → <code>status_bubble</code> unplanned</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="issue">
+    <h2>Issue 1: Provider Layer Reaches Up to Session Layer</h2>
+    <p class="issue-meta">
+      <strong>Integration</strong>: <code>providers/__init__.get_provider_for_window()</code> → <code>session.session_manager</code> &nbsp;|&nbsp;
+      <span class="severity severity-critical">Critical</span>
+    </p>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>get_provider_for_window(window_id)</code> — the canonical provider resolution function — lazily imports <code>session_manager</code> from <code>session.py</code> and reads <code>session_manager.window_states[window_id].provider_name</code> to decide which provider to instantiate. This means the <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">provider layer</a> (infrastructure, stable) has <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> to the session layer (business state, volatile). The provider layer now knows about: the <code>WindowState</code> data structure, the <code>window_states</code> dict key format, and the meaning of <code>provider_name</code> as a session concept. These are session-layer implementation details leaking downward into a layer that should only know about its own provider protocol.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>This creates a latent circular dependency held apart only by Python's lazy import mechanism. <code>session.py</code> imports <code>window_state_store</code>, which imports <code>providers.registry</code>. <code>providers/__init__</code> imports <code>session_manager</code>. The cycle exists at runtime; a future eager import — or any module restructuring — will surface it as an <code>ImportError</code>. Developers working on either <code>session.py</code> or <code>providers/</code> cannot reason about their module boundary in isolation: the provider resolution function's behavior depends on session state that is mutated from 27 other places.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li>Adding a new per-window state field to <code>WindowState</code> for provider selection (e.g., model variant, provider config override) requires editing both <code>session.py</code> and <code>providers/__init__</code>, which live at different conceptual layers.</li>
+      <li>Refactoring provider instantiation (e.g., lazy singletons → per-call instances) must account for session state read patterns.</li>
+      <li>Testing <code>get_provider_for_window()</code> in isolation requires constructing a real or mocked <code>session_manager</code> — the unit test boundary is broken.</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Invert the dependency: pass <code>provider_name</code> into the resolution function as an explicit parameter instead of having it read from <code>session_manager</code>. The call sites in handlers already know the window context; they can pass the provider name obtained from <code>session_manager.get_window_provider(window_id)</code> directly:</p>
+    <pre><code># Before (providers/__init__.py reading session layer)
+def get_provider_for_window(window_id: str) -> AgentProvider:
+    from ccgram.session import session_manager  # layer violation
+    provider_name = session_manager.window_states[window_id].provider_name
+    return registry.get(provider_name)
+
+# After (caller supplies provider_name — session layer stays at the call site)
+def get_provider(provider_name: str | None) -> AgentProvider:
+    return registry.get(provider_name or config.default_provider)</code></pre>
+    <p>The trade-off is minor: call sites become <code>get_provider(session_manager.get_window_provider(window_id))</code> instead of <code>get_provider_for_window(window_id)</code>. This makes the session dependency visible at each call site — which is the correct place for it, since the call site is already in the handler layer where <code>session_manager</code> belongs. It also makes <code>providers/__init__</code> independently testable.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue 2: <code>session_manager</code> as an Unbounded God Object</h2>
+    <p class="issue-meta">
+      <strong>Integration</strong>: 27 handler files → <code>session.session_manager</code> (103 call sites, 46 methods) &nbsp;|&nbsp;
+      <span class="severity severity-critical">Critical</span>
+    </p>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>session_manager</code> (804 lines, 46 public methods) accumulates every per-window and per-user state operation: approval mode, notification mode, batch mode, display names, thread bindings, session map sync, history retrieval, state auditing, orphan pruning, group ID management. Every handler that needs anything about a window calls <code>session_manager</code> directly — there is no interface boundary, no projection, and no ownership model. The 103 call sites share knowledge of the full method surface across 27 files. A <code>WindowView</code> frozen projection was introduced as a <a href="https://coupling.dev/posts/core-concepts/balance/">decoupling</a> mechanism but adopted in only 6 of 77 eligible call sites (8%).</p>
+
+    <h3>Complexity Impact</h3>
+    <p><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional coupling</a> at this scale exceeds the <a href="https://coupling.dev/posts/core-concepts/complexity/">cognitive capacity</a> a developer can hold in working memory. When modifying <code>session_manager</code>, the developer must mentally trace 27 import sites and 103 call patterns to understand impact. Conversely, when modifying a handler, the developer must know which of the 46 <code>session_manager</code> methods are appropriate for the operation — there is no scoped interface to constrain the choice. This is confirmed as an active pain point: any <code>session_manager</code> touch cascades through many handler files.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li>Renaming or splitting any <code>session_manager</code> method requires updating all 103 call sites.</li>
+      <li>Adding a new per-window state field — inevitable as new provider capabilities are added — means adding it to <code>WindowState</code>, adding a getter/setter to <code>WindowStateStore</code>, adding a delegation method to <code>session_manager</code>, and updating every handler that needs the new field.</li>
+      <li>The <code>WindowState</code> dataclass field names are the true shared data model: 27 files depend on them by name. A field rename is a 27-file change.</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Apply progressive encapsulation in two phases, without a big-bang rewrite:</p>
+    <p><strong>Phase 1 — increase <code>WindowView</code> adoption.</strong> The <code>WindowView</code> frozen projection already exists. Enforce its use in read-only handlers: audit the 71 call sites that access <code>session_manager.get_window_state()</code> instead of <code>session_manager.view_window()</code>, and migrate read-only access. This constrains the shared knowledge surface to <code>WindowView</code>'s 6 fields for most handlers.</p>
+    <p><strong>Phase 2 — introduce scoped facades.</strong> Group the 46 methods by domain:</p>
+    <ul>
+      <li><code>WindowStateManager</code> — approval/notification/batch mode, provider assignment</li>
+      <li><code>SessionBindingManager</code> — thread bindings, window display names, session map sync</li>
+      <li><code>HistoryManager</code> — per-window message history</li>
+    </ul>
+    <p>Each facade exposes a narrow, named interface. <code>bot.py</code> wires them together; handlers import only the facade they need. The god object becomes a coordinator of typed sub-managers rather than a single unbounded surface.</p>
+    <p>The trade-off: Phase 1 is low-risk and can be done incrementally per-handler. Phase 2 requires a cohesive refactor of <code>session.py</code> and <code>bot.py</code> wiring. Both phases reduce the blast radius of future changes to the session layer significantly.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue 3: <code>session_monitor.py</code> — Five Responsibilities in One Module</h2>
+    <p class="issue-meta">
+      <strong>Integration</strong>: <code>session_monitor</code> (internal low-cohesion) — file watching + hook event parsing + session mapping + idle timing + window lifecycle detection &nbsp;|&nbsp;
+      <span class="severity severity-significant">Significant</span>
+    </p>
+
+    <h3>Knowledge Leakage</h3>
+    <p>At 891 lines, <code>session_monitor.py</code> is the largest file in the project and conflates five distinct responsibilities:</p>
+    <ol>
+      <li><strong>File watching</strong> — polling JSONL transcript files for new lines (byte-offset tracking)</li>
+      <li><strong>Hook event parsing</strong> — reading <code>events.jsonl</code> and deserializing <code>HookEvent</code> objects</li>
+      <li><strong>Session map management</strong> — reading <code>session_map.json</code> and reconciling window state</li>
+      <li><strong>Idle timer management</strong> — tracking per-session inactivity and emitting idle events</li>
+      <li><strong>Window lifecycle detection</strong> — detecting new windows, replaced sessions, deleted windows</li>
+    </ol>
+    <p>Each responsibility leaks its internals into the others through shared instance variables (<code>self._tracked_sessions</code>, <code>self._last_mtime</code>, <code>self._idle_timers</code>), making it impossible to reason about or test them independently. Changes to hook event parsing affect the idle timer cadence because they share the same poll loop.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>Because the file watcher, event parser, and lifecycle detector are co-located, <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">accidental volatility</a> accumulates: a change to support a new hook event type requires navigating 891 lines and understanding how idle timers interact with the event dispatch path. The module also acts as a second cleanup controller alongside <code>hook_events.py</code> and <code>topic_lifecycle.py</code> — three modules share write authority over <code>claude_task_state</code> with no single coordinator, creating a distributed state management problem.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li>Adding a new Claude Code hook event type requires editing <code>session_monitor.py</code> (to parse the new event from <code>events.jsonl</code>) and <code>hook_events.py</code> (to dispatch it) — split responsibility across two files.</li>
+      <li>The idle timer logic is interleaved with the transcript-reading loop. Changing the poll interval or the idle threshold requires understanding both systems simultaneously.</li>
+      <li>The three-writer pattern on <code>claude_task_state</code> means any change to task state lifecycle must be traced through three files: <code>session_monitor.py</code>, <code>hook_events.py</code> (<code>SessionEnd</code>), and <code>topic_lifecycle.py</code>.</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Extract the five responsibilities into three focused classes/modules, keeping <code>session_monitor.py</code> as a thin coordinator:</p>
+    <ol>
+      <li><strong><code>event_reader.py</code></strong> — reads <code>events.jsonl</code> incrementally by byte offset, deserializes <code>HookEvent</code> objects, emits raw events to a callback. Pure I/O; no state.</li>
+      <li><strong><code>session_lifecycle.py</code></strong> — reconciles <code>session_map.json</code> against live tmux windows; detects new/replaced/deleted sessions; emits lifecycle events. Owns the single authoritative cleanup path for <code>claude_task_state</code>.</li>
+      <li><strong><code>idle_tracker.py</code></strong> — per-session idle timer with configurable threshold; receives "activity" signals from event_reader; emits idle callbacks. No I/O.</li>
+      <li><strong><code>session_monitor.py</code></strong> (coordinator, ~100 lines) — wires the three above, owns the poll loop, exposes the existing <code>NewMessage</code> / <code>NewWindowEvent</code> / <code>HookEvent</code> callback API unchanged.</li>
+    </ol>
+    <p>This refactor eliminates the three-writer problem: <code>session_lifecycle.py</code> becomes the single authority for <code>claude_task_state</code> cleanup, with <code>hook_events.py</code> and <code>topic_lifecycle.py</code> delegating to it.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue 4: <code>window_tick.py</code> as Secondary Coordination Hub</h2>
+    <p class="issue-meta">
+      <strong>Integration</strong>: <code>window_tick</code> → 30 imports (session, providers, session_monitor, message_queue, message_sender, polling_strategies, interactive_ui, cleanup, topic_emoji, recovery_callbacks, transcript_discovery, ...) &nbsp;|&nbsp;
+      <span class="severity severity-significant">Significant</span>
+    </p>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>window_tick.py</code> (535 lines) is the per-window poll cycle — conceptually a single function that decides what to do for one window on each tick. In practice it has become a coordination hub that touches every subsystem: it reads terminal state via pyte/tmux, checks session monitor activity timestamps via <code>get_active_monitor()</code>, dispatches interactive UI prompts, queues status updates, updates topic emoji, triggers transcript discovery, and builds recovery keyboards. Each of these is a separate concern imported as a direct dependency. The module knows the internal timing model of <code>session_monitor</code> (accessing <code>get_last_activity()</code> on the singleton) — a cross-subsystem runtime <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">coupling</a>.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>With 30 imports, any change to how any of those 30 dependencies behaves — a new argument, a renamed function, a changed return type — has a chance of requiring a <code>window_tick.py</code> edit. Because <code>window_tick</code> is on the hot path (runs every 1 second per active window), it is also the most common site for performance regressions. Adding a new status indicator or new provider behavior requires understanding the full 30-dependency graph to know where to insert the new logic without breaking existing paths.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li>Changing the <code>polling_strategies</code> API requires updating <code>window_tick</code>'s call sites to those strategies.</li>
+      <li>Adding multi-pane support for a new provider requires editing <code>window_tick</code> to know about the new pane scanning pattern — even though pane scanning belongs to the provider abstraction.</li>
+      <li>The <code>get_active_monitor().get_last_activity(session_id)</code> call couples the tick cycle to <code>session_monitor</code>'s internal data model. If the monitor's tracking changes (e.g., tracking activity per-pane rather than per-session), <code>window_tick</code> must change too.</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Decompose the tick into a coordinator with scoped delegates using an observe → decide → act pattern:</p>
+    <ol>
+      <li><strong>Terminal state capture</strong> — already partially in <code>polling_strategies.py</code>. Complete the extraction: <code>TerminalStateCapture</code> returns a snapshot (clean lines, spinner state, interactive prompt detected). No decisions, just observation.</li>
+      <li><strong>Status decision</strong> — given current snapshot and last-known state, decide: emit status update? trigger idle transition? open recovery keyboard? This is pure logic — no I/O — and can be unit-tested without mocks.</li>
+      <li><strong>Effect dispatch</strong> — apply the decision: enqueue the right message, call the right UI function. This thin layer is the only one that needs many imports.</li>
+    </ol>
+    <p>The <code>get_active_monitor()</code> coupling can be resolved by passing activity timestamps into the tick function as a parameter — <code>polling_coordinator.py</code> already polls the monitor and can supply the value.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue 5: <code>window_state_store</code> Depends on <code>providers.registry</code></h2>
+    <p class="issue-meta">
+      <strong>Integration</strong>: <code>window_state_store.set_window_provider()</code> → <code>providers.registry.is_known()</code> &nbsp;|&nbsp;
+      <span class="severity severity-minor">Minor</span>
+    </p>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>WindowStateStore</code> imports <code>from .providers import registry</code> to validate <code>provider_name</code> strings before persisting them. The state persistence layer exercises domain validation logic from the provider registry. This couples a persistence concern (write a validated string to a dict and save) to a business concern (what provider names are valid). The direction is wrong: the provider registry should not be a dependency of the state store.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>Adding a new provider requires registering it in <code>providers/registry.py</code> and ensuring the registry import in <code>window_state_store.py</code> resolves correctly. While the coupling is low-strength (<a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> — only <code>is_known()</code> is called), the architectural direction creates a latent circular dependency path: <code>session.py</code> → <code>window_state_store</code> → <code>providers.registry</code> → <code>providers.__init__</code> → (lazy) <code>session.session_manager</code>. Any eager resolution along this chain surfaces as an import cycle.</p>
+
+    <h3>Cascading Changes</h3>
+    <p>This issue is low-<a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatility</a> in practice — provider names rarely change. The risk is structural: the coupling makes the import graph harder to reason about and contributes to the circular dependency path described in Issue 1.</p>
+
+    <h3>Recommended Improvement</h3>
+    <p>Remove the provider registry dependency from <code>window_state_store</code>. Validate <code>provider_name</code> at the call site in <code>session.py</code> (the layer that already imports both <code>window_state_store</code> and <code>providers</code>), or use a simple allowlist passed in as a constructor argument:</p>
+    <pre><code># session.py constructs WindowStateStore with known provider names
+store = WindowStateStore(known_providers=set(registry.list_names()))
+
+# window_state_store.py — no providers import needed
+def set_window_provider(self, window_id: str, provider_name: str | None) -> None:
+    if provider_name and provider_name not in self._known_providers:
+        raise ValueError(f"Unknown provider: {provider_name}")
+    ...</code></pre>
+    <p>The trade-off is minimal: the validation is pushed one layer up where both dependencies already exist, and the state store becomes independently instantiable for testing.</p>
+  </div>
+
+  <hr>
+
+  <div class="footer">
+    <p><em>This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.</em></p>
+  </div>
+</div>
+
+<script>
+  function getDefaultTheme() {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('modularity-review-theme', theme);
+    document.getElementById('theme-icon').textContent = theme === 'light' ? '☾' : '☀';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  const saved = localStorage.getItem('modularity-review-theme');
+  setTheme(saved || getDefaultTheme());
+</script>
+</body>
+</html>

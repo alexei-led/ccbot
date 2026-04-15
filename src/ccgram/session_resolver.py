@@ -113,7 +113,10 @@ class SessionResolver:
         summary = ""
         last_user_msg = ""
         message_count = 0
-        provider = get_provider_for_window(window_id)
+        state = window_store.window_states.get(window_id)
+        provider = get_provider_for_window(
+            window_id, provider_name=state.provider_name if state else None
+        )
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 async for line in f:
@@ -174,7 +177,7 @@ class SessionResolver:
         if session:
             return session
 
-        provider = get_provider_for_window(window_id)
+        provider = get_provider_for_window(window_id, provider_name=state.provider_name)
         if not provider.capabilities.supports_hook:
             logger.debug(
                 "Hookless session unresolved for window_id %s "
@@ -227,7 +230,10 @@ class SessionResolver:
         if not file_path.exists():
             return [], 0
 
-        provider = get_provider_for_window(window_id)
+        state = window_store.window_states.get(window_id)
+        provider = get_provider_for_window(
+            window_id, provider_name=state.provider_name if state else None
+        )
         entries: list[dict[str, Any]] = []
         try:
             async with aiofiles.open(file_path, "r", encoding="utf-8") as f:

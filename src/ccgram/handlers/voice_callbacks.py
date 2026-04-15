@@ -13,6 +13,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..providers import get_provider_for_window
+from ..session import session_manager
 from ..tmux_manager import send_to_window
 from ..thread_router import thread_router
 from .callback_data import CB_VOICE
@@ -82,7 +83,9 @@ async def _handle_send(
         return
 
     # Shell provider: route through LLM for NL→command generation
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
     if not provider.capabilities.supports_mailbox_delivery and thread_id is not None:
         from .shell_commands import handle_shell_message
 

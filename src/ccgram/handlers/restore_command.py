@@ -55,8 +55,8 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
-    ws = session_manager.get_window_state(window_id)
-    cwd = ws.cwd or ""
+    view = session_manager.view_window(window_id)
+    cwd = view.cwd if view else ""
     if not cwd or not Path(cwd).is_dir():
         await safe_reply(update.message, "Directory no longer exists.")
         return
@@ -65,7 +65,9 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     thread_router.unbind_thread(user_id, thread_id)
     lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=view.provider_name if view else None
+    )
     approval_mode = session_manager.get_approval_mode(window_id)
     launch_command = resolve_launch_command(
         provider.capabilities.name, approval_mode=approval_mode

@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from ccgram.handlers.callback_data import (
     CB_RESUME_CANCEL,
@@ -979,7 +979,7 @@ class TestResumePerWindowProvider:
             mock_path.return_value.is_dir.return_value = True
             await handle_resume_command_callback(query, 100, query.data, update, ctx)
 
-        mock_gpw.assert_called_once_with("@3")
+        mock_gpw.assert_called_once_with("@3", provider_name=ANY)
 
     @patch(f"{_RC}.get_provider")
     @patch(f"{_RC}.tmux_manager")

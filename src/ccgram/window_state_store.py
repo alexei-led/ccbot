@@ -178,6 +178,7 @@ class WindowStateStore:
         provider_name: str,
         *,
         cwd: str | None = None,
+        new_provider_supports_hook: bool = True,
     ) -> None:
         """Set the provider for a window. Empty string resets to config default.
 
@@ -187,6 +188,10 @@ class WindowStateStore:
         When switching to a hookless provider (e.g. shell), invokes the
         ``_on_hookless_provider_switch`` callback so the caller can clear the
         stale session_map.json entry without a circular import.
+
+        ``new_provider_supports_hook`` must be resolved by the caller (e.g.
+        via ``registry.get(provider_name).capabilities.supports_hook``) so
+        this layer stays free of provider imports.
         """
         state = self.get_window_state(window_id)
         old_provider = state.provider_name
@@ -194,17 +199,19 @@ class WindowStateStore:
         if cwd:
             state.cwd = cwd
 
-        # When switching away from a hook-based provider to a hookless one,
-        # clear stale session data and notify caller to update session_map.json.
-        if old_provider != provider_name and provider_name:
-            from .providers import registry
-
-            new_prov = registry.get(provider_name)
-            if not new_prov.capabilities.supports_hook:
-                if state.session_id:
-                    state.session_id = ""
-                    state.transcript_path = ""
-                self._on_hookless_provider_switch(window_id)
+        # Guards: (1) only on real provider change, (2) only when non-empty
+        # (empty string is a reset-to-default and must NOT trigger cleanup),
+        # (3) only for hookless providers. Session fields are cleared only when
+        # set, but the hookless-switch callback is always invoked for hookless.
+        if (
+            old_provider != provider_name
+            and provider_name
+            and not new_provider_supports_hook
+        ):
+            if state.session_id:
+                state.session_id = ""
+                state.transcript_path = ""
+            self._on_hookless_provider_switch(window_id)
 
         self._schedule_save()
 

@@ -27,3 +27,6 @@ class WindowView:
     approval_mode: str
     notification_mode: str
     transcript_path: Path | None
+    window_name: str
+    session_id: str
+    external: bool

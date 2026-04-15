@@ -68,17 +68,17 @@ async def _build_dashboard(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     action_rows: list[list[InlineKeyboardButton]] = []
     for _thread_id, window_id in sorted(bindings.items()):
         display_name = thread_router.get_display_name(window_id)
-        ws = session_manager.get_window_state(window_id)
+        view = session_manager.view_window(window_id)
         alive = window_id in live_ids
-        is_external = ws.external
+        is_external = view.external if view else False
         status = "\U0001f7e2" if alive else "\u26ab"
 
         # Session line with provider + mode tags and cwd detail
-        provider_tag = f" [{ws.provider_name}]" if ws.provider_name else ""
-        mode_tag = " [YOLO]" if ws.approval_mode == "yolo" else ""
+        provider_tag = f" [{view.provider_name}]" if view and view.provider_name else ""
+        mode_tag = " [YOLO]" if view and view.approval_mode == "yolo" else ""
         line = f"{status} {display_name}{provider_tag}{mode_tag}"
-        if ws.cwd:
-            line += f"\n    {ws.cwd}"
+        if view and view.cwd:
+            line += f"\n    {view.cwd}"
         lines.append(line)
 
         if alive:
@@ -131,8 +131,8 @@ async def handle_sessions_kill(
     query: CallbackQuery, _user_id: int, window_id: str
 ) -> None:
     """First Kill tap — show confirmation prompt."""
-    ws = session_manager.get_window_state(window_id)
-    if ws.external:
+    view = session_manager.view_window(window_id)
+    if view and view.external:
         await safe_edit(query, "External sessions cannot be killed from ccgram.")
         return
     display = thread_router.get_display_name(window_id)

@@ -95,21 +95,16 @@ def _reset_provider() -> None:
 
 
 def get_provider_for_window(
-    window_id: str,
+    window_id: str,  # noqa: ARG001
     provider_name: str | None = None,
 ) -> AgentProvider:
     """Return the provider for a specific window, falling back to config default.
 
-    When *provider_name* is supplied the session-manager lookup is skipped,
-    breaking the providers / session circular-import chain on the hot path.
+    Callers must supply *provider_name* (e.g. from ``session_manager.get_window_provider``
+    or ``view.provider_name``). When it is None or unknown, falls back to the
+    config default provider.
     """
     _ensure_registered()
-
-    if provider_name is None:
-        from ccgram.session import session_manager
-
-        state = session_manager.window_states.get(window_id)
-        provider_name = state.provider_name if state else None
 
     if provider_name and registry.is_valid(provider_name):
         return registry.get(provider_name)

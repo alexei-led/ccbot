@@ -395,7 +395,7 @@ class TestSyncFix:
             ),
             AuditResult(issues=[], total_bindings=1, live_binding_count=1),
         ]
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp", window_name="stray-proj"
         )
 
@@ -480,7 +480,7 @@ class TestDeadTopicDetection:
 class TestDeadTopicRecreation:
     async def test_recreate_unbinds_and_creates_topic(self, _patch_deps) -> None:
         mock_sm, mock_tr, _, _ = _patch_deps
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp/proj", window_name="qmd-go"
         )
 
@@ -522,7 +522,7 @@ class TestDeadTopicRecreation:
 
     async def test_recreate_handles_telegram_error(self, _patch_deps) -> None:
         mock_sm, mock_tr, _, _ = _patch_deps
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp", window_name="proj"
         )
 
@@ -608,7 +608,7 @@ class TestSyncFixDeadTopic:
         ]
         mock_tr.resolve_chat_id.return_value = -999
         mock_tr.get_display_name.return_value = "qmd-go"
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp", window_name="qmd-go"
         )
 

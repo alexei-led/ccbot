@@ -28,7 +28,7 @@ def _patch_deps():
     ):
         mock_tr.get_all_thread_windows.return_value = {}
         mock_tr.get_display_name.side_effect = lambda wid: wid
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState()
+        mock_sm.view_window.side_effect = lambda wid: WindowState()
         mock_tm.list_windows = AsyncMock(return_value=[])
         mock_tm.discover_external_sessions = AsyncMock(return_value=[])
         mock_cfg.is_user_allowed.return_value = True
@@ -52,7 +52,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState(
+        mock_sm.view_window.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject"
         )
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
@@ -64,7 +64,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState(
+        mock_sm.view_window.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject"
         )
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
@@ -76,7 +76,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState(cwd="")
+        mock_sm.view_window.side_effect = lambda wid: WindowState(cwd="")
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
 
         text, _kb = await _build_dashboard(100)
@@ -154,7 +154,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState(
+        mock_sm.view_window.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject", provider_name="codex"
         )
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
@@ -166,7 +166,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState(
+        mock_sm.view_window.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject", provider_name=""
         )
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
@@ -178,7 +178,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState(
+        mock_sm.view_window.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject",
             provider_name="codex",
             approval_mode="yolo",

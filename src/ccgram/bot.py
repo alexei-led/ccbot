@@ -145,7 +145,9 @@ async def history_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         await safe_reply(update.message, "\u274c No session bound to this topic.")
         return
 
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
     if not provider.capabilities.supports_structured_transcript:
         await safe_reply(update.message, "No transcript available for this provider.")
         return
@@ -167,7 +169,9 @@ async def commands_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) 
         await safe_reply(update.message, "\u274c No session bound to this topic.")
         return
 
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
     await _sync_scoped_provider_menu(update.message, user.id, provider)
     commands = discover_provider_commands(provider)
     if not commands:

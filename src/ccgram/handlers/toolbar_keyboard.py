@@ -114,7 +114,9 @@ async def seed_button_states(window_id: str) -> None:
     mode_action = cfg.actions.get("mode")
     if mode_action is None or not mode_action.read_state:
         return
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
     label = await provider.scrape_current_mode(window_id)
     if label:
         _set_action_label(window_id, "mode", label)
@@ -139,14 +141,13 @@ async def refresh_button_label(
     logger = structlog.get_logger()
 
     await asyncio.sleep(delay)
-    provider = get_provider_for_window(window_id)
+    view = session_manager.view_window(window_id)
+    provider_name = view.provider_name if view else "claude"
+    provider = get_provider_for_window(window_id, provider_name=provider_name)
     short_label = await provider.scrape_current_mode(window_id)
     if not short_label:
         short_label = "Def"
     _set_action_label(window_id, action.name, short_label)
-
-    view = session_manager.view_window(window_id)
-    provider_name = view.provider_name if view else "claude"
     new_kb = build_toolbar_keyboard(window_id, provider_name)
     try:
         await query.edit_message_reply_markup(reply_markup=new_kb)

@@ -253,80 +253,40 @@ class TestGetProviderForWindow:
 
     def test_returns_window_specific_provider(self, monkeypatch) -> None:
         from ccgram.providers import get_provider_for_window
-        from ccgram.session import SessionManager, WindowState, session_manager
 
-        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
-        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
-
-        session_manager.window_states["@1"] = WindowState(
-            session_id="s1", cwd="/tmp", provider_name="codex"
-        )
-        provider = get_provider_for_window("@1")
+        provider = get_provider_for_window("@1", provider_name="codex")
         assert provider.capabilities.name == "codex"
-
-        session_manager.window_states.pop("@1", None)
 
     def test_falls_back_to_global_when_empty(self, monkeypatch) -> None:
         from ccgram.providers import get_provider_for_window
-        from ccgram.session import SessionManager, WindowState, session_manager
 
-        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
-        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
-
-        session_manager.window_states["@2"] = WindowState(
-            session_id="s2", cwd="/tmp", provider_name=""
-        )
-        provider = get_provider_for_window("@2")
+        provider = get_provider_for_window("@2", provider_name="")
         assert provider.capabilities.name == "claude"
-
-        session_manager.window_states.pop("@2", None)
 
     def test_falls_back_when_window_not_in_state(self, monkeypatch) -> None:
         from ccgram.providers import get_provider_for_window
-        from ccgram.session import SessionManager
 
-        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
-        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
-
-        provider = get_provider_for_window("@999")
+        provider = get_provider_for_window("@999", provider_name=None)
         assert provider.capabilities.name == "claude"
 
     def test_falls_back_on_invalid_provider_name(self, monkeypatch) -> None:
         from ccgram.providers import get_provider_for_window
-        from ccgram.session import SessionManager, WindowState, session_manager
 
-        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
-        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
-
-        session_manager.window_states["@3"] = WindowState(
-            session_id="s3", cwd="/tmp", provider_name="nonexistent"
-        )
-        provider = get_provider_for_window("@3")
+        provider = get_provider_for_window("@3", provider_name="nonexistent")
         assert provider.capabilities.name == "claude"
-
-        session_manager.window_states.pop("@3", None)
 
     def test_different_windows_resolve_different_providers(self, monkeypatch) -> None:
         from ccgram.providers import get_provider_for_window
-        from ccgram.session import SessionManager, WindowState, session_manager
 
-        monkeypatch.setattr(SessionManager, "_load_state", lambda self: None)
-        monkeypatch.setattr(SessionManager, "_save_state", lambda self: None)
-
-        session_manager.window_states["@10"] = WindowState(
-            session_id="s10", cwd="/tmp", provider_name="claude"
+        assert (
+            get_provider_for_window("@10", provider_name="claude").capabilities.name
+            == "claude"
         )
-        session_manager.window_states["@11"] = WindowState(
-            session_id="s11", cwd="/tmp", provider_name="codex"
+        assert (
+            get_provider_for_window("@11", provider_name="codex").capabilities.name
+            == "codex"
         )
-        session_manager.window_states["@12"] = WindowState(
-            session_id="s12", cwd="/tmp", provider_name="gemini"
+        assert (
+            get_provider_for_window("@12", provider_name="gemini").capabilities.name
+            == "gemini"
         )
-
-        assert get_provider_for_window("@10").capabilities.name == "claude"
-        assert get_provider_for_window("@11").capabilities.name == "codex"
-        assert get_provider_for_window("@12").capabilities.name == "gemini"
-
-        session_manager.window_states.pop("@10", None)
-        session_manager.window_states.pop("@11", None)
-        session_manager.window_states.pop("@12", None)

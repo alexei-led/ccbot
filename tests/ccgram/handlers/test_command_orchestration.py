@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -61,10 +62,11 @@ class TestForwardCommandResolution:
         self.mock_tr.set_group_chat_id = MagicMock()
 
         self.mock_sm = MagicMock()
-        self.mock_sm.get_window_state.return_value = SimpleNamespace(
-            transcript_path="",
+        self.mock_sm.view_window.return_value = SimpleNamespace(
+            transcript_path=None,
             session_id="sess-1",
             cwd="/work/repo",
+            provider_name="claude",
         )
 
         self.mock_tm = MagicMock()
@@ -296,10 +298,14 @@ class TestForwardCommandResolution:
         self.mock_send_to_window.assert_not_called()
 
     async def test_status_snapshot_sends_reply(self) -> None:
-        self.mock_sm.get_window_state.return_value = SimpleNamespace(
-            transcript_path="/tmp/codex.jsonl",
+        mock_path = MagicMock(spec=Path)
+        mock_path.__str__ = MagicMock(return_value="/tmp/codex.jsonl")
+        mock_path.stat.return_value.st_size = 1024
+        self.mock_sm.view_window.return_value = SimpleNamespace(
+            transcript_path=mock_path,
             session_id="sess-1",
             cwd="/work/repo",
+            provider_name="codex",
         )
         codex_provider = SimpleNamespace(
             capabilities=SimpleNamespace(
@@ -352,10 +358,14 @@ class TestForwardCommandResolution:
     async def test_status_snapshot_skips_fallback_when_native_reply_exists(
         self,
     ) -> None:
-        self.mock_sm.get_window_state.return_value = SimpleNamespace(
-            transcript_path="/tmp/codex.jsonl",
+        mock_path2 = MagicMock(spec=Path)
+        mock_path2.__str__ = MagicMock(return_value="/tmp/codex.jsonl")
+        mock_path2.stat.return_value.st_size = 1024
+        self.mock_sm.view_window.return_value = SimpleNamespace(
+            transcript_path=mock_path2,
             session_id="sess-1",
             cwd="/work/repo",
+            provider_name="codex",
         )
         codex_provider = SimpleNamespace(
             capabilities=SimpleNamespace(

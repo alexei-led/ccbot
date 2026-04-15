@@ -211,7 +211,7 @@ class TestEnhanceWithLlmSummary:
                 return_value="all",
             ),
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_window_state",
+                "ccgram.handlers.hook_events.session_manager.view_window",
                 return_value=mock_state,
             ),
             patch(
@@ -249,7 +249,7 @@ class TestEnhanceWithLlmSummary:
                 return_value="all",
             ),
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_window_state",
+                "ccgram.handlers.hook_events.session_manager.view_window",
                 return_value=mock_state,
             ),
             patch(
@@ -287,7 +287,7 @@ class TestEnhanceWithLlmSummary:
                 return_value="all",
             ),
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_window_state",
+                "ccgram.handlers.hook_events.session_manager.view_window",
                 return_value=mock_state,
             ),
             patch("ccgram.handlers.message_queue.enqueue_status_update"),

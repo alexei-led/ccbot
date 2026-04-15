@@ -122,7 +122,9 @@ async def _handle_status_recall(
 
     from ..providers import get_provider_for_window
 
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
     if not provider.capabilities.supports_mailbox_delivery:
         from .shell_commands import handle_shell_message
 

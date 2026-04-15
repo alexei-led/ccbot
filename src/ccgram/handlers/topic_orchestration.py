@@ -59,8 +59,8 @@ async def _auto_detect_provider(window_id: str) -> None:
     detect_provider_from_command returns "" for unrecognized commands (shells),
     so we only persist when a known CLI is confidently identified.
     """
-    existing_provider = session_manager.get_window_state(window_id).provider_name
-    if existing_provider:
+    view = session_manager.view_window(window_id)
+    if view and view.provider_name:
         return
 
     w = await tmux_manager.find_window_by_id(window_id)

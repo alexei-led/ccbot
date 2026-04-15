@@ -664,6 +664,9 @@ class SessionManager:
             approval_mode=ws.approval_mode,
             notification_mode=ws.notification_mode,
             transcript_path=Path(ws.transcript_path) if ws.transcript_path else None,
+            window_name=ws.window_name,
+            session_id=ws.session_id,
+            external=ws.external,
         )
 
     def clear_window_session(self, window_id: str) -> None:
@@ -672,6 +675,11 @@ class SessionManager:
 
     # --- Provider management ---
 
+    def get_window_provider(self, window_id: str) -> str | None:
+        """Return the provider name for a window, or None if not set."""
+        state = window_store.window_states.get(window_id)
+        return state.provider_name if state else None
+
     def set_window_provider(
         self,
         window_id: str,
@@ -679,8 +687,25 @@ class SessionManager:
         *,
         cwd: str | None = None,
     ) -> None:
-        """Set the provider for a window."""
-        window_store.set_window_provider(window_id, provider_name, cwd=cwd)
+        """Set the provider for a window.
+
+        Resolves whether the new provider supports hooks so that
+        ``window_state_store`` remains free of provider imports.
+        """
+        supports_hook = True
+        if provider_name:
+            from .providers.registry import UnknownProviderError, registry
+
+            try:
+                supports_hook = registry.get(provider_name).capabilities.supports_hook
+            except UnknownProviderError:
+                supports_hook = True
+        window_store.set_window_provider(
+            window_id,
+            provider_name,
+            cwd=cwd,
+            new_provider_supports_hook=supports_hook,
+        )
 
     def _clear_session_map_entry(self, window_id: str) -> None:
         """Delegate to session_map_sync — see session_map.py for implementation."""

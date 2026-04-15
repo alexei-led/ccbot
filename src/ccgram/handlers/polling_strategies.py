@@ -7,17 +7,23 @@ strategy classes:
   - InteractiveUIStrategy: pane alert hash state for deduplication
   - TopicLifecycleStrategy: autoclose timers, dead notification tracking, probe failures
 
+Also defines pure data types for the observe→decide→act pattern:
+  - TickContext: all inputs to the tick decision (pure data, no I/O)
+  - TickDecision: what effects to apply (returned by decide_tick in window_tick.py)
+
 Each strategy owns its state and state management methods. Domain-specific
 async functions (which depend on tmux, Telegram, providers, etc.) live in
 window_tick.py (per-window logic) and topic_lifecycle.py (lifecycle checks).
 This separation enables independent testing of state logic without mocking external deps.
 """
 
+from __future__ import annotations
+
 import structlog
 import time
 from dataclasses import dataclass, field
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from ..providers.base import StatusUpdate
 from ..topic_state_registry import topic_state
@@ -560,3 +566,43 @@ terminal_poll_state = TerminalPollState()
 terminal_screen_buffer = TerminalScreenBuffer(terminal_poll_state)
 interactive_strategy = InteractiveUIStrategy()
 lifecycle_strategy = TopicLifecycleStrategy(terminal_poll_state)
+
+
+# ── Observe→Decide→Act types ─────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class TickContext:
+    """All inputs to the tick decision — pure data, no I/O.
+
+    Coordinator computes all inputs (including those with side effects like
+    is_recently_active) before constructing this context, then passes it to
+    the pure decide_tick function.
+    """
+
+    window_id: str
+    resolved_status_text: (
+        str | None
+    )  # output of _build_status_line; None when no status
+    is_shell_prompt: bool  # pane_current_command is a bare shell (agent exited)
+    has_seen_status: bool  # at least one status was previously sent for this window
+    is_recently_active: bool  # transcript activity within ACTIVITY_THRESHOLD seconds
+    startup_time: float | None  # None if no startup grace period is running
+    is_dead_window: bool  # tmux window no longer exists
+    supports_hook: bool  # provider emits hook events (Claude)
+    notification_mode: str  # "normal" | "muted" | "errors_only" | etc.
+    queue_has_content: bool  # message queue non-empty for this window's user
+
+
+@dataclass(frozen=True, slots=True)
+class TickDecision:
+    """Output of decide_tick — what effects to apply.
+
+    All fields default to no-op so callers only need to set what they care about.
+    """
+
+    send_status: bool = False
+    status_text: str | None = None
+    transition: Literal["idle", "done", "active", "starting"] | None = None
+    show_recovery: bool = False
+    clear_status: bool = False

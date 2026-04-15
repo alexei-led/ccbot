@@ -40,6 +40,9 @@ class TestWindowViewProjection:
             approval_mode="normal",
             notification_mode="all",
             transcript_path=Path("/tmp/log.jsonl"),
+            window_name="",
+            session_id="",
+            external=False,
         )
         # cleanup
         window_store.window_states.pop("@1", None)

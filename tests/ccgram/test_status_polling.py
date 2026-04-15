@@ -14,11 +14,12 @@ from ccgram.handlers.topic_lifecycle import (
     prune_stale_state,
 )
 from ccgram.handlers.window_tick import (
-    _check_transcript_activity,
     _handle_dead_window_notification,
     _parse_with_pyte,
     _scan_window_panes,
+    decide_tick,
 )
+from ccgram.handlers.polling_strategies import TickContext
 from ccgram.handlers.polling_strategies import (
     MAX_PROBE_FAILURES,
     interactive_strategy,
@@ -199,71 +200,26 @@ class TestAutocloseTimers:
 class TestTranscriptActivityHeuristic:
     def test_active_when_recent_transcript(self) -> None:
         now = time.monotonic()
-        mock_monitor = MagicMock()
-        mock_monitor.get_last_activity.return_value = now - 5.0
-        with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch(
-                "ccgram.handlers.window_tick.get_active_monitor",
-                return_value=mock_monitor,
-            ),
-        ):
-            mock_sm.get_session_id_for_window.return_value = "sess-123"
-            result = _check_transcript_activity("@0")
+        result = terminal_poll_state.is_recently_active("@0", now - 5.0)
         assert result is True
         assert _window_poll_state.get("@0") and _window_poll_state["@0"].has_seen_status
 
     def test_inactive_when_stale_transcript(self) -> None:
         now = time.monotonic()
-        mock_monitor = MagicMock()
-        mock_monitor.get_last_activity.return_value = now - 20.0
-        with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch(
-                "ccgram.handlers.window_tick.get_active_monitor",
-                return_value=mock_monitor,
-            ),
-        ):
-            mock_sm.get_session_id_for_window.return_value = "sess-123"
-            result = _check_transcript_activity("@0")
+        result = terminal_poll_state.is_recently_active("@0", now - 20.0)
         assert result is False
         assert not (
             _window_poll_state.get("@0") and _window_poll_state["@0"].has_seen_status
         )
 
-    def test_inactive_when_no_session(self) -> None:
-        with patch("ccgram.handlers.window_tick.session_manager") as mock_sm:
-            mock_sm.get_session_id_for_window.return_value = None
-            result = _check_transcript_activity("@0")
-        assert result is False
-
-    def test_inactive_when_no_monitor(self) -> None:
-        with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch(
-                "ccgram.handlers.window_tick.get_active_monitor",
-                return_value=None,
-            ),
-        ):
-            mock_sm.get_session_id_for_window.return_value = "sess-123"
-            result = _check_transcript_activity("@0")
+    def test_inactive_when_no_activity_ts(self) -> None:
+        result = terminal_poll_state.is_recently_active("@0", None)
         assert result is False
 
     def test_clears_startup_timer_on_activity(self) -> None:
         now = time.monotonic()
-
         terminal_poll_state.get_state("@0").startup_time = now - 15.0
-        mock_monitor = MagicMock()
-        mock_monitor.get_last_activity.return_value = now - 3.0
-        with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch(
-                "ccgram.handlers.window_tick.get_active_monitor",
-                return_value=mock_monitor,
-            ),
-        ):
-            mock_sm.get_session_id_for_window.return_value = "sess-123"
-            result = _check_transcript_activity("@0")
+        result = terminal_poll_state.is_recently_active("@0", now - 3.0)
         assert result is True
         assert (
             _window_poll_state.get("@0") is None
@@ -271,76 +227,47 @@ class TestTranscriptActivityHeuristic:
         )
 
 
+def _make_ctx(
+    window_id: str = "@0",
+    resolved_status_text: str | None = None,
+    is_shell_prompt: bool = False,
+    has_seen_status: bool = False,
+    is_recently_active: bool = False,
+    startup_time: float | None = None,
+    is_dead_window: bool = False,
+    supports_hook: bool = True,
+    notification_mode: str = "normal",
+    queue_has_content: bool = False,
+) -> TickContext:
+    return TickContext(
+        window_id=window_id,
+        resolved_status_text=resolved_status_text,
+        is_shell_prompt=is_shell_prompt,
+        has_seen_status=has_seen_status,
+        is_recently_active=is_recently_active,
+        startup_time=startup_time,
+        is_dead_window=is_dead_window,
+        supports_hook=supports_hook,
+        notification_mode=notification_mode,
+        queue_has_content=queue_has_content,
+    )
+
+
 class TestStartupTimeout:
-    async def test_first_poll_records_startup_time(self) -> None:
-        from ccgram.handlers.window_tick import _handle_no_status
+    def test_first_poll_no_startup_time_yields_starting(self) -> None:
+        ctx = _make_ctx(startup_time=None)
+        decision = decide_tick(ctx)
+        assert decision.transition == "starting"
 
-        bot = AsyncMock(spec=Bot)
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.update_topic_emoji"),
-            patch("ccgram.handlers.window_tick._send_typing_throttled"),
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-            patch("ccgram.handlers.window_tick.time") as mock_time,
-        ):
-            mock_time.monotonic.return_value = 1000.0
-            mock_tr.resolve_chat_id.return_value = -100
-            mock_tr.get_display_name.return_value = "project"
-            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
-        assert (
-            _window_poll_state.get("@0") is not None
-            and _window_poll_state["@0"].startup_time is not None
-        )
+    def test_startup_timeout_transitions_to_idle(self) -> None:
+        ctx = _make_ctx(startup_time=time.monotonic() - 31.0)
+        decision = decide_tick(ctx)
+        assert decision.transition == "idle"
 
-    async def test_startup_timeout_transitions_to_idle(self) -> None:
-        from ccgram.handlers.window_tick import _handle_no_status
-
-        bot = AsyncMock(spec=Bot)
-        terminal_poll_state.get_state("@0").startup_time = time.monotonic() - 31.0
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
-            patch("ccgram.handlers.window_tick.enqueue_status_update"),
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-        ):
-            mock_tr.resolve_chat_id.return_value = -100
-            mock_tr.get_display_name.return_value = "project"
-            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
-        assert _window_poll_state.get("@0") and _window_poll_state["@0"].has_seen_status
-        assert (
-            _window_poll_state.get("@0") is None
-            or _window_poll_state["@0"].startup_time is None
-        )
-        mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "project")
-
-    async def test_startup_grace_period_sends_typing(self) -> None:
-        from ccgram.handlers.window_tick import _handle_no_status
-
-        bot = AsyncMock(spec=Bot)
-        terminal_poll_state.get_state("@0").startup_time = time.monotonic()
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
-            patch("ccgram.handlers.window_tick._send_typing_throttled") as mock_typing,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-        ):
-            mock_tr.resolve_chat_id.return_value = -100
-            mock_tr.get_display_name.return_value = "project"
-            await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
-        mock_typing.assert_called_once_with(bot, 1, 42)
-        mock_emoji.assert_called_once_with(bot, -100, 42, "active", "project")
-        assert not (
-            _window_poll_state.get("@0") and _window_poll_state["@0"].has_seen_status
-        )
+    def test_startup_grace_period_stays_starting(self) -> None:
+        ctx = _make_ctx(startup_time=time.monotonic())
+        decision = decide_tick(ctx)
+        assert decision.transition == "starting"
 
 
 @pytest.fixture()
@@ -699,56 +626,17 @@ class TestTransitionToIdle:
 
 
 class TestShellPromptClearsStatus:
-    async def test_shell_prompt_enqueues_status_clear(self) -> None:
-        from ccgram.handlers.window_tick import _handle_no_status
+    def test_shell_prompt_with_hook_yields_done(self) -> None:
+        ctx = _make_ctx(is_shell_prompt=True, supports_hook=True)
+        decision = decide_tick(ctx)
+        assert decision.transition == "done"
+        assert decision.clear_status is True
 
-        terminal_poll_state.get_state("@0").has_seen_status = True
-        bot = AsyncMock(spec=Bot)
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.update_topic_emoji"),
-            patch("ccgram.handlers.window_tick.enqueue_status_update") as mock_enqueue,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-            patch("ccgram.handlers.window_tick.time") as mock_time,
-        ):
-            mock_time.monotonic.return_value = 1000.0
-            mock_tr.resolve_chat_id.return_value = -100
-            mock_tr.get_display_name.return_value = "project"
-            await _handle_no_status(bot, 1, "@0", 42, "bash", "normal")
-        mock_enqueue.assert_called_once_with(bot, 1, "@0", None, thread_id=42)
-
-    async def test_hookless_shell_prompt_keeps_idle_status(self) -> None:
-        from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
-        from ccgram.handlers.window_tick import _handle_no_status
-
-        terminal_poll_state.get_state("@0").has_seen_status = True
-        bot = AsyncMock(spec=Bot)
-        with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.update_topic_emoji"),
-            patch("ccgram.handlers.window_tick.enqueue_status_update") as mock_enqueue,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-            patch("ccgram.handlers.window_tick.time") as mock_time,
-            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
-        ):
-            mock_time.monotonic.return_value = 1000.0
-            mock_tr.resolve_chat_id.return_value = -100
-            mock_tr.get_display_name.return_value = "project"
-            mock_sm.get_window_state.return_value = MagicMock(provider_name="codex")
-            mock_prov.return_value.capabilities.supports_hook = False
-            await _handle_no_status(bot, 1, "@0", 42, "bash", "normal")
-
-        mock_enqueue.assert_called_once_with(
-            bot, 1, "@0", IDLE_STATUS_TEXT, thread_id=42
-        )
-        assert not _has_autoclose(1, 42)
+    def test_hookless_shell_prompt_yields_idle(self) -> None:
+        ctx = _make_ctx(is_shell_prompt=True, supports_hook=False)
+        decision = decide_tick(ctx)
+        assert decision.transition == "idle"
+        assert decision.clear_status is False
 
 
 class TestProbeFailures:

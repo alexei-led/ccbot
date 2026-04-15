@@ -147,15 +147,13 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     first_window_id = users[0][2]
     summary: str | None = None
     if first_window_id:
-        transcript_path = session_manager.get_window_state(
-            first_window_id
-        ).transcript_path
-        if transcript_path:
+        view = session_manager.view_window(first_window_id)
+        if view and view.transcript_path:
             import asyncio
 
             try:
                 summary = await asyncio.wait_for(
-                    _get_llm_summary(transcript_path),
+                    _get_llm_summary(str(view.transcript_path)),
                     timeout=_LLM_SUMMARY_TIMEOUT,
                 )
             except TimeoutError:
@@ -298,7 +296,9 @@ async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
     # Clear session association and subagent tracking so next launch starts fresh
     if users:
         window_id = users[0][2]
-        claude_task_state.clear_window(window_id)
+        from ..session_lifecycle import session_lifecycle
+
+        session_lifecycle.handle_session_end(window_id)
         session_manager.clear_window_session(window_id)
         clear_subagents(window_id)
 

@@ -405,7 +405,10 @@ class TestPollingAndCleanupIntegration:
                 "ccgram.handlers.window_tick.get_interactive_window",
                 return_value=None,
             ),
-            patch("ccgram.handlers.window_tick._handle_no_status"),
+            patch(
+                "ccgram.handlers.window_tick._apply_tick_decision",
+                new_callable=AsyncMock,
+            ),
         ):
             from unittest.mock import MagicMock
 
@@ -450,7 +453,10 @@ class TestPollingAndCleanupIntegration:
                 "ccgram.handlers.window_tick.get_interactive_window",
                 return_value=None,
             ),
-            patch("ccgram.handlers.window_tick._handle_no_status"),
+            patch(
+                "ccgram.handlers.window_tick._apply_tick_decision",
+                new_callable=AsyncMock,
+            ),
         ):
             from unittest.mock import MagicMock
 

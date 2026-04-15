@@ -252,13 +252,15 @@ async def _adopt_orphaned_windows(bot: Bot, issues: list[AuditIssue]) -> None:
         if not match:
             continue
         window_id = match.group(1)
-        ws = session_manager.get_window_state(window_id)
-        name = ws.window_name or thread_router.get_display_name(window_id)
+        view = session_manager.view_window(window_id)
+        name = (view.window_name if view else "") or thread_router.get_display_name(
+            window_id
+        )
         event = NewWindowEvent(
             window_id=window_id,
-            session_id=ws.session_id,
+            session_id=view.session_id if view else "",
             window_name=name,
-            cwd=ws.cwd,
+            cwd=view.cwd if view else "",
         )
         try:
             await _handle_new_window(event, bot)
@@ -341,13 +343,15 @@ async def _recreate_dead_topics(bot: Bot, issues: list[AuditIssue]) -> int:
         thread_id = int(match.group(2))
         window_id = match.group(3)
 
-        ws = session_manager.get_window_state(window_id)
-        name = ws.window_name or thread_router.get_display_name(window_id)
+        view = session_manager.view_window(window_id)
+        name = (view.window_name if view else "") or thread_router.get_display_name(
+            window_id
+        )
         event = NewWindowEvent(
             window_id=window_id,
-            session_id=ws.session_id,
+            session_id=view.session_id if view else "",
             window_name=name,
-            cwd=ws.cwd,
+            cwd=view.cwd if view else "",
         )
 
         # Preserve group_chat_id before unbinding — unbind_thread deletes it,

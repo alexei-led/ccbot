@@ -136,7 +136,7 @@ class TestRestoreCommand:
         mock_sm, mock_tr, mock_tm, _, mock_cdn, mock_gpw, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
         mock_tm.find_window_by_id.return_value = None
-        mock_sm.get_window_state.return_value = WindowState(cwd=str(tmp_path))
+        mock_sm.view_window.return_value = MagicMock(cwd=str(tmp_path))
         mock_sm.get_approval_mode.return_value = "normal"
         update = _make_update()
         context = _make_context()
@@ -163,7 +163,7 @@ class TestRestoreCommand:
         mock_sm, mock_tr, mock_tm, _, _, _, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
         mock_tm.find_window_by_id.return_value = None
-        mock_sm.get_window_state.return_value = WindowState(cwd=str(tmp_path))
+        mock_sm.view_window.return_value = MagicMock(cwd=str(tmp_path))
         mock_sm.get_approval_mode.return_value = "normal"
         mock_tm.create_window.return_value = (False, "tmux error", "", "")
         update = _make_update()

@@ -65,7 +65,9 @@ def build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
     declares support for those capabilities.
     """
 
-    caps = get_provider_for_window(window_id).capabilities
+    caps = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    ).capabilities
     options: list[InlineKeyboardButton] = [
         InlineKeyboardButton(
             "\U0001f195 Fresh",
@@ -311,8 +313,8 @@ def _validate_recovery_state(
             context.user_data[PENDING_THREAD_ID] = thread_id
             context.user_data[RECOVERY_WINDOW_ID] = data_suffix
 
-    ws = session_manager.get_window_state(data_suffix)
-    cwd = ws.cwd or ""
+    view = session_manager.view_window(data_suffix)
+    cwd = view.cwd if view else ""
     return thread_id, data_suffix, cwd
 
 
@@ -352,7 +354,12 @@ async def _create_and_bind_window(
 
     # Resolve provider from old window (falls back to global default)
     provider = (
-        get_provider_for_window(old_window_id) if old_window_id else get_provider()
+        get_provider_for_window(
+            old_window_id,
+            provider_name=session_manager.get_window_provider(old_window_id),
+        )
+        if old_window_id
+        else get_provider()
     )
     approval_mode = (
         session_manager.get_approval_mode(old_window_id) if old_window_id else "normal"
@@ -492,7 +499,9 @@ async def _handle_continue(
         await query.answer("Failed")
         return
 
-    launch_args = get_provider_for_window(old_wid).make_launch_args(use_continue=True)
+    launch_args = get_provider_for_window(
+        old_wid, provider_name=session_manager.get_window_provider(old_wid)
+    ).make_launch_args(use_continue=True)
     await _create_and_bind_window(
         query,
         user_id,
@@ -588,17 +597,17 @@ async def _handle_resume_pick(
         await query.answer("Stale recovery state", show_alert=True)
         return
 
-    ws = session_manager.get_window_state(old_wid)
-    cwd = ws.cwd or ""
+    view = session_manager.view_window(old_wid)
+    cwd = view.cwd if view else ""
     if not cwd or not Path(cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)
         await query.answer("Failed")
         return
 
-    launch_args = get_provider_for_window(old_wid).make_launch_args(
-        resume_id=session_id
-    )
+    launch_args = get_provider_for_window(
+        old_wid, provider_name=session_manager.get_window_provider(old_wid)
+    ).make_launch_args(resume_id=session_id)
     await _create_and_bind_window(
         query,
         user_id,

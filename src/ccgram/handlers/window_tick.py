@@ -39,6 +39,9 @@ from .message_queue import (
 )
 from .message_sender import rate_limit_send_message
 from .polling_strategies import (
+    STARTUP_TIMEOUT,
+    TickContext,
+    TickDecision,
     interactive_strategy,
     is_shell_prompt,
     lifecycle_strategy,
@@ -87,21 +90,6 @@ def _parse_with_pyte(
     return terminal_screen_buffer.parse_with_pyte(window_id, pane_text, columns, rows)
 
 
-# ── Transcript activity check ───────────────────────────────────────────
-
-
-def _check_transcript_activity(window_id: str) -> bool:
-    session_id = session_manager.get_session_id_for_window(window_id)
-    if not session_id:
-        return False
-
-    mon = get_active_monitor()
-    if not mon:
-        return False
-    last_activity = mon.get_last_activity(session_id)
-    return terminal_poll_state.is_recently_active(window_id, last_activity)
-
-
 # ── Idle / no-status transitions ────────────────────────────────────────
 
 
@@ -126,66 +114,6 @@ async def _transition_to_idle(
         )
     else:
         await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
-
-
-async def _handle_no_status(
-    bot: Bot,
-    user_id: int,
-    window_id: str,
-    thread_id: int | None,
-    pane_current_command: str,
-    notif_mode: str,
-) -> None:
-    now = time.monotonic()
-    is_active = _check_transcript_activity(window_id)
-
-    if is_active:
-        claude_task_state.clear_wait_header(window_id)
-        await _send_typing_throttled(bot, user_id, thread_id)
-        if thread_id is not None:
-            chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-            display = thread_router.get_display_name(window_id)
-            await update_topic_emoji(bot, chat_id, thread_id, "active", display)
-            lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
-        return
-
-    if thread_id is None:
-        return
-
-    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-    display = thread_router.get_display_name(window_id)
-
-    if is_shell_prompt(pane_current_command):
-        terminal_poll_state.cancel_startup_timer(window_id)
-        if not get_provider_for_window(window_id).capabilities.supports_hook:
-            terminal_poll_state.mark_seen_status(window_id)
-            await _transition_to_idle(
-                bot, user_id, window_id, thread_id, chat_id, display, notif_mode
-            )
-            return
-
-        await update_topic_emoji(bot, chat_id, thread_id, "done", display)
-        lifecycle_strategy.start_autoclose_timer(user_id, thread_id, "done", now)
-        lifecycle_strategy.clear_typing_state(user_id, thread_id)
-        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
-    elif terminal_poll_state.check_seen_status(window_id):
-        await _transition_to_idle(
-            bot, user_id, window_id, thread_id, chat_id, display, notif_mode
-        )
-    elif terminal_poll_state.get_state(window_id).startup_time is None:
-        terminal_poll_state.begin_startup_timer(window_id, now)
-        await _send_typing_throttled(bot, user_id, thread_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
-        lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
-    elif terminal_poll_state.is_startup_expired(window_id):
-        terminal_poll_state.mark_seen_status(window_id)
-        await _transition_to_idle(
-            bot, user_id, window_id, thread_id, chat_id, display, notif_mode
-        )
-    else:
-        await _send_typing_throttled(bot, user_id, thread_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
-        lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
 
 
 # ── Multi-pane scanning (agent teams) ─────────────────────────────────
@@ -221,7 +149,9 @@ async def _scan_window_panes(
         if not pane_text:
             continue
 
-        provider = get_provider_for_window(window_id)
+        provider = get_provider_for_window(
+            window_id, provider_name=session_manager.get_window_provider(window_id)
+        )
         status = provider.parse_terminal_status(pane_text, pane_title="")
         if status is None or not status.is_interactive:
             interactive_strategy.remove_pane_alert(pane.pane_id)
@@ -272,7 +202,9 @@ async def _check_interactive_only(
 
     if status is None:
         clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-        provider = get_provider_for_window(window_id)
+        provider = get_provider_for_window(
+            window_id, provider_name=session_manager.get_window_provider(window_id)
+        )
         pane_title = ""
         if provider.capabilities.uses_pane_title:
             pane_title = await tmux_manager.get_pane_title(w.window_id)
@@ -291,7 +223,9 @@ async def _check_interactive_only(
 async def _maybe_check_passive_shell(
     bot: Bot, user_id: int, window_id: str, thread_id: int
 ) -> None:
-    if not get_provider_for_window(window_id).capabilities.chat_first_command_path:
+    if not get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    ).capabilities.chat_first_command_path:
         return
     ws = terminal_poll_state.get_state(window_id)
     rendered = ws.last_rendered_text
@@ -323,8 +257,8 @@ async def _handle_dead_window_notification(
         user_id, thread_id, "dead", time.monotonic()
     )
 
-    window_state = session_manager.get_window_state(wid)
-    cwd = window_state.cwd or ""
+    view = session_manager.view_window(wid)
+    cwd = view.cwd if view else ""
     try:
         dir_exists = bool(cwd) and await asyncio.to_thread(Path(cwd).is_dir)
     except OSError:
@@ -388,7 +322,9 @@ async def _resolve_status(
     if status is not None:
         return status
     clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-    provider = get_provider_for_window(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
     pane_title = ""
     if provider.capabilities.uses_pane_title:
         pane_title = await tmux_manager.get_pane_title(w.window_id)
@@ -413,29 +349,78 @@ def _build_status_line(status: StatusUpdate | None) -> str | None:
     return f"{status_emoji_prefix(status.raw_text)} {status.raw_text}"
 
 
-async def _emit_active_status(
+# ── Pure decision kernel ─────────────────────────────────────────────────
+
+
+def decide_tick(ctx: TickContext) -> TickDecision:
+    """Pure status/idle transition decision — no I/O, no side effects.
+
+    All mutable state reads (has_seen_status, is_recently_active, startup_time)
+    must be computed by the coordinator before building TickContext. The
+    is_recently_active flag is special: its computation in the coordinator
+    may mark_seen_status as a side effect, so it must not be re-derived here.
+    """
+    if ctx.is_dead_window:
+        return TickDecision(show_recovery=True)
+
+    if ctx.resolved_status_text:
+        return TickDecision(
+            send_status=True,
+            status_text=ctx.resolved_status_text,
+            transition="active",
+        )
+
+    if ctx.is_recently_active:
+        return TickDecision(transition="active")
+
+    if ctx.is_shell_prompt:
+        if ctx.supports_hook:
+            return TickDecision(clear_status=True, transition="done")
+        return TickDecision(transition="idle")
+
+    if ctx.has_seen_status:
+        return TickDecision(transition="idle")
+
+    startup_expired = (
+        ctx.startup_time is not None
+        and (time.monotonic() - ctx.startup_time) >= STARTUP_TIMEOUT
+    )
+    if startup_expired:
+        return TickDecision(transition="idle")
+
+    return TickDecision(transition="starting")
+
+
+# ── Main per-window orchestration ──────────────────────────────────────
+
+
+async def _apply_active_transition(
     bot: Bot,
     user_id: int,
     window_id: str,
     thread_id: int | None,
-    status_line: str,
+    decision: TickDecision,
     notif_mode: str,
 ) -> None:
-    claude_task_state.clear_wait_header(window_id)
-    claude_task_state.set_last_status(window_id, status_line)
-    terminal_poll_state.mark_seen_status(window_id)
-    await _send_typing_throttled(bot, user_id, thread_id)
-    if notif_mode not in ("muted", "errors_only"):
-        from ..claude_task_state import build_subagent_label, get_subagent_names
+    if decision.send_status:
+        claude_task_state.clear_wait_header(window_id)
+        claude_task_state.set_last_status(window_id, decision.status_text or "")
+        terminal_poll_state.mark_seen_status(window_id)
+        await _send_typing_throttled(bot, user_id, thread_id)
+        if notif_mode not in ("muted", "errors_only"):
+            from ..claude_task_state import build_subagent_label, get_subagent_names
 
-        subagent_names = get_subagent_names(window_id)
-        display_status = status_line
-        if subagent_names:
-            label = build_subagent_label(subagent_names)
-            display_status = f"{status_line} ({label})"
-        await enqueue_status_update(
-            bot, user_id, window_id, display_status, thread_id=thread_id
-        )
+            subagent_names = get_subagent_names(window_id)
+            display_status = decision.status_text or ""
+            if subagent_names:
+                label = build_subagent_label(subagent_names)
+                display_status = f"{display_status} ({label})"
+            await enqueue_status_update(
+                bot, user_id, window_id, display_status, thread_id=thread_id
+            )
+    else:
+        claude_task_state.clear_wait_header(window_id)
+        await _send_typing_throttled(bot, user_id, thread_id)
     if thread_id is not None:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         display = thread_router.get_display_name(window_id)
@@ -443,7 +428,86 @@ async def _emit_active_status(
         lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
 
 
-# ── Main per-window orchestration ──────────────────────────────────────
+async def _apply_done_transition(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int | None,
+) -> None:
+    if thread_id is None:
+        return
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    display = thread_router.get_display_name(window_id)
+    terminal_poll_state.cancel_startup_timer(window_id)
+    await update_topic_emoji(bot, chat_id, thread_id, "done", display)
+    lifecycle_strategy.start_autoclose_timer(
+        user_id, thread_id, "done", time.monotonic()
+    )
+    lifecycle_strategy.clear_typing_state(user_id, thread_id)
+    await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+    if not get_provider_for_window(
+        window_id,
+        provider_name=session_manager.get_window_provider(window_id),
+    ).capabilities.supports_hook:
+        terminal_poll_state.mark_seen_status(window_id)
+
+
+async def _apply_starting_transition(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int | None,
+) -> None:
+    ws = terminal_poll_state.peek_state(window_id)
+    if ws is None or ws.startup_time is None:
+        terminal_poll_state.begin_startup_timer(window_id, time.monotonic())
+    await _send_typing_throttled(bot, user_id, thread_id)
+    if thread_id is not None:
+        chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+        display = thread_router.get_display_name(window_id)
+        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+        lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
+
+
+async def _apply_tick_decision(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int | None,
+    decision: TickDecision,
+    notif_mode: str,
+) -> None:
+    """Apply the effects dictated by a TickDecision. All I/O lives here."""
+    if decision.show_recovery or decision.transition is None:
+        return
+
+    if decision.transition == "active":
+        await _apply_active_transition(
+            bot, user_id, window_id, thread_id, decision, notif_mode
+        )
+    elif decision.transition == "idle" and thread_id is not None:
+        await _transition_to_idle(
+            bot,
+            user_id,
+            window_id,
+            thread_id,
+            thread_router.resolve_chat_id(user_id, thread_id),
+            thread_router.get_display_name(window_id),
+            notif_mode,
+        )
+    elif decision.transition == "done":
+        await _apply_done_transition(bot, user_id, window_id, thread_id)
+    elif decision.transition == "starting":
+        await _apply_starting_transition(bot, user_id, window_id, thread_id)
+
+
+def _get_last_activity_ts(window_id: str) -> float | None:
+    """Read last transcript activity timestamp from the session monitor."""
+    session_id = session_manager.get_session_id_for_window(window_id)
+    if not session_id:
+        return None
+    mon = get_active_monitor()
+    return mon.get_last_activity(session_id) if mon else None
 
 
 async def _update_status(
@@ -481,17 +545,35 @@ async def _update_status(
         await handle_interactive_ui(bot, user_id, window_id, thread_id)
         return
 
-    status_line = _build_status_line(status)
-    notif_mode = session_manager.get_notification_mode(window_id)
+    # Compute inputs for the pure decision kernel.
+    # is_recently_active has a side effect (marks seen_status) — must be computed here.
+    last_activity_ts = _get_last_activity_ts(window_id)
+    is_recently_active = terminal_poll_state.is_recently_active(
+        window_id, last_activity_ts
+    )
 
-    if status_line:
-        await _emit_active_status(
-            bot, user_id, window_id, thread_id, status_line, notif_mode
-        )
-    else:
-        await _handle_no_status(
-            bot, user_id, window_id, thread_id, w.pane_current_command, notif_mode
-        )
+    resolved_status_text = _build_status_line(status)
+    ws = terminal_poll_state.peek_state(window_id)
+    provider = get_provider_for_window(
+        window_id, provider_name=session_manager.get_window_provider(window_id)
+    )
+    ctx = TickContext(
+        window_id=window_id,
+        resolved_status_text=resolved_status_text,
+        is_shell_prompt=is_shell_prompt(w.pane_current_command),
+        has_seen_status=terminal_poll_state.check_seen_status(window_id),
+        is_recently_active=is_recently_active,
+        startup_time=ws.startup_time if ws else None,
+        is_dead_window=False,
+        supports_hook=provider.capabilities.supports_hook,
+        notification_mode=session_manager.get_notification_mode(window_id),
+        queue_has_content=False,
+    )
+
+    decision = decide_tick(ctx)
+    await _apply_tick_decision(
+        bot, user_id, window_id, thread_id, decision, notif_mode=ctx.notification_mode
+    )
 
 
 # ── Entry point ──────────────────────────────────────────────────────────

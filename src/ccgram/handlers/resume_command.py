@@ -233,7 +233,14 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Check resume capability using per-window provider (or global fallback)
     window_id = thread_router.get_window_for_thread(user.id, thread_id)
-    provider = get_provider_for_window(window_id) if window_id else get_provider()
+    provider = (
+        get_provider_for_window(
+            window_id,
+            provider_name=session_manager.get_window_provider(window_id),
+        )
+        if window_id
+        else get_provider()
+    )
     if not provider.capabilities.supports_resume:
         await safe_reply(
             update.message,
@@ -295,7 +302,12 @@ async def _create_resume_window(
         lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
     provider = (
-        get_provider_for_window(old_window_id) if old_window_id else get_provider()
+        get_provider_for_window(
+            old_window_id,
+            provider_name=session_manager.get_window_provider(old_window_id),
+        )
+        if old_window_id
+        else get_provider()
     )
     approval_mode = (
         session_manager.get_approval_mode(old_window_id) if old_window_id else "normal"

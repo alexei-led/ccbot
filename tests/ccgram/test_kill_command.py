@@ -23,7 +23,7 @@ def _patch_deps():
         ) as mock_clear,
     ):
         mock_tr.get_display_name.side_effect = lambda wid: wid
-        mock_sm.get_window_state.side_effect = lambda wid: WindowState()
+        mock_sm.view_window.side_effect = lambda wid: WindowState()
         mock_tr.get_all_thread_windows.return_value = {}
         mock_tm.list_windows = AsyncMock(return_value=[])
         yield mock_sm, mock_tr, mock_tm, mock_clear

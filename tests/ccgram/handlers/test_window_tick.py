@@ -7,10 +7,11 @@ from telegram import Bot
 
 from ccgram.handlers import window_tick
 from ccgram.handlers.polling_strategies import (
+    TickContext,
+    interactive_strategy,
     lifecycle_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
-    interactive_strategy,
 )
 from ccgram.handlers.window_tick import (
     _check_interactive_only,
@@ -18,6 +19,7 @@ from ccgram.handlers.window_tick import (
     _maybe_check_passive_shell,
     _scan_window_panes,
     _update_status,
+    decide_tick,
     tick_window,
 )
 from ccgram.providers.base import StatusUpdate
@@ -331,127 +333,56 @@ class TestUpdateStatusActiveLine:
             mock_typing.assert_called_once()
 
 
-class TestHandleNoStatusActiveTranscript:
-    async def test_active_transcript_sends_typing_and_active_emoji(self):
-        bot = AsyncMock(spec=Bot)
-
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=True,
-            ),
-            patch(
-                "ccgram.handlers.window_tick._send_typing_throttled",
-                new_callable=AsyncMock,
-            ) as mock_typing,
-            patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
-            ) as mock_emoji,
-            patch("ccgram.handlers.window_tick.claude_task_state"),
-            patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
-                new_callable=AsyncMock,
-            ) as mock_enqueue,
-        ):
-            mock_tr.resolve_chat_id.return_value = 42
-            mock_tr.get_display_name.return_value = "test"
-            from ccgram.handlers.window_tick import _handle_no_status
-
-            await _handle_no_status(bot, 1, "@0", 100, "claude", "all")
-            mock_typing.assert_called_once()
-            mock_emoji.assert_called_once()
-            assert mock_emoji.call_args[0][3] == "active"
-            mock_enqueue.assert_not_called()
+def _make_ctx(
+    window_id: str = "@0",
+    resolved_status_text: str | None = None,
+    is_shell_prompt: bool = False,
+    has_seen_status: bool = False,
+    is_recently_active: bool = False,
+    startup_time: float | None = None,
+    is_dead_window: bool = False,
+    supports_hook: bool = True,
+    notification_mode: str = "all",
+    queue_has_content: bool = False,
+) -> TickContext:
+    return TickContext(
+        window_id=window_id,
+        resolved_status_text=resolved_status_text,
+        is_shell_prompt=is_shell_prompt,
+        has_seen_status=has_seen_status,
+        is_recently_active=is_recently_active,
+        startup_time=startup_time,
+        is_dead_window=is_dead_window,
+        supports_hook=supports_hook,
+        notification_mode=notification_mode,
+        queue_has_content=queue_has_content,
+    )
 
 
-class TestHandleNoStatusShellPrompt:
-    async def test_claude_provider_transitions_to_done(self):
-        bot = AsyncMock(spec=Bot)
+class TestDecideTickActiveTranscript:
+    def test_recently_active_yields_active_transition(self):
+        ctx = _make_ctx(is_recently_active=True)
+        decision = decide_tick(ctx)
+        assert decision.transition == "active"
+        assert decision.send_status is False
 
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-            patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
-            ) as mock_emoji,
-            patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
-                new_callable=AsyncMock,
-            ),
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_tick.time") as mock_time,
-        ):
-            mock_tr.resolve_chat_id.return_value = 42
-            mock_tr.get_display_name.return_value = "test"
-            mock_sm.get_window_state.return_value = MagicMock(provider_name="claude")
-            mock_time.monotonic.return_value = 100.0
-            from ccgram.handlers.window_tick import _handle_no_status
 
-            await _handle_no_status(bot, 1, "@0", 100, "bash", "all")
-            mock_emoji.assert_called()
-            assert mock_emoji.call_args[0][3] == "done"
+class TestDecideTickShellPrompt:
+    def test_claude_provider_yields_done(self):
+        ctx = _make_ctx(is_shell_prompt=True, supports_hook=True)
+        decision = decide_tick(ctx)
+        assert decision.transition == "done"
+        assert decision.clear_status is True
 
-    async def test_shell_provider_transitions_to_idle(self):
-        bot = AsyncMock(spec=Bot)
+    def test_shell_provider_yields_idle(self):
+        ctx = _make_ctx(is_shell_prompt=True, supports_hook=False)
+        decision = decide_tick(ctx)
+        assert decision.transition == "idle"
 
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-            patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
-            ) as mock_emoji,
-            patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
-                new_callable=AsyncMock,
-            ),
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_tick.time") as mock_time,
-            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
-        ):
-            mock_tr.resolve_chat_id.return_value = 42
-            mock_tr.get_display_name.return_value = "test"
-            mock_sm.get_window_state.return_value = MagicMock(provider_name="shell")
-            mock_time.monotonic.return_value = 100.0
-            mock_prov.return_value.capabilities.supports_hook = False
-            from ccgram.handlers.window_tick import _handle_no_status
-
-            await _handle_no_status(bot, 1, "@0", 100, "bash", "all")
-            mock_emoji.assert_called()
-            assert mock_emoji.call_args[0][3] == "idle"
-
-    async def test_startup_timer_begins_on_first_no_status(self):
-        bot = AsyncMock(spec=Bot)
-
-        with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch(
-                "ccgram.handlers.window_tick._check_transcript_activity",
-                return_value=False,
-            ),
-            patch(
-                "ccgram.handlers.window_tick._send_typing_throttled",
-                new_callable=AsyncMock,
-            ),
-            patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
-            ),
-            patch("ccgram.handlers.window_tick.time") as mock_time,
-        ):
-            mock_tr.resolve_chat_id.return_value = 42
-            mock_tr.get_display_name.return_value = "test"
-            mock_time.monotonic.return_value = 100.0
-            from ccgram.handlers.window_tick import _handle_no_status
-
-            await _handle_no_status(bot, 1, "@0", 100, "claude", "all")
-            ws = terminal_poll_state.get_state("@0")
-            assert ws.startup_time == 100.0
+    def test_no_startup_time_yields_starting(self):
+        ctx = _make_ctx(startup_time=None)
+        decision = decide_tick(ctx)
+        assert decision.transition == "starting"
 
 
 class TestScanPanes:
@@ -566,16 +497,21 @@ class TestContractTests:
     def test_tick_window_is_coroutine_function(self):
         assert inspect.iscoroutinefunction(window_tick.tick_window)
 
-    def test_tick_window_is_sole_public_function(self):
-        public = [
+    def test_tick_window_is_sole_async_public_function(self):
+        public_async = [
             name
             for name in dir(window_tick)
             if not name.startswith("_")
-            and callable(getattr(window_tick, name))
+            and inspect.iscoroutinefunction(getattr(window_tick, name))
             and getattr(getattr(window_tick, name), "__module__", None)
             == "ccgram.handlers.window_tick"
         ]
-        assert public == ["tick_window"]
+        assert public_async == ["tick_window"]
+
+    def test_decide_tick_is_public_pure_function(self):
+        assert hasattr(window_tick, "decide_tick")
+        assert not inspect.iscoroutinefunction(window_tick.decide_tick)
+        assert callable(window_tick.decide_tick)
 
     def test_polling_coordinator_imports_only_tick_window(self):
         import ccgram.handlers.polling_coordinator as pc

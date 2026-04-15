@@ -1,6 +1,6 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -182,7 +182,7 @@ class TestBuildRecoveryKeyboard:
             caps.supports_resume = True
             build_recovery_keyboard("@7")
 
-        mock_gpw.assert_called_once_with("@7")
+        mock_gpw.assert_called_once_with("@7", provider_name=None)
 
 
 @pytest.fixture(autouse=True)
@@ -467,7 +467,7 @@ class TestRecoveryFreshCallback:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             cwd="/tmp/project", provider_name=""
         )
         mock_tm.create_window = AsyncMock(
@@ -606,7 +606,7 @@ class TestRecoveryContinueCallback:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             cwd="/tmp/project", provider_name=""
         )
         mock_tm.create_window = AsyncMock(
@@ -779,7 +779,7 @@ class TestRecoveryResumePickCallback:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             cwd="/tmp/project", provider_name=""
         )
         mock_tm.create_window = AsyncMock(
@@ -826,7 +826,7 @@ class TestRecoveryResumePickCallback:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(
+        mock_sm.view_window.return_value = MagicMock(
             cwd="/tmp/project", provider_name=""
         )
         mock_tm.create_window = AsyncMock(
@@ -1305,7 +1305,7 @@ class TestRecoveryPerWindowProvider:
             mock_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        mock_gpw.assert_called_with("@0")
+        mock_gpw.assert_called_with("@0", provider_name=ANY)
         mock_gpw.return_value.make_launch_args.assert_called_once_with(
             use_continue=True
         )
@@ -1344,7 +1344,7 @@ class TestRecoveryPerWindowProvider:
             mock_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        mock_gpw.assert_called_with("@0")
+        mock_gpw.assert_called_with("@0", provider_name=ANY)
         mock_gpw.return_value.make_launch_args.assert_called_once_with(
             resume_id="sess-1"
         )
