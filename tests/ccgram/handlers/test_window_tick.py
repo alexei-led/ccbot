@@ -623,3 +623,46 @@ class TestContractTests:
         assert not violations, (
             f"polling_coordinator imports per-window collaborators: {violations}"
         )
+
+
+class TestDeadWindowTopicDeleted:
+    @pytest.mark.parametrize(
+        "error_msg",
+        ["thread not found", "TOPIC_ID_INVALID"],
+        ids=["thread_not_found", "topic_id_invalid"],
+    )
+    async def test_thread_not_found_unbinds_and_clears(self, error_msg):
+        from telegram.error import BadRequest
+
+        bot = AsyncMock(spec=["unpin_all_forum_topic_messages"])
+        bot.unpin_all_forum_topic_messages = AsyncMock(
+            side_effect=BadRequest(error_msg)
+        )
+
+        with (
+            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
+            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
+            ),
+            patch("ccgram.handlers.window_tick.clear_tool_msg_ids_for_topic"),
+            patch(
+                "ccgram.handlers.window_tick.rate_limit_send_message",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.window_tick.clear_topic_state",
+                new_callable=AsyncMock,
+            ) as mock_clear,
+        ):
+            mock_tr.resolve_chat_id.return_value = 42
+            mock_tr.get_display_name.return_value = "test"
+            mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp")
+
+            await _handle_dead_window_notification(bot, 1, 100, "@0")
+
+            mock_clear.assert_awaited_once()
+            _, kwargs = mock_clear.call_args
+            assert kwargs.get("window_dead") is True
+            mock_tr.unbind_thread.assert_called_once_with(1, 100)

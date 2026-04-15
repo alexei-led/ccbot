@@ -6,7 +6,6 @@ that translates between the provider protocol and existing module APIs.
 """
 
 import os
-import re
 from typing import Any, cast
 
 import structlog
@@ -34,7 +33,6 @@ from ccgram.transcript_parser import TranscriptParser
 
 _log = structlog.get_logger(__name__)
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 _MODE_MARKERS: tuple[str, ...] = ("\u23f5\u23f5", "\u23f8")
 _MODE_HINTS: tuple[str, ...] = (
     "auto mode",
@@ -58,8 +56,7 @@ _LINE_LIMIT = 80
 
 
 def _find_mode_line(capture: str) -> str | None:
-    cleaned = _ANSI_RE.sub("", capture)
-    lines = cleaned.splitlines()
+    lines = capture.splitlines()
     boundary = find_chrome_boundary(lines)
     chrome_lines = lines[boundary + 1 :] if boundary is not None else lines[-20:]
     for line in reversed(chrome_lines):

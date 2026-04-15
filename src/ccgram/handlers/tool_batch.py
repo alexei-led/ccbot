@@ -318,10 +318,7 @@ async def _send_or_edit_batch(
     if batch.telegram_msg_id is None:
         await clear_status_message(bot, user_id, thread_id_or_0)
         sent = await rate_limit_send_message(
-            bot,
-            chat_id,
-            batch_text,
-            **send_kwargs(raw_thread_id),  # type: ignore[arg-type]
+            bot, chat_id, batch_text, **send_kwargs(raw_thread_id)
         )
         if sent:
             batch.telegram_msg_id = sent.message_id
@@ -478,10 +475,7 @@ async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
 
     if batch.telegram_msg_id is None:
         await rate_limit_send_message(
-            bot,
-            chat_id,
-            batch_text,
-            **send_kwargs(thread_id),  # type: ignore[arg-type]
+            bot, chat_id, batch_text, **send_kwargs(thread_id)
         )
         return
 

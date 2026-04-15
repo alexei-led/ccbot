@@ -357,10 +357,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> No
                 continue
 
         sent = await rate_limit_send_message(
-            bot,
-            chat_id,
-            part,
-            **send_kwargs(task.thread_id),  # type: ignore[arg-type]
+            bot, chat_id, part, **send_kwargs(task.thread_id)
         )
 
         if sent:

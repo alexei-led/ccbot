@@ -212,11 +212,7 @@ async def send_status_text(
             await clear_status_message(bot, user_id, thread_id_or_0)
 
     sent = await rate_limit_send_message(
-        bot,
-        chat_id,
-        text,
-        reply_markup=keyboard,
-        **send_kwargs(thread_id),  # type: ignore[arg-type]
+        bot, chat_id, text, reply_markup=keyboard, **send_kwargs(thread_id)
     )
     if sent:
         _status_msg_info[skey] = (sent.message_id, window_id, text, chat_id)

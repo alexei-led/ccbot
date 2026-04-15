@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import contextlib
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -293,3 +294,84 @@ class TestNoBackEdgeImports:
         assert not any("message_queue" in m for m in imports), (
             f"status_bubble.py must not import from message_queue: {imports}"
         )
+
+
+class TestMessageQueueWorker:
+    async def test_telegram_error_calls_task_done(self, bot):
+        from ccgram.handlers.message_queue import (
+            _message_queue_worker,
+            _message_queues,
+            _queue_locks,
+        )
+        from telegram.error import TelegramError
+
+        user_id = 88001
+        _message_queues[user_id] = asyncio.Queue()
+        _queue_locks[user_id] = asyncio.Lock()
+        q = _message_queues[user_id]
+        q.put_nowait(_content_task("hello"))
+        worker = asyncio.create_task(_message_queue_worker(bot, user_id))
+        try:
+            with patch(
+                "ccgram.handlers.message_queue._dispatch",
+                new_callable=AsyncMock,
+                side_effect=TelegramError("fail"),
+            ):
+                await asyncio.wait_for(q.join(), timeout=1.0)
+        finally:
+            worker.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await worker
+            _message_queues.pop(user_id, None)
+            _queue_locks.pop(user_id, None)
+
+    async def test_oserror_calls_task_done(self, bot):
+        from ccgram.handlers.message_queue import (
+            _message_queue_worker,
+            _message_queues,
+            _queue_locks,
+        )
+
+        user_id = 88002
+        _message_queues[user_id] = asyncio.Queue()
+        _queue_locks[user_id] = asyncio.Lock()
+        q = _message_queues[user_id]
+        q.put_nowait(_content_task("hello"))
+        worker = asyncio.create_task(_message_queue_worker(bot, user_id))
+        try:
+            with patch(
+                "ccgram.handlers.message_queue._dispatch",
+                new_callable=AsyncMock,
+                side_effect=OSError("disk error"),
+            ):
+                await asyncio.wait_for(q.join(), timeout=1.0)
+        finally:
+            worker.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await worker
+            _message_queues.pop(user_id, None)
+            _queue_locks.pop(user_id, None)
+
+    async def test_cancelled_error_exits_cleanly(self, bot):
+        from ccgram.handlers.message_queue import (
+            _message_queue_worker,
+            _message_queues,
+            _queue_locks,
+        )
+
+        user_id = 88003
+        _message_queues[user_id] = asyncio.Queue()
+        _queue_locks[user_id] = asyncio.Lock()
+        worker = asyncio.create_task(_message_queue_worker(bot, user_id))
+        try:
+            await asyncio.sleep(0)
+            worker.cancel()
+            await asyncio.wait_for(worker, timeout=1.0)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _message_queues.pop(user_id, None)
+            _queue_locks.pop(user_id, None)
+
+        assert worker.done()
+        assert not worker.exception() if not worker.cancelled() else True

@@ -123,6 +123,8 @@ When creating a topic via the directory browser, users can choose the provider (
 | Incremental read | Yes                             | Yes                | No (whole-file JSON)        | No                          |
 | Commands         | Yes                             | Yes                | Yes                         | No                          |
 | Status detection | Hook events + pyte + spinner    | Activity heuristic | Pane title + interactive UI | Shell prompt idle detection |
+| YOLO auto-accept | Yes                             | No                 | No                          | No                          |
+| Mode scraping    | Yes (mode-line parse)           | No                 | No                          | No                          |
 
 Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks all hook event types for Claude. Codex, Gemini, and Shell have no hooks — session tracking for these providers relies on auto-detection from running processes.
 

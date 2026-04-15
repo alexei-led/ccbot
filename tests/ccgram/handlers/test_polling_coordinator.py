@@ -331,3 +331,88 @@ class TestModuleLineCountUnderCeiling:
         assert len(lines) <= 120, (
             f"polling_coordinator.py is {len(lines)} lines, ceiling is 120"
         )
+
+
+class TestBackoffBehavior:
+    async def test_loop_error_triggers_backoff_sleep(self):
+        bot = MagicMock(spec_set=["_do_post"])
+        combined, ctx = _patch_loop_deps(bindings=[], windows=[])
+        sleep_calls: list[float] = []
+
+        async def _capture_sleep(delay: float) -> None:
+            sleep_calls.append(delay)
+            raise asyncio.CancelledError
+
+        with combined():
+            ctx.mocks["tmux_manager"].list_windows = AsyncMock(
+                side_effect=TelegramError("loop-error")
+            )
+            with (
+                patch(
+                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    side_effect=_capture_sleep,
+                ),
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await status_poll_loop(bot)
+
+        assert sleep_calls == [_BACKOFF_MIN * (2**0)]
+
+    async def test_consecutive_errors_increase_backoff(self):
+        bot = MagicMock(spec_set=["_do_post"])
+        combined, ctx = _patch_loop_deps(bindings=[], windows=[])
+        sleep_calls: list[float] = []
+        call_count = 0
+
+        async def _capture_sleep(delay: float) -> None:
+            nonlocal call_count
+            sleep_calls.append(delay)
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with combined():
+            ctx.mocks["tmux_manager"].list_windows = AsyncMock(
+                side_effect=TelegramError("loop-error")
+            )
+            with (
+                patch(
+                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    side_effect=_capture_sleep,
+                ),
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await status_poll_loop(bot)
+
+        assert sleep_calls[0] == _BACKOFF_MIN
+        assert sleep_calls[1] == _BACKOFF_MIN * 2
+
+    async def test_error_streak_resets_after_success(self):
+        bot = MagicMock(spec_set=["_do_post"])
+        combined, ctx = _patch_loop_deps(bindings=[], windows=[])
+        sleep_calls: list[float] = []
+        call_count = 0
+
+        async def _capture_sleep(delay: float) -> None:
+            nonlocal call_count
+            sleep_calls.append(delay)
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError
+
+        with combined():
+            ctx.mocks["tmux_manager"].list_windows = AsyncMock(
+                side_effect=[TelegramError("boom"), []]
+            )
+            ctx.mocks["config"].status_poll_interval = 0.5
+            with (
+                patch(
+                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    side_effect=_capture_sleep,
+                ),
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await status_poll_loop(bot)
+
+        assert sleep_calls[0] == _BACKOFF_MIN
+        assert sleep_calls[1] == 0.5

@@ -268,7 +268,7 @@ async def ack_reaction(bot: Bot, chat_id: int, message_id: int) -> None:
         )
 
 
-def send_kwargs(thread_id: int | None) -> dict[str, int]:
+def send_kwargs(thread_id: int | None) -> dict[str, Any]:
     """Build message_thread_id kwargs for bot.send_message()."""
     if thread_id is not None:
         return {"message_thread_id": thread_id}
