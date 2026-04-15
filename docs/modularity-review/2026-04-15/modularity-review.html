@@ -3,338 +3,257 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ccgram Modularity Review — 2026-04-15</title>
+<title>Modularity Review — ccgram (2026-04-15)</title>
 <style>
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #c9d1d9;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --red: #f85149;
-    --orange: #f0883e;
-    --yellow: #e3b341;
-    --green: #3fb950;
-    --purple: #bc8cff;
-    --code-bg: #1f2937;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.6; padding: 2rem; max-width: 1100px; margin: 0 auto; }
-  h1 { font-size: 1.8rem; color: #e6edf3; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
-  h2 { font-size: 1.25rem; color: #e6edf3; margin: 2.5rem 0 1rem; border-left: 3px solid var(--accent); padding-left: 0.75rem; }
-  h3 { font-size: 1rem; color: #e6edf3; margin: 1.5rem 0 0.5rem; }
-  p { margin: 0.6rem 0; color: var(--text); }
-  a { color: var(--accent); text-decoration: none; }
-  code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.875em; font-family: 'JetBrains Mono', 'Fira Code', monospace; color: #f8c555; }
-  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
-  pre code { background: none; padding: 0; color: #e6edf3; font-size: 0.83em; }
-  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9em; }
-  th { background: var(--surface); color: var(--muted); font-weight: 600; text-align: left; padding: 0.5rem 0.75rem; border: 1px solid var(--border); }
-  td { padding: 0.45rem 0.75rem; border: 1px solid var(--border); vertical-align: top; }
-  tr:nth-child(even) td { background: #13181f; }
-  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
-  .score-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-  .score-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; }
-  .score-card .label { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
-  .score-card .score { font-size: 1.8rem; font-weight: 700; }
-  .score-card .bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 0.5rem; }
-  .score-card .bar-fill { height: 100%; border-radius: 2px; }
-  .score-card .note { font-size: 0.8rem; color: var(--muted); margin-top: 0.4rem; }
-  .s4 .score { color: var(--red); } .s4 .bar-fill { background: var(--red); width: 40%; }
-  .s5 .score { color: var(--orange); } .s5 .bar-fill { background: var(--orange); width: 50%; }
-  .s6 .score { color: var(--yellow); } .s6 .bar-fill { background: var(--yellow); width: 60%; }
-  .overall { background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0; display: flex; align-items: center; gap: 1.5rem; }
-  .overall .big { font-size: 3rem; font-weight: 700; color: var(--orange); }
-  .overall .text h3 { margin: 0; font-size: 1.1rem; color: #e6edf3; }
-  .overall .text p { margin: 0.25rem 0; color: var(--muted); font-size: 0.9rem; }
-  .issue { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin: 1.25rem 0; }
-  .issue-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
-  .badge { display: inline-block; padding: 0.2em 0.65em; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
-  .badge-critical { background: #3d1c1c; color: var(--red); }
-  .badge-high { background: #2d2012; color: var(--orange); }
-  .badge-medium { background: #272112; color: var(--yellow); }
-  .issue h3 { margin: 0; font-size: 1rem; color: #e6edf3; }
-  .coupling-row { display: flex; gap: 0.6rem; margin: 0.75rem 0; flex-wrap: wrap; }
-  .coupling-pill { font-size: 0.78rem; padding: 0.2em 0.6em; border-radius: 4px; background: var(--code-bg); border: 1px solid var(--border); }
-  .str-high { color: var(--red); border-color: #3d1c1c; }
-  .str-medium { color: var(--yellow); border-color: #3a2e0f; }
-  .str-low { color: var(--green); border-color: #12261a; }
-  .well { background: #0d1f15; border: 1px solid #1e3a27; border-radius: 6px; padding: 0.9rem 1.1rem; margin: 0.5rem 0; }
-  .well .wlabel { font-size: 0.78rem; color: var(--green); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
-  .reco { border-left: 3px solid var(--accent); background: #0e1521; padding: 0.7rem 0.9rem; border-radius: 0 4px 4px 0; margin: 1rem 0 0; }
-  .reco strong { color: var(--accent); }
-  ol.reco-list { margin: 0.5rem 0 0.5rem 1.2rem; }
-  ol.reco-list li { margin: 0.5rem 0; }
-  .file-ref { font-size: 0.82em; color: var(--purple); background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 3px; font-family: monospace; }
-  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.6; }
+  h1 { border-bottom: 2px solid #0088cc; padding-bottom: 8px; }
+  h2 { color: #0088cc; margin-top: 2em; }
+  h3 { color: #333; border-left: 4px solid #e65100; padding-left: 10px; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.92em; }
+  th { background: #f0f4f8; padding: 8px 12px; text-align: left; border: 1px solid #ddd; }
+  td { padding: 8px 12px; border: 1px solid #ddd; vertical-align: top; }
+  tr:nth-child(even) { background: #fafafa; }
+  code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 0.88em; border-left: 3px solid #0088cc; }
+  .score-critical { color: #c62828; font-weight: bold; }
+  .score-high     { color: #e65100; font-weight: bold; }
+  .score-medium   { color: #f9a825; font-weight: bold; }
+  .score-ok       { color: #2e7d32; }
+  .fixed          { background: #e8f5e9; }
+  .open           { background: #fff3e0; }
+  .meta           { color: #666; font-size: 0.92em; margin-bottom: 2em; }
+  .progress       { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 10px 16px; margin: 1em 0; border-radius: 0 6px 6px 0; }
 </style>
 </head>
 <body>
 
 <h1>Modularity Review — ccgram</h1>
-<p class="meta">
-  <strong>Date:</strong> 2026-04-15 &nbsp;·&nbsp;
-  <strong>Scope:</strong> Entire codebase (<code>src/ccgram/</code> — 90 Python files, ~18,000 lines) &nbsp;·&nbsp;
+<div class="meta">
+  <strong>Date:</strong> 2026-04-15 (updated post-afternoon refactoring) &nbsp;|&nbsp;
+  <strong>Scope:</strong> Entire codebase (<code>src/ccgram/</code> — ~90 Python files, ~18,000 lines) &nbsp;|&nbsp;
   <strong>Model:</strong> Balanced Coupling (Strength × Distance × Volatility)
-</p>
+</div>
 
 <h2>Executive Summary</h2>
 
-<div class="overall">
-  <div class="big">5/10</div>
-  <div class="text">
-    <h3>Overall Modularity Score</h3>
-    <p>Active refactoring trajectory is positive. Five high-priority structural issues remain.</p>
-    <p>The recent session_monitor refactoring (−439 lines, 4 new modules) demonstrates the team can improve modularity when focused on it.</p>
-  </div>
-</div>
-
-<div class="score-grid">
-  <div class="score-card s6">
-    <div class="label">Cohesion</div>
-    <div class="score">6/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note">Most modules focused; <code>window_tick.py</code> (616 lines, 24 imports) and <code>hook_events.py</code> (15 modules) are outliers</div>
-  </div>
-  <div class="score-card s4">
-    <div class="label">Encapsulation</div>
-    <div class="score">4/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note">Private functions accessed cross-module; internal dicts bypassed in 5 places; <code>window_states</code> is a public field inviting direct access</div>
-  </div>
-  <div class="score-card s6">
-    <div class="label">Coupling Strength</div>
-    <div class="score">6/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note">Mostly functional coupling; <code>session_map</code> → <code>window_store</code> is intrusive; <code>status_bubble</code> knows task schema internals</div>
-  </div>
-  <div class="score-card s5">
-    <div class="label">Subsystem Boundaries</div>
-    <div class="score">5/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note">Three confirmed layer violations: display→polling, hook→polling, poll→session-monitor</div>
-  </div>
-  <div class="score-card s5">
-    <div class="label">Dependency Graph</div>
-    <div class="score">5/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note">Active circular dependency (shell_capture ↔ shell_commands); ~6 structural cycles suppressed via deferred imports</div>
-  </div>
-  <div class="score-card s6">
-    <div class="label">State Ownership</div>
-    <div class="score">6/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note"><code>parse_session_map</code> duplicated across two files; <code>window_store.window_states</code> public dict bypassed by external callers</div>
-  </div>
-  <div class="score-card s5">
-    <div class="label">AI Context Efficiency</div>
-    <div class="score">5/10</div>
-    <div class="bar"><div class="bar-fill"></div></div>
-    <div class="note"><code>window_tick.py</code> requires loading 24 modules to safely edit; hook event changes cascade into 15 modules</div>
-  </div>
-</div>
-
 <table>
-  <thead>
-    <tr><th>Issue</th><th>Files</th><th>Strength</th><th>Volatility</th><th>Priority</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>window_tick.py god module + private API</td><td><code>window_tick.py</code>, <code>tmux_manager.py</code></td><td>HIGH</td><td>HIGH</td><td><span class="badge badge-critical">Critical</span></td></tr>
-    <tr><td>hook_events.py broad imports + layer crossing</td><td><code>hook_events.py</code>, <code>periodic_tasks.py</code></td><td>HIGH</td><td>HIGH</td><td><span class="badge badge-high">High</span></td></tr>
-    <tr><td>session_map bypasses store APIs</td><td><code>session_map.py</code>, <code>window_state_store.py</code></td><td>HIGH (intrusive)</td><td>MEDIUM</td><td><span class="badge badge-high">High</span></td></tr>
-    <tr><td>parse_session_map duplicated</td><td><code>session.py</code>, <code>session_map.py</code></td><td>HIGH (duplication)</td><td>MEDIUM</td><td><span class="badge badge-medium">Medium</span></td></tr>
-    <tr><td>status_bubble crosses into polling layer</td><td><code>status_bubble.py</code>, <code>polling_strategies.py</code></td><td>LOW</td><td>LOW</td><td><span class="badge badge-medium">Medium</span></td></tr>
-    <tr><td>shell_capture ↔ shell_commands circular</td><td><code>shell_capture.py</code>, <code>shell_commands.py</code></td><td>HIGH (mutual)</td><td>MEDIUM</td><td><span class="badge badge-medium">Medium</span></td></tr>
-  </tbody>
+  <tr><th>Dimension</th><th>Score</th><th>Notes</th></tr>
+  <tr>
+    <td><strong>Cohesion</strong></td>
+    <td>6.5/10</td>
+    <td>Most modules focused. <code>window_tick.py</code> (610 lines) and <code>hook_events.py</code> are outliers. Session_monitor refactoring improved this.</td>
+  </tr>
+  <tr>
+    <td><strong>Coupling Strength</strong></td>
+    <td class="score-high">5/10</td>
+    <td><code>session.py</code> imported by 32 handler modules (functional coupling on volatile schema); <code>claude_task_state</code> accessed from 8 modules across layers.</td>
+  </tr>
+  <tr>
+    <td><strong>Layer Discipline</strong></td>
+    <td class="score-high">5/10</td>
+    <td><code>hook_events</code> reaches into polling infra; <code>status_bubble</code> queries polling state; shell logic split across provider + handler layers.</td>
+  </tr>
+  <tr>
+    <td><strong>Encapsulation</strong></td>
+    <td>6.5/10</td>
+    <td><code>has_insert_indicator</code> promoted to public; store API bypasses resolved. <code>claude_task_state</code> ownership still undisciplined.</td>
+  </tr>
+  <tr>
+    <td><strong>Volatility Management</strong></td>
+    <td>5.5/10</td>
+    <td>Provider protocol cleanly isolated. Core volatile areas (session state, task tracking) have cascading coupling.</td>
+  </tr>
+  <tr>
+    <td><strong>Testability</strong></td>
+    <td class="score-high">5/10</td>
+    <td>Global singletons (<code>session_manager</code>, <code>thread_router</code>, <code>claude_task_state</code>, <code>tmux_manager</code>) require complex test wiring.</td>
+  </tr>
+  <tr>
+    <td><strong>AI Context Efficiency</strong></td>
+    <td>5.5/10</td>
+    <td><code>session.py</code> fan-out (32 modules) means any session change requires wide context. Core state changes still cascade across files.</td>
+  </tr>
+  <tr>
+    <td><strong>Overall</strong></td>
+    <td><strong>5.5/10</strong></td>
+    <td>Active refactoring trajectory is clearly positive — five issues resolved today. Four significant issues remain.</td>
+  </tr>
 </table>
 
-<h2>Issues</h2>
-
-<div class="issue">
-  <div class="issue-header">
-    <span class="badge badge-critical">Critical</span>
-    <h3>Issue 1 — <code>window_tick.py</code> is a God Module for Per-Window Polling</h3>
-  </div>
-  <p><span class="file-ref">handlers/window_tick.py</span> — 616 lines</p>
-  <div class="coupling-row">
-    <span class="coupling-pill str-high">Strength: HIGH</span>
-    <span class="coupling-pill str-low">Distance: LOW</span>
-    <span class="coupling-pill str-high">Volatility: HIGH</span>
-  </div>
-  <p>This file orchestrates <em>all</em> per-window polling: dead-window detection, transcript discovery, interactive UI, status updates, multi-pane scanning, and passive shell relay. It imports from <strong>24 distinct modules</strong> and contains 6 identical expressions resolving the current window provider — none extracted to a helper.</p>
-
-  <h3>Private API Access (window_tick.py:335)</h3>
-  <pre><code>from ..tmux_manager import _has_insert_indicator, notify_vim_insert_seen
-if _has_insert_indicator(vim_text):
-    notify_vim_insert_seen(w.window_id)</code></pre>
-  <p><code>_has_insert_indicator</code> is a private function. Refactoring vim-insert detection in <code>tmux_manager</code> will silently break <code>window_tick</code>.</p>
-
-  <h3>6 Identical Provider Resolution Expressions</h3>
-  <pre><code># Repeated at lines 152, 205, 226, 325, 448, 557 — no variation:
-provider = get_provider_for_window(
-    window_id, provider_name=session_manager.get_window_provider(window_id)
-)</code></pre>
-  <p>Each copy is an independent context-loading event for an AI making changes here.</p>
-
-  <div class="reco">
-    <strong>Recommendation:</strong> Promote <code>_has_insert_indicator</code> and <code>notify_vim_insert_seen</code> to public API or move vim-insert detection into the polling layer. Extract a <code>_get_provider(window_id)</code> helper to replace all 6 duplicates.
-  </div>
+<div class="progress">
+  <strong>Progress since noon review (resolved today):</strong>
+  <ul>
+    <li><code>parse_session_map</code> duplicate removed from <code>session.py</code> ✅</li>
+    <li><code>window_store.window_states</code> direct dict access replaced with store API ✅</li>
+    <li><code>_has_insert_indicator</code> promoted to public in <code>tmux_manager</code> ✅</li>
+    <li><code>_get_provider(window_id)</code> helper extracted in <code>window_tick.py</code> (6 duplicates → 1) ✅</li>
+    <li><code>session_monitor.py</code> refactored: 4 sub-modules extracted — monitor reduced 42% ✅</li>
+  </ul>
 </div>
 
-<div class="issue">
-  <div class="issue-header">
-    <span class="badge badge-high">High</span>
-    <h3>Issue 2 — <code>hook_events.py</code> Has 15 Module Dependencies, Half Hidden</h3>
-  </div>
-  <p><span class="file-ref">handlers/hook_events.py</span> — 385 lines, 15 distinct module imports (9 deferred)</p>
-  <div class="coupling-row">
-    <span class="coupling-pill str-high">Strength: HIGH</span>
-    <span class="coupling-pill str-low">Distance: LOW</span>
-    <span class="coupling-pill str-high">Volatility: HIGH</span>
-  </div>
-  <p>Hook event dispatch is the highest-volatility module (new hook types are added as Claude Code evolves). It has the broadest import surface in the codebase. Balance rule: <strong>HIGH strength × HIGH volatility → UNBALANCED.</strong></p>
+<h2>System Overview</h2>
 
-  <h3>Cross-Subsystem Boundary Violation</h3>
-  <pre><code># hook_events.py:180 — inside _handle_stop()
+<table>
+  <tr><th>Subsystem</th><th>Key Files</th><th>Domain</th></tr>
+  <tr><td>Provider abstraction</td><td><code>providers/</code> (12 files)</td><td>Core — competitive advantage, evolving</td></tr>
+  <tr><td>Session monitoring</td><td><code>session_monitor.py</code>, <code>event_reader.py</code>, <code>session_lifecycle.py</code>, <code>transcript_reader.py</code>, <code>idle_tracker.py</code></td><td>Core — actively evolving</td></tr>
+  <tr><td>Polling loop</td><td><code>polling_coordinator.py</code>, <code>window_tick.py</code>, <code>polling_strategies.py</code></td><td>Supporting — stable design</td></tr>
+  <tr><td>Message delivery</td><td><code>message_queue.py</code>, <code>status_bubble.py</code>, <code>tool_batch.py</code>, <code>message_sender.py</code></td><td>Supporting — stable</td></tr>
+  <tr><td>Core state</td><td><code>session.py</code>, <code>thread_router.py</code>, <code>window_state_store.py</code>, <code>claude_task_state.py</code></td><td>Supporting — frequently accessed</td></tr>
+  <tr><td>Shell provider</td><td><code>shell_infra.py</code>, <code>shell_commands.py</code>, <code>shell_capture.py</code>, <code>shell_context.py</code></td><td>Supporting — actively developed</td></tr>
+  <tr><td>Inter-agent messaging</td><td><code>mailbox.py</code>, <code>msg_broker.py</code>, <code>msg_spawn.py</code>, <code>msg_telegram.py</code></td><td>Core — new feature</td></tr>
+</table>
+
+<p><strong>Structural strengths:</strong></p>
+<ul>
+  <li><code>message_task.py</code> — pure frozen dataclass sum type, zero project imports</li>
+  <li><code>polling_coordinator.py</code> — 87 lines, thin orchestration shell</li>
+  <li><code>providers/base.py</code> — zero ccgram imports; clean protocol boundary</li>
+  <li><code>topic_state_registry.py</code> — self-registration pattern replaces scattered lazy cleanup imports</li>
+  <li><code>hook.py</code> — correctly isolated from <code>config.py</code> (deployed in agent panes)</li>
+</ul>
+
+<h2>Open Issues</h2>
+
+<h3>Issue 1 — <code>session.py</code> Is a De-Facto Hub with 32 Handler Dependents <span class="score-critical">[Critical]</span></h3>
+
+<p><strong>Files:</strong> <code>session.py</code> (783 lines), imported by 32+ handler modules.</p>
+
+<p>Every Telegram handler that needs window state, mode settings, session resolution, display names, or state persistence imports <code>session_manager</code> directly.</p>
+
+<table>
+  <tr><th>Concern</th><th>Methods</th></tr>
+  <tr><td>Window state</td><td><code>get_window_state()</code>, <code>view_window()</code></td></tr>
+  <tr><td>Mode settings</td><td><code>get_approval_mode()</code>, <code>cycle_notification_mode()</code>, <code>get_batch_mode()</code>…</td></tr>
+  <tr><td>Session map</td><td><code>load_session_map()</code>, <code>register_hookless_session()</code>, <code>wait_for_session_map_entry()</code></td></tr>
+  <tr><td>Session resolve</td><td><code>resolve_session_for_window()</code>, <code>get_recent_messages()</code></td></tr>
+  <tr><td>Lifecycle</td><td><code>prune_stale_state()</code>, <code>audit_state()</code>, <code>resolve_stale_ids()</code></td></tr>
+  <tr><td>Provider</td><td><code>get_window_provider()</code>, <code>set_window_provider()</code></td></tr>
+</table>
+
+<p><strong>Coupling:</strong> HIGH strength + HIGH volatility (WindowState schema extended repeatedly) → <strong>UNBALANCED</strong>.</p>
+<p><strong>AI context impact:</strong> Any session change requires loading <code>session.py</code> (783 lines) + every handler that mutates the relevant field. Adding a new per-window flag means auditing 32+ files for usage sites.</p>
+<p><strong>Recommendation:</strong> Enforce that handlers read via <code>view_window()</code> and write only through explicit setters. A <code>WindowModeService</code> wrapping approval/notification/batch modes would reduce most handlers' dependency to a 2-method slice.</p>
+
+<h3>Issue 2 — <code>claude_task_state.py</code> Is Shared Mutable State with No Ownership Discipline <span class="score-high">[High]</span></h3>
+
+<p><strong>Files:</strong> <code>claude_task_state.py</code> (562 lines), write access from 6 modules across core and handler layers.</p>
+<p><strong>The coordination failure:</strong> <code>session_lifecycle.py</code> is designated the single authority for session-end cleanup. The <code>hook_events.py</code> SessionEnd handler correctly calls <code>session_lifecycle.handle_session_end(window_id)</code> — but then performs additional cleanup directly alongside it:</p>
+
+<pre><code>session_lifecycle.handle_session_end(window_id)   # designated authority
+session_manager.clear_window_session(window_id)   # also done directly
+clear_subagents(window_id)                        # also done directly</code></pre>
+
+<p>Cleanup is split between the authority module and the caller. Anyone adding new per-session state cleared on SessionEnd has two sites to update — miss either and state leaks.</p>
+
+<p>More broadly, <code>claude_task_state</code> has 6 independent write paths with no coordination protocol: <code>session_lifecycle</code> (clear_window), <code>transcript_reader</code> (set_window_tasks, mark_task_completed), <code>hook_events</code> (add/remove/clear_subagents), plus read access from <code>window_tick</code>, <code>tool_batch</code>, and <code>status_bubble</code>.</p>
+
+<p><strong>Coupling:</strong> HIGH strength + HIGH distance (monitoring layer ↔ display/handler layer) + HIGH volatility → <strong>UNBALANCED</strong>. Any schema change requires auditing 6 callers across 2 layers.</p>
+<p><strong>Recommendation:</strong> Consolidate all write access in <code>session_lifecycle.py</code>. Have <code>hook_events.py</code> delegate fully — remove the parallel cleanup block alongside the <code>handle_session_end()</code> call. Give display modules a read-only interface via <code>get_claude_task_snapshot()</code>.</p>
+
+<h3>Issue 3 — <code>hook_events.py</code> Crosses the Hook→Polling Boundary <span class="score-high">[High]</span></h3>
+
+<p><strong>Files:</strong> <code>handlers/hook_events.py</code>, <code>handlers/periodic_tasks.py</code></p>
+
+<pre><code># hook_events.py:180-182
 from .periodic_tasks import run_broker_cycle
-run_broker_cycle(bot, user_id, thread_id)</code></pre>
-  <p>Event dispatch reaches directly into polling infrastructure. Adding a new hook event requires understanding both the event layer and the polling infrastructure.</p>
+await run_broker_cycle(bot, idle_windows=frozenset({event.window_key}))</code></pre>
 
-  <h3>Same Module Imported 4 Times (Deferred)</h3>
-  <pre><code># hook_events.py lines 60, 129, 236, 315 — different function bodies:
-from .message_queue import enqueue_status_update</code></pre>
-  <p>Hidden fan-out: only visible by scanning all function bodies at runtime, not by reading imports.</p>
+<p>9 of <code>hook_events.py</code>'s imports are inside function bodies. The same <code>message_queue</code> import appears in 4 separate functions — hidden fan-out invisible to static analysis.</p>
+<p><strong>Coupling:</strong> HIGH strength (cross-subsystem direct call) + HIGH volatility → <strong>UNBALANCED</strong>.</p>
+<p><strong>Recommendation:</strong> Replace the direct <code>run_broker_cycle</code> call with a registered callback. Consolidate deferred <code>message_queue</code> imports to top-level.</p>
 
-  <div class="reco">
-    <strong>Recommendation:</strong> Move <code>asyncio</code> to top-level. Consolidate <code>message_queue</code> deferred imports to module level. Replace <code>run_broker_cycle</code> direct call with a registered callback to break the hook→polling boundary.
-  </div>
-</div>
+<h3>Issue 4 — <code>status_bubble.py</code> Queries Polling State Directly <span class="score-medium">[Medium]</span></h3>
 
-<div class="issue">
-  <div class="issue-header">
-    <span class="badge badge-high">High</span>
-    <h3>Issue 3 — <code>session_map.py</code> Bypasses <code>WindowStateStore</code> and <code>ThreadRouter</code> APIs</h3>
-  </div>
-  <p><span class="file-ref">session_map.py</span>, <span class="file-ref">window_state_store.py</span>, <span class="file-ref">thread_router.py</span></p>
-  <div class="coupling-row">
-    <span class="coupling-pill str-high">Strength: HIGH (intrusive)</span>
-    <span class="coupling-pill str-low">Distance: LOW</span>
-    <span class="coupling-pill str-medium">Volatility: MEDIUM</span>
-  </div>
-  <pre><code>session_map.py:194  for w in window_store.window_states          # iteration
-session_map.py:199  window_store.window_states[w].session_id     # field read
-session_map.py:204  del window_store.window_states[wid]          # deletion
-session_map.py:294  if window_id in window_store.window_states:  # membership test
-session_map.py:295  del window_store.window_states[window_id]    # deletion
-session_map.py:188  for user_bindings in thread_router.thread_bindings.values()</code></pre>
-  <p><code>WindowStateStore</code> already provides <code>clear_window_session()</code>, <code>prune_stale_window_states()</code>, and <code>get_window_state()</code>. Direct dict access bypasses these and prevents adding side effects (cache invalidation, listener notification) to window removal.</p>
+<p><strong>Files:</strong> <code>handlers/status_bubble.py</code>, <code>handlers/polling_strategies.py</code></p>
 
-  <div class="reco">
-    <strong>Recommendation:</strong> Make <code>window_states</code> private (<code>_window_states</code>). Add <code>remove_window(window_id)</code> and <code>iter_window_ids()</code>. Expose <code>ThreadRouter.iter_bound_windows()</code>. Replace all 6 direct accesses in <code>session_map.py</code>.
-  </div>
-</div>
+<pre><code>from .polling_strategies import terminal_screen_buffer
+rc_active=terminal_screen_buffer.is_rc_active(window_id)</code></pre>
 
-<div class="issue">
-  <div class="issue-header">
-    <span class="badge badge-medium">Medium</span>
-    <h3>Issue 4 — <code>parse_session_map</code> Logic Duplicated Across Two Files</h3>
-  </div>
-  <p><span class="file-ref">session.py</span> (lines 50–88), <span class="file-ref">session_map.py</span> (lines 34–72)</p>
-  <div class="coupling-row">
-    <span class="coupling-pill str-high">Strength: HIGH (duplication)</span>
-    <span class="coupling-pill str-low">Distance: LOW</span>
-    <span class="coupling-pill str-medium">Volatility: MEDIUM</span>
-  </div>
-  <p>Both files define <code>parse_session_map()</code> and <code>parse_emdash_provider()</code> with identical implementations. A change to emdash's session naming convention must be applied to both or behavior diverges silently. <code>session_map.py</code> is the canonical home.</p>
+<p>Display logic (status_bubble) depends on polling state (polling_strategies) for a single boolean. Low volatility makes it tolerable today; architecturally surprising.</p>
+<p><strong>Recommendation:</strong> Pass <code>rc_active: bool</code> as a parameter to <code>build_status_keyboard()</code>. One-line fix.</p>
 
-  <div class="reco">
-    <strong>Recommendation:</strong> Delete both functions from <code>session.py</code>. Update <code>session_monitor.py</code> to import from <code>session_map</code>. Zero-risk, one-file change.
-  </div>
-</div>
+<h3>Issue 5 — Shell Feature Has Runtime Circular Dependency <span class="score-medium">[Medium]</span></h3>
 
-<div class="issue">
-  <div class="issue-header">
-    <span class="badge badge-medium">Medium</span>
-    <h3>Issue 5 — <code>status_bubble.py</code> Crosses into Polling Layer</h3>
-  </div>
-  <p><span class="file-ref">handlers/status_bubble.py</span>, <span class="file-ref">handlers/polling_strategies.py</span></p>
-  <div class="coupling-row">
-    <span class="coupling-pill str-medium">Strength: LOW-MEDIUM</span>
-    <span class="coupling-pill str-medium">Distance: MEDIUM (different subsystems)</span>
-    <span class="coupling-pill str-low">Volatility: LOW</span>
-  </div>
-  <pre><code># status_bubble.py:189-195
-from .polling_strategies import terminal_screen_buffer
-keyboard = build_status_keyboard(
-    window_id, history=history,
-    rc_active=terminal_screen_buffer.is_rc_active(window_id),
-)</code></pre>
-  <p>Low volatility makes this tolerable but architecturally surprising — the display layer should not know how RC detection works. Secondary issue: <code>status_bubble</code> accesses 4 internal fields of <code>ClaudeTaskSnapshot</code> (<code>total_count</code>, <code>done_count</code>, <code>open_count</code>, <code>items</code>), coupling display to the task state schema.</p>
+<p><strong>Files:</strong> <code>handlers/shell_capture.py</code>, <code>handlers/shell_commands.py</code></p>
+<p><code>shell_capture._maybe_suggest_fix()</code> calls <code>shell_commands.show_command_approval()</code> via a deferred runtime import. Additionally, <code>shell_capture.py</code> bypasses <code>tmux_manager</code> with a direct <code>asyncio.create_subprocess_exec("tmux", ...)</code> call.</p>
+<p><strong>Recommendation:</strong> Introduce a <code>CommandApprovalCallback</code> protocol. Route the <code>capture-pane</code> call through <code>tmux_manager</code>.</p>
 
-  <div class="reco">
-    <strong>Recommendation:</strong> Pass <code>rc_active: bool</code> as a parameter to <code>build_status_keyboard()</code>. Add a <code>format_task_summary() → str</code> method to <code>ClaudeTaskState</code> to encapsulate display logic.
-  </div>
-</div>
+<h2>Summary Matrix</h2>
 
-<div class="issue">
-  <div class="issue-header">
-    <span class="badge badge-medium">Medium</span>
-    <h3>Issue 6 — <code>shell_capture</code> ↔ <code>shell_commands</code> Mutual Circular Dependency</h3>
-  </div>
-  <p><span class="file-ref">handlers/shell_capture.py</span>, <span class="file-ref">handlers/shell_commands.py</span></p>
-  <div class="coupling-row">
-    <span class="coupling-pill str-high">Strength: HIGH (mutual)</span>
-    <span class="coupling-pill str-low">Distance: LOW</span>
-    <span class="coupling-pill str-medium">Volatility: MEDIUM</span>
-  </div>
-  <p><code>shell_context.py</code> was correctly extracted to break the static cycle, but <code>shell_capture._maybe_suggest_fix()</code> still calls <code>shell_commands.show_command_approval()</code> via a runtime deferred import. Additionally, <code>shell_capture.py</code> calls <code>asyncio.create_subprocess_exec("tmux", ...)</code> directly, bypassing <code>tmux_manager</code>.</p>
-
-  <div class="reco">
-    <strong>Recommendation:</strong> Introduce a <code>CommandApprovalCallback</code> protocol. <code>shell_capture</code> accepts it as a parameter — eliminates the circular dependency architecturally. Route the <code>capture-pane</code> call through <code>tmux_manager</code>.
-  </div>
-</div>
-
-<hr>
-
-<h2>What Is Working Well</h2>
-
-<div class="well">
-  <div class="wlabel">Data contract module</div>
-  <p><code>message_task.py</code> — Pure frozen dataclasses, zero project imports. Any module can import without loading other project code. Textbook contract coupling.</p>
-</div>
-<div class="well">
-  <div class="wlabel">Thin orchestrator</div>
-  <p><code>polling_coordinator.py</code> (87 lines) — Delegates all work, no logic leakage. The result of recent refactoring from a 522-line monolith.</p>
-</div>
-<div class="well">
-  <div class="wlabel">Clean data ownership</div>
-  <p><code>spawn_request.py</code> — Pure CRUD with no handler/Telegram/config dependencies.</p>
-</div>
-<div class="well">
-  <div class="wlabel">Provider facade</div>
-  <p><code>providers/__init__.py</code> — Lazy registration avoids circular imports. Detection, factory, and launch command resolution cleanly separated. Adding a new provider requires changes only within <code>providers/</code>.</p>
-</div>
-<div class="well">
-  <div class="wlabel">Registry pattern</div>
-  <p><code>topic_state_registry.py</code> — Self-registration decorator replaces 14+ deferred imports in <code>cleanup.py</code>. Correct architectural direction for cross-cutting concerns.</p>
-</div>
-
-<hr>
+<table>
+  <tr><th>Issue</th><th>Files</th><th>Strength</th><th>Volatility</th><th>Priority</th><th>Status</th></tr>
+  <tr class="open">
+    <td><code>session.py</code> hub — 32 handler dependents</td>
+    <td><code>session.py</code> + 32 handlers</td>
+    <td class="score-critical">HIGH</td><td class="score-critical">HIGH</td>
+    <td class="score-critical">Critical</td><td>Open</td>
+  </tr>
+  <tr class="open">
+    <td><code>claude_task_state</code> — no ownership discipline</td>
+    <td><code>claude_task_state.py</code> + 6 callers</td>
+    <td class="score-critical">HIGH</td><td class="score-critical">HIGH</td>
+    <td class="score-high">High</td><td>Open</td>
+  </tr>
+  <tr class="open">
+    <td><code>hook_events</code> reaches into polling infra</td>
+    <td><code>hook_events.py</code>, <code>periodic_tasks.py</code></td>
+    <td class="score-critical">HIGH</td><td class="score-critical">HIGH</td>
+    <td class="score-high">High</td><td>Open</td>
+  </tr>
+  <tr class="open">
+    <td><code>status_bubble</code> queries polling state</td>
+    <td><code>status_bubble.py</code>, <code>polling_strategies.py</code></td>
+    <td>LOW</td><td>LOW</td>
+    <td class="score-medium">Medium</td><td>Open</td>
+  </tr>
+  <tr class="open">
+    <td><code>shell_capture</code> ↔ <code>shell_commands</code> runtime cycle</td>
+    <td><code>shell_capture.py</code>, <code>shell_commands.py</code></td>
+    <td class="score-critical">HIGH</td><td class="score-medium">MEDIUM</td>
+    <td class="score-medium">Medium</td><td>Open</td>
+  </tr>
+  <tr class="fixed">
+    <td><code>_has_insert_indicator</code> private API access</td>
+    <td><code>window_tick.py</code>, <code>tmux_manager.py</code></td>
+    <td class="score-critical">HIGH</td><td class="score-critical">HIGH</td>
+    <td class="score-critical">Critical</td><td>✅ Fixed</td>
+  </tr>
+  <tr class="fixed">
+    <td><code>_get_provider()</code> duplicated 6× in window_tick</td>
+    <td><code>window_tick.py</code></td>
+    <td>MED</td><td class="score-critical">HIGH</td>
+    <td class="score-high">High</td><td>✅ Fixed</td>
+  </tr>
+  <tr class="fixed">
+    <td><code>session_map</code> bypasses <code>WindowStateStore</code> API</td>
+    <td><code>session_map.py</code>, <code>window_state_store.py</code></td>
+    <td class="score-critical">HIGH</td><td class="score-medium">MEDIUM</td>
+    <td class="score-high">High</td><td>✅ Fixed</td>
+  </tr>
+  <tr class="fixed">
+    <td><code>parse_session_map</code> duplicated in two files</td>
+    <td><code>session.py</code>, <code>session_map.py</code></td>
+    <td class="score-critical">HIGH</td><td class="score-medium">MEDIUM</td>
+    <td class="score-medium">Medium</td><td>✅ Fixed</td>
+  </tr>
+  <tr class="fixed">
+    <td><code>session_monitor.py</code> monolith (was 750+ lines)</td>
+    <td><code>session_monitor.py</code> + 4 extracted modules</td>
+    <td class="score-critical">HIGH</td><td class="score-critical">HIGH</td>
+    <td class="score-critical">Critical</td><td>✅ Fixed</td>
+  </tr>
+</table>
 
 <h2>Recommended Priorities</h2>
 
-<ol class="reco-list">
-  <li><strong>Promote or relocate private tmux functions</strong> — <code>_has_insert_indicator</code>, <code>notify_vim_insert_seen</code> in <code>tmux_manager.py</code>. Clearest encapsulation violation; window_tick.py touches 24 modules.</li>
-  <li><strong>Extract <code>_get_provider(window_id)</code> helper</strong> in <code>window_tick.py</code> — eliminates 6 duplicate 3-line expressions; immediately reduces AI change-context.</li>
-  <li><strong>Delete <code>parse_session_map</code> duplicate</strong> from <code>session.py</code> — zero-risk; reduces emdash change sites from 2 to 1.</li>
-  <li><strong>Make <code>window_store.window_states</code> private</strong> — forces <code>session_map.py</code> to use the existing <code>clear_window_session()</code> and <code>prune_stale_window_states()</code> methods.</li>
-  <li><strong>Pass <code>rc_active</code> as a parameter to <code>build_status_keyboard()</code></strong> — severs the status_bubble → polling_strategies cross-subsystem import.</li>
+<ol>
+  <li><strong><code>claude_task_state</code> write discipline</strong> — designate <code>session_lifecycle.py</code> as the single write authority; remove the <code>hook_events</code> → <code>claude_task_state</code> direct mutation path. Highest-risk shared-state pattern: volatile schema + 6 callers + violated authority claim.</li>
+  <li><strong><code>hook_events.py</code> boundary crossing</strong> — replace direct <code>run_broker_cycle</code> call with a callback. Consolidate 4× deferred <code>message_queue</code> imports to top-level. Hidden runtime dependencies are the most expensive pattern for AI context loading.</li>
+  <li><strong><code>session.py</code> interface narrowing</strong> — enforce <code>view_window()</code> for reads and explicit setters for writes. The 32-file fan-out is a symptom; narrowing each handler's dependency to the methods it actually uses is the fix.</li>
+  <li><strong><code>status_bubble</code> → <code>polling_strategies</code> severance</strong> — pass <code>rc_active: bool</code> as a parameter to <code>build_status_keyboard()</code>. One-line fix, zero risk.</li>
+  <li><strong>Shell circular dependency</strong> — introduce <code>CommandApprovalCallback</code> protocol; route <code>capture-pane</code> through <code>tmux_manager</code>.</li>
 </ol>
-
-<p style="margin-top:2rem; color: var(--muted); font-size: 0.85rem;">
-  Generated by modularity:review skill · Balanced Coupling model by Vlad Khononov · 2026-04-15
-</p>
 
 </body>
 </html>
