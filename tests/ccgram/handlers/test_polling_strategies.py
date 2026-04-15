@@ -39,7 +39,7 @@ class TestTerminalScreenBuffer:
         ws.last_rendered_text = "some text"
         self.strategy.clear_screen_buffer("@0")
         assert ws.screen_buffer is None
-        assert ws.last_pane_hash == 0
+        assert ws.last_pane_hash is None
         assert ws.last_rendered_text is None
 
     def test_reset_screen_buffer_state(self):
@@ -48,7 +48,7 @@ class TestTerminalScreenBuffer:
         ws.last_pane_hash = 999
         self.strategy.reset_screen_buffer_state()
         assert not ws.rc_active
-        assert ws.last_pane_hash == 0
+        assert ws.last_pane_hash is None
 
     def test_is_rc_active_default_false(self):
         assert not self.strategy.is_rc_active("@0")

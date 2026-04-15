@@ -42,11 +42,12 @@ async def clear_topic_state(
     registered as simple callbacks.
 
     Args:
-        window_dead: When False, skip window-scope and qualified-scope cleanup
-            (shell prompt state, monitor state, task state, delivery state,
-            peer metadata, spawn requests) because the tmux window is still
-            alive.  Callers that keep the window running (topic close, /unbind)
-            should pass ``window_dead=False``.
+        window_dead: When False, skip mailbox/qualified-scope cleanup because
+            the tmux window is still alive (e.g. topic close, /unbind).
+            Window-scope callbacks (toolbar labels, screen buffer, etc.) always
+            run.  Shell prompt orchestrator state is cleared separately, only
+            when the window is truly dead, to preserve skip/offer state for
+            live sessions.
     """
     from ..config import config
     from ..thread_router import thread_router
@@ -72,16 +73,21 @@ async def clear_topic_state(
         clear_status_msg_info(user_id, thread_id)
 
     # Registry dispatch — all module-specific per-topic/window/chat state.
-    # window_id is omitted when the window is still alive (window_dead=False)
-    # to avoid wiping shell prompt skip state, monitor state, and task state
-    # that belong to the running window, not the closing topic.
+    # Always pass window_id so window-scope callbacks (toolbar, screen buffer,
+    # monitor state, etc.) run even when the window is still alive.
+    # Shell prompt orchestrator state is excluded from the registry and handled
+    # below so it only clears on true window death.
     topic_state.clear_all(
         user_id,
         thread_id,
-        window_id=window_id if window_dead else None,
+        window_id=window_id,
         qualified_id=qualified_id,
         chat_id=chat_id,
     )
+    if window_id and window_dead:
+        from .shell_prompt_orchestrator import clear_state as _clear_shell_prompt
+
+        _clear_shell_prompt(window_id)
 
     # Infrastructure cleanup (formatted keys, file I/O — not registerable)
     log_throttle_reset(f"status-update:{user_id}:{thread_id}")

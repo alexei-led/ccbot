@@ -458,10 +458,10 @@ class TestPyteContentHashCaching:
     def test_clear_screen_buffer_resets_cache(self) -> None:
         _parse_with_pyte("@0", f"Output\n✻ Working\n{_SEP}\n")
         ws = terminal_poll_state.get_state("@0")
-        assert ws.last_pane_hash != 0
+        assert ws.last_pane_hash is not None
 
         terminal_screen_buffer.clear_screen_buffer("@0")
-        assert ws.last_pane_hash == 0
+        assert ws.last_pane_hash is None
         assert ws.last_pyte_result is None
 
 
@@ -736,11 +736,13 @@ class TestShellPromptClearsStatus:
                 return_value=False,
             ),
             patch("ccgram.handlers.window_tick.time") as mock_time,
+            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
         ):
             mock_time.monotonic.return_value = 1000.0
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_display_name.return_value = "project"
             mock_sm.get_window_state.return_value = MagicMock(provider_name="codex")
+            mock_prov.return_value.capabilities.supports_hook = False
             await _handle_no_status(bot, 1, "@0", 42, "bash", "normal")
 
         mock_enqueue.assert_called_once_with(

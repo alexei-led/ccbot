@@ -44,7 +44,10 @@ _status_msg_info: dict[tuple[int, int], tuple[int, str, str, int]] = {}
 
 
 def build_status_keyboard(
-    window_id: str, history: list[str] | None = None
+    window_id: str,
+    history: list[str] | None = None,
+    *,
+    rc_active: bool = False,
 ) -> InlineKeyboardMarkup:
     """Build inline keyboard for status messages.
 
@@ -53,7 +56,6 @@ def build_status_keyboard(
       Row 2: [Esc] [Screenshot] [Bell] [RC]
     """
     from .command_history import truncate_for_display
-    from .polling_strategies import terminal_screen_buffer
 
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -71,11 +73,7 @@ def build_status_keyboard(
 
     mode = session_manager.get_notification_mode(window_id)
     bell = NOTIFY_MODE_ICONS.get(mode, "\U0001f514")
-    rc_label = (
-        "\U0001f4e1\u2713"
-        if terminal_screen_buffer.is_rc_active(window_id)
-        else "\U0001f4e1"
-    )
+    rc_label = "📡✓" if rc_active else "📡"
     rows.append(
         [
             InlineKeyboardButton(
@@ -187,8 +185,14 @@ async def send_status_text(
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    from .polling_strategies import terminal_screen_buffer
+
     history = _get_idle_history(user_id, thread_id_or_0, text)
-    keyboard = build_status_keyboard(window_id, history=history)
+    keyboard = build_status_keyboard(
+        window_id,
+        history=history,
+        rc_active=terminal_screen_buffer.is_rc_active(window_id),
+    )
 
     existing = _status_msg_info.get(skey)
     if existing:

@@ -83,7 +83,7 @@ class WindowPollState:
     screen_buffer: "ScreenBuffer | None" = field(default=None, repr=False)
     pane_count_cache: tuple[int, float] | None = None
     unbound_timer: float | None = None
-    last_pane_hash: int = 0
+    last_pane_hash: int | None = None
     last_pyte_result: StatusUpdate | None = field(default=None, repr=False)
     last_rendered_text: str | None = None
     rc_active: bool = False
@@ -120,7 +120,7 @@ class TerminalScreenBuffer:
         if ws:
             ws.screen_buffer = None
             ws.pane_count_cache = None
-            ws.last_pane_hash = 0
+            ws.last_pane_hash = None
             ws.last_pyte_result = None
             ws.last_rendered_text = None
 
@@ -129,7 +129,7 @@ class TerminalScreenBuffer:
         for ws in self._poll_state.iter_states():
             ws.screen_buffer = None
             ws.pane_count_cache = None
-            ws.last_pane_hash = 0
+            ws.last_pane_hash = None
             ws.last_pyte_result = None
             ws.last_rendered_text = None
             ws.rc_active = False
@@ -222,8 +222,8 @@ class TerminalScreenBuffer:
         ws = self._poll_state.get_state(window_id)
         content_hash = hash((pane_text, columns, rows))
         if (
-            content_hash == ws.last_pane_hash
-            and ws.last_pane_hash != 0
+            ws.last_pane_hash is not None
+            and content_hash == ws.last_pane_hash
             and (ws.last_pyte_result is None or not ws.last_pyte_result.is_interactive)
         ):
             self.update_rc_state(ws, ws.last_rc_detected)

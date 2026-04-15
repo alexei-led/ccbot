@@ -157,9 +157,7 @@ async def _handle_no_status(
 
     if is_shell_prompt(pane_current_command):
         terminal_poll_state.cancel_startup_timer(window_id)
-        state = session_manager.get_window_state(window_id)
-        provider_name = (state.provider_name or "").lower()
-        if provider_name in ("codex", "gemini", "shell"):
+        if not get_provider_for_window(window_id).capabilities.supports_hook:
             terminal_poll_state.mark_seen_status(window_id)
             await _transition_to_idle(
                 bot, user_id, window_id, thread_id, chat_id, display, notif_mode
@@ -293,8 +291,7 @@ async def _check_interactive_only(
 async def _maybe_check_passive_shell(
     bot: Bot, user_id: int, window_id: str, thread_id: int
 ) -> None:
-    state = session_manager.get_window_state(window_id)
-    if not state or state.provider_name != "shell":
+    if not get_provider_for_window(window_id).capabilities.chat_first_command_path:
         return
     ws = terminal_poll_state.get_state(window_id)
     rendered = ws.last_rendered_text

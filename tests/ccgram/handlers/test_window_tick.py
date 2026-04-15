@@ -25,17 +25,19 @@ from ccgram.providers.base import StatusUpdate
 
 @pytest.fixture(autouse=True)
 def _reset():
-    terminal_poll_state._states.clear()
-    lifecycle_strategy._states.clear()
-    lifecycle_strategy._dead_notified.clear()
-    interactive_strategy._pane_alert_hashes.clear()
-    terminal_screen_buffer._poll_state._states.clear()
+    terminal_poll_state._states.clear()  # no public clear_all method
+    lifecycle_strategy.reset_autoclose_state()
+    lifecycle_strategy.reset_typing_state()
+    lifecycle_strategy.reset_dead_notification_state()
+    interactive_strategy.clear_all_alerts()
+    terminal_screen_buffer.reset_screen_buffer_state()
     yield
     terminal_poll_state._states.clear()
-    lifecycle_strategy._states.clear()
-    lifecycle_strategy._dead_notified.clear()
-    interactive_strategy._pane_alert_hashes.clear()
-    terminal_screen_buffer._poll_state._states.clear()
+    lifecycle_strategy.reset_autoclose_state()
+    lifecycle_strategy.reset_typing_state()
+    lifecycle_strategy.reset_dead_notification_state()
+    interactive_strategy.clear_all_alerts()
+    terminal_screen_buffer.reset_screen_buffer_state()
 
 
 def _make_window(
@@ -411,11 +413,13 @@ class TestHandleNoStatusShellPrompt:
             ),
             patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
             patch("ccgram.handlers.window_tick.time") as mock_time,
+            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
         ):
             mock_tr.resolve_chat_id.return_value = 42
             mock_tr.get_display_name.return_value = "test"
             mock_sm.get_window_state.return_value = MagicMock(provider_name="shell")
             mock_time.monotonic.return_value = 100.0
+            mock_prov.return_value.capabilities.supports_hook = False
             from ccgram.handlers.window_tick import _handle_no_status
 
             await _handle_no_status(bot, 1, "@0", 100, "bash", "all")
@@ -496,14 +500,14 @@ class TestMaybeCheckPassiveShell:
     async def test_shell_provider_calls_passive_check(self):
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
             patch(
                 "ccgram.handlers.shell_capture.check_passive_shell_output",
                 new_callable=AsyncMock,
             ) as mock_check,
         ):
-            mock_sm.get_window_state.return_value = MagicMock(provider_name="shell")
+            mock_prov.return_value.capabilities.chat_first_command_path = True
             ws = terminal_poll_state.get_state("@0")
             ws.last_rendered_text = "$ output here"
             mock_tm.capture_pane = AsyncMock(return_value="$ output here")
@@ -548,7 +552,7 @@ class TestDeadWindowNotification:
             mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp")
             mock_send.return_value = MagicMock()
             await _handle_dead_window_notification(bot, 1, 100, "@0")
-            assert (1, 100, "@0") in lifecycle_strategy._dead_notified
+            assert lifecycle_strategy.is_dead_notified(1, 100, "@0")
             mock_send.reset_mock()
             await _handle_dead_window_notification(bot, 1, 100, "@0")
             mock_send.assert_not_called()

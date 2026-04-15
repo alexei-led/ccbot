@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from ccgram.handlers.callback_data import (
     CB_KEYS_PREFIX,
@@ -35,7 +35,7 @@ class TestNotifyToggle:
                 query, 1, f"{CB_STATUS_NOTIFY}@0", MagicMock(), MagicMock()
             )
         sm.cycle_notification_mode.assert_called_once_with("@0")
-        bsk.assert_called_once_with("@0")
+        bsk.assert_called_once_with("@0", rc_active=ANY)
         query.answer.assert_awaited_once()
 
     async def test_rejects_non_owner(self):

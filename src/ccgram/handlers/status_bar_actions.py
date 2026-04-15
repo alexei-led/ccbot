@@ -72,9 +72,12 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
         return
     new_mode = session_manager.cycle_notification_mode(window_id)
     label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
+    from .polling_strategies import terminal_screen_buffer
     from .status_bubble import build_status_keyboard
 
-    keyboard = build_status_keyboard(window_id)
+    keyboard = build_status_keyboard(
+        window_id, rc_active=terminal_screen_buffer.is_rc_active(window_id)
+    )
     with contextlib.suppress(TelegramError):
         await query.edit_message_reply_markup(reply_markup=keyboard)
     await query.answer(label)

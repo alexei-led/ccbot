@@ -80,7 +80,7 @@ def get_or_create_queue(bot: Bot, user_id: int) -> asyncio.Queue[MessageTask]:
     return _message_queues[user_id]
 
 
-def _inspect_queue(queue: asyncio.Queue[MessageTask]) -> list[MessageTask]:
+def _drain_queue(queue: asyncio.Queue[MessageTask]) -> list[MessageTask]:
     """Non-destructively inspect all items in queue.
 
     Drains the queue and returns all items. Caller must refill.
@@ -117,9 +117,8 @@ async def _merge_content_tasks(
     additional tasks merged (0 if no merging occurred).
 
     Note on queue counter management:
-        When we put items back, we call task_done() to compensate for the
-        internal counter increment caused by put_nowait(). This is necessary
-        because the items were already counted when originally enqueued.
+        put_nowait() on re-enqueued items increments the internal task counter
+        again; task_done() compensates so the net count stays correct.
         Without this compensation, queue.join() would wait indefinitely.
     """
     merged_parts = list(first.parts)
@@ -127,7 +126,7 @@ async def _merge_content_tasks(
     merge_count = 0
 
     async with lock:
-        items = _inspect_queue(queue)
+        items = _drain_queue(queue)
         remaining: list[MessageTask] = []
 
         for i, task in enumerate(items):
@@ -179,7 +178,7 @@ async def _coalesce_status_updates(
     key = (thread_key(first.thread_id), first.window_id)
 
     async with lock:
-        items = _inspect_queue(queue)
+        items = _drain_queue(queue)
         remaining: list[MessageTask] = []
 
         for task in items:

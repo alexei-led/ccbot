@@ -364,6 +364,11 @@ def _add_tool_use_entry(
 ) -> bool:
     """Append a tool_use entry to the batch. Returns True if overflow occurred."""
     entry_text = "\n".join(task.parts) if task.parts else "tool call"
+    if (
+        len(batch.entries) >= BATCH_MAX_ENTRIES - 1
+        or batch.total_length + len(entry_text) > BATCH_MAX_LENGTH
+    ):
+        return True
     entry = ToolBatchEntry(
         tool_use_id=task.tool_use_id,
         tool_use_text=entry_text,
@@ -371,11 +376,6 @@ def _add_tool_use_entry(
     )
     batch.entries.append(entry)
     batch.total_length += len(entry_text)
-
-    if len(batch.entries) >= BATCH_MAX_ENTRIES or batch.total_length > BATCH_MAX_LENGTH:
-        batch.entries.pop()
-        batch.total_length -= len(entry_text)
-        return True
     return False
 
 

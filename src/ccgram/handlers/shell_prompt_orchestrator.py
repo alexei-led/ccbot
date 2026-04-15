@@ -21,7 +21,6 @@ import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-from ..topic_state_registry import topic_state
 from .callback_registry import register
 from .message_sender import safe_send
 
@@ -101,11 +100,13 @@ def record_skip(window_id: str) -> None:
 
 
 def clear_state(window_id: str) -> None:
-    """Remove orchestrator state for a window (cleanup on topic close)."""
+    """Remove orchestrator state for a window (cleanup on true window death)."""
     _state.pop(window_id, None)
 
 
-topic_state.register_bound("window", clear_state)
+def _reset_all_state() -> None:
+    """Reset all orchestrator state (for testing)."""
+    _state.clear()
 
 
 async def _show_offer_keyboard(
