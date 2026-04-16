@@ -14,12 +14,7 @@ from collections.abc import Awaitable, Callable
 
 from telegram import Bot
 
-from ..claude_task_state import (
-    add_subagent,
-    claude_task_state,
-    classify_wait_message,
-    remove_subagent,
-)
+from ..claude_task_state import classify_wait_message, claude_task_state
 from ..providers.base import HookEvent
 from ..session import session_manager
 from ..session_lifecycle import session_lifecycle
@@ -156,22 +151,23 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     # Try LLM summary with timeout to avoid flicker (send once, not twice).
     # If LLM is available and responds within timeout, include summary in the
     # initial status message. Otherwise fall back to plain Ready.
+    # All users share the same window_id — fetch view once, reuse in loop.
     first_window_id = users[0][2]
+    view = session_manager.view_window(first_window_id)
     summary: str | None = None
-    if first_window_id:
-        view = session_manager.view_window(first_window_id)
-        if view and view.transcript_path:
-            try:
-                summary = await asyncio.wait_for(
-                    _get_llm_summary(str(view.transcript_path)),
-                    timeout=_LLM_SUMMARY_TIMEOUT,
-                )
-            except TimeoutError:
-                logger.debug("LLM summary timed out after %ss", _LLM_SUMMARY_TIMEOUT)
+    if view and view.transcript_path:
+        try:
+            summary = await asyncio.wait_for(
+                _get_llm_summary(str(view.transcript_path)),
+                timeout=_LLM_SUMMARY_TIMEOUT,
+            )
+        except TimeoutError:
+            logger.debug("LLM summary timed out after %ss", _LLM_SUMMARY_TIMEOUT)
+
+    notif_mode = view.notification_mode if view else "all"
 
     for user_id, thread_id, window_id in users:
         claude_task_state.clear_wait_header(window_id)
-        notif_mode = session_manager.get_notification_mode(window_id)
         if notif_mode in ("muted", "errors_only"):
             status_text = None
         else:
@@ -206,7 +202,7 @@ async def _handle_subagent_start(event: HookEvent, _bot: Bot) -> None:
         or "subagent"
     )
 
-    count = add_subagent(window_id, subagent_id, name)
+    count = session_lifecycle.handle_subagent_start(window_id, subagent_id, name)
 
     logger.debug(
         "Subagent started: window=%s, count=%d, name=%s",
@@ -228,7 +224,7 @@ async def _handle_subagent_stop(event: HookEvent, _bot: Bot) -> None:
     window_id = users[0][2]
     subagent_id = event.data.get("subagent_id", "")
 
-    name, remaining = remove_subagent(window_id, subagent_id)
+    name, remaining = session_lifecycle.handle_subagent_stop(window_id, subagent_id)
 
     logger.debug(
         "Subagent stopped: window=%s, remaining=%d, name=%s",
@@ -298,11 +294,9 @@ async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
         reason,
     )
 
-    # Clear session association and subagent tracking so next launch starts fresh
     if users:
         window_id = users[0][2]
         session_lifecycle.handle_session_end(window_id)
-        session_manager.clear_window_session(window_id)
 
     for user_id, thread_id, window_id in users:
         terminal_poll_state.clear_seen_status(window_id)

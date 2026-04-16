@@ -17,7 +17,13 @@ import structlog
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .claude_task_state import clear_subagents, claude_task_state
+from .claude_task_state import (
+    add_subagent,
+    clear_subagents,
+    claude_task_state,
+    remove_subagent,
+)
+from .session import session_manager
 
 if TYPE_CHECKING:
     from .idle_tracker import IdleTracker
@@ -102,10 +108,19 @@ class SessionLifecycle:
         self._last_session_map = current_map
         return result
 
+    def handle_subagent_start(self, window_id: str, subagent_id: str, name: str) -> int:
+        """Single write authority for SubagentStart — add subagent to tracking."""
+        return add_subagent(window_id, subagent_id, name)
+
+    def handle_subagent_stop(self, window_id: str, subagent_id: str) -> tuple[str, int]:
+        """Single write authority for SubagentStop — remove subagent from tracking."""
+        return remove_subagent(window_id, subagent_id)
+
     def handle_session_end(self, window_id: str) -> None:
-        """Called by hook_events on SessionEnd — clears all task and subagent state."""
+        """Single cleanup point for SessionEnd: task state, subagents, session mapping."""
         claude_task_state.clear_window(window_id)
         clear_subagents(window_id)
+        session_manager.clear_window_session(window_id)
 
     def initialize(self, session_map: dict[str, dict[str, str]]) -> None:
         """Set initial session_map (called once at monitor startup)."""

@@ -164,10 +164,11 @@ class TestHandleStop:
             lambda: iter([(100, 42, "@0")]),
         )
         bot = AsyncMock(spec=Bot)
+        view_stub = MagicMock(notification_mode=mode, transcript_path=None)
         with (
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_notification_mode",
-                return_value=mode,
+                "ccgram.handlers.hook_events.session_manager.view_window",
+                return_value=view_stub,
             ),
             patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
             patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
