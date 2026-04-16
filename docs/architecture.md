@@ -8,21 +8,21 @@ ccgram maps each Telegram Forum topic to one tmux window running one agent CLI (
 
 ```mermaid
 graph TB
-    Telegram["Telegram\n(Forum topics)"]
-    Bot["bot.py\nPTB application"]
-    Handlers["handlers/\n50+ modules"]
-    TmuxMgr["tmux_manager.py\nlibtmux + subprocess"]
-    Windows["tmux windows\n(Claude, Codex, Gemini, Shell)"]
-    Hook["hook.py\nClaude Code hooks"]
-    Monitor["session_monitor.py\npoll loop"]
-    State["State files\n~/.ccgram/"]
+    Telegram["Telegram<br>(Forum topics)"]
+    Bot["bot.py<br>PTB application"]
+    Handlers["handlers/<br>50+ modules"]
+    TmuxMgr["tmux_manager.py <br> libtmux + subprocess"]
+    Windows["tmux windows <br> (Claude, Codex, Gemini, Shell)"]
+    Hook["hook.py<br>Claude Code hooks"]
+    Monitor["session_monitor.py<br>poll loop"]
+    State["State files<br>~/.ccgram/"]
 
     Telegram -- "updates" --> Bot
     Bot -- "dispatch" --> Handlers
     Handlers -- "send_keys / capture_pane" --> TmuxMgr
     TmuxMgr --> Windows
     Windows -- "hook events" --> Hook
-    Hook -- "session_map.json\nevents.jsonl" --> State
+    Hook -- "session_map.json<br>events.jsonl" --> State
     Monitor -- "reads" --> State
     Monitor -- "NewMessage / NewWindowEvent" --> Handlers
 ```
@@ -44,22 +44,22 @@ graph TD
         WindowTick["window_tick"]
         MsgQueue["message_queue"]
         MsgRouting["message_routing"]
-        ShellH["shell_commands\nshell_capture\nshell_context\nshell_prompt_orchestrator"]
-        DirH["directory_browser\ndirectory_callbacks"]
-        MsgBroker["msg_broker\nmsg_delivery\nmsg_telegram\nmsg_spawn"]
+        ShellH["shell_commands<br>shell_capture<br>shell_context<br>shell_prompt_orchestrator"]
+        DirH["directory_browser<br>directory_callbacks"]
+        MsgBroker["msg_broker<br>msg_delivery<br>msg_telegram<br>msg_spawn"]
     end
 
     subgraph query["Read-Only Query Layer"]
-        WQ["window_query.py\nread window state"]
-        SQ["session_query.py\nread session data"]
+        WQ["window_query.py<br>read window state"]
+        SQ["session_query.py<br>read session data"]
     end
 
     subgraph state["State Management"]
-        SM["session.py\nSessionManager\n(write + startup)"]
+        SM["session.py<br>SessionManager<br>(write + startup)"]
         TR["thread_router.py"]
         WS["window_state_store.py"]
         UP["user_preferences.py"]
-        SMS["session_map.py\nsession_map_sync"]
+        SMS["session_map.py<br>session_map_sync"]
         SR["session_resolver.py"]
     end
 
@@ -70,9 +70,9 @@ graph TD
     end
 
     subgraph providers["Provider Abstraction"]
-        Base["providers/base.py\nAgentProvider protocol\nProviderCapabilities"]
+        Base["providers/base.py<br>AgentProvider protocol<br>ProviderCapabilities"]
         Claude["providers/claude.py"]
-        Jsonl["providers/_jsonl.py\n(Codex + Gemini base)"]
+        Jsonl["providers/_jsonl.py<br>(Codex + Gemini base)"]
         Shell["providers/shell.py"]
     end
 
@@ -100,16 +100,16 @@ graph TD
 
 ```mermaid
 graph LR
-    Topic["Telegram Topic\n(thread_id)"]
-    Window["tmux Window\n(@id)"]
-    Session["Claude Session\n(uuid)"]
+    Topic["Telegram Topic<br>(thread_id)"]
+    Window["tmux Window<br>(@id)"]
+    Session["Claude Session<br>(uuid)"]
 
-    Topic -- "thread_bindings\n(thread_router.py)" --> Window
-    Window -- "session_map.json\n(written by hook)" --> Session
+    Topic -- "thread_bindings<br>(thread_router.py)" --> Window
+    Window -- "session_map.json<br>(written by hook)" --> Session
 
-    WQ["window_query.py\nread-only state"]
-    SQ["session_query.py\nread-only resolution"]
-    SM["SessionManager\nwrites + startup"]
+    WQ["window_query.py<br>read-only state"]
+    SQ["session_query.py<br>read-only resolution"]
+    SM["SessionManager<br>writes + startup"]
 
     Window -- "read" --> WQ
     Window -- "write" --> SM
@@ -120,16 +120,16 @@ graph LR
 
 ```mermaid
 graph TB
-    SM["SessionManager\n26 public methods\n(down from 39)"]
+    SM["SessionManager<br>26 public methods<br>(down from 39)"]
 
-    SM --> Startup["Startup orchestration\n__post_init__, _wire_singletons\nresolve_stale_ids"]
-    SM --> Writes["Write coordination\nset_window_provider\nset_window_cwd\nset_*_mode\nset_display_name"]
-    SM --> Audit["Cross-cutting audit\naudit_state\nprune_stale_state\nprune_stale_window_states"]
+    SM --> Startup["Startup orchestration<br>__post_init__, _wire_singletons<br>resolve_stale_ids"]
+    SM --> Writes["Write coordination<br>set_window_provider<br>set_window_cwd<br>set_*_mode<br>set_display_name"]
+    SM --> Audit["Cross-cutting audit<br>audit_state<br>prune_stale_state<br>prune_stale_window_states"]
 
-    WQ["window_query.py\nget_window_provider()\nget_approval_mode()\nget_notification_mode()\nview_window()"]
-    SQ["session_query.py\nresolve_session_for_window()\nfind_users_for_session()\nget_recent_messages()"]
-    SMS["session_map_sync\ndirect imports\nload/prune/register"]
-    TR2["thread_router\ndirect imports\nget_display_name()"]
+    WQ["window_query.py<br>get_window_provider()<br>get_approval_mode()<br>get_notification_mode()<br>view_window()"]
+    SQ["session_query.py<br>resolve_session_for_window()<br>find_users_for_session()<br>get_recent_messages()"]
+    SMS["session_map_sync<br>direct imports<br>load/prune/register"]
+    TR2["thread_router<br>direct imports<br>get_display_name()"]
 
     SM -. "replaced by" .-> WQ
     SM -. "replaced by" .-> SQ
@@ -218,7 +218,7 @@ sequenceDiagram
 sequenceDiagram
     participant Claude as Claude Code
     participant Hook as hook.py
-    participant EventFiles as events.jsonl\nsession_map.json
+    participant EventFiles as events.jsonl<br>session_map.json
     participant EventReader as event_reader.py
     participant SessionMonitor as session_monitor.py
     participant HookEvents as hook_events.py
@@ -236,17 +236,17 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    ShellH["handlers/\nshell_commands.py\nshell_capture.py\nshell_context.py\nshell_prompt_orchestrator.py"]
-    ShellProv["providers/\nshell.py (thin)\nshell_infra.py (utilities)"]
-    JsonlBase["providers/_jsonl.py\n(JsonlProvider base)"]
+    ShellH["handlers/<br>shell_commands.py<br>shell_capture.py<br>shell_context.py<br>shell_prompt_orchestrator.py"]
+    ShellProv["providers/<br>shell.py (thin)<br>shell_infra.py (utilities)"]
+    JsonlBase["providers/_jsonl.py<br>(JsonlProvider base)"]
 
-    ShellH -- "imports match_prompt,\nKNOWN_SHELLS,\nhas_prompt_marker\n(accepted leak: low volatility)" --> ShellProv
+    ShellH -- "imports match_prompt,<br>KNOWN_SHELLS,<br>has_prompt_marker<br>(accepted leak: low volatility)" --> ShellProv
     ShellProv --> JsonlBase
 
-    PS1["Terminal PS1\nwrap mode: append ⌘N⌘\nreplace mode: {prefix}:N❯"]
+    PS1["Terminal PS1<br>wrap mode: append ⌘N⌘<br>replace mode: {prefix}:N❯"]
     ShellH -- "setup_shell_prompt()" --> PS1
 
-    LLM["llm/ (optional)\nNL→command generation"]
+    LLM["llm/ (optional)<br>NL→command generation"]
     ShellH -- "get_completer()" --> LLM
 ```
 
@@ -254,31 +254,31 @@ graph TD
 
 ```mermaid
 graph TB
-    SM2["session_monitor.py\n(coordinator)"]
+    SM2["session_monitor.py<br>(coordinator)"]
 
-    SM2 --> ER["event_reader.py\nread_new_events(path, offset)\nstateless pure I/O"]
-    SM2 --> TR2["transcript_reader.py\nper-session JSONL parsing\nfile mtime cache"]
-    SM2 --> SL["session_lifecycle.py\nreconcile() session map changes\nhandle_session_end()"]
-    SM2 --> IT["idle_tracker.py\nper-session activity timestamps"]
+    SM2 --> ER["event_reader.py<br>read_new_events(path, offset)<br>stateless pure I/O"]
+    SM2 --> TR2["transcript_reader.py<br>per-session JSONL parsing<br>file mtime cache"]
+    SM2 --> SL["session_lifecycle.py<br>reconcile() session map changes<br>handle_session_end()"]
+    SM2 --> IT["idle_tracker.py<br>per-session activity timestamps"]
 
-    TR2 -- "seed_task_state()\napply_task_entries()\n(via provider protocol)" --> Claude2["ClaudeProvider\nclause_task_state"]
+    TR2 -- "seed_task_state()<br>apply_task_entries()<br>(via provider protocol)" --> Claude2["ClaudeProvider<br>clause_task_state"]
 
-    SM2 -- "load_session_map()\nprune_session_map()" --> SMS2["session_map_sync"]
+    SM2 -- "load_session_map()<br>prune_session_map()" --> SMS2["session_map_sync"]
 ```
 
 ## Inter-Agent Messaging
 
 ```mermaid
 graph LR
-    AgentA["Agent A\n(ccgram:@1)"]
-    Mailbox["~/.ccgram/mailbox/\nper-window inbox dirs"]
-    AgentB["Agent B\n(ccgram:@3)"]
-    MsgBroker2["msg_broker.py\nbroker delivery cycle\nidle detection"]
-    TelegramNotif["Telegram\nsilent notifications"]
-    SpawnRequest["spawn_request.py\nuser approval flow"]
+    AgentA["Agent A<br>(ccgram:@1)"]
+    Mailbox["~/.ccgram/mailbox/<br>per-window inbox dirs"]
+    AgentB["Agent B<br>(ccgram:@3)"]
+    MsgBroker2["msg_broker.py<br>broker delivery cycle<br>idle detection"]
+    TelegramNotif["Telegram<br>silent notifications"]
+    SpawnRequest["spawn_request.py<br>user approval flow"]
 
     AgentA -- "ccgram msg send" --> Mailbox
-    MsgBroker2 -- "poll + inject\nsend_keys" --> AgentB
+    MsgBroker2 -- "poll + inject<br>send_keys" --> AgentB
     MsgBroker2 -- "notify" --> TelegramNotif
     AgentA -- "ccgram msg spawn" --> SpawnRequest
     SpawnRequest -- "inline keyboard" --> TelegramNotif
