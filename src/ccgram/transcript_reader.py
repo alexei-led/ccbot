@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +22,7 @@ import aiofiles
 import structlog
 
 from .claude_task_state import claude_task_state
+from .monitor_events import NewMessage, SessionInfo
 from .monitor_state import MonitorState, TrackedSession
 from .providers import (
     detect_provider_from_transcript_path,
@@ -37,37 +37,6 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 _PathResolveError = (OSError, ValueError)
-
-
-@dataclass
-class SessionInfo:
-    """Information about a Claude Code session file."""
-
-    session_id: str
-    file_path: Path
-
-
-@dataclass
-class NewMessage:
-    """A new message detected by the monitor."""
-
-    session_id: str
-    text: str
-    is_complete: bool  # True when stop_reason is set (final message)
-    content_type: str = "text"  # "text" or "thinking"
-    tool_use_id: str | None = None
-    role: str = "assistant"  # "user" or "assistant"
-    tool_name: str | None = None  # For tool_use messages, the tool name
-
-
-@dataclass
-class NewWindowEvent:
-    """A new tmux window detected via session_map changes."""
-
-    window_id: str
-    session_id: str
-    window_name: str
-    cwd: str
 
 
 def _resolve_provider_for_file(window_id: str, file_path: Path) -> Any:

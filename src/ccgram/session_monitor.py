@@ -32,7 +32,8 @@ from .providers import get_provider_for_window, registry  # noqa: F401 (used by 
 from .session_map import parse_session_map
 from .session_lifecycle import session_lifecycle
 from .tmux_manager import tmux_manager
-from .transcript_reader import NewMessage, NewWindowEvent, SessionInfo, TranscriptReader
+from .monitor_events import NewMessage, NewWindowEvent, SessionInfo
+from .transcript_reader import TranscriptReader
 from .utils import task_done_callback
 
 import aiofiles
