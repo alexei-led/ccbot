@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root{--font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;--font-mono:'SF Mono','Fira Code','Fira Mono',Menlo,Consolas,monospace;--max-width:820px}
+  :root[data-theme="light"]{--bg:#fff;--bg-secondary:#f6f8fa;--bg-tertiary:#eef1f5;--text:#1a1a1a;--text-secondary:#4a5568;--text-muted:#718096;--border:#e2e8f0;--severity-critical:#c53030;--severity-critical-bg:#fff5f5;--severity-significant:#c05621;--severity-significant-bg:#fffaf0;--severity-minor:#2b6cb0;--severity-minor-bg:#ebf8ff;--table-stripe:#f7fafc;--link:#2b6cb0;--link-hover:#1a4971;--shadow:rgba(0,0,0,.06)}
+  :root[data-theme="dark"]{--bg:#1a1a1a;--bg-secondary:#242424;--bg-tertiary:#2e2e2e;--text:#e2e2e2;--text-secondary:#a0a0a0;--text-muted:#717171;--border:#333;--severity-critical:#fc8181;--severity-critical-bg:#2d1b1b;--severity-significant:#f6ad55;--severity-significant-bg:#2d2415;--severity-minor:#a0a0a0;--severity-minor-bg:#282828;--table-stripe:#222;--link:#e0c97f;--link-hover:#f0dca0;--shadow:rgba(0,0,0,.2)}
+  *,*::before,*::after{box-sizing:border-box}
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-height:1.7;margin:0;padding:2rem 1.5rem;transition:background .3s,color .3s}
+  .container{max-width:var(--max-width);margin:0 auto}
+  .theme-toggle{position:fixed;top:1.5rem;right:1.5rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:50%;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:var(--text);transition:background .2s;z-index:100}
+  .theme-toggle:hover{background:var(--bg-tertiary)}
+  h1{font-size:2rem;font-weight:700;letter-spacing:-.02em;margin:0 0 .5rem}
+  h2{font-size:1.4rem;font-weight:600;margin:2.5rem 0 1rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)}
+  h3{font-size:1.1rem;font-weight:600;margin:1.8rem 0 .6rem}
+  p{margin:0 0 1rem;color:var(--text-secondary)}
+  a{color:var(--link);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .2s}
+  a:hover{color:var(--link-hover);border-bottom-color:var(--link-hover)}
+  .meta{color:var(--text-muted);font-size:.95rem;margin-bottom:2.5rem}
+  .meta strong{color:var(--text-secondary)}
+  table{width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:.9rem}
+  th{background:var(--bg-secondary);font-weight:600;text-align:left;padding:.75rem 1rem;border:1px solid var(--border)}
+  td{padding:.65rem 1rem;border:1px solid var(--border);color:var(--text-secondary)}
+  tr:nth-child(even) td{background:var(--table-stripe)}
+  .severity{display:inline-block;font-size:.8rem;font-weight:600;padding:.15rem .6rem;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+  .severity-minor{color:var(--severity-minor);background:var(--severity-minor-bg)}
+  .issue{background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1.5rem 2rem;margin:1.5rem 0;box-shadow:0 1px 3px var(--shadow)}
+  .issue h2{margin-top:0;border-bottom:none;padding-bottom:0}
+  .issue h3{font-size:1rem}
+  .issue-meta{font-size:.9rem;color:var(--text-muted);margin-bottom:1rem}
+  ul,ol{padding-left:1.5rem;color:var(--text-secondary)}
+  li{margin-bottom:.35rem}
+  code{font-family:var(--font-mono);font-size:.88em;background:var(--bg-tertiary);padding:.15rem .4rem;border-radius:3px}
+  pre{background:var(--bg-tertiary);padding:1rem;border-radius:6px;overflow-x:auto;font-size:.88em;color:var(--text-secondary)}
+  hr{border:none;border-top:1px solid var(--border);margin:3rem 0 1.5rem}
+  .footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:.9rem;color:var(--text-muted);font-style:italic}
+  .footer a{color:var(--text-muted);border-bottom-color:var(--border)}
+  .footer a:hover{color:var(--link)}
+  @media print{.theme-toggle{display:none}body{padding:0}.issue{break-inside:avoid}}
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon"></span></button>
+<div class="container">
+
+<h1>Modularity Review</h1>
+<div class="meta">
+  <strong>Scope:</strong> Entire ccgram codebase — fifth pass, 2026-04-16<br>
+  <strong>Date:</strong> 2026-04-16 (v5 — final review of the refactoring series)
+</div>
+
+<h2>Executive Summary</h2>
+
+<p>ccgram is a single-process Python bot (~47k lines) that routes Telegram messages to AI coding agent CLIs running in tmux panes. Four refactoring passes have moved the overall modularity score from <strong>4.8 to 6.3/10</strong> (+1.5). The final pass — extracting <code>window_query.py</code> — was the structural breakthrough that broke through the 5.6 plateau: handler files importing <code>SessionManager</code> dropped from 30 to 15 (–50%), and call sites from 85 to 57 (–33%). The god-object is now split along its natural read/write boundary: <code>window_query</code> owns reads, <code>session_lifecycle</code> owns mutations, and <code>SessionManager</code> is retained only as the coordinator for writes, lifecycle operations, and session resolution.</p>
+
+<p>The codebase has moved from "needs attention" to <strong>"healthy with known debt"</strong>. No Significant or Critical issues remain. The three Minor issues — 15 handler files that still import <code>SessionManager</code>, 3 deferred-import cycles, and <code>window_tick</code>'s 30 polling strategy calls — are all either at their natural floor or tolerable at low <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a>. The refactoring series is complete.</p>
+
+<h2>Five-Version Progression</h2>
+
+<table>
+<thead><tr><th>Dimension</th><th>v1</th><th>v2</th><th>v3</th><th>v4</th><th>v5</th><th>Net Δ</th></tr></thead>
+<tbody>
+<tr><td>Encapsulation / Information Hiding</td><td>4</td><td>5</td><td>6</td><td>6</td><td><strong>7</strong></td><td>+3</td></tr>
+<tr><td>Cohesion</td><td>5</td><td>5</td><td>5</td><td>5</td><td>5</td><td>—</td></tr>
+<tr><td><a href="https://coupling.dev/posts/core-concepts/coupling/">Coupling</a> Discipline</td><td>4</td><td>5</td><td>5</td><td>5</td><td><strong>6</strong></td><td>+2</td></tr>
+<tr><td>Contract Stability</td><td>6</td><td>6</td><td>6</td><td>6</td><td><strong>7</strong></td><td>+1</td></tr>
+<tr><td>Testability</td><td>5</td><td>6</td><td>7</td><td>7</td><td>7</td><td>+2</td></tr>
+<tr><td><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a> Alignment</td><td>4</td><td>5</td><td>5</td><td>5</td><td><strong>6</strong></td><td>+2</td></tr>
+<tr><td>Module Size Distribution</td><td>6</td><td>6</td><td>6</td><td>6</td><td>6</td><td>—</td></tr>
+<tr><td>Dependency Direction</td><td>4</td><td>5</td><td>5</td><td>5</td><td><strong>6</strong></td><td>+2</td></tr>
+<tr><td><strong>Overall</strong></td><td><strong>4.8</strong></td><td><strong>5.4</strong></td><td><strong>5.6</strong></td><td><strong>5.6</strong></td><td><strong>6.3</strong></td><td><strong>+1.5</strong></td></tr>
+</tbody>
+</table>
+
+<h2>What This Pass Changed</h2>
+
+<table>
+<thead><tr><th>Metric</th><th>v1 (baseline)</th><th>v4 (pre-extraction)</th><th>v5 (post-extraction)</th><th>Total Δ</th></tr></thead>
+<tbody>
+<tr><td>Handler files importing <code>SessionManager</code></td><td>30</td><td>30</td><td><strong>15</strong></td><td>–50%</td></tr>
+<tr><td><code>session_manager.*</code> call sites in handlers</td><td>89</td><td>85</td><td><strong>57</strong></td><td>–36%</td></tr>
+<tr><td>Fully decoupled handler files</td><td>0</td><td>0</td><td><strong>14</strong></td><td>+14</td></tr>
+<tr><td>Partially migrated handler files</td><td>0</td><td>0</td><td>3</td><td>+3</td></tr>
+</tbody>
+</table>
+
+<h2>Architectural Pattern: Read/Write Boundary Split</h2>
+
+<table>
+<thead><tr><th>Concern</th><th>Module</th><th><a href="https://coupling.dev/posts/core-concepts/coupling/">Coupling</a> level</th><th>Depends on</th></tr></thead>
+<tbody>
+<tr><td><strong>Reads</strong></td><td><code>window_query.py</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td><code>window_state_store</code> only</td></tr>
+<tr><td><strong>Hook-event mutations</strong></td><td><code>session_lifecycle.py</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td><code>claude_task_state</code>, <code>session_manager</code></td></tr>
+<tr><td><strong>Poll-cycle mutations</strong></td><td><code>window_tick.py</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (intentional)</td><td><code>claude_task_state</code>, <code>polling_strategies</code></td></tr>
+<tr><td><strong>Transcript-parse mutations</strong></td><td><code>transcript_reader.py</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (intentional)</td><td><code>claude_task_state</code></td></tr>
+<tr><td><strong>Writes + lifecycle</strong></td><td><code>session.py</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td><td>Full state graph</td></tr>
+<tr><td><strong>Polling state</strong></td><td><code>reset_window_polling_state()</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td><code>polling_strategies</code> internals</td></tr>
+</tbody>
+</table>
+
+<h2>Coupling Overview</h2>
+
+<table>
+<thead>
+<tr><th>Integration</th><th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th><th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th><th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th><th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th></tr>
+</thead>
+<tbody>
+<tr><td>14 handler modules → <code>window_query</code> (read-only)</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td>Same service</td><td>High</td><td>Yes — narrow read contract</td></tr>
+<tr><td>15 handler modules → <code>SessionManager</code> (writes + lifecycle)</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td><td>Same service</td><td>High</td><td>Tolerable — legitimate consumers</td></tr>
+<tr><td>3 handler modules → both (partial migration)</td><td>Mixed</td><td>Same service</td><td>High</td><td>Tolerable</td></tr>
+<tr><td><code>hook_events</code> → <code>session_lifecycle</code> (5 facade calls)</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td>Same service</td><td>High</td><td>Yes</td></tr>
+<tr><td><code>window_tick</code> → <code>polling_strategies</code> (30 calls)</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td><td>Same service, low distance</td><td>High</td><td>Tolerable</td></tr>
+<tr><td>3 deferred-import cycles</td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (bidirectional)</td><td>Same service</td><td>High</td><td>No — low priority</td></tr>
+<tr><td><code>monitor_events.py</code>, <code>IdleTracker</code>, <code>event_reader</code>, <code>base.py</code></td><td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td><td>Same service</td><td>Low/Moderate</td><td>Yes — design exemplars</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<div class="issue">
+<h2>Issue 1: 15 Handler Files Still Import SessionManager</h2>
+<div class="issue-meta"><strong>Integration:</strong> 15 handler modules → <code>session.py:SessionManager</code> (57 call sites) &nbsp;|&nbsp; <strong>Severity:</strong> <span class="severity severity-minor">Minor</span> — natural floor</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The remaining 15 handler files import <code>SessionManager</code> because they genuinely need write, lifecycle, or query capabilities: 7 files call write methods, 4 call lifecycle methods, 4 call session resolution. These are <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> call sites that cannot be reduced to <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a> without introducing artificial abstractions.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Accept as the natural floor. The <a href="https://coupling.dev/posts/core-concepts/balance/">balance rule</a> tolerates high strength at low <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a>. If a future pass targets this, the highest-leverage move is extracting <code>set_window_provider</code> (11 call sites across 7 files) into <code>session_lifecycle</code>.</p>
+</div>
+
+<hr>
+
+<div class="issue">
+<h2>Issue 2: Three Deferred-Import Cycles Remain</h2>
+<div class="issue-meta"><strong>Integration:</strong> <code>session.py</code> ↔ <code>session_resolver.py</code>, <code>session_map.py</code> ↔ <code>window_state_store.py</code> / <code>thread_router.py</code> &nbsp;|&nbsp; <strong>Severity:</strong> <span class="severity severity-minor">Minor</span></div>
+
+<h3>Knowledge Leakage</h3>
+<p>Three bidirectional dependency cycles survive, suppressed by deferred imports. The <code>monitor_events.py</code> extraction proved the fix pattern. Not blocking feature work.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Address opportunistically. Extract shared types to dependency-free modules following the established pattern.</p>
+</div>
+
+<hr>
+
+<div class="issue">
+<h2>Issue 3: window_tick Has 30 Direct Polling Strategy Calls</h2>
+<div class="issue-meta"><strong>Integration:</strong> <code>window_tick.py</code> → <code>polling_strategies</code> singletons &nbsp;|&nbsp; <strong>Severity:</strong> <span class="severity severity-minor">Minor</span> — tolerable at low distance</div>
+
+<h3>Knowledge Leakage</h3>
+<p><code>window_tick.py</code> is the poll cycle executor. Its 30 calls are high-strength <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> at very low <a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">distance</a>. The <a href="https://coupling.dev/posts/core-concepts/balance/">balance rule</a> tolerates this.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Low priority. Group related transitions into compound methods on strategy objects if <code>window_tick.py</code> grows further.</p>
+</div>
+
+<hr>
+
+<h2>Series Retrospective</h2>
+
+<table>
+<thead><tr><th>Dimension</th><th>v1→v5</th><th>What moved it</th><th>Current ceiling</th></tr></thead>
+<tbody>
+<tr><td><strong>Encapsulation</strong> (4→7)</td><td>+3</td><td><code>window_query</code> extraction, <code>session_lifecycle</code> write authority, <code>reset_window_polling_state</code> facade, injectable <code>capture_fn</code></td><td>15 legitimate <code>SessionManager</code> consumers</td></tr>
+<tr><td><strong>Coupling Discipline</strong> (4→6)</td><td>+2</td><td>Layer violation removed, cycle broken, read/write boundary split</td><td>3 remaining import cycles</td></tr>
+<tr><td><strong>Testability</strong> (5→7)</td><td>+2</td><td>Injectable callables, <code>monitor_events.py</code>, <code>window_query</code> simplifies mocking</td><td><code>shell_infra</code> internal functions</td></tr>
+<tr><td><strong>Volatility Alignment</strong> (4→6)</td><td>+2</td><td>Mutations per trigger type, volatile handler reads now contract-coupled</td><td>Natural floor</td></tr>
+<tr><td><strong>Dependency Direction</strong> (4→6)</td><td>+2</td><td>Inversion resolved, <code>window_query</code> depends only on <code>window_state_store</code></td><td><code>claude.py</code> lazy tmux import</td></tr>
+<tr><td><strong>Contract Stability</strong> (6→7)</td><td>+1</td><td><code>WindowView</code>, <code>window_query</code> functions, facades</td><td>Protocol-level contracts needed for 8+</td></tr>
+<tr><td><strong>Cohesion</strong> (5→5)</td><td>—</td><td>—</td><td>Large files are legitimate</td></tr>
+<tr><td><strong>Module Size</strong> (6→6)</td><td>—</td><td>—</td><td>Splitting adds complexity</td></tr>
+</tbody>
+</table>
+
+<pre>v1 ──(+0.6)──▸ v2 ──(+0.2)──▸ v3 ──(+0.0)──▸ v4 ──(+0.7)──▸ v5
+4.8            5.4            5.6            5.6            6.3</pre>
+
+<p>The lesson: incremental fixes converge to a local optimum; breaking through requires an architectural insight. In this case: "reads don't need the coordinator."</p>
+
+<div class="footer">
+<p><em>This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.</em></p>
+</div>
+
+</div>
+<script>
+function getDefaultTheme(){const h=new Date().getHours();return(h>=7&&h<19)?'light':'dark'}
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('modularity-review-theme',t);document.getElementById('theme-icon').textContent=t==='light'?'☾':'☀'}
+function toggleTheme(){setTheme(document.documentElement.getAttribute('data-theme')==='light'?'dark':'light')}
+setTheme(localStorage.getItem('modularity-review-theme')||getDefaultTheme());
+</script>
+</body>
+</html>
