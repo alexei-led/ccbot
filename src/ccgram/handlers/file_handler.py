@@ -20,7 +20,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..session import session_manager
+from ..window_query import view_window
 from ..tmux_manager import send_to_window
 from ..thread_router import thread_router
 from .callback_helpers import get_thread_id
@@ -118,7 +118,7 @@ def _resolve_upload_dir(
     if not window_id:
         return None, None, "No session bound to this topic."
 
-    view = session_manager.view_window(window_id)
+    view = view_window(window_id)
     if view is None or not view.cwd:
         return window_id, None, "Session has no working directory."
 

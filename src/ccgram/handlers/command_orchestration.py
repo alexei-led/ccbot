@@ -36,6 +36,7 @@ from ..providers import (
     get_provider_for_window,
     registry,
 )
+from .. import window_query
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
@@ -273,7 +274,7 @@ async def sync_scoped_menu_for_text_context(update: Update, user_id: int) -> Non
     if not window_id:
         return
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     await sync_scoped_provider_menu(message, user_id, provider)
 
@@ -297,7 +298,7 @@ async def _capture_command_probe_context(
     provider: AgentProvider,
 ) -> tuple[str | None, int | None, str | None]:
     """Capture transcript offset + pane snapshot before sending a command."""
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     transcript_path: str | None = (
         str(view.transcript_path) if view and view.transcript_path else None
     )
@@ -429,7 +430,7 @@ def _status_snapshot_probe_offset(window_id: str, cc_slash: str) -> int | None:
     if command not in ("/status", "/stats"):
         return None
 
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     provider = get_provider_for_window(
         window_id, provider_name=view.provider_name if view else None
     )
@@ -458,7 +459,7 @@ async def _maybe_send_status_snapshot(
     if command not in ("/status", "/stats"):
         return
 
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     provider = get_provider_for_window(
         window_id, provider_name=view.provider_name if view else None
     )
@@ -583,7 +584,7 @@ async def forward_command_handler(
 
     display = thread_router.get_display_name(window_id)
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     await sync_scoped_provider_menu(update.message, user.id, provider)
     provider_map, current_supported = _build_provider_command_metadata(provider)

@@ -16,7 +16,7 @@ from telegram import Bot
 
 from ..claude_task_state import classify_wait_message, claude_task_state
 from ..providers.base import HookEvent
-from ..session import session_manager
+from ..window_query import view_window
 from ..session_lifecycle import session_lifecycle
 from ..thread_router import thread_router
 from .interactive_ui import (
@@ -153,7 +153,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     # initial status message. Otherwise fall back to plain Ready.
     # All users share the same window_id — fetch view once, reuse in loop.
     first_window_id = users[0][2]
-    view = session_manager.view_window(first_window_id)
+    view = view_window(first_window_id)
     summary: str | None = None
     if view and view.transcript_path:
         try:

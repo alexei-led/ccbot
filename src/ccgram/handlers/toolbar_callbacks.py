@@ -25,7 +25,7 @@ from telegram import (
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..session import session_manager
+from ..window_query import view_window
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from ..toolbar_config import ToolbarAction
@@ -148,7 +148,7 @@ async def _builtin_send(
         await query.answer("No user context", show_alert=True)
         return
     user_id = user.id
-    view = session_manager.view_window(window_id)
+    view = view_window(window_id)
     cwd = Path(view.cwd) if view and view.cwd else None
     if not cwd or not cwd.is_dir():
         await query.answer("Working directory not available", show_alert=True)

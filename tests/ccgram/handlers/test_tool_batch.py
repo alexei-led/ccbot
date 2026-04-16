@@ -127,9 +127,7 @@ class TestIsBatchEligible:
     ) -> None:
         from ccgram.handlers import tool_batch
 
-        monkeypatch.setattr(
-            tool_batch.session_manager, "get_batch_mode", lambda _wid: "batched"
-        )
+        monkeypatch.setattr(tool_batch, "get_batch_mode", lambda _wid: "batched")
         task = self._make_task(content_type=content_type)
         assert is_batch_eligible(task) is True
 
@@ -139,9 +137,7 @@ class TestIsBatchEligible:
     ) -> None:
         from ccgram.handlers import tool_batch
 
-        monkeypatch.setattr(
-            tool_batch.session_manager, "get_batch_mode", lambda _wid: "batched"
-        )
+        monkeypatch.setattr(tool_batch, "get_batch_mode", lambda _wid: "batched")
         task = self._make_task(content_type=content_type)
         assert is_batch_eligible(task) is False
 
@@ -150,9 +146,7 @@ class TestIsBatchEligible:
     ) -> None:
         from ccgram.handlers import tool_batch
 
-        monkeypatch.setattr(
-            tool_batch.session_manager, "get_batch_mode", lambda _wid: "individual"
-        )
+        monkeypatch.setattr(tool_batch, "get_batch_mode", lambda _wid: "individual")
         task = self._make_task(content_type="tool_use")
         assert is_batch_eligible(task) is False
 
@@ -165,9 +159,7 @@ class TestIsBatchEligible:
             captured.append(wid)
             return "batched"
 
-        monkeypatch.setattr(
-            tool_batch.session_manager, "get_batch_mode", capture_get_batch_mode
-        )
+        monkeypatch.setattr(tool_batch, "get_batch_mode", capture_get_batch_mode)
         task = self._make_task(content_type="tool_use", window_id="@7")
         is_batch_eligible(task)
         assert captured == ["@7"]

@@ -199,7 +199,7 @@ class TestHandleDeadWindow:
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_recovery_keyboard")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.thread_router")
     async def test_shows_recovery_ui(
         self,
@@ -213,7 +213,7 @@ class TestHandleDeadWindow:
         mock_tr.get_display_name.return_value = "project"
         ws = MagicMock()
         ws.cwd = "/tmp/project"
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_kb.return_value = MagicMock()
 
         user_data: dict = {}
@@ -233,7 +233,7 @@ class TestHandleDeadWindow:
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.thread_router")
     async def test_falls_back_to_browser_no_cwd(
         self,
@@ -247,7 +247,7 @@ class TestHandleDeadWindow:
         mock_tr.get_display_name.return_value = "project"
         ws = MagicMock()
         ws.cwd = ""
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_browser.return_value = ("Browse:", MagicMock(), [])
 
         user_data: dict = {}
@@ -269,7 +269,7 @@ class TestHandleDeadWindow:
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.thread_router")
     async def test_falls_back_to_browser_invalid_cwd(
         self,
@@ -283,7 +283,7 @@ class TestHandleDeadWindow:
         mock_tr.get_display_name.return_value = "project"
         ws = MagicMock()
         ws.cwd = "/nonexistent"
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_browser.return_value = ("Browse:", MagicMock(), [])
 
         user_data: dict = {}
@@ -349,7 +349,7 @@ class TestShellProviderRouting:
 
     @patch(f"{_TH}.get_provider_for_window")
     @patch(f"{_TH}._handle_dead_window", new_callable=AsyncMock, return_value=False)
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.thread_router")
     async def test_non_shell_provider_does_not_route_to_shell(
         self,
@@ -394,7 +394,7 @@ class TestShellProviderRouting:
 
 class TestForwardMessage:
     @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     async def test_sends_to_window(
         self, mock_sm: MagicMock, mock_send: AsyncMock
     ) -> None:
@@ -412,7 +412,7 @@ class TestForwardMessage:
         new_callable=AsyncMock,
         return_value=(False, "Window not found"),
     )
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     async def test_send_failure_replies_error(
         self, mock_sm: MagicMock, _mock_send: AsyncMock, mock_reply: AsyncMock
     ) -> None:
@@ -427,7 +427,7 @@ class TestForwardMessage:
     @patch(f"{_TH}.get_interactive_window", return_value=None)
     @patch(f"{_TH}._capture_bash_output")
     @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     async def test_bash_capture_for_bang_command(
         self,
         mock_sm: MagicMock,
@@ -451,7 +451,7 @@ class TestForwardMessage:
 
     @patch(f"{_TH}.get_interactive_window", return_value=None)
     @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     async def test_cancels_existing_bash_capture(
         self, mock_sm: MagicMock, _mock_send: AsyncMock, _mock_interactive: MagicMock
     ) -> None:
@@ -472,7 +472,7 @@ class TestForwardMessage:
     @patch(f"{_TH}.handle_interactive_ui", new_callable=AsyncMock)
     @patch(f"{_TH}.get_interactive_window", return_value="@0")
     @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     async def test_refreshes_interactive_ui(
         self,
         mock_sm: MagicMock,

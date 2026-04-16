@@ -15,7 +15,7 @@ import functools
 import re
 import shutil
 
-from ..session import session_manager
+from ..window_query import view_window
 
 # Modern CLI tools we hint to the LLM as preferred replacements when present.
 _MODERN_TOOLS: dict[str, str] = {
@@ -60,6 +60,6 @@ async def gather_llm_context(window_id: str) -> dict[str, str]:
 
     shell = await detect_pane_shell(window_id)
     tools = _detect_shell_tools()
-    view = session_manager.view_window(window_id)
+    view = view_window(window_id)
     cwd = view.cwd if view else ""
     return {"cwd": cwd, "shell": shell, "shell_tools": tools}

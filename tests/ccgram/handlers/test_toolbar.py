@@ -319,9 +319,9 @@ class TestDispatchBuiltinSend:
                 "ccgram.handlers.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.toolbar_callbacks.view_window") as mock_view,
         ):
-            mock_sm.view_window.return_value = None
+            mock_view.return_value = None
             await handle_toolbar_callback(query, 100, "tb:@5:send", update, context)
         query.answer.assert_awaited_once_with(
             "Working directory not available", show_alert=True

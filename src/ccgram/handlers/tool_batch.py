@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import structlog
 from telegram import Bot
 
-from ..session import session_manager
+from ..window_query import get_batch_mode
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
@@ -78,7 +78,7 @@ def is_batch_eligible(task: ContentTask) -> bool:
     """Check if a task should go through the batching pipeline."""
     return (
         task.content_type in ("tool_use", "tool_result")
-        and session_manager.get_batch_mode(task.window_id) == "batched"
+        and get_batch_mode(task.window_id) == "batched"
     )
 
 

@@ -476,9 +476,7 @@ def _mock_update_status_patches(*, pyte_result, provider):
     stack = ExitStack()
     mocks: dict[str, MagicMock] = {}
     mocks["tm"] = stack.enter_context(patch("ccgram.handlers.window_tick.tmux_manager"))
-    mocks["sm"] = stack.enter_context(
-        patch("ccgram.handlers.window_tick.session_manager")
-    )
+    mocks["sm"] = stack.enter_context(patch("ccgram.handlers.window_tick.window_query"))
     mocks["tr"] = stack.enter_context(
         patch("ccgram.handlers.window_tick.thread_router")
     )
@@ -1539,7 +1537,7 @@ class TestDeadWindowNotification:
     async def test_marks_notified_even_when_send_fails(self) -> None:
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch(
                 "ccgram.handlers.window_tick.rate_limit_send_message",
@@ -1570,7 +1568,7 @@ class TestDeadWindowNotification:
     async def test_no_retry_after_failed_send(self) -> None:
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch(
                 "ccgram.handlers.window_tick.rate_limit_send_message",
@@ -1853,7 +1851,7 @@ class TestUpdateStatusMessageEdgeCases:
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji"),
             patch("ccgram.handlers.window_tick.enqueue_status_update"),
@@ -1893,7 +1891,7 @@ class TestUpdateStatusMessageEdgeCases:
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji"),
             patch(
@@ -1947,7 +1945,7 @@ class TestUpdateStatusMessageEdgeCases:
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji"),
             patch(
@@ -1991,7 +1989,7 @@ class TestUpdateStatusMessageEdgeCases:
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji"),
             patch("ccgram.handlers.window_tick.enqueue_status_update"),
@@ -2038,7 +2036,7 @@ class TestUpdateStatusMessageEdgeCases:
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.update_topic_emoji"),
             patch("ccgram.handlers.window_tick.enqueue_status_update"),
             patch(

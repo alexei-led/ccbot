@@ -40,7 +40,7 @@ from .recovery_callbacks import build_recovery_keyboard
 from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
-from ..session import session_manager
+from .. import window_query
 from ..thread_router import thread_router
 from ..providers import get_provider_for_window
 from ..tmux_manager import send_to_window, tmux_manager
@@ -97,7 +97,7 @@ async def _capture_bash_output(
 
             output = get_provider_for_window(
                 window_id,
-                provider_name=session_manager.get_window_provider(window_id),
+                provider_name=window_query.get_window_provider(window_id),
             ).extract_bash_output(raw, command)
             if not output or output == last_output:
                 await asyncio.sleep(1.0)
@@ -255,7 +255,7 @@ async def _handle_dead_window(
         return False
 
     display = thread_router.get_display_name(window_id)
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     cwd = view.cwd if view else ""
 
     if not cwd or not Path(cwd).is_dir():
@@ -406,7 +406,7 @@ async def handle_text_message(
 
     # Shell provider: route through LLM or raw execution
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
         from .shell_commands import handle_shell_message

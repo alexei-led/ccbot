@@ -60,8 +60,9 @@ class TestBuildStatusKeyboard:
     def test_bell_icon_reflects_notification_mode(
         self, mode: str, expected_icon: str
     ) -> None:
-        with patch("ccgram.handlers.status_bubble.session_manager") as mock_sm:
-            mock_sm.get_notification_mode.return_value = mode
+        with patch(
+            "ccgram.handlers.status_bubble.get_notification_mode", return_value=mode
+        ):
             kb = build_status_keyboard("@0")
             notify_btn = kb.inline_keyboard[0][2]
             assert notify_btn.text == expected_icon

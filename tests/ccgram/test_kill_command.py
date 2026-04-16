@@ -14,7 +14,7 @@ from ccgram.session import WindowState
 @pytest.fixture(autouse=True)
 def _patch_deps():
     with (
-        patch("ccgram.handlers.sessions_dashboard.session_manager") as mock_sm,
+        patch("ccgram.handlers.sessions_dashboard.view_window") as mock_view,
         patch("ccgram.handlers.sessions_dashboard.thread_router") as mock_tr,
         patch("ccgram.handlers.sessions_dashboard.tmux_manager") as mock_tm,
         patch(
@@ -23,10 +23,10 @@ def _patch_deps():
         ) as mock_clear,
     ):
         mock_tr.get_display_name.side_effect = lambda wid: wid
-        mock_sm.view_window.side_effect = lambda wid: WindowState()
+        mock_view.side_effect = lambda wid: WindowState()
         mock_tr.get_all_thread_windows.return_value = {}
         mock_tm.list_windows = AsyncMock(return_value=[])
-        yield mock_sm, mock_tr, mock_tm, mock_clear
+        yield mock_view, mock_tr, mock_tm, mock_clear
 
 
 class TestHandleSessionsKill:

@@ -141,10 +141,6 @@ class TestHandleStop:
         )
         bot = AsyncMock(spec=Bot)
         with (
-            patch(
-                "ccgram.handlers.hook_events.session_manager.get_notification_mode",
-                return_value="all",
-            ),
             patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
             patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
         ):
@@ -167,7 +163,7 @@ class TestHandleStop:
         view_stub = MagicMock(notification_mode=mode, transcript_path=None)
         with (
             patch(
-                "ccgram.handlers.hook_events.session_manager.view_window",
+                "ccgram.handlers.hook_events.view_window",
                 return_value=view_stub,
             ),
             patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
@@ -202,11 +198,7 @@ class TestEnhanceWithLlmSummary:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_notification_mode",
-                return_value="all",
-            ),
-            patch(
-                "ccgram.handlers.hook_events.session_manager.view_window",
+                "ccgram.handlers.hook_events.view_window",
                 return_value=mock_state,
             ),
             patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
@@ -238,11 +230,7 @@ class TestEnhanceWithLlmSummary:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_notification_mode",
-                return_value="all",
-            ),
-            patch(
-                "ccgram.handlers.hook_events.session_manager.view_window",
+                "ccgram.handlers.hook_events.view_window",
                 return_value=mock_state,
             ),
             patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
@@ -274,11 +262,7 @@ class TestEnhanceWithLlmSummary:
         bot = AsyncMock(spec=Bot)
         with (
             patch(
-                "ccgram.handlers.hook_events.session_manager.get_notification_mode",
-                return_value="all",
-            ),
-            patch(
-                "ccgram.handlers.hook_events.session_manager.view_window",
+                "ccgram.handlers.hook_events.view_window",
                 return_value=mock_state,
             ),
             patch("ccgram.handlers.hook_events.enqueue_status_update"),
@@ -744,7 +728,7 @@ class TestHandleSessionEnd:
                 return_value="project",
             ),
             patch(
-                "ccgram.handlers.hook_events.session_manager.clear_window_session",
+                "ccgram.session_lifecycle.session_manager.clear_window_session",
             ) as mock_clear_session,
             patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
             patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
@@ -801,7 +785,7 @@ class TestHandleSessionEnd:
                 "ccgram.handlers.hook_events.thread_router.get_display_name",
                 return_value="project",
             ),
-            patch("ccgram.handlers.hook_events.session_manager.clear_window_session"),
+            patch("ccgram.session_lifecycle.session_manager.clear_window_session"),
             patch("ccgram.handlers.hook_events.update_topic_emoji"),
             patch("ccgram.handlers.hook_events.enqueue_status_update"),
             patch(
@@ -830,7 +814,7 @@ class TestHandleSessionEnd:
                 return_value="project",
             ),
             patch(
-                "ccgram.handlers.hook_events.session_manager.clear_window_session",
+                "ccgram.session_lifecycle.session_manager.clear_window_session",
             ),
             patch("ccgram.handlers.hook_events.update_topic_emoji"),
             patch("ccgram.handlers.hook_events.enqueue_status_update"),

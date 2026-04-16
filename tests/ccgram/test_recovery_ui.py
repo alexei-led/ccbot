@@ -204,7 +204,7 @@ _TH = "ccgram.handlers.text_handler"
 class TestTextHandlerDeadWindow:
     @patch(f"{_TH}.thread_router")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     async def test_dead_window_shows_recovery_ui(
         self,
@@ -218,7 +218,7 @@ class TestTextHandlerDeadWindow:
         mock_tm.find_window_by_id = AsyncMock(return_value=None)
         ws = MagicMock()
         ws.cwd = "/tmp/project"
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_tr.get_display_name.return_value = "project"
 
         update = _make_update()
@@ -241,7 +241,7 @@ class TestTextHandlerDeadWindow:
 
     @patch(f"{_TH}.thread_router")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     async def test_dead_window_stores_pending_message(
         self,
@@ -255,7 +255,7 @@ class TestTextHandlerDeadWindow:
         mock_tm.find_window_by_id = AsyncMock(return_value=None)
         ws = MagicMock()
         ws.cwd = "/tmp/project"
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_tr.get_display_name.return_value = "project"
 
         update = _make_update(text="my pending message")
@@ -273,7 +273,7 @@ class TestTextHandlerDeadWindow:
 
     @patch(f"{_TH}.thread_router")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")
     async def test_dead_window_no_cwd_falls_back_to_browser(
@@ -289,7 +289,7 @@ class TestTextHandlerDeadWindow:
         mock_tm.find_window_by_id = AsyncMock(return_value=None)
         ws = MagicMock()
         ws.cwd = ""
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_tr.get_display_name.return_value = "project"
         mock_browser.return_value = ("Browse:", MagicMock(), [])
 
@@ -308,7 +308,7 @@ class TestTextHandlerDeadWindow:
 
     @patch(f"{_TH}.thread_router")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")
     async def test_dead_window_invalid_cwd_falls_back_to_browser(
@@ -324,7 +324,7 @@ class TestTextHandlerDeadWindow:
         mock_tm.find_window_by_id = AsyncMock(return_value=None)
         ws = MagicMock()
         ws.cwd = "/nonexistent/path"
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_tr.get_display_name.return_value = "project"
         mock_browser.return_value = ("Browse:", MagicMock(), [])
 
@@ -342,7 +342,7 @@ class TestTextHandlerDeadWindow:
 
     @patch(f"{_TH}.thread_router")
     @patch(f"{_TH}.tmux_manager")
-    @patch(f"{_TH}.session_manager")
+    @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     async def test_dead_window_does_not_unbind(
         self,
@@ -356,7 +356,7 @@ class TestTextHandlerDeadWindow:
         mock_tm.find_window_by_id = AsyncMock(return_value=None)
         ws = MagicMock()
         ws.cwd = "/tmp/project"
-        mock_sm.get_window_state.return_value = ws
+        mock_sm.view_window.return_value = ws
         mock_tr.get_display_name.return_value = "project"
 
         update = _make_update()
@@ -510,7 +510,7 @@ class TestRecoveryFreshCallback:
         mock_tr: MagicMock,
         mock_send_to_window: AsyncMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -543,7 +543,7 @@ class TestRecoveryFreshCallback:
         _mock_tm: MagicMock,
         mock_tr: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/gone")
+        mock_sm.view_window.return_value = MagicMock(cwd="/gone")
         mock_tr.resolve_chat_id.return_value = -100999
 
         update = _make_callback_update(data=f"{CB_RECOVERY_FRESH}@0")
@@ -647,7 +647,7 @@ class TestRecoveryContinueCallback:
         mock_tr: MagicMock,
         mock_send_to_window: AsyncMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -676,7 +676,7 @@ class TestRecoveryContinueCallback:
         mock_sm: MagicMock,
         _mock_tm: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/gone")
+        mock_sm.view_window.return_value = MagicMock(cwd="/gone")
 
         update = _make_callback_update(data=f"{CB_RECOVERY_CONTINUE}@0")
         user_data = _recovery_user_data()
@@ -712,7 +712,7 @@ class TestRecoveryResumeCallback:
         mock_sm: MagicMock,
         mock_scan: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_scan.return_value = [
             _SessionEntry("sess-1", "Fix login bug"),
             _SessionEntry("sess-2", "Add tests"),
@@ -740,7 +740,7 @@ class TestRecoveryResumeCallback:
         mock_sm: MagicMock,
         mock_scan: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_scan.return_value = []
 
         update = _make_callback_update(data=f"{CB_RECOVERY_RESUME}@0")
@@ -909,7 +909,7 @@ class TestRecoveryBackCallback:
         mock_safe_edit: AsyncMock,
         mock_sm: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@0")
         user_data = _recovery_user_data()
         ctx = _make_context(user_data)
@@ -1287,7 +1287,7 @@ class TestRecoveryPerWindowProvider:
         mock_tr: MagicMock,
         mock_gpw: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -1323,7 +1323,7 @@ class TestRecoveryPerWindowProvider:
         mock_tr: MagicMock,
         mock_gpw: MagicMock,
     ) -> None:
-        mock_sm.get_window_state.return_value = MagicMock(cwd="/tmp/project")
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )

@@ -157,6 +157,7 @@ class TestApprovalFlow:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="claude",
@@ -167,7 +168,7 @@ class TestApprovalFlow:
             ) as mock_topic,
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             result = await handle_spawn_approval(spawn_request.id, mock_bot)
 
@@ -187,6 +188,7 @@ class TestApprovalFlow:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="claude",
@@ -197,7 +199,7 @@ class TestApprovalFlow:
             ),
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             await handle_spawn_approval(spawn_request.id, mock_bot)
 
@@ -212,13 +214,14 @@ class TestApprovalFlow:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             result = await handle_spawn_approval(spawn_request.id, mock_bot)
 
         assert result is None
@@ -251,6 +254,7 @@ class TestAutoMode:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="claude",
@@ -261,7 +265,7 @@ class TestAutoMode:
             ),
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             result = await handle_spawn_approval(req.id, mock_bot)
 
@@ -309,6 +313,7 @@ class TestContextBootstrap:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="claude",
@@ -319,7 +324,7 @@ class TestContextBootstrap:
             ),
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             result = await handle_spawn_approval(req.id, mock_bot)
 
@@ -385,6 +390,7 @@ class TestSkillInstallOnSpawn:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="claude",
@@ -395,7 +401,7 @@ class TestSkillInstallOnSpawn:
             ),
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             await handle_spawn_approval(req.id, mock_bot)
 
@@ -417,6 +423,7 @@ class TestSkillInstallOnSpawn:
         with (
             patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
             patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.msg_spawn.resolve_launch_command",
                 return_value="codex",
@@ -427,7 +434,7 @@ class TestSkillInstallOnSpawn:
             ),
         ):
             mock_sm.window_states = {}
-            mock_sm.window_count = 0
+            mock_wq.window_count.return_value = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             await handle_spawn_approval(req.id, mock_bot)
 

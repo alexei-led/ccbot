@@ -387,7 +387,7 @@ class TestStatusPollingIntegration:
     async def test_active_window_with_status_updates_emoji(self) -> None:
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
             patch("ccgram.handlers.window_tick.enqueue_status_update"),
@@ -418,7 +418,7 @@ class TestStatusPollingIntegration:
     async def test_idle_window_without_status_updates_emoji(self) -> None:
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
             patch(
@@ -453,7 +453,7 @@ class TestStatusPollingIntegration:
     async def test_startup_window_shows_active_not_idle(self) -> None:
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
             patch(
@@ -488,7 +488,7 @@ class TestStatusPollingIntegration:
     async def test_done_when_shell_prompt(self) -> None:
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
             patch(
@@ -520,7 +520,7 @@ class TestStatusPollingIntegration:
     async def test_no_thread_id_skips_emoji(self) -> None:
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.update_topic_emoji") as mock_emoji,
             patch("ccgram.handlers.window_tick.enqueue_status_update"),
             patch(

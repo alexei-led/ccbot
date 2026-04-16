@@ -538,16 +538,15 @@ class TestSendCommand:
         with (
             patch("ccgram.config.Config.is_user_allowed", return_value=True),
             patch("ccgram.handlers.send_command.thread_router") as mock_tr,
-            patch("ccgram.handlers.send_command.session_manager") as mock_sm,
+            patch("ccgram.handlers.send_command.view_window") as mock_view,
         ):
             self.mock_tr = mock_tr
-            self.mock_sm = mock_sm
+            self.mock_view = mock_view
             mock_tr.resolve_window_for_thread.return_value = "@1"
             mock_tr.resolve_chat_id.return_value = -100123
             ws = MagicMock()
             ws.cwd = None  # overridden per test
-            mock_sm.get_window_state.return_value = ws
-            mock_sm.view_window.return_value = ws
+            mock_view.return_value = ws
             self.ws = ws
             yield
 
@@ -587,7 +586,7 @@ class TestSendCommand:
         # view_window returns None (window state was wiped after binding).
         # The new None guard at send_command.py should reject cleanly
         # instead of raising AttributeError.
-        self.mock_sm.view_window.return_value = None
+        self.mock_view.return_value = None
         update = _make_update()
         ctx = _make_context()
         await send_command(update, ctx)

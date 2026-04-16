@@ -69,6 +69,10 @@ class TestForwardCommandResolution:
             provider_name="claude",
         )
 
+        self.mock_wq = MagicMock()
+        self.mock_wq.view_window.return_value = self.mock_sm.view_window.return_value
+        self.mock_wq.get_window_provider.return_value = "claude"
+
         self.mock_tm = MagicMock()
         self.mock_tm.find_window_by_id = AsyncMock(
             return_value=MagicMock(window_id="@1")
@@ -89,6 +93,7 @@ class TestForwardCommandResolution:
             patch(
                 "ccgram.handlers.command_orchestration.session_manager", self.mock_sm
             ),
+            patch("ccgram.handlers.command_orchestration.window_query", self.mock_wq),
             patch(
                 "ccgram.handlers.command_orchestration.send_to_window",
                 new_callable=AsyncMock,
@@ -301,12 +306,14 @@ class TestForwardCommandResolution:
         mock_path = MagicMock(spec=Path)
         mock_path.__str__ = MagicMock(return_value="/tmp/codex.jsonl")
         mock_path.stat.return_value.st_size = 1024
-        self.mock_sm.view_window.return_value = SimpleNamespace(
+        _view = SimpleNamespace(
             transcript_path=mock_path,
             session_id="sess-1",
             cwd="/work/repo",
             provider_name="codex",
         )
+        self.mock_sm.view_window.return_value = _view
+        self.mock_wq.view_window.return_value = _view
         codex_provider = SimpleNamespace(
             capabilities=SimpleNamespace(
                 name="codex",
@@ -361,12 +368,14 @@ class TestForwardCommandResolution:
         mock_path2 = MagicMock(spec=Path)
         mock_path2.__str__ = MagicMock(return_value="/tmp/codex.jsonl")
         mock_path2.stat.return_value.st_size = 1024
-        self.mock_sm.view_window.return_value = SimpleNamespace(
+        _view2 = SimpleNamespace(
             transcript_path=mock_path2,
             session_id="sess-1",
             cwd="/work/repo",
             provider_name="codex",
         )
+        self.mock_sm.view_window.return_value = _view2
+        self.mock_wq.view_window.return_value = _view2
         codex_provider = SimpleNamespace(
             capabilities=SimpleNamespace(
                 name="codex",

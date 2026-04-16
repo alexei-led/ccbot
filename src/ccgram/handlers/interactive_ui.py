@@ -23,7 +23,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ..providers import get_provider_for_window
-from ..session import session_manager
+from ..window_query import get_window_provider
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from ..topic_state_registry import topic_state
@@ -217,7 +217,7 @@ async def _capture_interactive_content(
         return None
 
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=get_window_provider(window_id)
     )
     pane_title = ""
     if provider.capabilities.uses_pane_title and not pane_id:

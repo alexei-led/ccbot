@@ -183,7 +183,7 @@ class TestUpdateStatusInteractive:
 
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager"),
+            patch("ccgram.handlers.window_tick.window_query"),
             patch("ccgram.handlers.window_tick.thread_router"),
             patch(
                 "ccgram.handlers.window_tick.get_interactive_window", return_value=None
@@ -219,7 +219,7 @@ class TestUpdateStatusActiveLine:
 
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch(
                 "ccgram.handlers.window_tick.get_interactive_window", return_value=None
@@ -258,7 +258,7 @@ class TestUpdateStatusActiveLine:
 
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
             patch(
                 "ccgram.handlers.window_tick.get_interactive_window", return_value=None
@@ -304,7 +304,7 @@ class TestUpdateStatusActiveLine:
 
         with (
             patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.thread_router"),
             patch(
                 "ccgram.handlers.window_tick.get_interactive_window", return_value=None
@@ -422,7 +422,7 @@ class TestMaybeCheckPassiveShell:
     async def test_non_shell_noop(self):
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch("ccgram.handlers.window_tick.tmux_manager"),
         ):
             mock_sm.get_window_state.return_value = MagicMock(provider_name="claude")
@@ -468,7 +468,7 @@ class TestDeadWindowNotification:
         bot = AsyncMock(spec=Bot)
         with (
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch(
                 "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
             ),
@@ -577,7 +577,7 @@ class TestDeadWindowTopicDeleted:
 
         with (
             patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.session_manager") as mock_sm,
+            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
             patch(
                 "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
             ),

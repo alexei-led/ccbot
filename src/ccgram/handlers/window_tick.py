@@ -20,7 +20,7 @@ from telegram.error import BadRequest, TelegramError
 from ..claude_task_state import claude_task_state
 from ..providers import get_provider_for_window
 from ..providers.base import StatusUpdate
-from ..session import session_manager
+from .. import window_query
 from ..session_monitor import get_active_monitor
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
@@ -63,7 +63,7 @@ logger = structlog.get_logger()
 
 def _get_provider(window_id: str) -> "AgentProvider":
     return get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
 
 
@@ -258,7 +258,7 @@ async def _handle_dead_window_notification(
         user_id, thread_id, "dead", time.monotonic()
     )
 
-    view = session_manager.view_window(wid)
+    view = window_query.view_window(wid)
     cwd = view.cwd if view else ""
     try:
         dir_exists = bool(cwd) and await asyncio.to_thread(Path(cwd).is_dir)
@@ -499,7 +499,7 @@ async def _apply_tick_decision(
 
 def _get_last_activity_ts(window_id: str) -> float | None:
     """Read last transcript activity timestamp from the session monitor."""
-    session_id = session_manager.get_session_id_for_window(window_id)
+    session_id = window_query.get_session_id_for_window(window_id)
     if not session_id:
         return None
     mon = get_active_monitor()
@@ -560,7 +560,7 @@ async def _update_status(
         startup_time=ws.startup_time if ws else None,
         is_dead_window=False,
         supports_hook=provider.capabilities.supports_hook,
-        notification_mode=session_manager.get_notification_mode(window_id),
+        notification_mode=window_query.get_notification_mode(window_id),
         queue_has_content=False,
     )
 

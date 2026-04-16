@@ -26,6 +26,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ..config import config
+from .. import window_query
 from ..session import AuditIssue, AuditResult, session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
@@ -252,7 +253,7 @@ async def _adopt_orphaned_windows(bot: Bot, issues: list[AuditIssue]) -> None:
         if not match:
             continue
         window_id = match.group(1)
-        view = session_manager.view_window(window_id)
+        view = window_query.view_window(window_id)
         name = (view.window_name if view else "") or thread_router.get_display_name(
             window_id
         )
@@ -343,7 +344,7 @@ async def _recreate_dead_topics(bot: Bot, issues: list[AuditIssue]) -> int:
         thread_id = int(match.group(2))
         window_id = match.group(3)
 
-        view = session_manager.view_window(window_id)
+        view = window_query.view_window(window_id)
         name = (view.window_name if view else "") or thread_router.get_display_name(
             window_id
         )

@@ -93,7 +93,7 @@ class TestHandleShellMessage:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
-            patch(f"{_CTX}.session_manager"),
+            patch(f"{_CTX}.view_window"),
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch(
                 f"{_MOD}.send_to_window",
@@ -116,7 +116,7 @@ class TestHandleShellMessage:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
-            patch(f"{_CTX}.session_manager"),
+            patch(f"{_CTX}.view_window"),
             patch(
                 f"{_MOD}.send_to_window",
                 new_callable=AsyncMock,
@@ -135,7 +135,7 @@ class TestHandleShellMessage:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
         ):
             mock_sm.send_to_window = AsyncMock()
             await handle_shell_message(bot, 1, 42, "@0", "!", message)
@@ -150,7 +150,7 @@ class TestHandleShellMessage:
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=None),
-            patch(f"{_CTX}.session_manager"),
+            patch(f"{_CTX}.view_window"),
             patch(
                 f"{_MOD}.send_to_window",
                 new_callable=AsyncMock,
@@ -212,7 +212,7 @@ class TestHandleShellMessage:
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", return_value=mock_completer),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
@@ -238,7 +238,7 @@ class TestHandleShellMessage:
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD}.get_completer", side_effect=ValueError("bad provider")),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
         ):
@@ -256,7 +256,7 @@ class TestHandleShellMessage:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
             patch(
@@ -309,7 +309,7 @@ class TestHandleShellCallback:
         bot = AsyncMock(spec=Bot)
 
         with (
-            patch(f"{_CTX}.session_manager"),
+            patch(f"{_CTX}.view_window"),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock),
@@ -469,7 +469,7 @@ class TestHandleShellCallback:
         bot = AsyncMock(spec=Bot)
 
         with (
-            patch(f"{_CTX}.session_manager"),
+            patch(f"{_CTX}.view_window"),
             patch(f"{_MOD}.thread_router") as mock_tr,
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock),
             patch(
@@ -505,9 +505,9 @@ class TestGatherLlmContext:
                 f"{_CTX}._detect_shell_tools",
                 return_value="rg (grep replacement)",
             ),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
         ):
-            mock_sm.view_window.return_value = MagicMock(cwd="/home/user/project")
+            mock_sm.return_value = MagicMock(cwd="/home/user/project")
             ctx = await gather_llm_context("@0")
 
         assert ctx["cwd"] == "/home/user/project"
@@ -527,9 +527,9 @@ class TestGatherLlmContext:
                 f"{_CTX}._detect_shell_tools",
                 return_value="",
             ),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
         ):
-            mock_sm.view_window.return_value = MagicMock(cwd="")
+            mock_sm.return_value = MagicMock(cwd="")
             ctx = await gather_llm_context("@0")
 
         assert ctx["cwd"] == ""
@@ -662,7 +662,7 @@ class TestLazyMarkerRecovery:
         with (
             patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
-            patch(f"{_CTX}.session_manager") as mock_sm,
+            patch(f"{_CTX}.view_window") as mock_sm,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
             patch("ccgram.handlers.shell_capture.mark_telegram_command"),
             patch(

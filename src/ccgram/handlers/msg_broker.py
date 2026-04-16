@@ -203,7 +203,7 @@ async def broker_delivery_cycle(
     delivered messages, shell-pending messages, and loop detection.
     """
     from ..providers import get_provider_for_window
-    from ..session import session_manager
+    from ..window_query import get_window_provider
     from ..window_resolver import is_foreign_window
 
     _recover_stale_pending(mailbox)
@@ -218,7 +218,7 @@ async def broker_delivery_cycle(
             qualified_id = f"{tmux_session}:{window_id}"
 
         provider = get_provider_for_window(
-            window_id, provider_name=session_manager.get_window_provider(window_id)
+            window_id, provider_name=get_window_provider(window_id)
         )
         if not provider.capabilities.supports_mailbox_delivery:
             await _deliver_to_shell_topic(bot, mailbox, qualified_id)

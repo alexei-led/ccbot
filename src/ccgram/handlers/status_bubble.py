@@ -17,7 +17,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
-from ..session import session_manager
+from ..window_query import get_notification_mode
 from ..thread_router import thread_router
 from .callback_data import (
     CB_STATUS_ESC,
@@ -96,7 +96,7 @@ def build_status_keyboard(
             )
         rows.append(hist_row)
 
-    mode = session_manager.get_notification_mode(window_id)
+    mode = get_notification_mode(window_id)
     bell = NOTIFY_MODE_ICONS.get(mode, "\U0001f514")
     rc_label = "📡✓" if rc_active else "📡"
     rows.append(

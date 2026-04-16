@@ -21,18 +21,18 @@ from ccgram.session import WindowState
 @pytest.fixture(autouse=True)
 def _patch_deps():
     with (
-        patch("ccgram.handlers.sessions_dashboard.session_manager") as mock_sm,
+        patch("ccgram.handlers.sessions_dashboard.view_window") as mock_view,
         patch("ccgram.handlers.sessions_dashboard.thread_router") as mock_tr,
         patch("ccgram.handlers.sessions_dashboard.tmux_manager") as mock_tm,
         patch("ccgram.handlers.sessions_dashboard.config") as mock_cfg,
     ):
         mock_tr.get_all_thread_windows.return_value = {}
         mock_tr.get_display_name.side_effect = lambda wid: wid
-        mock_sm.view_window.side_effect = lambda wid: WindowState()
+        mock_view.side_effect = lambda wid: WindowState()
         mock_tm.list_windows = AsyncMock(return_value=[])
         mock_tm.discover_external_sessions = AsyncMock(return_value=[])
         mock_cfg.is_user_allowed.return_value = True
-        yield mock_sm, mock_tr, mock_tm, mock_cfg
+        yield mock_view, mock_tr, mock_tm, mock_cfg
 
 
 class TestBuildDashboard:
@@ -52,9 +52,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.view_window.side_effect = lambda wid: WindowState(
-            cwd="/home/user/myproject"
-        )
+        mock_sm.side_effect = lambda wid: WindowState(cwd="/home/user/myproject")
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
 
         text, _kb = await _build_dashboard(100)
@@ -64,9 +62,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.view_window.side_effect = lambda wid: WindowState(
-            cwd="/home/user/myproject"
-        )
+        mock_sm.side_effect = lambda wid: WindowState(cwd="/home/user/myproject")
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
 
         text, _kb = await _build_dashboard(100)
@@ -76,7 +72,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.view_window.side_effect = lambda wid: WindowState(cwd="")
+        mock_sm.side_effect = lambda wid: WindowState(cwd="")
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
 
         text, _kb = await _build_dashboard(100)
@@ -154,7 +150,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.view_window.side_effect = lambda wid: WindowState(
+        mock_sm.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject", provider_name="codex"
         )
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
@@ -166,7 +162,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.view_window.side_effect = lambda wid: WindowState(
+        mock_sm.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject", provider_name=""
         )
         mock_tm.list_windows = AsyncMock(return_value=[MagicMock(window_id="@0")])
@@ -178,7 +174,7 @@ class TestBuildDashboard:
         mock_sm, mock_tr, mock_tm, _ = _patch_deps
         mock_tr.get_all_thread_windows.return_value = {42: "@0"}
         mock_tr.get_display_name.side_effect = lambda wid: "myproject"
-        mock_sm.view_window.side_effect = lambda wid: WindowState(
+        mock_sm.side_effect = lambda wid: WindowState(
             cwd="/home/user/myproject",
             provider_name="codex",
             approval_mode="yolo",

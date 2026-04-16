@@ -24,7 +24,7 @@ from telegram import (
 from telegram.ext import ContextTypes
 
 from ..config import config
-from ..session import session_manager
+from ..window_query import view_window
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from .callback_data import (
@@ -68,7 +68,7 @@ async def _build_dashboard(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     action_rows: list[list[InlineKeyboardButton]] = []
     for _thread_id, window_id in sorted(bindings.items()):
         display_name = thread_router.get_display_name(window_id)
-        view = session_manager.view_window(window_id)
+        view = view_window(window_id)
         alive = window_id in live_ids
         is_external = view.external if view else False
         status = "\U0001f7e2" if alive else "\u26ab"
@@ -131,7 +131,7 @@ async def handle_sessions_kill(
     query: CallbackQuery, _user_id: int, window_id: str
 ) -> None:
     """First Kill tap — show confirmation prompt."""
-    view = session_manager.view_window(window_id)
+    view = view_window(window_id)
     if view and view.external:
         await safe_edit(query, "External sessions cannot be killed from ccgram.")
         return
