@@ -353,17 +353,15 @@ async def _create_and_bind_window(
     lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
     # Resolve provider from old window (falls back to global default)
-    provider = (
-        get_provider_for_window(
-            old_window_id,
-            provider_name=session_manager.get_window_provider(old_window_id),
+    if old_window_id:
+        old_view = session_manager.view_window(old_window_id)
+        provider = get_provider_for_window(
+            old_window_id, provider_name=old_view.provider_name if old_view else None
         )
-        if old_window_id
-        else get_provider()
-    )
-    approval_mode = (
-        session_manager.get_approval_mode(old_window_id) if old_window_id else "normal"
-    )
+        approval_mode = old_view.approval_mode if old_view else "normal"
+    else:
+        provider = get_provider()
+        approval_mode = "normal"
     launch_command = resolve_launch_command(
         provider.capabilities.name, approval_mode=approval_mode
     )
@@ -598,15 +596,15 @@ async def _handle_resume_pick(
         return
 
     view = session_manager.view_window(old_wid)
-    cwd = view.cwd if view else ""
-    if not cwd or not Path(cwd).is_dir():
+    if view is None or not view.cwd or not Path(view.cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)
         await query.answer("Failed")
         return
+    cwd = view.cwd
 
     launch_args = get_provider_for_window(
-        old_wid, provider_name=session_manager.get_window_provider(old_wid)
+        old_wid, provider_name=view.provider_name
     ).make_launch_args(resume_id=session_id)
     await _create_and_bind_window(
         query,

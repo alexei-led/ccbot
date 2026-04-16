@@ -301,17 +301,15 @@ async def _create_resume_window(
 
         lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
-    provider = (
-        get_provider_for_window(
-            old_window_id,
-            provider_name=session_manager.get_window_provider(old_window_id),
+    if old_window_id:
+        old_view = session_manager.view_window(old_window_id)
+        provider = get_provider_for_window(
+            old_window_id, provider_name=old_view.provider_name if old_view else None
         )
-        if old_window_id
-        else get_provider()
-    )
-    approval_mode = (
-        session_manager.get_approval_mode(old_window_id) if old_window_id else "normal"
-    )
+        approval_mode = old_view.approval_mode if old_view else "normal"
+    else:
+        provider = get_provider()
+        approval_mode = "normal"
     launch_args = provider.make_launch_args(resume_id=session_id)
     launch_command = resolve_launch_command(
         provider.capabilities.name, approval_mode=approval_mode
