@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any
 import aiofiles
 import structlog
 
-from .claude_task_state import claude_task_state
 from .monitor_events import NewMessage, SessionInfo
 from .monitor_state import MonitorState, TrackedSession
 from .providers import (
@@ -124,8 +123,8 @@ class TranscriptReader:
             )
             self._state.update_session(tracked)
             self._file_mtimes[session_id] = current_mtime
-            if provider.capabilities.name == "claude" and window_id:
-                await self._seed_claude_task_state(window_id, session_id, file_path)
+            if provider.capabilities.supports_task_tracking and window_id:
+                await provider.seed_task_state(window_id, session_id, str(file_path))
             logger.debug("Started tracking session: %s", session_id)
             return
 
@@ -149,8 +148,8 @@ class TranscriptReader:
         if new_entries:
             self._idle_tracker.record_activity(session_id)
 
-        if provider.capabilities.name == "claude" and window_id:
-            claude_task_state.apply_entries(window_id, session_id, new_entries)
+        if provider.capabilities.supports_task_tracking and window_id:
+            provider.apply_task_entries(window_id, session_id, new_entries)
 
         carry = self._pending_tools.get(session_id, {})
         session_cwd: str | None = None
@@ -270,24 +269,6 @@ class TranscriptReader:
         except OSError:
             logger.exception("Error reading transcript file %s", file_path)
             return []
-
-    async def _seed_claude_task_state(
-        self, window_id: str, session_id: str, file_path: Path
-    ) -> None:
-        """Build a Claude task snapshot from the full transcript once per session."""
-        entries: list[dict[str, Any]] = []
-        provider = registry.get("claude")
-        try:
-            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-                async for line in f:
-                    data = provider.parse_transcript_line(line)
-                    if data:
-                        entries.append(data)
-        except OSError:
-            logger.exception("Error seeding Claude task state from %s", file_path)
-            return
-
-        claude_task_state.rebuild_from_entries(window_id, session_id, entries)
 
     async def _get_active_cwds(self) -> set[str]:
         """Get normalized cwds of all active tmux windows."""

@@ -110,6 +110,7 @@ class ClaudeProvider:
         builtin_commands=tuple(CC_BUILTINS.keys()),
         supports_user_command_discovery=True,
         has_yolo_confirmation=True,
+        supports_task_tracking=True,
     )
 
     @property
@@ -323,3 +324,37 @@ class ClaudeProvider:
             return None
         mode_line = _find_mode_line(capture)
         return _mode_short_label(mode_line) if mode_line else None
+
+    async def seed_task_state(
+        self,
+        window_id: str,
+        session_id: str,
+        transcript_path: str,
+    ) -> None:
+        """Seed Claude task-tracking state by reading the full transcript once."""
+        import aiofiles
+
+        from ccgram.claude_task_state import claude_task_state
+
+        entries: list[dict] = []
+        try:
+            async with aiofiles.open(transcript_path, "r", encoding="utf-8") as f:
+                async for line in f:
+                    data = self.parse_transcript_line(line)
+                    if data:
+                        entries.append(data)
+        except OSError:
+            _log.exception("seed_task_state: error reading %s", transcript_path)
+            return
+        claude_task_state.rebuild_from_entries(window_id, session_id, entries)
+
+    def apply_task_entries(
+        self,
+        window_id: str,
+        session_id: str,
+        entries: list[dict],
+    ) -> None:
+        """Apply parsed transcript entries to Claude task-tracking state."""
+        from ccgram.claude_task_state import claude_task_state
+
+        claude_task_state.apply_entries(window_id, session_id, entries)
