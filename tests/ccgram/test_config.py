@@ -133,50 +133,22 @@ class TestMessagingConfig:
         cfg = Config()
         assert cfg.msg_auto_spawn is True
 
-    def test_msg_max_windows_default(self):
-        cfg = Config()
-        assert cfg.msg_max_windows == 10
-
-    def test_msg_max_windows_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_MSG_MAX_WINDOWS", "20")
-        cfg = Config()
-        assert cfg.msg_max_windows == 20
-
-    def test_msg_wait_timeout_default(self):
-        cfg = Config()
-        assert cfg.msg_wait_timeout == 60
-
-    def test_msg_wait_timeout_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_MSG_WAIT_TIMEOUT", "120")
-        cfg = Config()
-        assert cfg.msg_wait_timeout == 120
-
-    def test_msg_spawn_timeout_default(self):
-        cfg = Config()
-        assert cfg.msg_spawn_timeout == 300
-
-    def test_msg_spawn_timeout_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_MSG_SPAWN_TIMEOUT", "600")
-        cfg = Config()
-        assert cfg.msg_spawn_timeout == 600
-
-    def test_msg_spawn_rate_default(self):
-        cfg = Config()
-        assert cfg.msg_spawn_rate == 3
-
-    def test_msg_spawn_rate_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_MSG_SPAWN_RATE", "5")
-        cfg = Config()
-        assert cfg.msg_spawn_rate == 5
-
-    def test_msg_rate_limit_default(self):
-        cfg = Config()
-        assert cfg.msg_rate_limit == 10
-
-    def test_msg_rate_limit_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_MSG_RATE_LIMIT", "25")
-        cfg = Config()
-        assert cfg.msg_rate_limit == 25
+    @pytest.mark.parametrize(
+        ("attr", "env_var", "default", "env_str", "expected"),
+        [
+            ("msg_max_windows", "CCGRAM_MSG_MAX_WINDOWS", 10, "20", 20),
+            ("msg_wait_timeout", "CCGRAM_MSG_WAIT_TIMEOUT", 60, "120", 120),
+            ("msg_spawn_timeout", "CCGRAM_MSG_SPAWN_TIMEOUT", 300, "600", 600),
+            ("msg_spawn_rate", "CCGRAM_MSG_SPAWN_RATE", 3, "5", 5),
+            ("msg_rate_limit", "CCGRAM_MSG_RATE_LIMIT", 10, "25", 25),
+        ],
+    )
+    def test_int_config_default_and_override(
+        self, monkeypatch, attr, env_var, default, env_str, expected
+    ):
+        assert getattr(Config(), attr) == default
+        monkeypatch.setenv(env_var, env_str)
+        assert getattr(Config(), attr) == expected
 
     def test_mailbox_dir_derived_from_config_dir(self, tmp_path):
         cfg = Config()
@@ -185,71 +157,71 @@ class TestMessagingConfig:
 
 @pytest.mark.usefixtures("_base_env")
 class TestLiveViewConfig:
-    def test_live_view_interval_default(self):
-        cfg = Config()
-        assert cfg.live_view_interval == 5
+    @pytest.mark.parametrize(
+        ("attr", "env_var", "default", "env_str", "expected"),
+        [
+            ("live_view_interval", "CCGRAM_LIVE_VIEW_INTERVAL", 5, "10", 10),
+            ("live_view_timeout", "CCGRAM_LIVE_VIEW_TIMEOUT", 300, "600", 600),
+        ],
+    )
+    def test_default_and_override(
+        self, monkeypatch, attr, env_var, default, env_str, expected
+    ):
+        assert getattr(Config(), attr) == default
+        monkeypatch.setenv(env_var, env_str)
+        assert getattr(Config(), attr) == expected
 
-    def test_live_view_interval_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "10")
-        cfg = Config()
-        assert cfg.live_view_interval == 10
+    @pytest.mark.parametrize(
+        ("attr", "env_var"),
+        [
+            ("live_view_interval", "CCGRAM_LIVE_VIEW_INTERVAL"),
+            ("live_view_timeout", "CCGRAM_LIVE_VIEW_TIMEOUT"),
+        ],
+    )
+    def test_zero_clamped_to_one(self, monkeypatch, attr, env_var):
+        monkeypatch.setenv(env_var, "0")
+        assert getattr(Config(), attr) == 1
 
-    def test_live_view_timeout_default(self):
-        cfg = Config()
-        assert cfg.live_view_timeout == 300
-
-    def test_live_view_timeout_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "600")
-        cfg = Config()
-        assert cfg.live_view_timeout == 600
-
-    def test_live_view_interval_zero_clamped_to_one(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "0")
-        cfg = Config()
-        assert cfg.live_view_interval == 1
-
-    def test_live_view_timeout_zero_clamped_to_one(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "0")
-        cfg = Config()
-        assert cfg.live_view_timeout == 1
-
-    def test_live_view_interval_invalid(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "not-a-number")
-        with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_INTERVAL"):
-            Config()
-
-    def test_live_view_timeout_invalid(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "not-a-number")
-        with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_TIMEOUT"):
+    @pytest.mark.parametrize(
+        "env_var",
+        ["CCGRAM_LIVE_VIEW_INTERVAL", "CCGRAM_LIVE_VIEW_TIMEOUT"],
+    )
+    def test_invalid_raises(self, monkeypatch, env_var):
+        monkeypatch.setenv(env_var, "not-a-number")
+        with pytest.raises(ValueError, match=env_var):
             Config()
 
 
 @pytest.mark.usefixtures("_base_env")
 class TestPollingConfig:
-    def test_monitor_poll_interval_default(self):
-        cfg = Config()
-        assert cfg.monitor_poll_interval == 1.0
-
-    def test_monitor_poll_interval_override(self, monkeypatch):
-        monkeypatch.setenv("MONITOR_POLL_INTERVAL", "0.8")
-        cfg = Config()
-        assert cfg.monitor_poll_interval == 0.8
-
-    def test_monitor_poll_interval_clamped_to_min(self, monkeypatch):
-        monkeypatch.setenv("MONITOR_POLL_INTERVAL", "0.1")
-        cfg = Config()
-        assert cfg.monitor_poll_interval == 0.5
-
-    def test_status_poll_interval_default(self):
-        cfg = Config()
-        assert cfg.status_poll_interval == 1.0
-
-    def test_status_poll_interval_override(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_STATUS_POLL_INTERVAL", "2.0")
-        cfg = Config()
-        assert cfg.status_poll_interval == 2.0
-
-    def test_status_poll_interval_clamped_to_min(self, monkeypatch):
-        monkeypatch.setenv("CCGRAM_STATUS_POLL_INTERVAL", "0.2")
-        cfg = Config()
-        assert cfg.status_poll_interval == 0.5
+    @pytest.mark.parametrize(
+        ("attr", "env_var", "default", "env_str", "expected", "clamp_str", "clamped"),
+        [
+            (
+                "monitor_poll_interval",
+                "MONITOR_POLL_INTERVAL",
+                1.0,
+                "0.8",
+                0.8,
+                "0.1",
+                0.5,
+            ),
+            (
+                "status_poll_interval",
+                "CCGRAM_STATUS_POLL_INTERVAL",
+                1.0,
+                "2.0",
+                2.0,
+                "0.2",
+                0.5,
+            ),
+        ],
+    )
+    def test_default_override_and_clamp(
+        self, monkeypatch, attr, env_var, default, env_str, expected, clamp_str, clamped
+    ):
+        assert getattr(Config(), attr) == default
+        monkeypatch.setenv(env_var, env_str)
+        assert getattr(Config(), attr) == expected
+        monkeypatch.setenv(env_var, clamp_str)
+        assert getattr(Config(), attr) == clamped
