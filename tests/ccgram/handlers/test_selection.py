@@ -272,6 +272,7 @@ class TestHandleModeSelect:
     )
     @patch("ccgram.providers.resolve_launch_command")
     @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
+    @patch("ccgram.handlers.directory_callbacks.session_map_sync")
     @patch("ccgram.handlers.directory_callbacks.session_manager")
     @patch("ccgram.handlers.directory_callbacks.tmux_manager")
     @patch("ccgram.handlers.directory_callbacks.provider_registry")
@@ -282,6 +283,7 @@ class TestHandleModeSelect:
         mock_registry: MagicMock,
         mock_tmux: MagicMock,
         mock_sm: MagicMock,
+        mock_sms: MagicMock,
         mock_edit: AsyncMock,
         mock_resolve_launch: MagicMock,
         mock_accept_yolo: AsyncMock,
@@ -301,7 +303,7 @@ class TestHandleModeSelect:
         mock_tr.get_window_for_thread.return_value = None
         mock_tr.resolve_chat_id.return_value = 123
         mock_sm.get_window_state.return_value = MagicMock()
-        mock_sm.wait_for_session_map_entry = AsyncMock(return_value=True)
+        mock_sms.wait_for_session_map_entry = AsyncMock(return_value=True)
         mock_accept_yolo.return_value = True
 
         user_data = {"browse_path": "/tmp/proj", PENDING_THREAD_ID: 42}
@@ -314,7 +316,7 @@ class TestHandleModeSelect:
         )
 
         mock_accept_yolo.assert_awaited_once_with("@5")
-        mock_sm.wait_for_session_map_entry.assert_awaited_once_with("@5")
+        mock_sms.wait_for_session_map_entry.assert_awaited_once_with("@5")
 
     @patch("ccgram.handlers.directory_callbacks.provider_registry")
     async def test_rejects_unknown_mode(self, mock_registry: MagicMock) -> None:

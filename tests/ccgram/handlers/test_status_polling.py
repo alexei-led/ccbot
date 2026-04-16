@@ -994,6 +994,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch("ccgram.handlers.transcript_discovery.tmux_manager") as mock_tmux,
             patch(
                 "ccgram.handlers.transcript_discovery.get_provider_for_window",
@@ -1010,7 +1011,7 @@ class TestMaybeDiscoverTranscript:
         mock_sm.set_window_provider.assert_called_once_with(
             "@7", "codex", cwd="/my/project"
         )
-        mock_sm.register_hookless_session.assert_called_once()
+        mock_sms.register_hookless_session.assert_called_once()
 
     async def test_skips_when_provider_has_hooks(self) -> None:
         from ccgram.handlers.transcript_discovery import (
@@ -1061,6 +1062,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch(
                 "ccgram.handlers.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1077,14 +1079,14 @@ class TestMaybeDiscoverTranscript:
             mock_tmux.get_pane_title = AsyncMock(return_value="")
             await discover_and_register_transcript("@7")
 
-        mock_sm.register_hookless_session.assert_called_once_with(
+        mock_sms.register_hookless_session.assert_called_once_with(
             window_id="@7",
             session_id="uuid-abc",
             cwd="/my/project",
             transcript_path="/path/to/transcript.jsonl",
             provider_name="codex",
         )
-        mock_sm.write_hookless_session_map.assert_called_once_with(
+        mock_sms.write_hookless_session_map.assert_called_once_with(
             window_id="@7",
             session_id="uuid-abc",
             cwd="/my/project",
@@ -1111,6 +1113,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch(
                 "ccgram.handlers.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1133,7 +1136,7 @@ class TestMaybeDiscoverTranscript:
             mock_tmux.get_pane_title = AsyncMock(return_value="")
             await discover_and_register_transcript("@7")
 
-        mock_sm.register_hookless_session.assert_called_once_with(
+        mock_sms.register_hookless_session.assert_called_once_with(
             window_id="@7",
             session_id="uuid-new",
             cwd="/my/project",
@@ -1191,6 +1194,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch(
                 "ccgram.handlers.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1213,8 +1217,8 @@ class TestMaybeDiscoverTranscript:
         discover_call = mock_asyncio.to_thread.call_args_list[0]
         assert discover_call.args[0] == mock_provider.discover_transcript
         write_call = mock_asyncio.to_thread.call_args_list[1]
-        assert write_call.args[0] == mock_sm.write_hookless_session_map
-        mock_sm.register_hookless_session.assert_called_once()
+        assert write_call.args[0] == mock_sms.write_hookless_session_map
+        mock_sms.register_hookless_session.assert_called_once()
 
     async def test_tries_hookless_providers_when_provider_name_empty(self) -> None:
         from ccgram.handlers.transcript_discovery import (
@@ -1257,6 +1261,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch("ccgram.handlers.transcript_discovery.tmux_manager") as mock_tmux,
             patch("ccgram.handlers.transcript_discovery.config") as mock_config,
             patch("ccgram.providers.registry", mock_registry),
@@ -1269,7 +1274,7 @@ class TestMaybeDiscoverTranscript:
             mock_tmux.get_pane_title = AsyncMock(return_value="")
             await discover_and_register_transcript("@7")
 
-        mock_sm.register_hookless_session.assert_called_once_with(
+        mock_sms.register_hookless_session.assert_called_once_with(
             window_id="@7",
             session_id="uuid-found",
             cwd="/proj",
@@ -1407,6 +1412,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch(
                 "ccgram.handlers.transcript_discovery.get_provider_for_window",
                 side_effect=_provider_for_window,
@@ -1438,7 +1444,7 @@ class TestMaybeDiscoverTranscript:
             "gemini",
             cwd="/Users/alexei/Workspace/ccgram",
         )
-        mock_sm.register_hookless_session.assert_called_once_with(
+        mock_sms.register_hookless_session.assert_called_once_with(
             window_id="@7",
             session_id="gemini-uuid",
             cwd="/Users/alexei/Workspace/ccgram",
@@ -1491,6 +1497,7 @@ class TestMaybeDiscoverTranscript:
 
         with (
             patch("ccgram.handlers.transcript_discovery.session_manager") as mock_sm,
+            patch("ccgram.handlers.transcript_discovery.session_map_sync") as mock_sms,
             patch(
                 "ccgram.handlers.transcript_discovery.get_provider_for_window",
                 side_effect=_provider_for_window,
@@ -1524,7 +1531,7 @@ class TestMaybeDiscoverTranscript:
             cwd="/Users/alexei/Workspace/ccgram",
         )
         mock_codex.discover_transcript.assert_called_once()
-        mock_sm.register_hookless_session.assert_called_once_with(
+        mock_sms.register_hookless_session.assert_called_once_with(
             window_id="@7",
             session_id="codex-uuid",
             cwd="/Users/alexei/Workspace/ccgram",
