@@ -30,7 +30,6 @@ from libtmux.exc import LibTmuxException
 
 from .config import config
 from .topic_state_registry import topic_state
-from .providers import detect_provider_from_command
 from .window_resolver import EMDASH_SESSION_PREFIX as _EMDASH_PREFIX, is_foreign_window
 
 logger = structlog.get_logger()
@@ -852,6 +851,10 @@ class TmuxManager:
             return []
         if proc.returncode != 0:
             return []
+
+        from .providers import (
+            detect_provider_from_command,
+        )  # local: infra must not import domain at module level
 
         results: list[TmuxWindow] = []
         for line in win_stdout.decode().strip().split("\n"):

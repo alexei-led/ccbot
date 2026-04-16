@@ -5,7 +5,10 @@ cc_commands.py without changing any behavior. This is a thin adapter layer
 that translates between the provider protocol and existing module APIs.
 """
 
+from __future__ import annotations
+
 import os
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import structlog
@@ -294,11 +297,25 @@ class ClaudeProvider:
         _ = transcript_path, offset
         return False
 
-    async def scrape_current_mode(self, window_id: str) -> str | None:
-        from ccgram.tmux_manager import tmux_manager
+    async def scrape_current_mode(
+        self,
+        window_id: str,
+        *,
+        capture_fn: Callable[[str], Awaitable[str | None]] | None = None,
+    ) -> str | None:
+        """Return the short mode label visible in the Claude Code status line.
 
+        ``capture_fn`` is optional and injectable for tests — defaults to
+        ``tmux_manager.capture_pane`` so production callers need no changes.
+        """
+        if capture_fn is not None:
+            _fn: Callable[[str], Awaitable[str | None]] = capture_fn
+        else:
+            from ccgram.tmux_manager import tmux_manager
+
+            _fn = tmux_manager.capture_pane
         try:
-            capture = await tmux_manager.capture_pane(window_id)
+            capture = await _fn(window_id)
         except OSError as exc:
             _log.warning("Mode scrape: capture_pane failed %s (%s)", window_id, exc)
             return None
