@@ -167,6 +167,7 @@ class TestApprovalFlow:
             ) as mock_topic,
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             result = await handle_spawn_approval(spawn_request.id, mock_bot)
 
@@ -196,6 +197,7 @@ class TestApprovalFlow:
             ),
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             await handle_spawn_approval(spawn_request.id, mock_bot)
 
@@ -216,6 +218,7 @@ class TestApprovalFlow:
             ),
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             result = await handle_spawn_approval(spawn_request.id, mock_bot)
 
         assert result is None
@@ -258,6 +261,7 @@ class TestAutoMode:
             ),
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             result = await handle_spawn_approval(req.id, mock_bot)
 
@@ -315,6 +319,7 @@ class TestContextBootstrap:
             ),
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             result = await handle_spawn_approval(req.id, mock_bot)
 
@@ -390,6 +395,7 @@ class TestSkillInstallOnSpawn:
             ),
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             await handle_spawn_approval(req.id, mock_bot)
 
@@ -421,6 +427,7 @@ class TestSkillInstallOnSpawn:
             ),
         ):
             mock_sm.window_states = {}
+            mock_sm.window_count = 0
             mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
             await handle_spawn_approval(req.id, mock_bot)
 

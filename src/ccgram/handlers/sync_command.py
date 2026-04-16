@@ -425,7 +425,7 @@ async def handle_sync_fix(query: CallbackQuery) -> None:
         bound_ids: set[str] = {
             wid for _, _, wid in thread_router.iter_thread_bindings()
         }
-        state_ids = set(session_manager.window_states.keys())
+        state_ids = set(session_manager.iter_window_ids())
         session_manager.prune_stale_offsets(live_ids | bound_ids | state_ids)
     except OSError:
         logger.exception("Error during sync fix operations")

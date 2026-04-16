@@ -625,6 +625,15 @@ class SessionManager:
             external=ws.external,
         )
 
+    @property
+    def window_count(self) -> int:
+        """Number of tracked windows — use instead of accessing window_states directly."""
+        return len(window_store.window_states)
+
+    def iter_window_ids(self) -> list[str]:
+        """All tracked window IDs — use instead of accessing window_states.keys() directly."""
+        return list(window_store.window_states.keys())
+
     def clear_window_session(self, window_id: str) -> None:
         """Clear session association for a window (e.g., after /clear command)."""
         window_store.clear_window_session(window_id)
