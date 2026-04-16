@@ -26,7 +26,7 @@ from .interactive_ui import (
     set_interactive_mode,
 )
 from .message_queue import enqueue_status_update
-from .polling_strategies import terminal_poll_state
+from .polling_strategies import reset_window_polling_state
 from .topic_emoji import update_topic_emoji
 
 # Wired at startup by bot.py to trigger broker delivery on Stop events.
@@ -85,7 +85,7 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
 
     for user_id, thread_id, window_id in users:
         if wait_header:
-            claude_task_state.set_wait_header(window_id, wait_header)
+            session_lifecycle.handle_notification_wait(window_id, wait_header)
             await enqueue_status_update(
                 bot, user_id, window_id, None, thread_id=thread_id
             )
@@ -167,7 +167,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     notif_mode = view.notification_mode if view else "all"
 
     for user_id, thread_id, window_id in users:
-        claude_task_state.clear_wait_header(window_id)
+        session_lifecycle.handle_stop_task_state(window_id)
         if notif_mode in ("muted", "errors_only"):
             status_text = None
         else:
@@ -299,7 +299,7 @@ async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
         session_lifecycle.handle_session_end(window_id)
 
     for user_id, thread_id, window_id in users:
-        terminal_poll_state.clear_seen_status(window_id)
+        reset_window_polling_state(window_id)
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         display = thread_router.get_display_name(window_id)
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)
@@ -326,7 +326,7 @@ async def _handle_task_completed(event: HookEvent, bot: Bot) -> None:
         task_id = event.data.get("task_id", "")
         tracked = False
         if task_id:
-            tracked = claude_task_state.mark_task_completed(
+            tracked = session_lifecycle.handle_task_completed(
                 window_id,
                 event.session_id,
                 task_id,

@@ -17,6 +17,7 @@ import asyncio
 import functools
 import os
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 _DEFAULT_MARKER = "ccgram"
@@ -112,11 +113,21 @@ def match_prompt(line: str) -> PromptMatch | None:
 KNOWN_SHELLS = frozenset({"bash", "zsh", "fish", "sh", "dash", "tcsh", "csh", "ksh"})
 
 
-async def has_prompt_marker(window_id: str) -> bool:
-    """Check if the prompt marker is present in the pane."""
-    from ccgram.tmux_manager import tmux_manager
+async def has_prompt_marker(
+    window_id: str,
+    *,
+    capture_fn: Callable[[str], Awaitable[str | None]] | None = None,
+) -> bool:
+    """Check if the prompt marker is present in the pane.
 
-    capture = await tmux_manager.capture_pane(window_id)
+    ``capture_fn`` is optional and injectable for tests — defaults to
+    ``tmux_manager.capture_pane`` so production callers need no changes.
+    """
+    if capture_fn is None:
+        from ccgram.tmux_manager import tmux_manager
+
+        capture_fn = tmux_manager.capture_pane
+    capture = await capture_fn(window_id)
     if not capture:
         return False
     return any(match_prompt(line) for line in capture.rstrip().splitlines()[-5:])
@@ -232,7 +243,13 @@ async def _is_interactive_shell(window_id: str) -> bool:
     return len(tokens) == 1
 
 
-async def setup_shell_prompt(window_id: str, *, clear: bool = True) -> None:
+async def setup_shell_prompt(
+    window_id: str,
+    *,
+    clear: bool = True,
+    capture_fn: Callable[[str], Awaitable[str | None]] | None = None,
+    send_keys_fn: Callable[..., Awaitable[bool]] | None = None,
+) -> None:
     """Configure the shell prompt with a detectable marker.
 
     In ``wrap`` mode the existing prompt is preserved and a small ``⌘N⌘``
@@ -242,6 +259,10 @@ async def setup_shell_prompt(window_id: str, *, clear: bool = True) -> None:
     No-op if the marker is already present in the pane (idempotent).
     Set ``clear=False`` when attaching to an existing session to
     preserve scrollback context.
+
+    ``capture_fn`` and ``send_keys_fn`` are optional and injectable for
+    tests — default to ``tmux_manager.capture_pane`` and
+    ``tmux_manager.send_keys`` so production callers need no changes.
     """
     from ccgram.config import config
 
@@ -253,12 +274,15 @@ async def setup_shell_prompt(window_id: str, *, clear: bool = True) -> None:
     if not await _is_interactive_shell(window_id):
         return
 
-    if await has_prompt_marker(window_id):
+    if await has_prompt_marker(window_id, capture_fn=capture_fn):
         return
 
-    from ccgram.tmux_manager import tmux_manager
+    if send_keys_fn is None:
+        from ccgram.tmux_manager import tmux_manager
 
-    await tmux_manager.send_keys(window_id, "C-c", enter=False, literal=False)
+        send_keys_fn = tmux_manager.send_keys
+
+    await send_keys_fn(window_id, "C-c", enter=False, literal=False)
     await asyncio.sleep(0.1)
 
     shell = await detect_pane_shell(window_id)
@@ -267,7 +291,7 @@ async def setup_shell_prompt(window_id: str, *, clear: bool = True) -> None:
         cmd = _replace_setup_commands(shell, _get_marker_prefix())
     else:
         cmd = _wrap_setup_commands(shell)
-    await tmux_manager.send_keys(window_id, cmd, raw=True)
+    await send_keys_fn(window_id, cmd, raw=True)
     await asyncio.sleep(0.3)
     if clear:
-        await tmux_manager.send_keys(window_id, "clear", raw=True)
+        await send_keys_fn(window_id, "clear", raw=True)

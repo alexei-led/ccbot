@@ -1,18 +1,19 @@
-"""Session lifecycle management — single authority for all claude_task_state cleanup.
+"""Session lifecycle management — single write authority for claude_task_state mutations.
 
 Owns the session_map diff logic: compares old vs. new session_map to detect
 session changes and deleted windows. Returns a structured result so the
 coordinator (SessionMonitor) can clean up its own per-session state.
 
-Provides handle_session_end() as the single cleanup point for hook_events.py:
-callers must NOT touch claude_task_state or subagent state directly.
+All mutations to claude_task_state are routed through this module so there
+is one place to audit for state consistency. hook_events.py and window_tick.py
+may still *read* claude_task_state (format_completion_text, has_snapshot,
+get_wait_header) but must not call mutating methods directly.
 
 Key class: SessionLifecycle. Module-level singleton: session_lifecycle.
 """
 
 from __future__ import annotations
 
-import json
 import structlog
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -29,8 +30,6 @@ if TYPE_CHECKING:
     from .idle_tracker import IdleTracker
 
 logger = structlog.get_logger()
-
-_SessionMapError = (json.JSONDecodeError, OSError)
 
 
 @dataclass
@@ -121,6 +120,28 @@ class SessionLifecycle:
         claude_task_state.clear_window(window_id)
         clear_subagents(window_id)
         session_manager.clear_window_session(window_id)
+
+    # ── Hook-event mutation authority ────────────────────────────────────────
+
+    def handle_notification_wait(self, window_id: str, wait_header: str) -> None:
+        """Set wait-state header when a Notification hook fires."""
+        claude_task_state.set_wait_header(window_id, wait_header)
+
+    def handle_stop_task_state(self, window_id: str) -> None:
+        """Clear wait-state header when a Stop hook fires."""
+        claude_task_state.clear_wait_header(window_id)
+
+    def handle_task_completed(
+        self,
+        window_id: str,
+        session_id: str,
+        task_id: str,
+        subject: str,
+    ) -> bool:
+        """Mark task as completed; return True if it was tracked in the task list."""
+        return claude_task_state.mark_task_completed(
+            window_id, session_id, task_id, subject=subject
+        )
 
     def initialize(self, session_map: dict[str, dict[str, str]]) -> None:
         """Set initial session_map (called once at monitor startup)."""
