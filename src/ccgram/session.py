@@ -618,6 +618,7 @@ class SessionManager:
             provider_name=ws.provider_name,
             approval_mode=ws.approval_mode,
             notification_mode=ws.notification_mode,
+            batch_mode=ws.batch_mode,
             transcript_path=Path(ws.transcript_path) if ws.transcript_path else None,
             window_name=ws.window_name,
             session_id=ws.session_id,

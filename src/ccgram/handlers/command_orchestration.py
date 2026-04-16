@@ -537,13 +537,12 @@ async def _handle_clear_command(
     logger.info("Clearing session for window %s after /clear", display)
     session_manager.clear_window_session(window_id)
     from .message_queue import enqueue_status_update
-    from .polling_strategies import terminal_poll_state, terminal_screen_buffer
+    from .polling_strategies import reset_window_polling_state
 
     await enqueue_status_update(
         update.get_bot(), user_id, window_id, None, thread_id=thread_id
     )
-    terminal_poll_state.clear_seen_status(window_id)
-    terminal_screen_buffer.clear_screen_buffer(window_id)
+    reset_window_polling_state(window_id)
 
 
 # --- Main command handler ---

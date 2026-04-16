@@ -568,6 +568,17 @@ interactive_strategy = InteractiveUIStrategy()
 lifecycle_strategy = TopicLifecycleStrategy(terminal_poll_state)
 
 
+def reset_window_polling_state(window_id: str) -> None:
+    """Reset all per-window polling state in one call.
+
+    Use after /clear, window restart, or any event that requires a clean
+    slate for the next poll cycle. Callers should not call the individual
+    strategy methods directly — this is the single reset contract.
+    """
+    terminal_poll_state.clear_seen_status(window_id)
+    terminal_screen_buffer.clear_screen_buffer(window_id)
+
+
 # ── Observe→Decide→Act types ─────────────────────────────────────────────
 
 
