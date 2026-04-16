@@ -28,6 +28,8 @@ from telegram.ext import ContextTypes
 from ..config import config
 from .. import window_query
 from ..session import AuditIssue, AuditResult, session_manager
+from ..session_map import session_map_sync
+from ..user_preferences import user_preferences
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from .callback_data import CB_SYNC_DISMISS, CB_SYNC_FIX
@@ -421,13 +423,13 @@ async def handle_sync_fix(query: CallbackQuery) -> None:
     try:
         session_manager.sync_display_names(live_pairs)
         session_manager.prune_stale_state(live_ids)
-        session_manager.prune_session_map(live_ids)
+        session_map_sync.prune_session_map(live_ids)
         session_manager.prune_stale_window_states(live_ids)
         bound_ids: set[str] = {
             wid for _, _, wid in thread_router.iter_thread_bindings()
         }
         state_ids = set(session_manager.iter_window_ids())
-        session_manager.prune_stale_offsets(live_ids | bound_ids | state_ids)
+        user_preferences.prune_stale_offsets(live_ids | bound_ids | state_ids)
     except OSError:
         logger.exception("Error during sync fix operations")
 

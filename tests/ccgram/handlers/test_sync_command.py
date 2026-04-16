@@ -245,7 +245,6 @@ class TestSyncFix:
             mock_sm.prune_stale_state.assert_called_once_with(set())
             mock_sm.prune_session_map.assert_called_once_with(set())
             mock_sm.prune_stale_window_states.assert_called_once_with(set())
-            mock_sm.prune_stale_offsets.assert_called_once_with(set())
             assert mock_sm.audit_state.call_count == 2
             mock_edit.assert_called_once()
             assert "\u2705 Fixed 1 issue" in mock_edit.call_args[0][1]

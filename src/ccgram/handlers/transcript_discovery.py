@@ -24,6 +24,7 @@ from ..providers import (
     should_probe_pane_title_for_provider_detection,
 )
 from ..session import session_manager
+from ..session_map import session_map_sync
 from ..tmux_manager import tmux_manager
 from ..window_resolver import is_foreign_window
 from .polling_strategies import is_shell_prompt
@@ -149,7 +150,7 @@ async def _find_and_register_transcript(
         ):
             return
 
-        session_manager.register_hookless_session(
+        session_map_sync.register_hookless_session(
             window_id=window_id,
             session_id=event.session_id,
             cwd=event.cwd,
@@ -157,7 +158,7 @@ async def _find_and_register_transcript(
             provider_name=provider_name,
         )
         await asyncio.to_thread(
-            session_manager.write_hookless_session_map,
+            session_map_sync.write_hookless_session_map,
             window_id=window_id,
             session_id=event.session_id,
             cwd=event.cwd,

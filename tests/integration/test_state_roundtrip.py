@@ -14,6 +14,7 @@ import pytest
 from ccgram.session import SessionManager
 from ccgram.thread_router import thread_router
 from ccgram.user_preferences import user_preferences
+from ccgram.window_state_store import window_store
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +43,7 @@ def make_session_manager(tmp_path, monkeypatch):
             ),
             lambda sm: (
                 thread_router.get_window_for_thread(user_id=1, thread_id=42) == "@0"
-                and sm.get_display_name("@0") == "test-proj"
+                and thread_router.get_display_name("@0") == "test-proj"
             ),
             id="bind-thread",
         ),
@@ -70,8 +71,8 @@ def make_session_manager(tmp_path, monkeypatch):
             lambda sm: (
                 thread_router.get_window_for_thread(100, 1) == "@0"
                 and thread_router.get_window_for_thread(200, 2) == "@1"
-                and sm.get_display_name("@0") == "proj-a"
-                and sm.get_display_name("@1") == "proj-b"
+                and thread_router.get_display_name("@0") == "proj-a"
+                and thread_router.get_display_name("@1") == "proj-b"
             ),
             id="multiple-users",
         ),
@@ -113,15 +114,15 @@ async def test_persist_reload(make_session_manager, setup_fn, check_fn) -> None:
 
 async def test_window_state_survives_reload(make_session_manager) -> None:
     sm1 = make_session_manager()
-    state = sm1.get_window_state("@5")
+    state = window_store.get_window_state("@5")
     state.session_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     state.cwd = "/tmp/myproject"
     sm1.set_window_provider("@5", "claude")
     sm1.set_notification_mode("@5", "errors_only")
     sm1.flush_state()
 
-    sm2 = make_session_manager()
-    reloaded = sm2.get_window_state("@5")
+    _sm2 = make_session_manager()  # reload triggers __post_init__ -> _load_state
+    reloaded = window_store.get_window_state("@5")
     assert reloaded.session_id == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     assert reloaded.cwd == "/tmp/myproject"
     assert reloaded.provider_name == "claude"

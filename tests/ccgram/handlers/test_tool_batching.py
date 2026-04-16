@@ -27,6 +27,7 @@ from ccgram.session import (
     DEFAULT_BATCH_MODE,
     SessionManager,
     WindowState,
+    window_store,
 )
 
 
@@ -372,7 +373,7 @@ class TestSessionManagerBatchMode:
         assert len(save_calls) == 0
 
     def test_get_invalid_stored_mode_returns_default(self, mgr: SessionManager) -> None:
-        state = mgr.get_window_state("@0")
+        state = window_store.get_window_state("@0")
         state.batch_mode = "garbage"
         assert mgr.get_batch_mode("@0") == "batched"
 

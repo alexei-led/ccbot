@@ -24,7 +24,7 @@ from .claude_task_state import (
     claude_task_state,
     remove_subagent,
 )
-from .session import session_manager
+from .window_state_store import window_store
 
 if TYPE_CHECKING:
     from .idle_tracker import IdleTracker
@@ -119,7 +119,7 @@ class SessionLifecycle:
         """Single cleanup point for SessionEnd: task state, subagents, session mapping."""
         claude_task_state.clear_window(window_id)
         clear_subagents(window_id)
-        session_manager.clear_window_session(window_id)
+        window_store.clear_window_session(window_id)
 
     # ── Hook-event mutation authority ────────────────────────────────────────
 

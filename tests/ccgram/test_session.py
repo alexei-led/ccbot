@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ccgram.session import SessionManager
+from ccgram.session_map import session_map_sync
+from ccgram.session_resolver import session_resolver
 from ccgram.thread_router import thread_router
 from ccgram.user_preferences import user_preferences
 from ccgram.window_state_store import APPROVAL_MODES, WindowState, window_store
@@ -59,22 +61,22 @@ class TestResolveChatId:
 
 class TestWindowState:
     def test_get_creates_new(self, mgr: SessionManager) -> None:
-        state = mgr.get_window_state("@0")
+        state = window_store.get_window_state("@0")
         assert state.session_id == ""
         assert state.cwd == ""
 
     def test_get_returns_existing(self, mgr: SessionManager) -> None:
-        state = mgr.get_window_state("@1")
+        state = window_store.get_window_state("@1")
         state.session_id = "abc"
-        assert mgr.get_window_state("@1").session_id == "abc"
+        assert window_store.get_window_state("@1").session_id == "abc"
 
     def test_clear_window_session(self, mgr: SessionManager) -> None:
-        state = mgr.get_window_state("@1")
+        state = window_store.get_window_state("@1")
         state.session_id = "abc"
         state.approval_mode = "yolo"
-        mgr.clear_window_session("@1")
-        assert mgr.get_window_state("@1").session_id == ""
-        assert mgr.get_window_state("@1").approval_mode == "yolo"
+        window_store.clear_window_session("@1")
+        assert window_store.get_window_state("@1").session_id == ""
+        assert window_store.get_window_state("@1").approval_mode == "yolo"
 
 
 class TestResolveWindowForThread:
@@ -91,24 +93,24 @@ class TestResolveWindowForThread:
 
 class TestDisplayNames:
     def test_get_display_name_fallback(self, mgr: SessionManager) -> None:
-        assert mgr.get_display_name("@99") == "@99"
+        assert thread_router.get_display_name("@99") == "@99"
 
     def test_set_and_get_display_name(self, mgr: SessionManager) -> None:
         mgr.set_display_name("@1", "myproject")
-        assert mgr.get_display_name("@1") == "myproject"
+        assert thread_router.get_display_name("@1") == "myproject"
 
     def test_set_display_name_update(self, mgr: SessionManager) -> None:
         mgr.set_display_name("@1", "old-name")
         mgr.set_display_name("@1", "new-name")
-        assert mgr.get_display_name("@1") == "new-name"
+        assert thread_router.get_display_name("@1") == "new-name"
 
     def test_bind_thread_sets_display_name(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1", window_name="proj")
-        assert mgr.get_display_name("@1") == "proj"
+        assert thread_router.get_display_name("@1") == "proj"
 
     def test_bind_thread_without_name_no_display(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1")
-        assert mgr.get_display_name("@1") == "@1"
+        assert thread_router.get_display_name("@1") == "@1"
 
 
 class TestIsWindowId:
@@ -133,26 +135,26 @@ class TestFindUsersForSession:
     def test_returns_matching_users(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1")
         mgr.window_states["@1"] = self._ws("sid-1")
-        result = mgr.find_users_for_session("sid-1")
+        result = session_resolver.find_users_for_session("sid-1")
         assert result == [(100, "@1", 1)]
 
     def test_no_match_returns_empty(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1")
         mgr.window_states["@1"] = self._ws("sid-1")
-        assert mgr.find_users_for_session("sid-other") == []
+        assert session_resolver.find_users_for_session("sid-other") == []
 
     def test_multiple_users_same_session(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1")
         thread_router.bind_thread(200, 2, "@2")
         mgr.window_states["@1"] = self._ws("sid-shared")
         mgr.window_states["@2"] = self._ws("sid-shared")
-        result = mgr.find_users_for_session("sid-shared")
+        result = session_resolver.find_users_for_session("sid-shared")
         assert len(result) == 2
         assert {r[0] for r in result} == {100, 200}
 
     def test_ignores_windows_without_state(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1")
-        assert mgr.find_users_for_session("sid-1") == []
+        assert session_resolver.find_users_for_session("sid-1") == []
 
 
 class TestLoadSessionMapDisplayName:
@@ -181,9 +183,9 @@ class TestLoadSessionMapDisplayName:
             session_id="sid-1", cwd="/tmp/project", window_name="ccgram"
         )
 
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
 
-        assert mgr.get_display_name("@1") == "ccgram"
+        assert thread_router.get_display_name("@1") == "ccgram"
         assert mgr.window_states["@1"].window_name == "ccgram"
 
     async def test_initializes_display_name_when_missing(
@@ -205,9 +207,9 @@ class TestLoadSessionMapDisplayName:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
 
-        assert mgr.get_display_name("@2") == "project-2"
+        assert thread_router.get_display_name("@2") == "project-2"
         assert mgr.window_states["@2"].window_name == "project-2"
 
 
@@ -286,7 +288,7 @@ class TestPruneSessionMap:
         mgr.window_states["@2"] = WindowState(session_id="sid-2", cwd="/b")
         mgr.window_states["@3"] = WindowState(session_id="sid-3", cwd="/c")
 
-        mgr.prune_session_map(live_window_ids={"@1"})
+        session_map_sync.prune_session_map(live_window_ids={"@1"})
 
         result = json.loads(session_map_file.read_text())
         assert "ccgram:@1" in result
@@ -309,7 +311,7 @@ class TestPruneSessionMap:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        mgr.prune_session_map(live_window_ids={"@1"})
+        session_map_sync.prune_session_map(live_window_ids={"@1"})
 
         result = json.loads(session_map_file.read_text())
         assert "ccgram:@1" in result
@@ -320,7 +322,7 @@ class TestPruneSessionMap:
         missing = tmp_path / "nonexistent.json"
         monkeypatch.setattr("ccgram.session.config.session_map_file", missing)
 
-        mgr.prune_session_map(live_window_ids=set())
+        session_map_sync.prune_session_map(live_window_ids=set())
 
         assert not missing.exists()
 
@@ -332,7 +334,7 @@ class TestPruneSessionMap:
 
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
 
-        mgr.prune_session_map(live_window_ids={"@1"})
+        session_map_sync.prune_session_map(live_window_ids={"@1"})
 
     def test_prunes_entry_without_window_state(
         self, mgr: SessionManager, tmp_path, monkeypatch
@@ -345,7 +347,7 @@ class TestPruneSessionMap:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        mgr.prune_session_map(live_window_ids=set())
+        session_map_sync.prune_session_map(live_window_ids=set())
 
         result = json.loads(session_map_file.read_text())
         assert "ccgram:@5" not in result
@@ -455,7 +457,9 @@ class TestGlobFallbackCwdUpdate:
             return _orig_is_dir(self)
 
         with patch.object(Path, "is_dir", _mock_is_dir):
-            session = await mgr._get_session_direct("session-abc", "/wrong/path", "@1")
+            session = await session_resolver._get_session_direct(
+                "session-abc", "/wrong/path", "@1"
+            )
 
         assert session is not None
         assert mgr.window_states["@1"].cwd == "/data/code/proj"
@@ -473,7 +477,9 @@ class TestGlobFallbackCwdUpdate:
 
         mgr.window_states["@2"] = WindowState(session_id="sid-456", cwd="/wrong/path")
 
-        session = await mgr._get_session_direct("sid-456", "/wrong/path", "@2")
+        session = await session_resolver._get_session_direct(
+            "sid-456", "/wrong/path", "@2"
+        )
 
         assert session is not None
         assert mgr.window_states["@2"].cwd == "/wrong/path"
@@ -489,7 +495,7 @@ class TestGlobFallbackCwdUpdate:
 
         monkeypatch.setattr("ccgram.session.config.claude_projects_path", projects_path)
 
-        session = await mgr._get_session_direct("sid-123", "/wrong/path")
+        session = await session_resolver._get_session_direct("sid-123", "/wrong/path")
 
         assert session is not None
         assert not mgr.window_states
@@ -543,12 +549,12 @@ class TestGetWindowForChatThread:
     def test_resolves_bound_window_for_group_topic(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 42, "@9")
         thread_router.set_group_chat_id(100, 42, -100123)
-        assert mgr.get_window_for_chat_thread(-100123, 42) == "@9"
+        assert thread_router.get_window_for_chat_thread(-100123, 42) == "@9"
 
     def test_returns_none_when_chat_mismatch(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 42, "@9")
         thread_router.set_group_chat_id(100, 42, -100123)
-        assert mgr.get_window_for_chat_thread(-100999, 42) is None
+        assert thread_router.get_window_for_chat_thread(-100999, 42) is None
 
 
 class TestSyncDisplayNames:
@@ -556,7 +562,7 @@ class TestSyncDisplayNames:
         thread_router.window_display_names["@1"] = "old-name"
         changed = mgr.sync_display_names([("@1", "new-name")])
         assert changed is True
-        assert mgr.get_display_name("@1") == "new-name"
+        assert thread_router.get_display_name("@1") == "new-name"
 
     def test_updates_window_state_too(self, mgr: SessionManager) -> None:
         thread_router.window_display_names["@1"] = "old-name"
@@ -579,8 +585,8 @@ class TestSyncDisplayNames:
         thread_router.window_display_names["@2"] = "b"
         changed = mgr.sync_display_names([("@1", "a-renamed"), ("@2", "b")])
         assert changed is True
-        assert mgr.get_display_name("@1") == "a-renamed"
-        assert mgr.get_display_name("@2") == "b"
+        assert thread_router.get_display_name("@1") == "a-renamed"
+        assert thread_router.get_display_name("@2") == "b"
 
     def test_heals_stale_window_state_when_router_already_correct(
         self, mgr: SessionManager
@@ -675,7 +681,7 @@ class TestUnbindThreadCleanup:
 
 class TestRegisterHooklessSession:
     def test_updates_window_state(self, mgr: SessionManager) -> None:
-        mgr.register_hookless_session(
+        session_map_sync.register_hookless_session(
             window_id="@7",
             session_id="uuid-abc",
             cwd="/my/project",
@@ -709,7 +715,7 @@ class TestResolveSessionForWindow:
             ),
         )
 
-        session = await mgr.resolve_session_for_window("@7")
+        session = await session_resolver.resolve_session_for_window("@7")
 
         assert session is not None
         assert session.file_path == str(transcript)
@@ -732,12 +738,12 @@ class TestResolveSessionForWindow:
             ),
         )
         monkeypatch.setattr(
-            mgr,
+            session_resolver,
             "_get_session_direct",
             AsyncMock(return_value=None),
         )
 
-        session = await mgr.resolve_session_for_window("@8")
+        session = await session_resolver.resolve_session_for_window("@8")
 
         assert session is None
         assert mgr.window_states["@8"].session_id == "codex-uuid"
@@ -758,12 +764,12 @@ class TestResolveSessionForWindow:
             ),
         )
         monkeypatch.setattr(
-            mgr,
+            session_resolver,
             "_get_session_direct",
             AsyncMock(return_value=None),
         )
 
-        session = await mgr.resolve_session_for_window("@9")
+        session = await session_resolver.resolve_session_for_window("@9")
 
         assert session is None
         assert mgr.window_states["@9"].session_id == ""
@@ -779,7 +785,7 @@ class TestWriteHooklessSessionMap:
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
         mgr.set_display_name("@7", "pumba-codex")
-        mgr.write_hookless_session_map(
+        session_map_sync.write_hookless_session_map(
             window_id="@7",
             session_id="uuid-abc",
             cwd="/my/project",
@@ -805,7 +811,7 @@ class TestWriteHooklessSessionMap:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        mgr.write_hookless_session_map(
+        session_map_sync.write_hookless_session_map(
             window_id="@7",
             session_id="uuid-new",
             cwd="/new/project",
@@ -824,7 +830,7 @@ class TestWriteHooklessSessionMap:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        mgr.write_hookless_session_map(
+        session_map_sync.write_hookless_session_map(
             window_id="@7",
             session_id="uuid-abc",
             cwd="/my/project",
@@ -926,20 +932,20 @@ class TestAuditState:
 class TestPruneStaleOffsets:
     def test_removes_unknown_windows(self, mgr: SessionManager) -> None:
         user_preferences.user_window_offsets[100] = {"@1": 100, "@99": 200}
-        changed = mgr.prune_stale_offsets(known_window_ids={"@1"})
+        changed = user_preferences.prune_stale_offsets(known_window_ids={"@1"})
         assert changed
         assert "@99" not in user_preferences.user_window_offsets[100]
         assert "@1" in user_preferences.user_window_offsets[100]
 
     def test_removes_empty_user_entry(self, mgr: SessionManager) -> None:
         user_preferences.user_window_offsets[100] = {"@99": 200}
-        changed = mgr.prune_stale_offsets(known_window_ids=set())
+        changed = user_preferences.prune_stale_offsets(known_window_ids=set())
         assert changed
         assert 100 not in user_preferences.user_window_offsets
 
     def test_noop_when_nothing_stale(self, mgr: SessionManager) -> None:
         user_preferences.user_window_offsets[100] = {"@1": 100}
-        changed = mgr.prune_stale_offsets(known_window_ids={"@1"})
+        changed = user_preferences.prune_stale_offsets(known_window_ids={"@1"})
         assert not changed
 
 

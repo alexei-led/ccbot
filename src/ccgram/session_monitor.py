@@ -308,7 +308,7 @@ class SessionMonitor:
         """Background poll loop."""
         logger.info("Session monitor started, polling every %ss", self.poll_interval)
 
-        from .session import session_manager
+        from .session_map import session_map_sync
 
         await self._cleanup_all_stale_sessions()
         initial_map = await self._load_current_session_map()
@@ -318,7 +318,7 @@ class SessionMonitor:
         while self._running:
             try:
                 await self._read_hook_events()
-                await session_manager.load_session_map()
+                await session_map_sync.load_session_map()
 
                 current_map = await self._detect_and_cleanup_changes()
 
@@ -326,7 +326,7 @@ class SessionMonitor:
                 external_windows = await tmux_manager.discover_external_sessions()
                 all_windows = all_windows + external_windows
                 live_window_ids = {w.window_id for w in all_windows}
-                session_manager.prune_session_map(live_window_ids)
+                session_map_sync.prune_session_map(live_window_ids)
                 known_window_ids = set(current_map.keys())
                 for window in all_windows:
                     if window.window_id in known_window_ids:

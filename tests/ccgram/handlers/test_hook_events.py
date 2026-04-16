@@ -728,7 +728,7 @@ class TestHandleSessionEnd:
                 return_value="project",
             ),
             patch(
-                "ccgram.session_lifecycle.session_manager.clear_window_session",
+                "ccgram.session_lifecycle.window_store.clear_window_session",
             ) as mock_clear_session,
             patch("ccgram.handlers.hook_events.update_topic_emoji") as mock_emoji,
             patch("ccgram.handlers.hook_events.enqueue_status_update") as mock_enqueue,
@@ -785,7 +785,7 @@ class TestHandleSessionEnd:
                 "ccgram.handlers.hook_events.thread_router.get_display_name",
                 return_value="project",
             ),
-            patch("ccgram.session_lifecycle.session_manager.clear_window_session"),
+            patch("ccgram.session_lifecycle.window_store.clear_window_session"),
             patch("ccgram.handlers.hook_events.update_topic_emoji"),
             patch("ccgram.handlers.hook_events.enqueue_status_update"),
             patch(
@@ -814,7 +814,7 @@ class TestHandleSessionEnd:
                 return_value="project",
             ),
             patch(
-                "ccgram.session_lifecycle.session_manager.clear_window_session",
+                "ccgram.session_lifecycle.window_store.clear_window_session",
             ),
             patch("ccgram.handlers.hook_events.update_topic_emoji"),
             patch("ccgram.handlers.hook_events.enqueue_status_update"),

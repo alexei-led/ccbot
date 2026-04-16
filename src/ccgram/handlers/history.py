@@ -14,7 +14,7 @@ from typing import Any
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
-from ..session import session_manager
+from .. import session_query
 from ..user_preferences import user_preferences
 from ..thread_router import thread_router
 from ..telegram_sender import split_message
@@ -118,7 +118,7 @@ async def send_history(
         end_byte,
     )
 
-    messages, total = await session_manager.get_recent_messages(
+    messages, total = await session_query.get_recent_messages(
         window_id,
         start_byte=start_byte,
         end_byte=end_byte if end_byte > 0 else None,

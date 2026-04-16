@@ -100,7 +100,7 @@ def get_provider_for_window(
 ) -> AgentProvider:
     """Return the provider for a specific window, falling back to config default.
 
-    Callers must supply *provider_name* (e.g. from ``session_manager.get_window_provider``
+    Callers must supply *provider_name* (e.g. from ``window_query.get_window_provider``
     or ``view.provider_name``). When it is None or unknown, falls back to the
     config default provider.
     """

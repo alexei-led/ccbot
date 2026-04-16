@@ -83,6 +83,7 @@ from .handlers.polling_coordinator import status_poll_loop
 from .handlers.file_handler import handle_document_message, handle_photo_message
 from .handlers.voice_handler import handle_voice_message
 from .handlers.text_handler import handle_text_message
+from . import window_query
 from .session import session_manager
 from .session_monitor import NewMessage, NewWindowEvent, SessionMonitor
 from .thread_router import thread_router
@@ -146,7 +147,7 @@ async def history_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         return
 
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_structured_transcript:
         await safe_reply(update.message, "No transcript available for this provider.")
@@ -170,7 +171,7 @@ async def commands_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) 
         return
 
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     await _sync_scoped_provider_menu(update.message, user.id, provider)
     commands = discover_provider_commands(provider)
@@ -224,7 +225,7 @@ async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         seed_button_states,
     )
 
-    provider_name = session_manager.get_window_provider(window_id) or "claude"
+    provider_name = window_query.get_window_provider(window_id) or "claude"
     # Seed toggle-button labels with the actual current state so the
     # initial render shows "Edit"/"Plan"/"YOLO"/"Def" instead of "Mode".
     await seed_button_states(window_id)

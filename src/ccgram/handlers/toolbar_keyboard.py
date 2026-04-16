@@ -12,6 +12,7 @@ from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..config import config
 from ..providers import get_provider_for_window
+from .. import window_query
 from ..session import session_manager
 from ..topic_state_registry import topic_state
 from ..toolbar_config import (
@@ -115,7 +116,7 @@ async def seed_button_states(window_id: str) -> None:
     if mode_action is None or not mode_action.read_state:
         return
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     label = await provider.scrape_current_mode(window_id)
     if label:

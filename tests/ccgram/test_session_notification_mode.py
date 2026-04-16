@@ -9,6 +9,7 @@ from ccgram.handlers.callback_data import (
     NOTIFY_MODE_LABELS,
 )
 from ccgram.session import NOTIFICATION_MODES, SessionManager, WindowState
+from ccgram.window_state_store import window_store
 
 
 @pytest.fixture
@@ -52,7 +53,7 @@ class TestNotificationMode:
 
     def test_clear_window_resets_notification_mode(self, mgr: SessionManager) -> None:
         mgr.set_notification_mode("@0", "muted")
-        mgr.clear_window_session("@0")
+        window_store.clear_window_session("@0")
         assert mgr.get_notification_mode("@0") == "all"
 
 

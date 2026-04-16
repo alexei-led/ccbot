@@ -61,16 +61,15 @@ class TestForwardCommandResolution:
         self.mock_tr.get_display_name.return_value = "project"
         self.mock_tr.set_group_chat_id = MagicMock()
 
-        self.mock_sm = MagicMock()
-        self.mock_sm.view_window.return_value = SimpleNamespace(
+        self.mock_ws = MagicMock()
+
+        self.mock_wq = MagicMock()
+        self.mock_wq.view_window.return_value = SimpleNamespace(
             transcript_path=None,
             session_id="sess-1",
             cwd="/work/repo",
             provider_name="claude",
         )
-
-        self.mock_wq = MagicMock()
-        self.mock_wq.view_window.return_value = self.mock_sm.view_window.return_value
         self.mock_wq.get_window_provider.return_value = "claude"
 
         self.mock_tm = MagicMock()
@@ -90,9 +89,7 @@ class TestForwardCommandResolution:
 
         with (
             patch("ccgram.handlers.command_orchestration.thread_router", self.mock_tr),
-            patch(
-                "ccgram.handlers.command_orchestration.session_manager", self.mock_sm
-            ),
+            patch("ccgram.handlers.command_orchestration.window_store", self.mock_ws),
             patch("ccgram.handlers.command_orchestration.window_query", self.mock_wq),
             patch(
                 "ccgram.handlers.command_orchestration.send_to_window",
@@ -222,7 +219,7 @@ class TestForwardCommandResolution:
         update = _make_update(text="/clear")
         await forward_command_handler(update, _make_context())
 
-        self.mock_sm.clear_window_session.assert_called_once_with("@1")
+        self.mock_ws.clear_window_session.assert_called_once_with("@1")
 
     async def test_clear_enqueues_status_clear_and_resets_idle(self) -> None:
         from ccgram.handlers.polling_strategies import terminal_poll_state
@@ -312,7 +309,6 @@ class TestForwardCommandResolution:
             cwd="/work/repo",
             provider_name="codex",
         )
-        self.mock_sm.view_window.return_value = _view
         self.mock_wq.view_window.return_value = _view
         codex_provider = SimpleNamespace(
             capabilities=SimpleNamespace(
@@ -374,7 +370,6 @@ class TestForwardCommandResolution:
             cwd="/work/repo",
             provider_name="codex",
         )
-        self.mock_sm.view_window.return_value = _view2
         self.mock_wq.view_window.return_value = _view2
         codex_provider = SimpleNamespace(
             capabilities=SimpleNamespace(

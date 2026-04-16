@@ -9,7 +9,7 @@ import pytest
 
 from ccgram.handlers.directory_browser import _window_label, build_window_picker
 from ccgram.session import SessionManager, WindowState
-from ccgram.session_map import parse_emdash_provider
+from ccgram.session_map import parse_emdash_provider, session_map_sync
 from ccgram.thread_router import thread_router
 from ccgram.window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window
 
@@ -115,7 +115,7 @@ class TestLoadSessionMapEmdash:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
 
         wid = "emdash-claude-main-abc123:@0"
         assert wid in mgr.window_states
@@ -142,7 +142,7 @@ class TestLoadSessionMapEmdash:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
 
         wid = "emdash-codex-main-def456:@0"
         assert mgr.window_states[wid].provider_name == "codex"
@@ -169,7 +169,7 @@ class TestLoadSessionMapEmdash:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
 
         assert "@1" in mgr.window_states
         assert mgr.window_states["@1"].external is False
@@ -193,9 +193,9 @@ class TestLoadSessionMapEmdash:
         monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
         monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
 
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
         # Second load should not prune emdash entries
-        await mgr.load_session_map()
+        await session_map_sync.load_session_map()
 
         assert "emdash-claude-main-abc:@0" in mgr.window_states
 

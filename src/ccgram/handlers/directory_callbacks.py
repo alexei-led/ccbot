@@ -25,6 +25,7 @@ from telegram.ext import ContextTypes
 
 from ..providers import registry as provider_registry
 from ..session import session_manager
+from ..session_map import session_map_sync
 from ..user_preferences import user_preferences
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
@@ -594,7 +595,7 @@ async def _create_window_and_bind(
         await _accept_yolo_confirmation(created_wid)
 
     if provider.capabilities.supports_hook:
-        await session_manager.wait_for_session_map_entry(created_wid)
+        await session_map_sync.wait_for_session_map_entry(created_wid)
 
     if pending_thread_id is None:
         await safe_edit(query, f"✅ {message}")

@@ -18,6 +18,7 @@ from telegram.ext import ContextTypes
 from ..config import config
 from ..providers import get_provider_for_window, resolve_launch_command
 from ..session import session_manager
+from ..session_map import session_map_sync
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from .message_sender import safe_reply
@@ -80,7 +81,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if provider.capabilities.supports_hook:
-        await session_manager.wait_for_session_map_entry(wid)
+        await session_map_sync.wait_for_session_map_entry(wid)
 
     session_manager.set_window_provider(wid, provider.capabilities.name)
     session_manager.set_window_approval_mode(wid, approval_mode)

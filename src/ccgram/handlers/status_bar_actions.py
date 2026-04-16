@@ -24,6 +24,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ..screenshot import text_to_image
+from .. import window_query
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
@@ -123,7 +124,7 @@ async def _handle_status_recall(
     from ..providers import get_provider_for_window
 
     provider = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
         from .shell_commands import handle_shell_message

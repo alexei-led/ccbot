@@ -37,7 +37,7 @@ from ..providers import (
     registry,
 )
 from .. import window_query
-from ..session import session_manager
+from ..window_state_store import window_store
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import task_done_callback
@@ -536,7 +536,7 @@ async def _handle_clear_command(
     if cc_slash.strip().lower() != "/clear":
         return
     logger.info("Clearing session for window %s after /clear", display)
-    session_manager.clear_window_session(window_id)
+    window_store.clear_window_session(window_id)
     from .message_queue import enqueue_status_update
     from .polling_strategies import reset_window_polling_state
 

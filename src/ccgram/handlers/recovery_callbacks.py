@@ -22,7 +22,9 @@ from telegram.ext import ContextTypes
 
 from ..config import config
 from ..providers import get_provider, get_provider_for_window, resolve_launch_command
+from .. import window_query
 from ..session import session_manager
+from ..session_map import session_map_sync
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import read_session_metadata_from_jsonl
@@ -66,7 +68,7 @@ def build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
     """
 
     caps = get_provider_for_window(
-        window_id, provider_name=session_manager.get_window_provider(window_id)
+        window_id, provider_name=window_query.get_window_provider(window_id)
     ).capabilities
     options: list[InlineKeyboardButton] = [
         InlineKeyboardButton(
@@ -377,7 +379,7 @@ async def _create_and_bind_window(
 
     # Only wait for session_map if provider supports hooks (avoids 5s timeout)
     if provider.capabilities.supports_hook:
-        await session_manager.wait_for_session_map_entry(created_wid)
+        await session_map_sync.wait_for_session_map_entry(created_wid)
 
     # Propagate provider to new window
     session_manager.set_window_provider(created_wid, provider.capabilities.name)
@@ -498,7 +500,7 @@ async def _handle_continue(
         return
 
     launch_args = get_provider_for_window(
-        old_wid, provider_name=session_manager.get_window_provider(old_wid)
+        old_wid, provider_name=window_query.get_window_provider(old_wid)
     ).make_launch_args(use_continue=True)
     await _create_and_bind_window(
         query,
