@@ -153,7 +153,7 @@ def read_session_header(file_path: str) -> dict[str, str] | None:
 
 
 def _tool_call_block_to_message(
-    block: dict[str, Any], pending: Pending
+    block: dict[str, Any], pending: Pending, timestamp: str | None = None
 ) -> AgentMessage:
     """Convert one ``toolCall`` content block into a tool_use AgentMessage."""
     call_id_raw = block.get("id", "")
@@ -172,10 +172,13 @@ def _tool_call_block_to_message(
         content_type="tool_use",
         tool_use_id=call_id or None,
         tool_name=display,
+        timestamp=timestamp,
     )
 
 
-def _assistant_error_message(msg: dict[str, Any]) -> AgentMessage | None:
+def _assistant_error_message(
+    msg: dict[str, Any], timestamp: str | None = None
+) -> AgentMessage | None:
     """Emit an inline notice when pi records an LLM/provider error."""
     if msg.get("stopReason") != "error":
         return None
@@ -186,11 +189,12 @@ def _assistant_error_message(msg: dict[str, Any]) -> AgentMessage | None:
         text=f"\u26a0 API error: {err}",
         role="assistant",
         content_type="text",
+        timestamp=timestamp,
     )
 
 
 def parse_assistant(
-    msg: dict[str, Any], pending: Pending
+    msg: dict[str, Any], pending: Pending, timestamp: str | None = None
 ) -> tuple[list[AgentMessage], Pending]:
     """Split an assistant message into ordered text + tool_use AgentMessages.
 
@@ -202,8 +206,7 @@ def parse_assistant(
     if not isinstance(content, list):
         return [], pending
 
-    text_parts: list[str] = []
-    tool_msgs: list[AgentMessage] = []
+    messages: list[AgentMessage] = []
 
     for block in content:
         if not isinstance(block, dict):
@@ -211,21 +214,20 @@ def parse_assistant(
         btype = block.get("type", "")
         if btype == "text":
             text = block.get("text")
-            if isinstance(text, str):
-                text_parts.append(text)
+            if isinstance(text, str) and text.strip():
+                messages.append(
+                    AgentMessage(
+                        text=text.strip(),
+                        role="assistant",
+                        content_type="text",
+                        timestamp=timestamp,
+                    )
+                )
         elif btype == "toolCall":
-            tool_msgs.append(_tool_call_block_to_message(block, pending))
+            messages.append(_tool_call_block_to_message(block, pending, timestamp))
         # thinking blocks are intentionally dropped for relay parity with Claude
 
-    messages: list[AgentMessage] = []
-    combined = "".join(text_parts).strip()
-    if combined:
-        messages.append(
-            AgentMessage(text=combined, role="assistant", content_type="text")
-        )
-    messages.extend(tool_msgs)
-
-    err_msg = _assistant_error_message(msg)
+    err_msg = _assistant_error_message(msg, timestamp)
     if err_msg is not None:
         messages.append(err_msg)
 
@@ -233,7 +235,7 @@ def parse_assistant(
 
 
 def parse_tool_result(
-    msg: dict[str, Any], pending: Pending
+    msg: dict[str, Any], pending: Pending, timestamp: str | None = None
 ) -> tuple[list[AgentMessage], Pending]:
     """Resolve a ``role: toolResult`` back to its call via ``toolCallId``."""
     call_id_value = msg.get("toolCallId", "")
@@ -254,6 +256,8 @@ def parse_tool_result(
 
     if is_error and output:
         text = f"Error: {output}"
+    elif is_error:
+        text = "Error"
     else:
         text = format_tool_result_text(raw_name, output)
 
@@ -265,6 +269,7 @@ def parse_tool_result(
                 content_type="tool_result",
                 tool_use_id=call_id or None,
                 tool_name=display,
+                timestamp=timestamp,
             )
         ],
         pending,
@@ -272,7 +277,7 @@ def parse_tool_result(
 
 
 def parse_bash_execution(
-    msg: dict[str, Any],
+    msg: dict[str, Any], timestamp: str | None = None
 ) -> list[AgentMessage]:
     """Pi can persist shell runs as a dedicated ``bashExecution`` role."""
     if msg.get("excludeFromContext"):
@@ -308,16 +313,17 @@ def parse_bash_execution(
             role="assistant",
             content_type="tool_result",
             tool_name="Bash",
+            timestamp=timestamp,
         )
     ]
 
 
-def parse_user(msg: dict[str, Any]) -> list[AgentMessage]:
+def parse_user(msg: dict[str, Any], timestamp: str | None = None) -> list[AgentMessage]:
     """Render a user turn — pi stores content as ``[{type:text,text:...}]``."""
     text = extract_text(msg.get("content", "")).strip()
     if not text:
         return []
-    return [AgentMessage(text=text, role="user", content_type="text")]
+    return [AgentMessage(text=text, role="user", content_type="text", timestamp=timestamp)]
 
 
 def normalize_pending(value: Any) -> Pending:

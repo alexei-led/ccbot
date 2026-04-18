@@ -32,8 +32,10 @@ from ccgram.providers.base import (
     ProviderCapabilities,
     SessionStartEvent,
 )
+from ccgram.providers.pi_discovery import discover_pi_commands
 from ccgram.providers.pi_format import (
     Pending,
+    extract_text,
     normalize_pending,
     parse_assistant,
     parse_bash_execution,
@@ -42,7 +44,8 @@ from ccgram.providers.pi_format import (
     read_session_header,
 )
 
-_PI_SESSIONS_DIR = Path.home() / ".pi" / "agent" / "sessions"
+def _pi_sessions_dir() -> Path:
+    return Path.home() / ".pi" / "agent" / "sessions"
 
 # Cap transcript age when the pane is dead — guards against picking up an
 # unrelated historical transcript for the same cwd.
@@ -53,17 +56,13 @@ _DISCOVERY_SCAN_LIMIT = 20
 
 _PI_BUILTINS: dict[str, str] = {
     "/clear": "Clear conversation history",
-    "/compact": "Summarize older messages to save tokens",
-    "/export": "Export session as HTML",
-    "/fork": "Branch the current session into a new file",
-    "/model": "Switch active model",
-    "/models": "List available models",
-    "/new": "Start a new session",
-    "/resume": "Browse past sessions",
-    "/share": "Share session via gist",
-    "/thinking": "Change reasoning level",
-    "/tools": "List available tools",
-    "/tree": "Navigate the session history tree",
+    "/changelog": "Show version history",
+    "/compact": "Compact conversation context",
+    "/export": "Export session to HTML",
+    "/name": "Set session display name",
+    "/reload": "Reload extensions, skills, prompts, and themes",
+    "/session": "Show session info",
+    "/share": "Upload as private GitHub gist",
 }
 
 
@@ -83,7 +82,7 @@ def encode_cwd_dirname(cwd: str) -> str:
 
 def _candidate_transcripts(cwd: str) -> list[tuple[float, Path]]:
     """Return ``(mtime, path)`` tuples for this cwd's sessions, newest first."""
-    session_dir = _PI_SESSIONS_DIR / encode_cwd_dirname(cwd)
+    session_dir = _pi_sessions_dir() / encode_cwd_dirname(cwd)
     if not session_dir.is_dir():
         return []
     results: list[tuple[float, Path]] = []
@@ -105,16 +104,17 @@ def _parse_message_entry(
     role: str,
     msg: dict[str, Any],
     pending: Pending,
+    timestamp: str | None = None,
 ) -> tuple[list[AgentMessage], Pending]:
     """Dispatch one envelope's inner ``message`` to the role-specific parser."""
     if role == "user":
-        return parse_user(msg), pending
+        return parse_user(msg, timestamp=timestamp), pending
     if role == "assistant":
-        return parse_assistant(msg, pending)
+        return parse_assistant(msg, pending, timestamp=timestamp)
     if role == "toolResult":
-        return parse_tool_result(msg, pending)
+        return parse_tool_result(msg, pending, timestamp=timestamp)
     if role == "bashExecution":
-        return parse_bash_execution(msg), pending
+        return parse_bash_execution(msg, timestamp=timestamp), pending
     # branchSummary, compactionSummary, custom → no relay output for v1
     return [], pending
 
@@ -194,14 +194,55 @@ class PiProvider(JsonlProvider):
             inner = entry.get("message")
             if not isinstance(inner, dict):
                 continue
-            batch, pending = _parse_message_entry(role, inner, pending)
+            timestamp = entry.get("timestamp")
+            batch, pending = _parse_message_entry(role, inner, pending, timestamp)
             messages.extend(batch)
 
         return messages, dict(pending)
 
-    # `is_user_transcript_entry` / `parse_history_entry` inherited from
-    # JsonlProvider — pi's envelope is flattened by parse_transcript_line
-    # above, so the base implementations apply unchanged.
+    def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
+        """Check if this Pi entry is a human turn."""
+        entry_type = entry.get("type")
+        if entry_type == "user":
+            return True
+        message = entry.get("message")
+        if not isinstance(message, dict):
+            return False
+        return message.get("role") == "user"
+
+    def parse_history_entry(self, entry: dict[str, Any]) -> AgentMessage | None:
+        """Parse a raw or flattened Pi transcript entry for history display."""
+        entry_type = entry.get("type")
+        if entry_type not in ("user", "assistant", "message"):
+            return None
+
+        if entry_type == "message":
+            message = entry.get("message")
+            if not isinstance(message, dict):
+                return None
+            role = message.get("role")
+            content = message.get("content", "")
+        else:
+            role = entry_type
+            message = entry.get("message")
+            content = message.get("content", "") if isinstance(message, dict) else entry.get("content", "")
+
+        if role not in ("user", "assistant"):
+            return None
+
+        text = extract_text(content).strip()
+        if not text:
+            return None
+        timestamp = entry.get("timestamp")
+        return AgentMessage(
+            text=text,
+            role=role,
+            content_type="text",
+            timestamp=timestamp if isinstance(timestamp, str) else None,
+        )
+
+    # `parse_transcript_line` flattens Pi envelopes for monitor reads; raw
+    # session resolution still uses the overrides above.
 
     # ── Discovery ────────────────────────────────────────────────────────
 
@@ -247,8 +288,5 @@ class PiProvider(JsonlProvider):
 
     # ── Commands ─────────────────────────────────────────────────────────
 
-    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:  # noqa: ARG002
-        return [
-            DiscoveredCommand(name=name, description=desc, source="builtin")
-            for name, desc in _PI_BUILTINS.items()
-        ]
+    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
+        return discover_pi_commands(base_dir)
