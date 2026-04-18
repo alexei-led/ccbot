@@ -16,6 +16,7 @@ from ccgram.providers._jsonl import JsonlProvider
 from ccgram.providers.claude import ClaudeProvider
 from ccgram.providers.codex import CodexProvider
 from ccgram.providers.gemini import GeminiProvider
+from ccgram.providers.pi import PiProvider
 from ccgram.providers.shell import ShellProvider
 
 
@@ -62,6 +63,7 @@ PROVIDER_FIXTURES: list[type] = [
     ClaudeProvider,
     CodexProvider,
     GeminiProvider,
+    PiProvider,
     ShellProvider,
 ]
 
@@ -196,6 +198,20 @@ def _make_tool_use_entry(provider: AgentProvider) -> dict[str, Any]:
             "content": "Using tool",
             "toolCalls": [{"id": "t1", "name": "Read"}],
         }
+    if name == "pi":
+        return {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "id": "t1",
+                        "name": "read",
+                        "arguments": {"path": "foo.py"},
+                    }
+                ]
+            },
+        }
     return {
         "type": "assistant",
         "message": {
@@ -217,6 +233,17 @@ def _make_tool_result_entry(provider: AgentProvider) -> dict[str, Any]:
         }
     if name == "gemini":
         return {"type": "gemini", "content": "result ok"}
+    if name == "pi":
+        return {
+            "type": "toolResult",
+            "message": {
+                "role": "toolResult",
+                "toolCallId": "t1",
+                "toolName": "read",
+                "content": [{"type": "text", "text": "ok"}],
+                "isError": False,
+            },
+        }
     return {
         "type": "user",
         "message": {

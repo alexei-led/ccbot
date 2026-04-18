@@ -233,7 +233,7 @@ class TestEnsureRegistered:
 
     @pytest.mark.parametrize(
         "name",
-        ["claude", "codex", "gemini", "shell"],
+        ["claude", "codex", "gemini", "pi", "shell"],
     )
     def test_all_providers_registered(self, name: str) -> None:
         from ccgram.providers import _ensure_registered, registry
