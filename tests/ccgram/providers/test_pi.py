@@ -192,6 +192,7 @@ class TestParseAssistant:
                     "name": "bash",
                     "arguments": {"command": "ls -la"},
                 },
+                {"type": "text", "text": "after"},
                 {
                     "type": "toolCall",
                     "id": "t2",
@@ -200,13 +201,14 @@ class TestParseAssistant:
                 },
             ],
         }
-        msgs, pending = parse_assistant(msg, {})
-        assert [m.content_type for m in msgs] == ["text", "tool_use", "tool_use"]
+        msgs, pending = parse_assistant(msg, {}, timestamp="2024-12-03T14:00:02.000Z")
+        assert [m.content_type for m in msgs] == ["text", "tool_use", "text", "tool_use"]
+        assert [m.text for m in msgs] == ["running tools", "**Bash** `ls -la`", "after", "**Read** `foo.py`"]
+        assert all(m.timestamp == "2024-12-03T14:00:02.000Z" for m in msgs)
         assert msgs[1].tool_use_id == "t1"
         assert msgs[1].tool_name == "Bash"
-        assert "ls -la" in msgs[1].text
-        assert msgs[2].tool_use_id == "t2"
-        assert msgs[2].tool_name == "Read"
+        assert msgs[3].tool_use_id == "t2"
+        assert msgs[3].tool_name == "Read"
         assert pending == {"t1": ("bash", "Bash"), "t2": ("read", "Read")}
 
     def test_skips_thinking(self) -> None:
@@ -291,6 +293,17 @@ class TestParseToolResult:
         [out], _ = parse_tool_result(msg, {})
         assert out.text == "Error: boom"
 
+    def test_empty_error_is_not_done(self) -> None:
+        msg = {
+            "role": "toolResult",
+            "toolCallId": "t1",
+            "toolName": "bash",
+            "content": [],
+            "isError": True,
+        }
+        [out], _ = parse_tool_result(msg, {})
+        assert out.text == "Error"
+
 
 class TestParseBashExecution:
     def test_happy_path(self) -> None:
@@ -315,9 +328,11 @@ class TestParseBashExecution:
 
     def test_non_zero_exit(self) -> None:
         [out] = parse_bash_execution(
-            {"role": "bashExecution", "command": "false", "output": "", "exitCode": 1}
+            {"role": "bashExecution", "command": "false", "output": "", "exitCode": 1},
+            timestamp="2024-12-03T14:00:03.000Z",
         )
         assert "exit code 1" in out.text
+        assert out.timestamp == "2024-12-03T14:00:03.000Z"
 
 
 class TestNormalizePending:
@@ -377,6 +392,7 @@ class TestParseTranscriptLine:
                 "type": "message",
                 "id": "m1",
                 "parentId": "m0",
+                "timestamp": "2024-12-03T14:00:01.000Z",
                 "message": {
                     "role": "user",
                     "content": [{"type": "text", "text": "hi"}],
@@ -388,6 +404,7 @@ class TestParseTranscriptLine:
         assert out["type"] == "user"
         assert out["id"] == "m1"
         assert out["parentId"] == "m0"
+        assert out["timestamp"] == "2024-12-03T14:00:01.000Z"
         assert out["message"]["content"][0]["text"] == "hi"
 
     def test_rejects_empty(self) -> None:
@@ -397,6 +414,50 @@ class TestParseTranscriptLine:
     def test_rejects_message_without_role(self) -> None:
         line = '{"type":"message","message":{"content":[]}}'
         assert self.provider.parse_transcript_line(line) is None
+
+
+class TestHistoryEntry:
+    def test_reads_raw_user_message(self) -> None:
+        entry = {
+            "type": "message",
+            "timestamp": "2024-12-03T14:00:01.000Z",
+            "message": {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+        }
+        assert PiProvider().is_user_transcript_entry(entry) is True
+        parsed = PiProvider().parse_history_entry(entry)
+        assert parsed is not None
+        assert parsed.text == "hi"
+        assert parsed.timestamp == "2024-12-03T14:00:01.000Z"
+
+    def test_parses_assistant_message(self) -> None:
+        entry = {
+            "type": "message",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
+        }
+        assert PiProvider().is_user_transcript_entry(entry) is False
+        parsed = PiProvider().parse_history_entry(entry)
+        assert parsed is not None
+        assert parsed.role == "assistant"
+        assert parsed.text == "hi"
+
+    def test_preserves_order_and_timestamp(self) -> None:
+        provider = PiProvider()
+        entry = {
+            "type": "assistant",
+            "timestamp": "2024-12-03T14:00:02.000Z",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "before"},
+                    {"type": "toolCall", "id": "t1", "name": "read", "arguments": {"path": "foo.py"}},
+                    {"type": "text", "text": "after"},
+                ]
+            },
+        }
+        msgs, pending = provider.parse_transcript_entries([entry], {})
+        assert [m.content_type for m in msgs] == ["text", "tool_use", "text"]
+        assert [m.text for m in msgs] == ["before", "**Read** `foo.py`", "after"]
+        assert all(m.timestamp == "2024-12-03T14:00:02.000Z" for m in msgs)
+        assert pending == {"t1": ("read", "Read")}
 
 
 class TestDiscoverTranscript:
@@ -410,7 +471,7 @@ class TestDiscoverTranscript:
     def test_returns_newest_matching_cwd(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("ccgram.providers.pi._PI_SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("ccgram.providers.pi._pi_sessions_dir", lambda: tmp_path)
         cwd = "/real/project"
         session_dir = tmp_path / encode_cwd_dirname(cwd)
         session_dir.mkdir()
@@ -436,13 +497,13 @@ class TestDiscoverTranscript:
     def test_missing_dir_returns_none(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("ccgram.providers.pi._PI_SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("ccgram.providers.pi._pi_sessions_dir", lambda: tmp_path)
         assert PiProvider().discover_transcript("/no/such/place", "ccgram:@0") is None
 
     def test_rejects_stale_files_when_max_age_set(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("ccgram.providers.pi._PI_SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("ccgram.providers.pi._pi_sessions_dir", lambda: tmp_path)
         monkeypatch.setattr("pathlib.Path.resolve", lambda self, strict=False: self)
         cwd = "/some/project"
         session_dir = tmp_path / encode_cwd_dirname(cwd)
@@ -469,23 +530,105 @@ class TestCapabilities:
         assert caps.supports_continue is True
         assert caps.transcript_format == "jsonl"
         assert caps.supports_incremental_read is True
-        assert "/compact" in caps.builtin_commands
+        assert set(caps.builtin_commands) == {
+            "/clear",
+            "/changelog",
+            "/compact",
+            "/export",
+            "/name",
+            "/reload",
+            "/session",
+            "/share",
+        }
 
 
 class TestDiscoverCommands:
-    def test_returns_builtins(self) -> None:
-        cmds = PiProvider().discover_commands("")
+    def test_returns_builtins_and_dynamic_sources(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        pi_agent = home / ".pi" / "agent"
+        skill_dir = pi_agent / "skills" / "brave-search"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: brave-search\ndescription: Search the web\nuser-invocable: true\n---\n"
+        )
+        prompt_dir = pi_agent / "prompts"
+        prompt_dir.mkdir(parents=True)
+        (prompt_dir / "review.md").write_text(
+            "---\ndescription: Review staged changes\nargument-hint: <PR>\n---\n"
+        )
+        ext_dir = pi_agent / "extensions"
+        ext_dir.mkdir(parents=True)
+        (ext_dir / "stats.ts").write_text(
+            'export default function (pi) { pi.registerCommand("stats", { description: "Stats", handler: async () => {} }); }\n'
+        )
+        monkeypatch.setattr(Path, "home", lambda: home)
+
+        cmds = PiProvider().discover_commands(str(tmp_path / "proj"))
         names = {c.name for c in cmds}
-        assert "/compact" in names
-        assert "/tree" in names
-        assert all(c.source == "builtin" for c in cmds)
+        assert "/clear" in names
+        assert "brave-search" in names
+        assert "review" in names
+        assert "stats" in names
+        assert "/tree" not in names
+        assert "/model" not in names
+        assert all(c.name for c in cmds)
+
+    def test_dedup_keeps_first_source(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        pi_agent = home / ".pi" / "agent"
+        skill_dir = pi_agent / "skills" / "stats"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: stats\ndescription: Skill stats\nuser-invocable: true\n---\n"
+        )
+        prompt_dir = pi_agent / "prompts"
+        prompt_dir.mkdir(parents=True)
+        (prompt_dir / "stats.md").write_text("---\ndescription: Prompt stats\n---\n")
+        ext_dir = pi_agent / "extensions"
+        ext_dir.mkdir(parents=True)
+        (ext_dir / "stats.ts").write_text(
+            'export default function (pi) { pi.registerCommand("stats", { description: "Extension stats", handler: async () => {} }); }\n'
+        )
+        monkeypatch.setattr(Path, "home", lambda: home)
+
+        cmds = PiProvider().discover_commands(str(tmp_path / "proj"))
+        stats = [cmd for cmd in cmds if cmd.name == "stats"]
+        assert len(stats) == 1
+        assert stats[0].source == "skill"
+        assert stats[0].description == "Skill stats"
+
+    def test_ignores_false_positive_sources(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        pi_agent = home / ".pi" / "agent"
+        skill_dir = pi_agent / "skills" / "broken"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "README.md").write_text("just docs\n")
+        prompt_dir = pi_agent / "prompts"
+        prompt_dir.mkdir(parents=True)
+        (prompt_dir / "skip.txt").write_text("---\ndescription: ignored\n---\n")
+        ext_dir = pi_agent / "extensions"
+        ext_dir.mkdir(parents=True)
+        (ext_dir / "noop.ts").write_text("export default function () { return; }\n")
+        monkeypatch.setattr(Path, "home", lambda: home)
+
+        cmds = PiProvider().discover_commands(str(tmp_path / "proj"))
+        names = {cmd.name for cmd in cmds}
+        assert "broken" not in names
+        assert "skip" not in names
+        assert "noop" not in names
 
 
 class TestIntegrationWithCandidateTranscripts:
     def test_sorts_newest_first(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("ccgram.providers.pi._PI_SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("ccgram.providers.pi._pi_sessions_dir", lambda: tmp_path)
         cwd = "/demo"
         d = tmp_path / encode_cwd_dirname(cwd)
         d.mkdir()
