@@ -1,4 +1,4 @@
-"""Pi coding agent provider — ``@mariozechner/pi-coding-agent`` behind AgentProvider.
+"""Pi coding agent provider — https://pi.dev behind AgentProvider.
 
 Pi is a Node.js-based CLI with JSONL session transcripts (v3 format) and no
 hook subsystem; session discovery therefore follows the Codex/Gemini pattern:
@@ -32,7 +32,7 @@ from ccgram.providers.base import (
     ProviderCapabilities,
     SessionStartEvent,
 )
-from ccgram.providers.pi_discovery import discover_pi_commands
+from ccgram.providers.pi_discovery import _PI_TELEGRAM_BUILTINS, discover_pi_commands
 from ccgram.providers.pi_format import (
     Pending,
     extract_text,
@@ -55,17 +55,6 @@ _STALE_TRANSCRIPT_MAX_AGE_SECS = 120.0
 
 # How many recent session files to inspect when searching for a cwd match.
 _DISCOVERY_SCAN_LIMIT = 20
-
-_PI_BUILTINS: dict[str, str] = {
-    "/clear": "Clear conversation history",
-    "/changelog": "Show version history",
-    "/compact": "Compact conversation context",
-    "/export": "Export session to HTML",
-    "/name": "Set session display name",
-    "/reload": "Reload extensions, skills, prompts, and themes",
-    "/session": "Show session info",
-    "/share": "Upload as private GitHub gist",
-}
 
 
 def encode_cwd_dirname(cwd: str) -> str:
@@ -134,13 +123,13 @@ class PiProvider(JsonlProvider):
         supports_structured_transcript=True,
         supports_incremental_read=True,
         transcript_format="jsonl",
-        builtin_commands=tuple(_PI_BUILTINS.keys()),
+        builtin_commands=tuple(_PI_TELEGRAM_BUILTINS.keys()),
         supports_user_command_discovery=False,
         supports_status_snapshot=False,
         supports_mailbox_delivery=True,
     )
 
-    _BUILTINS = _PI_BUILTINS
+    _BUILTINS = _PI_TELEGRAM_BUILTINS
 
     # ── Launch ───────────────────────────────────────────────────────────
 

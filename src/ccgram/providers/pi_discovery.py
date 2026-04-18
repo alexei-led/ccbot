@@ -6,6 +6,7 @@ on-disk skills, prompt templates, and extension commands.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -175,29 +176,32 @@ def _discover_prompt_templates(base_dir: str) -> list[DiscoveredCommand]:
 _EXTENSION_SKIP_DIRS = frozenset({"node_modules", "dist", "build", ".git"})
 
 
-_EXTENSION_SUFFIXES = {".ts", ".js", ".mjs", ".cjs"}
+_EXTENSION_SUFFIXES = frozenset({".ts", ".js", ".mjs", ".cjs"})
 
 
 def _extension_candidates(entry: Path) -> list[Path]:
-    """Collect script files from a single extension root entry."""
+    """Collect script files from a single extension root entry.
+
+    ``os.walk`` is used instead of ``rglob`` so skip dirs are pruned before
+    descent — avoids walking ``node_modules``, ``dist``, etc. on large trees.
+    """
     if entry.is_file() and entry.suffix.lower() in _EXTENSION_SUFFIXES:
         return [entry]
-    if entry.is_dir():
-        try:
-            return [
-                path
-                for path in entry.rglob("*")
-                if path.is_file()
-                and path.suffix.lower() in _EXTENSION_SUFFIXES
-                and not path.name.startswith(".")
-                and not (
-                    _EXTENSION_SKIP_DIRS
-                    & {p.name for p in path.relative_to(entry).parents}
-                )
-            ]
-        except OSError:
-            return []
-    return []
+    if not entry.is_dir():
+        return []
+    candidates: list[Path] = []
+    try:
+        for dirpath, dirnames, filenames in os.walk(entry):
+            dirnames[:] = [d for d in dirnames if d not in _EXTENSION_SKIP_DIRS]
+            dir_path = Path(dirpath)
+            for name in filenames:
+                if name.startswith("."):
+                    continue
+                if Path(name).suffix.lower() in _EXTENSION_SUFFIXES:
+                    candidates.append(dir_path / name)
+    except OSError:
+        return []
+    return candidates
 
 
 def _extract_commands_from_file(path: Path) -> list[DiscoveredCommand]:
