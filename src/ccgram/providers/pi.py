@@ -34,7 +34,6 @@ from ccgram.providers.base import (
 )
 from ccgram.providers.pi_format import (
     Pending,
-    extract_text,
     normalize_pending,
     parse_assistant,
     parse_bash_execution,
@@ -200,24 +199,9 @@ class PiProvider(JsonlProvider):
 
         return messages, dict(pending)
 
-    def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
-        return entry.get("type") == "user"
-
-    def parse_history_entry(self, entry: dict[str, Any]) -> AgentMessage | None:
-        role = entry.get("type", "")
-        if role not in ("user", "assistant"):
-            return None
-        inner = entry.get("message")
-        if not isinstance(inner, dict):
-            return None
-        text = extract_text(inner.get("content", "")).strip()
-        if not text:
-            return None
-        return AgentMessage(
-            text=text,
-            role="user" if role == "user" else "assistant",
-            content_type="text",
-        )
+    # `is_user_transcript_entry` / `parse_history_entry` inherited from
+    # JsonlProvider — pi's envelope is flattened by parse_transcript_line
+    # above, so the base implementations apply unchanged.
 
     # ── Discovery ────────────────────────────────────────────────────────
 

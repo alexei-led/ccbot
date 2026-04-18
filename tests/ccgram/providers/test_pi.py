@@ -88,8 +88,13 @@ class TestFormatToolResultText:
 
     def test_bash_always_quoted(self) -> None:
         out = format_tool_result_text("bash", "one line")
-        assert "1 lines" in out
+        assert "1 line" in out
+        assert "1 lines" not in out
         assert "one line" in out
+
+    def test_bash_pluralizes_two_lines(self) -> None:
+        out = format_tool_result_text("bash", "a\nb")
+        assert "2 lines" in out
 
     def test_short_non_bash_inline(self) -> None:
         assert format_tool_result_text("read", "x") == "x"
@@ -232,6 +237,19 @@ class TestParseAssistant:
     def test_empty_content_no_error_no_output(self) -> None:
         msgs, _ = parse_assistant({"role": "assistant", "content": []}, {})
         assert msgs == []
+
+    def test_error_appended_alongside_partial_content(self) -> None:
+        msg = {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "partial reply "}],
+            "stopReason": "error",
+            "errorMessage": "rate limited",
+        }
+        msgs, _ = parse_assistant(msg, {})
+        assert [m.content_type for m in msgs] == ["text", "text"]
+        assert msgs[0].text == "partial reply"
+        assert "API error" in msgs[1].text
+        assert "rate limited" in msgs[1].text
 
 
 class TestParseToolResult:
@@ -421,6 +439,25 @@ class TestDiscoverTranscript:
         monkeypatch.setattr("ccgram.providers.pi._PI_SESSIONS_DIR", tmp_path)
         assert PiProvider().discover_transcript("/no/such/place", "ccgram:@0") is None
 
+    def test_rejects_stale_files_when_max_age_set(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("ccgram.providers.pi._PI_SESSIONS_DIR", tmp_path)
+        monkeypatch.setattr("pathlib.Path.resolve", lambda self, strict=False: self)
+        cwd = "/some/project"
+        session_dir = tmp_path / encode_cwd_dirname(cwd)
+        session_dir.mkdir()
+        stale = self._write_session(session_dir / "old.jsonl", "s1", cwd)
+        import os
+
+        now = time.time()
+        os.utime(stale, (now - 600, now - 600))
+
+        provider = PiProvider()
+        assert provider.discover_transcript(cwd, "ccgram:@0", max_age=60) is None
+        ev = provider.discover_transcript(cwd, "ccgram:@0", max_age=1200)
+        assert ev is not None and ev.session_id == "s1"
+
 
 class TestCapabilities:
     def test_shape(self) -> None:
@@ -442,35 +479,6 @@ class TestDiscoverCommands:
         assert "/compact" in names
         assert "/tree" in names
         assert all(c.source == "builtin" for c in cmds)
-
-
-class TestRealSessionFixture:
-    FIXTURE = Path(
-        "/Users/alexei/.pi/agent/sessions/"
-        "--Users-alexei-Workspace-ccgram--/"
-        "2026-04-18T08-57-30-467Z_019d9fcf-3663-750a-b941-946136546d38.jsonl"
-    )
-
-    def _skip_if_missing(self) -> None:
-        if not self.FIXTURE.is_file():
-            pytest.skip(f"live fixture missing: {self.FIXTURE}")
-
-    def test_pairs_all_tool_calls(self) -> None:
-        self._skip_if_missing()
-        provider = PiProvider()
-        entries: list[dict] = []
-        for line in self.FIXTURE.read_text().splitlines():
-            parsed = provider.parse_transcript_line(line)
-            if parsed is not None:
-                entries.append(parsed)
-
-        assert entries, "expected non-empty fixture"
-        assert entries[0]["type"] == "session"
-
-        _, pending = provider.parse_transcript_entries(entries, {})
-        assert pending == {}, (
-            f"{len(pending)} unpaired toolCall(s) — parser dropped results"
-        )
 
 
 class TestIntegrationWithCandidateTranscripts:

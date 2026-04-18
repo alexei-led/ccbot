@@ -75,7 +75,8 @@ def format_tool_result_text(raw_name: str, output: str) -> str:
     line_count = output.count("\n") + 1
     needs_quote = raw_name == "bash" or line_count > _TOOL_RESULT_QUOTE_THRESHOLD
     if needs_quote:
-        stats = f"  \u23bf  {line_count} lines"
+        unit = "line" if line_count == 1 else "lines"
+        stats = f"  \u23bf  {line_count} {unit}"
         return stats + "\n" + format_expandable_quote(output)
     return output
 
@@ -193,8 +194,9 @@ def parse_assistant(
 ) -> tuple[list[AgentMessage], Pending]:
     """Split an assistant message into ordered text + tool_use AgentMessages.
 
-    Empty content with ``stopReason=="error"`` surfaces ``errorMessage`` so API
-    failures are visible instead of silent.
+    ``stopReason=="error"`` always appends an ``errorMessage`` notice — pi can
+    emit errors alongside partial content, so gating on empty output would hide
+    the failure.
     """
     content = msg.get("content", [])
     if not isinstance(content, list):
@@ -223,10 +225,9 @@ def parse_assistant(
         )
     messages.extend(tool_msgs)
 
-    if not messages:
-        err_msg = _assistant_error_message(msg)
-        if err_msg is not None:
-            messages.append(err_msg)
+    err_msg = _assistant_error_message(msg)
+    if err_msg is not None:
+        messages.append(err_msg)
 
     return messages, pending
 
@@ -288,7 +289,8 @@ def parse_bash_execution(
     if output:
         line_count = output.count("\n") + 1
         if line_count > _TOOL_RESULT_QUOTE_THRESHOLD:
-            lines.append(f"  \u23bf  {line_count} lines")
+            unit = "line" if line_count == 1 else "lines"
+            lines.append(f"  \u23bf  {line_count} {unit}")
             lines.append(format_expandable_quote(output))
         else:
             lines.append(output)
