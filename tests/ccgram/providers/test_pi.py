@@ -202,8 +202,18 @@ class TestParseAssistant:
             ],
         }
         msgs, pending = parse_assistant(msg, {}, timestamp="2024-12-03T14:00:02.000Z")
-        assert [m.content_type for m in msgs] == ["text", "tool_use", "text", "tool_use"]
-        assert [m.text for m in msgs] == ["running tools", "**Bash** `ls -la`", "after", "**Read** `foo.py`"]
+        assert [m.content_type for m in msgs] == [
+            "text",
+            "tool_use",
+            "text",
+            "tool_use",
+        ]
+        assert [m.text for m in msgs] == [
+            "running tools",
+            "**Bash** `ls -la`",
+            "after",
+            "**Read** `foo.py`",
+        ]
         assert all(m.timestamp == "2024-12-03T14:00:02.000Z" for m in msgs)
         assert msgs[1].tool_use_id == "t1"
         assert msgs[1].tool_name == "Bash"
@@ -252,6 +262,26 @@ class TestParseAssistant:
         assert msgs[0].text == "partial reply"
         assert "API error" in msgs[1].text
         assert "rate limited" in msgs[1].text
+
+    def test_string_content(self) -> None:
+        msg = {"role": "assistant", "content": "plain string reply"}
+        msgs, _ = parse_assistant(msg, {})
+        assert len(msgs) == 1
+        assert msgs[0].text == "plain string reply"
+        assert msgs[0].content_type == "text"
+
+    def test_string_content_with_error(self) -> None:
+        msg = {
+            "role": "assistant",
+            "content": "partial",
+            "stopReason": "error",
+            "errorMessage": "context overflow",
+        }
+        msgs, _ = parse_assistant(msg, {})
+        assert len(msgs) == 2
+        assert msgs[0].text == "partial"
+        assert "API error" in msgs[1].text
+        assert "context overflow" in msgs[1].text
 
 
 class TestParseToolResult:
@@ -432,7 +462,10 @@ class TestHistoryEntry:
     def test_parses_assistant_message(self) -> None:
         entry = {
             "type": "message",
-            "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "hi"}],
+            },
         }
         assert PiProvider().is_user_transcript_entry(entry) is False
         parsed = PiProvider().parse_history_entry(entry)
@@ -448,7 +481,12 @@ class TestHistoryEntry:
             "message": {
                 "content": [
                     {"type": "text", "text": "before"},
-                    {"type": "toolCall", "id": "t1", "name": "read", "arguments": {"path": "foo.py"}},
+                    {
+                        "type": "toolCall",
+                        "id": "t1",
+                        "name": "read",
+                        "arguments": {"path": "foo.py"},
+                    },
                     {"type": "text", "text": "after"},
                 ]
             },

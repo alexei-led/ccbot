@@ -44,8 +44,10 @@ from ccgram.providers.pi_format import (
     read_session_header,
 )
 
+
 def _pi_sessions_dir() -> Path:
     return Path.home() / ".pi" / "agent" / "sessions"
+
 
 # Cap transcript age when the pane is dead — guards against picking up an
 # unrelated historical transcript for the same cwd.
@@ -225,7 +227,11 @@ class PiProvider(JsonlProvider):
         else:
             role = entry_type
             message = entry.get("message")
-            content = message.get("content", "") if isinstance(message, dict) else entry.get("content", "")
+            content = (
+                message.get("content", "")
+                if isinstance(message, dict)
+                else entry.get("content", "")
+            )
 
         if role not in ("user", "assistant"):
             return None

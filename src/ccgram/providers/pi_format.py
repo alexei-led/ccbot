@@ -193,21 +193,26 @@ def _assistant_error_message(
     )
 
 
-def parse_assistant(
-    msg: dict[str, Any], pending: Pending, timestamp: str | None = None
-) -> tuple[list[AgentMessage], Pending]:
-    """Split an assistant message into ordered text + tool_use AgentMessages.
-
-    ``stopReason=="error"`` always appends an ``errorMessage`` notice — pi can
-    emit errors alongside partial content, so gating on empty output would hide
-    the failure.
-    """
-    content = msg.get("content", [])
+def _parse_assistant_content(
+    content: Any,
+    pending: Pending,
+    timestamp: str | None,
+) -> list[AgentMessage]:
+    """Extract text and tool_use messages from assistant content."""
+    if isinstance(content, str):
+        if content.strip():
+            return [
+                AgentMessage(
+                    text=content.strip(),
+                    role="assistant",
+                    content_type="text",
+                    timestamp=timestamp,
+                )
+            ]
+        return []
     if not isinstance(content, list):
-        return [], pending
-
+        return []
     messages: list[AgentMessage] = []
-
     for block in content:
         if not isinstance(block, dict):
             continue
@@ -225,8 +230,20 @@ def parse_assistant(
                 )
         elif btype == "toolCall":
             messages.append(_tool_call_block_to_message(block, pending, timestamp))
-        # thinking blocks are intentionally dropped for relay parity with Claude
+    return messages
 
+
+def parse_assistant(
+    msg: dict[str, Any], pending: Pending, timestamp: str | None = None
+) -> tuple[list[AgentMessage], Pending]:
+    """Split an assistant message into ordered text + tool_use AgentMessages.
+
+    ``stopReason=="error"`` always appends an ``errorMessage`` notice — pi can
+    emit errors alongside partial content, so gating on empty output would hide
+    the failure.
+    """
+    content = msg.get("content", [])
+    messages = _parse_assistant_content(content, pending, timestamp)
     err_msg = _assistant_error_message(msg, timestamp)
     if err_msg is not None:
         messages.append(err_msg)
@@ -323,7 +340,9 @@ def parse_user(msg: dict[str, Any], timestamp: str | None = None) -> list[AgentM
     text = extract_text(msg.get("content", "")).strip()
     if not text:
         return []
-    return [AgentMessage(text=text, role="user", content_type="text", timestamp=timestamp)]
+    return [
+        AgentMessage(text=text, role="user", content_type="text", timestamp=timestamp)
+    ]
 
 
 def normalize_pending(value: Any) -> Pending:

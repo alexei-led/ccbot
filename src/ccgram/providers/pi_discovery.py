@@ -20,6 +20,7 @@ def _pi_home() -> Path:
 def _agents_home() -> Path:
     return Path.home() / ".agents"
 
+
 _PI_EXTENSION_COMMAND_RE = re.compile(
     r"pi\.registerCommand\(\s*[\"'](?P<name>[^\"']+)[\"']",
 )
@@ -48,7 +49,7 @@ def telegram_builtins() -> list[DiscoveredCommand]:
 def _safe_read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return ""
 
 
@@ -104,34 +105,41 @@ def _discover_skill_roots(base_dir: Path) -> list[Path]:
     return ordered
 
 
+def _scan_skill_root(root: Path) -> list[DiscoveredCommand]:
+    """Scan a single skill root directory for commands."""
+    if not root.is_dir():
+        return []
+    allow_root_markdown = root.name == "skills" and root.parent.name in {
+        ".pi",
+        "agent",
+    }
+    try:
+        entries = sorted(root.iterdir())
+    except OSError:
+        return []
+    found: list[DiscoveredCommand] = []
+    for entry in entries:
+        if entry.name.startswith("."):
+            continue
+        if entry.is_file() and allow_root_markdown and entry.suffix.lower() == ".md":
+            cmd = _skill_command(entry)
+            if cmd:
+                found.append(cmd)
+            continue
+        if not entry.is_dir():
+            continue
+        skill_md = entry / "SKILL.md"
+        if skill_md.is_file():
+            cmd = _skill_command(skill_md)
+            if cmd:
+                found.append(cmd)
+    return found
+
+
 def _discover_skills(base_dir: str) -> list[DiscoveredCommand]:
     discovered: list[DiscoveredCommand] = []
     for root in _discover_skill_roots(Path(base_dir)):
-        if not root.is_dir():
-            continue
-        allow_root_markdown = root.name == "skills" and root.parent.name in {
-            ".pi",
-            "agent",
-        }
-        try:
-            entries = sorted(root.iterdir())
-        except OSError:
-            continue
-        for entry in entries:
-            if entry.name.startswith("."):
-                continue
-            if entry.is_file() and allow_root_markdown and entry.suffix.lower() == ".md":
-                cmd = _skill_command(entry)
-                if cmd:
-                    discovered.append(cmd)
-                continue
-            if not entry.is_dir():
-                continue
-            skill_md = entry / "SKILL.md"
-            if skill_md.is_file():
-                cmd = _skill_command(skill_md)
-                if cmd:
-                    discovered.append(cmd)
+        discovered.extend(_scan_skill_root(root))
     return discovered
 
 
@@ -163,7 +171,48 @@ def _discover_prompt_templates(base_dir: str) -> list[DiscoveredCommand]:
             )
     return discovered
 
+
 _EXTENSION_SKIP_DIRS = frozenset({"node_modules", "dist", "build", ".git"})
+
+
+_EXTENSION_SUFFIXES = {".ts", ".js", ".mjs", ".cjs"}
+
+
+def _extension_candidates(entry: Path) -> list[Path]:
+    """Collect script files from a single extension root entry."""
+    if entry.is_file() and entry.suffix.lower() in _EXTENSION_SUFFIXES:
+        return [entry]
+    if entry.is_dir():
+        try:
+            return [
+                path
+                for path in entry.rglob("*")
+                if path.is_file()
+                and path.suffix.lower() in _EXTENSION_SUFFIXES
+                and not path.name.startswith(".")
+                and not (
+                    _EXTENSION_SKIP_DIRS
+                    & {p.name for p in path.relative_to(entry).parents}
+                )
+            ]
+        except OSError:
+            return []
+    return []
+
+
+def _extract_commands_from_file(path: Path) -> list[DiscoveredCommand]:
+    """Extract registered command names from a single extension file."""
+    text = _safe_read_text(path)
+    if not text:
+        return []
+    found: list[DiscoveredCommand] = []
+    for match in _PI_EXTENSION_COMMAND_RE.finditer(text):
+        name = match.group("name").strip()
+        if name:
+            found.append(
+                DiscoveredCommand(name=name, description=f"/{name}", source="command")
+            )
+    return found
 
 
 def _discover_extension_commands(base_dir: str) -> list[DiscoveredCommand]:
@@ -187,40 +236,8 @@ def _discover_extension_commands(base_dir: str) -> list[DiscoveredCommand]:
         for entry in entries:
             if entry.name.startswith("."):
                 continue
-            candidates: list[Path]
-            if entry.is_file() and entry.suffix.lower() in {".ts", ".js", ".mjs", ".cjs"}:
-                candidates = [entry]
-            elif entry.is_dir():
-                try:
-                    candidates = [
-                        path
-                        for path in entry.rglob("*")
-                        if path.is_file()
-                        and path.suffix.lower() in {".ts", ".js", ".mjs", ".cjs"}
-                        and not path.name.startswith(".")
-                        and not (_EXTENSION_SKIP_DIRS & {p.name for p in path.relative_to(entry).parents})
-                    ]
-                except OSError:
-                    continue
-            else:
-                continue
-
-            for path in candidates:
-                text = _safe_read_text(path)
-                if not text:
-                    continue
-                matches = list(_PI_EXTENSION_COMMAND_RE.finditer(text))
-                for match in matches:
-                    name = match.group("name").strip()
-                    if not name:
-                        continue
-                    discovered.append(
-                        DiscoveredCommand(
-                            name=name,
-                            description=f"/{name}",
-                            source="command",
-                        )
-                    )
+            for path in _extension_candidates(entry):
+                discovered.extend(_extract_commands_from_file(path))
     return discovered
 
 
