@@ -24,7 +24,7 @@ graph TB
     end
 
     subgraph windows["Tmux Windows"]
-        Win["One window per topic/session\nClaude Code · Codex · Gemini"]
+        Win["One window per topic/session\nClaude Code · Codex · Gemini · Pi"]
     end
 
     subgraph hook["Hook — hook.py"]
@@ -67,10 +67,13 @@ graph TB
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `base.py`              | AgentProvider protocol, ProviderCapabilities, event types                                                      |
 | `registry.py`          | ProviderRegistry (name→factory map, singleton cache)                                                           |
-| `_jsonl.py`            | Shared JSONL parsing base class for Codex + Gemini                                                             |
+| `_jsonl.py`            | Shared JSONL parsing base class for Codex + Gemini + Pi                                                        |
 | `claude.py`            | ClaudeProvider (hook, resume, continue, JSONL transcripts)                                                     |
 | `codex.py`             | CodexProvider (resume, continue, JSONL transcripts, no hook)                                                   |
 | `gemini.py`            | GeminiProvider (resume, continue, whole-file JSON transcripts, no hook)                                        |
+| `pi.py`                | PiProvider (resume via `--session`, continue, JSONL v3 transcripts, no hook)                                   |
+| `pi_format.py`         | Pi transcript parsers (user/assistant/toolResult/bashExecution, session header, pending-tool tracking)         |
+| `pi_discovery.py`      | Pi command discovery (Telegram-safe builtins + skills + prompts + extension `pi.registerCommand` scans)        |
 | `codex_status.py`      | Codex status snapshot builder (transcript parsing, activity detection)                                         |
 | `codex_format.py`      | Codex interactive prompt formatter (permission/tool prompts)                                                   |
 | `shell.py`             | Slim ShellProvider class (re-exports infrastructure from shell_infra for backward compat)                      |

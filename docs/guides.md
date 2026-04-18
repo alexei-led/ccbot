@@ -77,7 +77,7 @@ End-to-end tests exercise the full lifecycle: inject fake Telegram updates → r
 **Prerequisites:**
 
 - tmux installed and in PATH
-- One or more agent CLIs installed and authenticated: `claude`, `codex`, `gemini`
+- One or more agent CLIs installed and authenticated: `claude`, `codex`, `gemini`, `pi`
 
 **Test coverage per provider:**
 
@@ -86,6 +86,7 @@ End-to-end tests exercise the full lifecycle: inject fake Telegram updates → r
 | Claude   | 9     | Lifecycle, `/sessions`, `/screenshot`, `/help` forwarding, recovery (fresh + continue), status transitions, multi-topic isolation, notification mode cycling |
 | Codex    | 3     | Lifecycle, command forwarding, recovery                                                                                                                      |
 | Gemini   | 3     | Lifecycle, command forwarding, recovery                                                                                                                      |
+| Pi       | —     | Unit + contract coverage only; no e2e lifecycle suite yet                                                                                                    |
 
 **How it works:** The Bot API HTTP layer is mocked — fake `Update` objects are injected via `app.process_update()` and all outgoing API calls are intercepted and recorded for assertions. The tests drive through the full topic binding flow (directory browser → provider picker → mode select → window creation) and verify agent processes launch, messages are forwarded, and responses are delivered.
 
@@ -96,6 +97,7 @@ make test-e2e                                         # All providers
 uv run pytest tests/e2e/test_claude_lifecycle.py -v   # Claude only
 uv run pytest tests/e2e/test_codex_lifecycle.py -v    # Codex only
 uv run pytest tests/e2e/test_gemini_lifecycle.py -v   # Gemini only
+# Pi: covered by unit + contract tests in tests/ccgram/providers/test_pi.py
 ```
 
 The tests create an isolated `ccgram-e2e` tmux session that does not interfere with a running `ccgram` instance. Safe to run from a tmux window.
@@ -104,35 +106,35 @@ The tests create an isolated `ccgram-e2e` tmux session that does not interfere w
 
 All settings accept both CLI flags and environment variables. CLI flags take precedence. `TELEGRAM_BOT_TOKEN` is env-only for security (flags are visible in `ps`).
 
-| Variable / Flag                                      | Default              | Description                                                        |
-| ---------------------------------------------------- | -------------------- | ------------------------------------------------------------------ |
-| `TELEGRAM_BOT_TOKEN`                                 | _(required)_         | Bot token from @BotFather (env only)                               |
-| `ALLOWED_USERS` / `--allowed-users`                  | _(required)_         | Comma-separated Telegram user IDs                                  |
-| `CCGRAM_DIR` / `--config-dir`                        | `~/.ccgram`          | Config and state directory                                         |
-| `CLAUDE_CONFIG_DIR` / `--claude-config-dir`          | `~/.claude`          | Override Claude config directory (for wrappers like ce, cc-mirror) |
-| `TMUX_SESSION_NAME` / `--tmux-session`               | `ccgram`             | tmux session name                                                  |
-| `CCGRAM_PROVIDER` / `--provider`                     | `claude`             | Default agent provider (`claude`, `codex`, `gemini`, `shell`)      |
-| `CCGRAM_<NAME>_COMMAND`                              | _(from provider)_    | Per-provider launch command (env only, see below)                  |
-| `CCGRAM_PROMPT_MODE` / `--prompt-mode`               | `wrap`               | Shell prompt marker mode (`wrap` or `replace`)                     |
-| `CCGRAM_SHOW_HIDDEN_DIRS` / `--show-hidden-dirs`     | `false`              | Show dot-directories in directory browser                          |
-| `CCGRAM_GROUP_ID` / `--group-id`                     | _(all groups)_       | Restrict to one Telegram group                                     |
-| `CCGRAM_INSTANCE_NAME` / `--instance-name`           | hostname             | Display label for this instance                                    |
-| `CCGRAM_LOG_LEVEL` / `--log-level`                   | `INFO`               | Logging level (DEBUG, INFO, WARNING, ERROR)                        |
-| `MONITOR_POLL_INTERVAL` / `--monitor-interval`       | `2.0`                | Seconds between transcript polls                                   |
-| `AUTOCLOSE_DONE_MINUTES` / `--autoclose-done`        | `30`                 | Auto-close done topics after N minutes (0=off)                     |
-| `AUTOCLOSE_DEAD_MINUTES` / `--autoclose-dead`        | `10`                 | Auto-close dead sessions after N minutes (0=off)                   |
-| `CCGRAM_WHISPER_PROVIDER` / `--whisper-provider`     | _(empty)_            | Whisper provider: `openai`, `groq`, or empty to disable            |
-| `CCGRAM_WHISPER_API_KEY`                             | _(empty)_            | API key (env only); falls back to OPENAI_API_KEY/GROQ_API_KEY      |
-| `CCGRAM_WHISPER_BASE_URL` / `--whisper-base-url`     | _(provider default)_ | Custom OpenAI-compatible endpoint URL                              |
-| `CCGRAM_WHISPER_MODEL` / `--whisper-model`           | _(provider default)_ | Model override (e.g., `whisper-large-v3-turbo`)                    |
-| `CCGRAM_WHISPER_LANGUAGE` / `--whisper-language`     | _(auto-detect)_      | Force language code (e.g., `en`, `zh`)                             |
-| `CCGRAM_LLM_PROVIDER`                                | _(empty = disabled)_ | LLM provider for shell command generation                          |
-| `CCGRAM_LLM_API_KEY`                                 | _(empty)_            | API key for LLM provider (env only)                                |
-| `CCGRAM_LLM_BASE_URL`                                | _(from provider)_    | Custom LLM API endpoint                                            |
-| `CCGRAM_LLM_MODEL`                                   | _(from provider)_    | LLM model override                                                 |
-| `CCGRAM_LLM_TEMPERATURE`                             | `0.1`                | LLM sampling temperature (0 = deterministic)                       |
-| `CCGRAM_LIVE_VIEW_INTERVAL` / `--live-view-interval` | `5`                  | Live view refresh interval in seconds (min 1)                      |
-| `CCGRAM_LIVE_VIEW_TIMEOUT` / `--live-view-timeout`   | `300`                | Live view auto-stop timeout in seconds (min 1)                     |
+| Variable / Flag                                      | Default              | Description                                                         |
+| ---------------------------------------------------- | -------------------- | ------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`                                 | _(required)_         | Bot token from @BotFather (env only)                                |
+| `ALLOWED_USERS` / `--allowed-users`                  | _(required)_         | Comma-separated Telegram user IDs                                   |
+| `CCGRAM_DIR` / `--config-dir`                        | `~/.ccgram`          | Config and state directory                                          |
+| `CLAUDE_CONFIG_DIR` / `--claude-config-dir`          | `~/.claude`          | Override Claude config directory (for wrappers like ce, cc-mirror)  |
+| `TMUX_SESSION_NAME` / `--tmux-session`               | `ccgram`             | tmux session name                                                   |
+| `CCGRAM_PROVIDER` / `--provider`                     | `claude`             | Default agent provider (`claude`, `codex`, `gemini`, `pi`, `shell`) |
+| `CCGRAM_<NAME>_COMMAND`                              | _(from provider)_    | Per-provider launch command (env only, see below)                   |
+| `CCGRAM_PROMPT_MODE` / `--prompt-mode`               | `wrap`               | Shell prompt marker mode (`wrap` or `replace`)                      |
+| `CCGRAM_SHOW_HIDDEN_DIRS` / `--show-hidden-dirs`     | `false`              | Show dot-directories in directory browser                           |
+| `CCGRAM_GROUP_ID` / `--group-id`                     | _(all groups)_       | Restrict to one Telegram group                                      |
+| `CCGRAM_INSTANCE_NAME` / `--instance-name`           | hostname             | Display label for this instance                                     |
+| `CCGRAM_LOG_LEVEL` / `--log-level`                   | `INFO`               | Logging level (DEBUG, INFO, WARNING, ERROR)                         |
+| `MONITOR_POLL_INTERVAL` / `--monitor-interval`       | `2.0`                | Seconds between transcript polls                                    |
+| `AUTOCLOSE_DONE_MINUTES` / `--autoclose-done`        | `30`                 | Auto-close done topics after N minutes (0=off)                      |
+| `AUTOCLOSE_DEAD_MINUTES` / `--autoclose-dead`        | `10`                 | Auto-close dead sessions after N minutes (0=off)                    |
+| `CCGRAM_WHISPER_PROVIDER` / `--whisper-provider`     | _(empty)_            | Whisper provider: `openai`, `groq`, or empty to disable             |
+| `CCGRAM_WHISPER_API_KEY`                             | _(empty)_            | API key (env only); falls back to OPENAI_API_KEY/GROQ_API_KEY       |
+| `CCGRAM_WHISPER_BASE_URL` / `--whisper-base-url`     | _(provider default)_ | Custom OpenAI-compatible endpoint URL                               |
+| `CCGRAM_WHISPER_MODEL` / `--whisper-model`           | _(provider default)_ | Model override (e.g., `whisper-large-v3-turbo`)                     |
+| `CCGRAM_WHISPER_LANGUAGE` / `--whisper-language`     | _(auto-detect)_      | Force language code (e.g., `en`, `zh`)                              |
+| `CCGRAM_LLM_PROVIDER`                                | _(empty = disabled)_ | LLM provider for shell command generation                           |
+| `CCGRAM_LLM_API_KEY`                                 | _(empty)_            | API key for LLM provider (env only)                                 |
+| `CCGRAM_LLM_BASE_URL`                                | _(from provider)_    | Custom LLM API endpoint                                             |
+| `CCGRAM_LLM_MODEL`                                   | _(from provider)_    | LLM model override                                                  |
+| `CCGRAM_LLM_TEMPERATURE`                             | `0.1`                | LLM sampling temperature (0 = deterministic)                        |
+| `CCGRAM_LIVE_VIEW_INTERVAL` / `--live-view-interval` | `5`                  | Live view refresh interval in seconds (min 1)                       |
+| `CCGRAM_LIVE_VIEW_TIMEOUT` / `--live-view-timeout`   | `300`                | Live view auto-stop timeout in seconds (min 1)                      |
 
 ## Voice Message Transcription
 
@@ -262,10 +264,10 @@ tmux attach -t ccgram
 tmux new-window -n myproject -c ~/Code/myproject
 
 # Start any supported agent CLI
-claude     # or: codex, gemini
+claude     # or: codex, gemini, pi
 ```
 
-The window must be in the ccgram tmux session (configurable via `TMUX_SESSION_NAME`). For Claude, the SessionStart hook registers it automatically. For Codex and Gemini, CCGram auto-detects the provider from the running process name. In both cases, the bot creates a matching Telegram topic.
+The window must be in the ccgram tmux session (configurable via `TMUX_SESSION_NAME`). For Claude, the SessionStart hook registers it automatically. For Codex, Gemini, and Pi, CCGram auto-detects the provider from the running process name and discovers the session from transcript files on disk. In all cases, the bot creates a matching Telegram topic.
 
 This works even on a fresh instance with no existing topic bindings (cold-start).
 
@@ -277,7 +279,7 @@ When an agent session exits or crashes, the bot detects the dead window and offe
 - **Continue** — Resume the last conversation (all providers support this)
 - **Resume** — Browse and select a past session to resume from
 
-The buttons shown adapt to each provider's capabilities. Claude, Codex, and Gemini support Fresh, Continue, and Resume. Shell supports Fresh only (shell sessions are ephemeral).
+The buttons shown adapt to each provider's capabilities. Claude, Codex, Gemini, and Pi support Fresh, Continue, and Resume. Shell supports Fresh only (shell sessions are ephemeral).
 
 ## Live View
 
@@ -455,13 +457,13 @@ Peer IDs use the qualified format `session:@N` (e.g., `ccgram:@0`, `ccgram:@3`).
 
 ### Limitations
 
-- **Claude only** — the messaging skill is auto-installed only for Claude windows. Codex and Gemini agents don't receive the skill (they can still receive messages via the broker, but won't know how to use the CLI).
+- **Claude only** — the messaging skill is auto-installed only for Claude windows. Codex, Gemini, and Pi agents don't receive the skill (they can still receive messages via the broker, but won't know how to use the CLI).
 - **Shell windows are inbox-only** — shell topics receive Telegram notifications about messages but the broker does not inject text into shell panes.
 - **Delivery requires idle** — for hook-enabled providers (Claude), messages are only injected when the agent goes idle (Stop event). During long-running tool calls, messages queue until the agent finishes.
 
 ## Providers
 
-CCGram supports Claude Code, Codex CLI, Gemini CLI, and Shell. Each topic can use a different provider. See **[docs/providers.md](providers.md)** for full details on each provider, session modes, custom launch commands, LLM configuration, and provider-specific behavior.
+CCGram supports Claude Code, Codex CLI, Gemini CLI, Pi, and Shell. Each topic can use a different provider. See **[docs/providers.md](providers.md)** for full details on each provider, session modes, custom launch commands, LLM configuration, and provider-specific behavior.
 
 ## Data Storage
 
@@ -475,7 +477,7 @@ All state files live in `$CCGRAM_DIR` (`~/.ccgram/` by default):
 | `monitor_state.json` | Byte offsets per session (prevents duplicate notifications) |
 | `mailbox/`           | Inter-agent message inboxes (per-window dirs with JSON)     |
 
-Session transcripts are read from provider-specific locations (read-only): `~/.claude/projects/` (Claude), `~/.codex/sessions/` (Codex), `~/.gemini/tmp/` (Gemini). Shell has no transcript — output is captured directly from the tmux pane. The bot never writes to agent data directories.
+Session transcripts are read from provider-specific locations (read-only): `~/.claude/projects/` (Claude), `~/.codex/sessions/` (Codex), `~/.gemini/tmp/` (Gemini), `~/.pi/agent/sessions/` (Pi). Shell has no transcript — output is captured directly from the tmux pane. The bot never writes to agent data directories.
 
 ## Running as a Service
 

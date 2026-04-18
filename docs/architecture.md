@@ -4,7 +4,7 @@ Generated from code state 2026-04-16 (post modularity round 3).
 
 ## System Overview
 
-ccgram maps each Telegram Forum topic to one tmux window running one agent CLI (Claude Code, Codex, Gemini, or Shell). All internal routing is keyed by tmux window ID (`@0`, `@12`).
+ccgram maps each Telegram Forum topic to one tmux window running one agent CLI (Claude Code, Codex, Gemini, Pi, or Shell). All internal routing is keyed by tmux window ID (`@0`, `@12`).
 
 ```mermaid
 graph TB
@@ -12,7 +12,7 @@ graph TB
     Bot["bot.py<br>PTB application"]
     Handlers["handlers/<br>50+ modules"]
     TmuxMgr["tmux_manager.py <br> libtmux + subprocess"]
-    Windows["tmux windows <br> (Claude, Codex, Gemini, Shell)"]
+    Windows["tmux windows <br> (Claude, Codex, Gemini, Pi, Shell)"]
     Hook["hook.py<br>Claude Code hooks"]
     Monitor["session_monitor.py<br>poll loop"]
     State["State files<br>~/.ccgram/"]
@@ -72,7 +72,7 @@ graph TD
     subgraph providers["Provider Abstraction"]
         Base["providers/base.py<br>AgentProvider protocol<br>ProviderCapabilities"]
         Claude["providers/claude.py"]
-        Jsonl["providers/_jsonl.py<br>(Codex + Gemini base)"]
+        Jsonl["providers/_jsonl.py<br>(Codex + Gemini + Pi base)"]
         Shell["providers/shell.py"]
     end
 
@@ -179,12 +179,14 @@ classDiagram
 
     class CodexProvider
     class GeminiProvider
+    class PiProvider
     class ShellProvider
 
     AgentProvider <|.. ClaudeProvider
     AgentProvider <|.. JsonlProvider
     JsonlProvider <|-- CodexProvider
     JsonlProvider <|-- GeminiProvider
+    JsonlProvider <|-- PiProvider
     JsonlProvider <|-- ShellProvider
 ```
 

@@ -86,7 +86,8 @@ Change provider behavior (commands, parsing, capabilities):
 
 - `src/ccgram/providers/base.py` for contract/capabilities.
 - `src/ccgram/providers/__init__.py` for per-window provider resolution.
-- `src/ccgram/providers/{claude,codex,gemini,shell}.py` for provider-specific behavior.
+- `src/ccgram/providers/{claude,codex,gemini,pi,shell}.py` for provider-specific behavior.
+- `src/ccgram/providers/pi_discovery.py` + `pi_format.py` for Pi command discovery and transcript parsing.
 - `src/ccgram/providers/codex_format.py` for provider-facing interactive prompt text normalization (currently Codex edit approval readability).
 
 Change shell command generation behavior:

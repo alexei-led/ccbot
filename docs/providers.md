@@ -9,18 +9,19 @@ CCGram supports multiple agent CLI backends. Each Telegram topic can use a diffe
 | Claude Code | `claude`    | Yes         | Yes    | Yes      | JSONL      | Hook events + pyte VT100 + spinner                        |
 | Codex CLI   | `codex`     | No          | Yes    | Yes      | JSONL      | pyte VT100 interactive UI + transcript activity heuristic |
 | Gemini CLI  | `gemini`    | No          | Yes    | Yes      | JSON       | Pane title + interactive UI                               |
+| Pi          | `pi`        | No          | Yes    | Yes      | JSONL (v3) | Transcript activity heuristic                             |
 | Shell       | `bash`      | No          | No     | No       | None       | Shell prompt idle detection                               |
 
 ## Choosing a Provider
 
-**From Telegram**: When you create a new topic and select a directory, a provider picker appears with Claude (default), Codex, Gemini, and Shell options. After provider selection, CCGram asks for session mode:
+**From Telegram**: When you create a new topic and select a directory, a provider picker appears with Claude (default), Codex, Gemini, Pi, and Shell options. After provider selection, CCGram asks for session mode:
 
 - `✅ Standard` (normal approvals)
 - `🚀 YOLO` (provider-specific permissive mode)
 
 **From the terminal**: If you create a tmux window manually and start an agent CLI, CCGram auto-detects the provider from the running process name. When the pane command is a JS runtime wrapper (node, bun), it falls back to `ps -t` foreground process inspection to reliably identify the actual CLI. As a last resort, Gemini pane-title symbols (`✦`, `✋`, `◇`) are checked.
 
-**Default provider**: Set `CCGRAM_PROVIDER=codex` (or `gemini`, `shell`) to change the default. Claude is the default if unset.
+**Default provider**: Set `CCGRAM_PROVIDER=codex` (or `gemini`, `pi`, `shell`) to change the default. Claude is the default if unset.
 
 ## Session Mode (Standard vs YOLO)
 
@@ -42,9 +43,10 @@ Override the CLI command used to launch each provider via `CCGRAM_<NAME>_COMMAND
 CCGRAM_CLAUDE_COMMAND=ce --current
 CCGRAM_CODEX_COMMAND=my-codex-wrapper
 CCGRAM_GEMINI_COMMAND=/opt/gemini/run
+CCGRAM_PI_COMMAND=pi --model sonnet
 ```
 
-`<NAME>` is uppercase: `CLAUDE`, `CODEX`, `GEMINI`. Defaults to the provider's built-in command (`claude`, `codex`, `gemini`) when unset. New providers automatically support `CCGRAM_<NAME>_COMMAND` without code changes.
+`<NAME>` is uppercase: `CLAUDE`, `CODEX`, `GEMINI`, `PI`. Defaults to the provider's built-in command (`claude`, `codex`, `gemini`, `pi`) when unset. New providers automatically support `CCGRAM_<NAME>_COMMAND` without code changes.
 
 You can use this for a global "today" setup (all new sessions), for example:
 
@@ -61,6 +63,7 @@ Each provider exposes its own slash commands to the Telegram menu. Examples:
 - **Claude**: `/clear`, `/compact`, `/cost`, `/doctor`, `/permissions`...
 - **Codex**: `/model`, `/mode`, `/status`, `/diff`, `/compact`, `/mcp`...
 - **Gemini**: `/chat`, `/clear`, `/compress`, `/model`, `/memory`, `/vim`...
+- **Pi**: `/clear`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`, `/changelog`... (plus discovered skills/prompts/extensions)
 
 ---
 
@@ -138,6 +141,40 @@ For ccgram-managed Gemini launches, CCGram injects `GEMINI_CLI_SYSTEM_SETTINGS_P
 ### Transcript
 
 Gemini transcripts are JSON files (whole-file read, not incremental) under `~/.gemini/tmp/`.
+
+## Pi
+
+[Pi](https://pi.dev) is a Node.js-based CLI with JSONL v3 transcripts and no hook subsystem. Session tracking follows the Codex/Gemini pattern: ccgram scans `~/.pi/agent/sessions/--<encoded-cwd>--/` for the newest transcript whose header `cwd` matches the window working directory.
+
+### Launch
+
+The default command is `pi`. Override via `CCGRAM_PI_COMMAND` to change models, flags, or wrappers.
+
+### Resume
+
+Resume always uses `--session <path-or-uuid>`. Pi's `--resume` flag opens an interactive picker ccgram can't drive over `send_keys`, so ccgram always passes the resolved transcript path (or UUID prefix) directly. Pi's own `--continue` is used for the Continue recovery button.
+
+### Transcript
+
+Pi transcripts are JSONL files (v3 format) under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`. The canonical session id lives in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`) — the filename prefix is just a timestamp. Transcripts are read incrementally via byte offsets.
+
+### Commands
+
+Pi exposes a Telegram-safe subset of built-in slash commands (`/clear`, `/changelog`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`). Dynamic discovery surfaces three more sources:
+
+- **Skills** — `SKILL.md` under `~/.pi/agent/skills/<name>/`, `~/.agents/skills/<name>/`, `<project>/.pi/skills/<name>/`, or `<project>/.agents/skills/<name>/`. Loose `.md` files at the root of `~/.pi/agent/skills/` or `<project>/.pi/skills/` are also picked up.
+- **Prompt templates** — `.md` files under `~/.pi/agent/prompts/` or `<project>/.pi/prompts/` (per-project walk stops at the first `.git` ancestor).
+- **Extension commands** — TypeScript/JavaScript files (`.ts`, `.js`, `.mjs`, `.cjs`) under `~/.pi/agent/extensions/` or `<project>/.pi/extensions/`, scanned for `pi.registerCommand("name", ...)` calls. The walker prunes `node_modules`, `dist`, `build`, and `.git` before descent.
+
+Names collide-dedupe with first-source wins (skills > prompts > extensions).
+
+### Status Detection
+
+Pi has no hooks and no pane-title signaling, so status is inferred from transcript activity — idle when the latest assistant message has no pending tool calls, working when there are unreturned tool uses.
+
+### Toolbar
+
+Pi's default toolbar omits Mode/Think/YOLO (pi has no mode cycling): Row 1 `Screen, Ctrl-C, Live`, Row 2 `Esc, Enter, Tab`, Row 3 `Send, Close`. Override with a `[providers.pi]` block in `~/.ccgram/toolbar.toml`.
 
 ## Shell
 

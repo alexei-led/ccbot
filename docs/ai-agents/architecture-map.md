@@ -23,7 +23,8 @@
 - `src/ccgram/providers/base.py` defines the provider contract.
   - `discover_transcript(cwd, window_key, *, max_age=None)` is the hookless discovery contract (used by Codex/Gemini; `max_age=0` disables staleness checks for alive panes).
 - `src/ccgram/providers/__init__.py` resolves per-window provider selection.
-- `src/ccgram/providers/{claude,codex,gemini,shell}.py` implement provider-specific behavior.
+- `src/ccgram/providers/{claude,codex,gemini,pi,shell}.py` implement provider-specific behavior.
+- `src/ccgram/providers/pi_format.py` + `pi_discovery.py` handle Pi transcript parsing and command discovery.
 - `src/ccgram/command_catalog.py` discovers provider commands from filesystem (skills, custom commands) with 60s TTL caching.
 - `src/ccgram/cc_commands.py` registers discovered commands as Telegram bot menu entries.
 - `src/ccgram/providers/codex_format.py` normalizes provider interactive prompt text for Telegram readability (currently Codex edit approvals).
@@ -126,6 +127,7 @@ Provider transcript sources (read-only):
 - Codex: `~/.codex/sessions/`
 - Gemini: `~/.gemini/tmp/`
   - Gemini discovery matches by `projectHash` (or configured project alias dir) and does not full-scan unrelated project dirs.
+- Pi: `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl` (JSONL v3; discovery matches the header `cwd` against the window cwd).
 - Shell: no transcript files; output is captured directly from the tmux pane by `handlers/shell_capture.py`.
 
 ## Core Flow

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-ccgram (Command & Control Bot) — manage AI coding agents from Telegram via tmux. Each Telegram Forum topic is bound to one tmux window running one agent CLI instance (Claude Code, Codex, Gemini, or a plain shell).
+ccgram (Command & Control Bot) — manage AI coding agents from Telegram via tmux. Each Telegram Forum topic is bound to one tmux window running one agent CLI instance (Claude Code, Codex, Gemini, Pi, or a plain shell).
 
 Tech stack: Python, python-telegram-bot, tmux, uv.
 
@@ -94,7 +94,7 @@ ccgram supports multiple agent CLI backends via the provider abstraction (`src/c
 | Default provider     | `CCGRAM_PROVIDER`       | `claude`        |
 | Per-provider command | `CCGRAM_<NAME>_COMMAND` | (from provider) |
 
-Launch command override: `CCGRAM_<NAME>_COMMAND` (e.g. `CCGRAM_CLAUDE_COMMAND=ce --current`), falls back to provider default. The shell provider has no override — tmux opens `$SHELL` by default. Resolved by `resolve_launch_command()` in `providers/__init__.py`.
+Launch command override: `CCGRAM_<NAME>_COMMAND` (e.g. `CCGRAM_CLAUDE_COMMAND=ce --current`, `CCGRAM_PI_COMMAND=pi --model sonnet`), falls back to provider default. The shell provider has no override — tmux opens `$SHELL` by default. Resolved by `resolve_launch_command()` in `providers/__init__.py`.
 
 ### Per-Window Provider Model
 
@@ -107,26 +107,26 @@ Key functions:
 
 - `get_provider_for_window(window_id)` — resolves provider instance for a specific window
 - `detect_provider_from_pane(pane_current_command, pane_tty, window_id)` — auto-detects provider from process name with ps-based TTY fallback for JS-runtime-wrapped CLIs
-- `detect_provider_from_command(pane_current_command)` — fast-path detection from process basename (claude/codex/gemini/shell)
+- `detect_provider_from_command(pane_current_command)` — fast-path detection from process basename (claude/codex/gemini/pi/shell)
 - `set_window_provider(window_id, provider_name)` — persists provider choice on SessionManager
 
-When creating a topic via the directory browser, users can choose the provider (Claude default, Codex, Gemini, Shell). Externally created tmux windows are auto-detected via `detect_provider_from_pane()` which tries process basename first, then falls back to `ps -t` foreground process inspection (with PGID caching) when the pane command is a JS runtime wrapper (node/bun). The global `get_provider()` remains as fallback for CLI commands without window context (e.g., `doctor`, `status`). Runtime re-detection (every 1s poll cycle) triggers prompt marker check on each transition to shell. Explicit shell topic creation (directory browser) auto-configures the marker.
+When creating a topic via the directory browser, users can choose the provider (Claude default, Codex, Gemini, Pi, Shell). Externally created tmux windows are auto-detected via `detect_provider_from_pane()` which tries process basename first, then falls back to `ps -t` foreground process inspection (with PGID caching) when the pane command is a JS runtime wrapper (node/bun). The global `get_provider()` remains as fallback for CLI commands without window context (e.g., `doctor`, `status`). Runtime re-detection (every 1s poll cycle) triggers prompt marker check on each transition to shell. Explicit shell topic creation (directory browser) auto-configures the marker.
 
 ### Provider Capability Matrix
 
-| Capability       | Claude                          | Codex              | Gemini                      | Shell                       |
-| ---------------- | ------------------------------- | ------------------ | --------------------------- | --------------------------- |
-| Hook events      | Yes (all supported event types) | No                 | No                          | No                          |
-| Resume           | Yes (`--resume`)                | Yes (`resume`)     | Yes (`--resume idx/latest`) | No                          |
-| Continue         | Yes                             | Yes                | Yes                         | No                          |
-| Transcript       | JSONL                           | JSONL              | JSON (whole-file read)      | None                        |
-| Incremental read | Yes                             | Yes                | No (whole-file JSON)        | No                          |
-| Commands         | Yes                             | Yes                | Yes                         | No                          |
-| Status detection | Hook events + pyte + spinner    | Activity heuristic | Pane title + interactive UI | Shell prompt idle detection |
-| YOLO auto-accept | Yes                             | No                 | No                          | No                          |
-| Mode scraping    | Yes (mode-line parse)           | No                 | No                          | No                          |
+| Capability       | Claude                          | Codex              | Gemini                      | Pi                       | Shell                       |
+| ---------------- | ------------------------------- | ------------------ | --------------------------- | ------------------------ | --------------------------- |
+| Hook events      | Yes (all supported event types) | No                 | No                          | No                       | No                          |
+| Resume           | Yes (`--resume`)                | Yes (`resume`)     | Yes (`--resume idx/latest`) | Yes (`--session <path>`) | No                          |
+| Continue         | Yes                             | Yes                | Yes                         | Yes                      | No                          |
+| Transcript       | JSONL                           | JSONL              | JSON (whole-file read)      | JSONL (v3)               | None                        |
+| Incremental read | Yes                             | Yes                | No (whole-file JSON)        | Yes                      | No                          |
+| Commands         | Yes                             | Yes                | Yes                         | Yes (builtins + skills)  | No                          |
+| Status detection | Hook events + pyte + spinner    | Activity heuristic | Pane title + interactive UI | Transcript activity      | Shell prompt idle detection |
+| YOLO auto-accept | Yes                             | No                 | No                          | No                       | No                          |
+| Mode scraping    | Yes (mode-line parse)           | No                 | No                          | No                       | No                          |
 
-Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks all hook event types for Claude. Codex, Gemini, and Shell have no hooks — session tracking for these providers relies on auto-detection from running processes.
+Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks all hook event types for Claude. Codex, Gemini, Pi, and Shell have no hooks — session tracking for these providers relies on auto-detection from running processes.
 
 ### Shell Prompt Configuration
 
@@ -201,6 +201,7 @@ Send workspace files to Telegram. Three modes in one command:
 | Claude   | 📷 Screen, ⏹ Ctrl-C, 📺 Live | 🔀 Mode, 💭 Think, ⎋ Esc | 📤 Send, ⏎ Enter, ✖ Close |
 | Codex    | 📷 Screen, ⏹ Ctrl-C, 📺 Live | ⎋ Esc, ⏎ Enter, ⇥ Tab    | 📤 Send, 🔀 Mode, ✖ Close |
 | Gemini   | 📷 Screen, ⏹ Ctrl-C, 📺 Live | 🔀 Mode, 🅨 YOLO, ⎋ Esc   | 📤 Send, ⏎ Enter, ✖ Close |
+| Pi       | 📷 Screen, ⏹ Ctrl-C, 📺 Live | ⎋ Esc, ⏎ Enter, ⇥ Tab    | 📤 Send, ✖ Close          |
 | Shell    | 📷 Screen, ⏹ Ctrl-C, 📺 Live | ⏎ Enter, ^D EOF, ^Z Susp | 📤 Send, ⎋ Esc, ✖ Close   |
 
 **Toggle actions with state readback**: Mode (Shift+Tab), Think (Tab), YOLO (Ctrl+Y) capture the pane ~250ms after the key press, scrape the agent CLI's mode-line, and surface it in the answer toast (e.g., "auto-accept edits on"). Falls back to the static toast when no recognized mode-line is found.
@@ -234,6 +235,10 @@ Providers absent from the TOML keep their built-in defaults. Malformed entries a
 ### Migration Notes
 
 Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccgram hook --install`) is Claude-specific and skipped for other providers.
+
+### Pi Provider
+
+[Pi](https://pi.dev) is a Node.js-based coding agent CLI with JSONL v3 transcripts and no hook subsystem, so session discovery follows the Codex/Gemini pattern (hookless `discover_transcript()`). Transcripts live under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`; the canonical session id sits in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`). Resume always uses `--session <path>` — `--resume` would open an interactive picker ccgram can't drive. Command discovery (`pi_discovery.py`) surfaces Telegram-friendly builtins (`/clear`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`, `/changelog`) plus on-disk sources: skills under `.pi/skills`, `.agents/skills`, `~/.pi/agent/skills`, and `~/.agents/skills`; prompt templates under `.pi/prompts` and `~/.pi/agent/prompts`; extension commands via `pi.registerCommand(...)` scans in `.pi/extensions` and `~/.pi/agent/extensions`.
 
 ## Testing
 

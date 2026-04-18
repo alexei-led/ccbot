@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/github/license/alexei-led/ccgram)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**Control AI coding agents from your phone.** CCGram bridges Telegram to tmux — monitor output, respond to prompts, and manage multiple sessions without touching your computer. Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), and plain shell sessions.
+**Control AI coding agents from your phone.** CCGram bridges Telegram to tmux — monitor output, respond to prompts, and manage multiple sessions without touching your computer. Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Pi](https://pi.dev), and plain shell sessions.
 
 ---
 
@@ -36,6 +36,7 @@ graph LR
     T2["💬 ui — Codex"]
     T3["💬 data — Gemini"]
     T4["💬 ops — Shell"]
+    T5["💬 lab — Pi"]
   end
 
   subgraph bridge["⚡ CCGram"]
@@ -51,6 +52,7 @@ graph LR
     W2["window @1 · codex"]
     W3["window @2 · gemini"]
     W4["window @3 · bash"]
+    W5["window @4 · pi"]
   end
 
   phone -- "messages / voice" --> bridge
@@ -72,13 +74,13 @@ Each Telegram Forum topic binds to one tmux window. Messages you type are sent a
 
 - **Topic-per-agent** — each Telegram Forum topic is one tmux window running one agent CLI
 - **Interactive prompts** — AskUserQuestion, ExitPlanMode, and Permission dialogs rendered as inline keyboards
-- **Slash commands** — provider-aware menu (Claude `/cost`, Codex `/status`, Gemini `/chat`, etc.); mismatched commands report errors
+- **Slash commands** — provider-aware menu (Claude `/cost`, Codex `/status`, Gemini `/chat`, Pi `/compact`, etc.); mismatched commands report errors
 - **Voice messages** — transcribed via Whisper API (OpenAI/Groq), shown with **Send / Discard** buttons before forwarding
 - **Multi-pane support** — auto-detects blocked panes in agent teams, surfaces prompts as alerts; `/panes` for overview
 - **Terminal screenshots** — capture the current pane (or any specific pane) as a PNG image
 - **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
 - **File delivery** (`/send`) — send workspace files to Telegram: exact path (`/send docs/arch.png`), glob (`/send *.png`), substring search (`/send arch`), or interactive browser (`/send`). Project-scoped with security filtering (hidden files, credentials, gitignored, >50 MB denied)
-- **Action toolbar** (`/toolbar`) — provider-specific inline buttons. Universal row: Screenshot, Ctrl-C, Live, Send. Provider row varies: Claude (Mode, Think, Esc), Codex (Esc, Enter, Tab), Gemini (Mode, YOLO, Esc), Shell (Enter, EOF, Suspend)
+- **Action toolbar** (`/toolbar`) — provider-specific inline buttons. Universal row: Screenshot, Ctrl-C, Live, Send. Provider row varies: Claude (Mode, Think, Esc), Codex (Esc, Enter, Tab), Gemini (Mode, YOLO, Esc), Pi (Esc, Enter, Tab), Shell (Enter, EOF, Suspend)
 - **Remote Control** — 📡 topic badge when RC is active; one-tap activation from status keyboard
 
 ### Real-Time Monitoring
@@ -107,6 +109,7 @@ graph TB
     C["🟠 Claude Code\nhook events · resume · JSONL"]
     X["🧩 Codex CLI\nresume · continue · JSONL"]
     G["♊ Gemini CLI\nresume · continue · JSON"]
+    P["🥧 Pi\nresume · continue · JSONL"]
     S["🐚 Shell\nnl→command · raw mode"]
   end
 
@@ -177,7 +180,7 @@ graph LR
 
 - **Python 3.14+**
 - **tmux** — installed and in PATH
-- **At least one agent CLI** — `claude` (default), `codex`, or `gemini` installed and authenticated (or use `shell` with no extra install)
+- **At least one agent CLI** — `claude` (default), `codex`, `gemini`, or `pi` installed and authenticated (or use `shell` with no extra install)
 
 ### Install
 
@@ -212,7 +215,7 @@ CCGRAM_GROUP_ID=your_telegram_group_id
 ccgram hook --install
 ```
 
-Registers Claude Code hooks for automatic session tracking, instant interactive UI detection, API error alerting, and subagent/team notifications. Not needed for Codex or Gemini.
+Registers Claude Code hooks for automatic session tracking, instant interactive UI detection, API error alerting, and subagent/team notifications. Not needed for Codex, Gemini, or Pi.
 
 > If hooks are missing, ccgram warns at startup with the fix command. Hooks are optional — terminal scraping works as fallback.
 
@@ -222,29 +225,29 @@ Registers Claude Code hooks for automatic session tracking, instant interactive 
 ccgram
 ```
 
-Open your Telegram group, create a new topic, send a message — a directory browser appears. Pick a project directory, choose your agent (Claude, Codex, Gemini, or Shell), choose session mode (`✅ Standard` or `🚀 YOLO`), and you're connected.
+Open your Telegram group, create a new topic, send a message — a directory browser appears. Pick a project directory, choose your agent (Claude, Codex, Gemini, Pi, or Shell), choose session mode (`✅ Standard` or `🚀 YOLO`), and you're connected.
 
 ---
 
 ## Configuration Reference
 
-| Variable / Flag             | Default           | Description                                                 |
-| --------------------------- | ----------------- | ----------------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`        | _(required)_      | Bot token from @BotFather (env only)                        |
-| `ALLOWED_USERS`             | _(required)_      | Comma-separated Telegram user IDs                           |
-| `CCGRAM_DIR`                | `~/.ccgram`       | Config and state directory                                  |
-| `CCGRAM_PROVIDER`           | `claude`          | Default provider (`claude`, `codex`, `gemini`, `shell`)     |
-| `CCGRAM_<NAME>_COMMAND`     | _(from provider)_ | Override launch command per provider                        |
-| `CCGRAM_GROUP_ID`           | _(all groups)_    | Restrict to one Telegram group                              |
-| `CCGRAM_LLM_PROVIDER`       | _(disabled)_      | LLM for shell command generation + completion summaries     |
-| `CCGRAM_LLM_API_KEY`        | _(empty)_         | LLM API key (env only)                                      |
-| `CCGRAM_WHISPER_PROVIDER`   | _(disabled)_      | Whisper provider for voice transcription (`openai`, `groq`) |
-| `CCGRAM_LIVE_VIEW_INTERVAL` | `5`               | Live view refresh interval in seconds                       |
-| `CCGRAM_LIVE_VIEW_TIMEOUT`  | `300`             | Live view auto-stop timeout in seconds                      |
-| `CCGRAM_SEND_SEARCH_DEPTH`  | `5`               | Max directory depth for `/send` file search                 |
-| `CCGRAM_SEND_MAX_RESULTS`   | `50`              | Max file results returned by `/send` search                 |
-| `AUTOCLOSE_DONE_MINUTES`    | `30`              | Auto-close completed topics after N minutes                 |
-| `AUTOCLOSE_DEAD_MINUTES`    | `10`              | Auto-close dead sessions after N minutes                    |
+| Variable / Flag             | Default           | Description                                                   |
+| --------------------------- | ----------------- | ------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`        | _(required)_      | Bot token from @BotFather (env only)                          |
+| `ALLOWED_USERS`             | _(required)_      | Comma-separated Telegram user IDs                             |
+| `CCGRAM_DIR`                | `~/.ccgram`       | Config and state directory                                    |
+| `CCGRAM_PROVIDER`           | `claude`          | Default provider (`claude`, `codex`, `gemini`, `pi`, `shell`) |
+| `CCGRAM_<NAME>_COMMAND`     | _(from provider)_ | Override launch command per provider                          |
+| `CCGRAM_GROUP_ID`           | _(all groups)_    | Restrict to one Telegram group                                |
+| `CCGRAM_LLM_PROVIDER`       | _(disabled)_      | LLM for shell command generation + completion summaries       |
+| `CCGRAM_LLM_API_KEY`        | _(empty)_         | LLM API key (env only)                                        |
+| `CCGRAM_WHISPER_PROVIDER`   | _(disabled)_      | Whisper provider for voice transcription (`openai`, `groq`)   |
+| `CCGRAM_LIVE_VIEW_INTERVAL` | `5`               | Live view refresh interval in seconds                         |
+| `CCGRAM_LIVE_VIEW_TIMEOUT`  | `300`             | Live view auto-stop timeout in seconds                        |
+| `CCGRAM_SEND_SEARCH_DEPTH`  | `5`               | Max directory depth for `/send` file search                   |
+| `CCGRAM_SEND_MAX_RESULTS`   | `50`              | Max file results returned by `/send` search                   |
+| `AUTOCLOSE_DONE_MINUTES`    | `30`              | Auto-close completed topics after N minutes                   |
+| `AUTOCLOSE_DEAD_MINUTES`    | `10`              | Auto-close dead sessions after N minutes                      |
 
 Full reference: **[docs/guides.md](docs/guides.md#configuration)**
 
@@ -266,7 +269,7 @@ make test-e2e     # E2E tests (requires agent CLIs, see docs/guides.md)
 ## Documentation
 
 - **[docs/guides.md](docs/guides.md)** — CLI reference, configuration, voice messages, multi-instance setup, session recovery, testing
-- **[docs/providers.md](docs/providers.md)** — Provider details (Claude, Codex, Gemini, Shell), session modes, LLM configuration, custom launch commands
+- **[docs/providers.md](docs/providers.md)** — Provider details (Claude, Codex, Gemini, Pi, Shell), session modes, LLM configuration, custom launch commands
 
 ---
 
