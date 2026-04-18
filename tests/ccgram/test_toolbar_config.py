@@ -287,11 +287,11 @@ class TestBuiltins:
         assert BUILTIN_ACTIONS["think"].read_state is False
         assert BUILTIN_ACTIONS["yolo"].read_state is True
 
-    def test_default_layouts_have_3x3_grids(self) -> None:
+    def test_default_layouts_have_valid_grids(self) -> None:
         for provider, layout in DEFAULT_LAYOUTS.items():
             assert len(layout.buttons) == 3, f"{provider}: expected 3 rows"
             for row in layout.buttons:
-                assert len(row) == 3, f"{provider}: expected 3 cells per row"
+                assert 1 <= len(row) <= 8, f"{provider}: row width out of range"
 
     def test_default_layouts_use_known_actions(self) -> None:
         for provider, layout in DEFAULT_LAYOUTS.items():

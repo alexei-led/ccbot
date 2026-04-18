@@ -209,6 +209,14 @@ DEFAULT_LAYOUTS: dict[str, ToolbarLayout] = {
             ("send", "enter", "close"),
         ),
     ),
+    "pi": ToolbarLayout(
+        style="emoji_text",
+        buttons=(
+            ("screen", "ctrlc", "live"),
+            ("esc", "enter", "tab"),
+            ("send", "close"),
+        ),
+    ),
     "shell": ToolbarLayout(
         style="emoji_text",
         buttons=(
