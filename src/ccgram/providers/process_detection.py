@@ -41,6 +41,7 @@ _PROVIDER_BASENAMES: tuple[tuple[frozenset[str], str], ...] = (
     (frozenset({"claude", "ce", "cc-mirror", "zai"}), "claude"),
     (frozenset({"codex"}), "codex"),
     (frozenset({"gemini"}), "gemini"),
+    (frozenset({"pi"}), "pi"),
 )
 
 # Path substrings that identify a provider when basename alone is ambiguous
@@ -49,6 +50,7 @@ _PROVIDER_PATH_MARKERS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("claude-code", "cc-team"), "claude"),
     (("@openai/codex", "/codex/", "/codex-"), "codex"),
     (("gemini-cli",), "gemini"),
+    (("@mariozechner/pi-coding-agent", "/pi-coding-agent/"), "pi"),
 )
 
 

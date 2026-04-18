@@ -54,11 +54,13 @@ def _ensure_registered() -> None:
     from ccgram.providers.claude import ClaudeProvider
     from ccgram.providers.codex import CodexProvider
     from ccgram.providers.gemini import GeminiProvider
+    from ccgram.providers.pi import PiProvider
     from ccgram.providers.shell import ShellProvider
 
     registry.register("claude", ClaudeProvider)
     registry.register("codex", CodexProvider)
     registry.register("gemini", GeminiProvider)
+    registry.register("pi", PiProvider)
     registry.register("shell", ShellProvider)
     _registered = True
 
@@ -126,7 +128,7 @@ def detect_provider_from_command(pane_current_command: str) -> str:
     # Match basename only (first token) to avoid false positives
     # from paths like /home/claude/bin/vim
     basename = os.path.basename(cmd.split()[0])
-    for name in ("claude", "codex", "gemini"):
+    for name in ("claude", "codex", "gemini", "pi"):
         if basename == name or basename.startswith(name + "-"):
             return name
 
@@ -149,6 +151,8 @@ def detect_provider_from_transcript_path(transcript_path: str) -> str:
         return "claude"
     if "/.gemini/" in normalized and "/chats/" in normalized:
         return "gemini"
+    if "/.pi/agent/sessions/" in normalized:
+        return "pi"
     return ""
 
 
