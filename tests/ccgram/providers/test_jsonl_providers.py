@@ -119,6 +119,23 @@ class TestCodexTranscriptParsing:
         assert messages[0].text == "hello"
         assert messages[0].role == "assistant"
 
+    def test_parses_final_answer_phase_from_response_item(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "phase": "final_answer",
+                    "content": [{"type": "output_text", "text": "done"}],
+                },
+            }
+        ]
+        messages, _ = codex.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].phase == "final_answer"
+
     def test_parses_user_input_item(self) -> None:
         codex = CodexProvider()
         entries = [
@@ -171,6 +188,47 @@ class TestCodexTranscriptParsing:
         messages, _ = codex.parse_transcript_entries(entries, {})
         assert len(messages) == 1
         assert messages[0].text == "same text"
+
+    def test_dedupes_event_and_prefers_final_answer_metadata(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "agent_message",
+                    "message": "same text",
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "phase": "final_answer",
+                    "content": [{"type": "output_text", "text": "same text"}],
+                },
+            },
+        ]
+        messages, _ = codex.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].text == "same text"
+        assert messages[0].phase == "final_answer"
+
+    def test_parses_task_complete_as_final_answer_fallback(self) -> None:
+        codex = CodexProvider()
+        entries = [
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "task_complete",
+                    "last_agent_message": "finished",
+                },
+            }
+        ]
+        messages, _ = codex.parse_transcript_entries(entries, {})
+        assert len(messages) == 1
+        assert messages[0].text == "finished"
+        assert messages[0].phase == "final_answer"
 
     def test_tracks_function_call_pending(self) -> None:
         codex = CodexProvider()
@@ -1291,12 +1349,21 @@ def _write_gemini_session(
 
 
 def _write_codex_session(
-    sessions_dir: Path, date_parts: str, name: str, session_id: str, cwd: str
+    sessions_dir: Path,
+    date_parts: str,
+    name: str,
+    session_id: str,
+    cwd: str,
+    *,
+    source: object = "cli",
 ) -> Path:
     day_dir = sessions_dir / date_parts
     day_dir.mkdir(parents=True, exist_ok=True)
     fpath = day_dir / f"{name}.jsonl"
-    meta = {"type": "session_meta", "payload": {"id": session_id, "cwd": cwd}}
+    meta = {
+        "type": "session_meta",
+        "payload": {"id": session_id, "cwd": cwd, "source": source},
+    }
     fpath.write_text(json.dumps(meta) + "\n")
     return fpath
 
@@ -1411,6 +1478,45 @@ class TestCodexDiscoverTranscript:
             event = codex.discover_transcript("/my/project", "ccgram:@7")
         assert event is not None
         assert event.session_id == "uuid-fresh"
+
+    def test_skips_newer_guardian_subagent_transcript(self, tmp_path: Path) -> None:
+        sessions_dir = tmp_path / ".codex" / "sessions"
+        _write_codex_session(
+            sessions_dir, "2026/03/01", "main", "uuid-main", "/my/project"
+        )
+        time.sleep(0.05)
+        _write_codex_session(
+            sessions_dir,
+            "2026/03/02",
+            "guardian",
+            "uuid-guardian",
+            "/my/project",
+            source={"subagent": {"other": "guardian"}},
+        )
+
+        codex = CodexProvider()
+        with patch.object(Path, "home", return_value=tmp_path):
+            event = codex.discover_transcript("/my/project", "ccgram:@7")
+        assert event is not None
+        assert event.session_id == "uuid-main"
+
+    def test_returns_none_when_only_guardian_subagent_matches(
+        self, tmp_path: Path
+    ) -> None:
+        sessions_dir = tmp_path / ".codex" / "sessions"
+        _write_codex_session(
+            sessions_dir,
+            "2026/03/02",
+            "guardian",
+            "uuid-guardian",
+            "/my/project",
+            source={"subagent": {"other": "guardian"}},
+        )
+
+        codex = CodexProvider()
+        with patch.object(Path, "home", return_value=tmp_path):
+            event = codex.discover_transcript("/my/project", "ccgram:@7")
+        assert event is None
 
 
 class TestCodexDiscoverTranscriptMaxAge:

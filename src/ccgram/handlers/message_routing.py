@@ -67,8 +67,10 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
         if not is_tool_flow:
             if notif_mode == "muted":
                 continue
-            if notif_mode == "errors_only" and not _ERROR_KEYWORDS_RE.search(
-                msg.text or ""
+            if (
+                notif_mode == "errors_only"
+                and msg.phase != "final_answer"
+                and not _ERROR_KEYWORDS_RE.search(msg.text or "")
             ):
                 continue
 

@@ -29,8 +29,9 @@ class NewMessage:
 
     session_id: str
     text: str
-    is_complete: bool  # True when stop_reason is set (final message)
+    is_complete: bool
     content_type: str = "text"  # "text" or "thinking"
+    phase: str | None = None
     tool_use_id: str | None = None
     role: str = "assistant"  # "user" or "assistant"
     tool_name: str | None = None  # For tool_use messages, the tool name

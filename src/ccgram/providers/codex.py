@@ -421,12 +421,14 @@ def _parse_response_message(
     text = _extract_text_blocks(payload.get("content", ""))
     if not text:
         return [], pending
+    phase = payload.get("phase")
     return (
         [
             AgentMessage(
                 text=text,
                 role=cast(MessageRole, role),
                 content_type="text",
+                phase=phase if isinstance(phase, str) and phase else None,
             )
         ],
         pending,
@@ -439,13 +441,31 @@ def _parse_event_message(
 ) -> tuple[list[AgentMessage], dict[str, Any]]:
     """Parse Codex event_msg payloads that carry assistant-visible text."""
     payload_type = payload.get("type", "")
-    if payload_type != "agent_message":
-        return [], pending
-    text = payload.get("message", "")
-    if not isinstance(text, str) or not text:
-        return [], pending
+    if payload_type == "agent_message":
+        text = payload.get("message", "")
+        if not isinstance(text, str) or not text:
+            return [], pending
+        return (
+            [AgentMessage(text=text, role="assistant", content_type="text")],
+            pending,
+        )
+    if payload_type == "task_complete":
+        text = payload.get("last_agent_message", "")
+        if not isinstance(text, str) or not text:
+            return [], pending
+        return (
+            [
+                AgentMessage(
+                    text=text,
+                    role="assistant",
+                    content_type="text",
+                    phase="final_answer",
+                )
+            ],
+            pending,
+        )
     return (
-        [AgentMessage(text=text, role="assistant", content_type="text")],
+        [],
         pending,
     )
 
@@ -473,10 +493,23 @@ def _append_unique_messages(
     for message in candidates:
         signature = (message.role, message.content_type, message.text)
         if signature == current:
+            if dest and _prefer_duplicate_message(dest[-1], message):
+                dest[-1] = message
             continue
         dest.append(message)
         current = signature
     return current
+
+
+def _prefer_duplicate_message(previous: AgentMessage, candidate: AgentMessage) -> bool:
+    """Keep the duplicate carrying richer metadata, such as final_answer."""
+    if previous.phase != candidate.phase:
+        return previous.phase is None and candidate.phase is not None
+    if previous.tool_use_id != candidate.tool_use_id:
+        return previous.tool_use_id is None and candidate.tool_use_id is not None
+    if previous.tool_name != candidate.tool_name:
+        return previous.tool_name is None and candidate.tool_name is not None
+    return False
 
 
 # Transcripts older than this are considered stale and skipped during discovery.
@@ -513,6 +546,22 @@ def _read_codex_session_meta(fpath: Path) -> dict[str, Any] | None:
         return None
     payload = data.get("payload")
     return payload if isinstance(payload, dict) else None
+
+
+def _is_primary_codex_session(meta: dict[str, Any]) -> bool:
+    """Whether session metadata represents a top-level Codex CLI session.
+
+    Hookless discovery should bind a tmux window to the main user-visible
+    conversation, not transient guardian/subagent transcripts created for
+    approvals or delegated work. Those transcripts share the same cwd and can be
+    newer than the main transcript, so they must be filtered out here.
+    """
+    source = meta.get("source")
+    if isinstance(source, str):
+        return True
+    if not isinstance(source, dict):
+        return True
+    return "subagent" not in source
 
 
 class CodexProvider(JsonlProvider):
@@ -692,6 +741,8 @@ class CodexProvider(JsonlProvider):
                 break  # sorted newest-first; remaining are all older
             meta = _read_codex_session_meta(fpath)
             if not meta:
+                continue
+            if not _is_primary_codex_session(meta):
                 continue
             file_cwd = meta.get("cwd", "")
             if file_cwd and str(Path(file_cwd).resolve()) == resolved_cwd:

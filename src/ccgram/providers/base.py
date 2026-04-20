@@ -49,6 +49,7 @@ class AgentMessage:
     role: MessageRole
     content_type: ContentType
     is_complete: bool = True
+    phase: str | None = None
     tool_use_id: str | None = None
     tool_name: str | None = None
     timestamp: str | None = None

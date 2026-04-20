@@ -10,6 +10,7 @@ def _make_msg(
     *,
     text: str = "hello",
     content_type: str = "text",
+    phase: str | None = None,
     tool_name: str = "",
     tool_use_id: str = "",
     role: str = "assistant",
@@ -20,6 +21,7 @@ def _make_msg(
         session_id=session_id,
         text=text,
         content_type=content_type,
+        phase=phase,
         tool_name=tool_name,
         tool_use_id=tool_use_id,
         role=role,
@@ -99,6 +101,15 @@ async def test_errors_only_skips_without_keyword(bot, mock_deps):
 async def test_errors_only_passes_with_error_keyword(bot, mock_deps):
     mock_deps["wq"].get_notification_mode.return_value = "errors_only"
     await handle_new_message(_make_msg(text="got Exception: boom"), bot)
+    mock_deps["eq"].assert_called_once()
+
+
+async def test_errors_only_passes_final_answer_without_keyword(bot, mock_deps):
+    mock_deps["wq"].get_notification_mode.return_value = "errors_only"
+    await handle_new_message(
+        _make_msg(text="normal final answer", phase="final_answer"),
+        bot,
+    )
     mock_deps["eq"].assert_called_once()
 
 

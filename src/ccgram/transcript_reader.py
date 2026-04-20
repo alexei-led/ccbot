@@ -176,8 +176,9 @@ class TranscriptReader:
                 NewMessage(
                     session_id=session_id,
                     text=entry.text,
-                    is_complete=True,
+                    is_complete=entry.is_complete,
                     content_type=entry.content_type,
+                    phase=entry.phase,
                     tool_use_id=entry.tool_use_id,
                     role=entry.role,
                     tool_name=entry.tool_name,
