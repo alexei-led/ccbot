@@ -14,9 +14,12 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
+import os
+import time
 import structlog
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import aiofiles
@@ -29,6 +32,48 @@ from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window
 logger = structlog.get_logger()
 
 _LEGACY_SESSION_PREFIX = "ccbot:"
+
+# Default grace window (seconds) for liveness-gated session_id overwrite.
+# Configurable via the CCGRAM_NESTED_SESSION_GRACE_SEC env var.
+_DEFAULT_NESTED_SESSION_GRACE_SEC = 60.0
+
+
+def _nested_session_grace_sec() -> float:
+    """Read the nested-session grace window from the env each call.
+
+    Read-on-call (rather than module-load) keeps tests free to override via
+    monkeypatch.setenv without re-importing the module.
+    """
+    raw = os.getenv("CCGRAM_NESTED_SESSION_GRACE_SEC")
+    if raw is None:
+        return _DEFAULT_NESTED_SESSION_GRACE_SEC
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "CCGRAM_NESTED_SESSION_GRACE_SEC must be a number, got %r — "
+            "using default %.1f",
+            raw,
+            _DEFAULT_NESTED_SESSION_GRACE_SEC,
+        )
+        return _DEFAULT_NESTED_SESSION_GRACE_SEC
+
+
+def _existing_session_is_live(transcript_path: str, grace_sec: float) -> bool:
+    """Return True if the transcript file was modified within grace_sec.
+
+    Heuristic for "the session bound to this window is still actively running":
+    a fresh-mtime transcript means Claude is still appending to it. A stale or
+    missing transcript means the prior session has gone silent and its hold on
+    the window binding can be released.
+    """
+    if not transcript_path:
+        return False
+    try:
+        mtime = Path(transcript_path).stat().st_mtime
+    except OSError:
+        return False
+    return (time.time() - mtime) < grace_sec
 
 
 def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, str]]:
@@ -471,6 +516,34 @@ class SessionMapSync:
         if mark_external and not state.external:
             state.external = True
             changed = True
+
+        # Liveness-gated overwrite: if a different session_id arrives for a
+        # window whose existing session is still actively writing its
+        # transcript, treat the new SessionStart as nested (e.g. an Agent
+        # Teams teammate spawned in the same tmux pane) and preserve the
+        # existing parent binding. Other field updates (provider_name,
+        # window_name) below still proceed. The grace window auto-releases
+        # the hold once the parent's transcript stops being modified, so
+        # `/clear`, a fresh CLI restart, or `claude --resume` of a different
+        # session all unblock naturally.
+        if (
+            state.session_id
+            and new_sid != state.session_id
+            and _existing_session_is_live(
+                state.transcript_path, _nested_session_grace_sec()
+            )
+        ):
+            logger.info(
+                "Skip session_id overwrite for window_id %s: "
+                "existing %s still live, new %s treated as nested",
+                window_id,
+                state.session_id,
+                new_sid,
+            )
+            new_sid = state.session_id
+            new_cwd = state.cwd
+            new_transcript = state.transcript_path
+
         if state.session_id != new_sid or state.cwd != new_cwd:
             logger.info(
                 "Session map: window_id %s updated sid=%s, cwd=%s",
