@@ -90,7 +90,7 @@ def _prefer_existing_primary(
     if not existing_is_fresh and not existing_is_newer:
         return None
 
-    logger.info(
+    logger.debug(
         "Preserving primary session for window_id %s: existing %s, incoming %s treated as nested",
         window_id,
         state.session_id,
