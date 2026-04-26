@@ -260,7 +260,9 @@ async def _rebind_existing_topic_by_name(
         )
         return False
 
-    thread_router.bind_thread(user_id, thread_id, event.window_id, window_name=topic_name)
+    thread_router.bind_thread(
+        user_id, thread_id, event.window_id, window_name=topic_name
+    )
     thread_router.set_group_chat_id(user_id, thread_id, chat_id)
     logger.info(
         "Rebound existing topic thread %d from stale window %s to new window %s (%s)",
