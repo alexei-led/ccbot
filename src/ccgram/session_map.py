@@ -14,9 +14,12 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
+import os
+import time
 import structlog
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import aiofiles
@@ -29,6 +32,93 @@ from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window
 logger = structlog.get_logger()
 
 _LEGACY_SESSION_PREFIX = "ccbot:"
+_DEFAULT_PRIMARY_SESSION_GRACE_SEC = 60.0
+
+
+def _primary_session_grace_sec() -> float:
+    raw = os.getenv("CCGRAM_NESTED_SESSION_GRACE_SEC")
+    if raw is None:
+        return _DEFAULT_PRIMARY_SESSION_GRACE_SEC
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "CCGRAM_NESTED_SESSION_GRACE_SEC must be a number, got %r; using default %.1f",
+            raw,
+            _DEFAULT_PRIMARY_SESSION_GRACE_SEC,
+        )
+        return _DEFAULT_PRIMARY_SESSION_GRACE_SEC
+
+
+def _transcript_mtime(transcript_path: str) -> float | None:
+    if not transcript_path:
+        return None
+    try:
+        return Path(transcript_path).stat().st_mtime
+    except OSError:
+        return None
+
+
+def _transcript_is_fresh(transcript_path: str, *, now: float | None = None) -> bool:
+    mtime = _transcript_mtime(transcript_path)
+    if mtime is None:
+        return False
+    reference = time.time() if now is None else now
+    return reference - mtime < _primary_session_grace_sec()
+
+
+def _prefer_existing_primary(
+    window_id: str,
+    incoming: dict[str, Any],
+) -> dict[str, str] | None:
+    from .window_state_store import window_store
+
+    state = window_store.window_states.get(window_id)
+    if not state or not state.session_id:
+        return None
+
+    incoming_sid = incoming.get("session_id", "")
+    if not incoming_sid or incoming_sid == state.session_id:
+        return None
+
+    existing_mtime = _transcript_mtime(state.transcript_path)
+    incoming_mtime = _transcript_mtime(incoming.get("transcript_path", ""))
+    existing_is_fresh = _transcript_is_fresh(state.transcript_path)
+    existing_is_newer = existing_mtime is not None and (
+        incoming_mtime is None or existing_mtime >= incoming_mtime
+    )
+    if not existing_is_fresh and not existing_is_newer:
+        return None
+
+    logger.info(
+        "Preserving primary session for window_id %s: existing %s, incoming %s treated as nested",
+        window_id,
+        state.session_id,
+        incoming_sid,
+    )
+    return {
+        "session_id": state.session_id,
+        "cwd": state.cwd,
+        "window_name": incoming.get("window_name", "") or state.window_name,
+        "transcript_path": state.transcript_path,
+        "provider_name": incoming.get("provider_name", "") or state.provider_name,
+    }
+
+
+def effective_session_map_info(
+    window_id: str,
+    info: dict[str, Any],
+) -> dict[str, str]:
+    preferred = _prefer_existing_primary(window_id, info)
+    if preferred is not None:
+        return preferred
+    return {
+        "session_id": info.get("session_id", ""),
+        "cwd": info.get("cwd", ""),
+        "window_name": info.get("window_name", ""),
+        "transcript_path": info.get("transcript_path", ""),
+        "provider_name": info.get("provider_name", ""),
+    }
 
 
 def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, str]]:
@@ -48,15 +138,9 @@ def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, s
             continue
         if not isinstance(info, dict):
             continue
-        session_id = info.get("session_id", "")
-        if session_id:
-            result[window_name] = {
-                "session_id": session_id,
-                "cwd": info.get("cwd", ""),
-                "window_name": info.get("window_name", ""),
-                "transcript_path": info.get("transcript_path", ""),
-                "provider_name": info.get("provider_name", ""),
-            }
+        effective = effective_session_map_info(window_name, info)
+        if effective["session_id"]:
+            result[window_name] = effective
     return result
 
 
@@ -459,12 +543,13 @@ class SessionMapSync:
         from .thread_router import thread_router
         from .window_state_store import window_store
 
-        new_sid = info.get("session_id", "")
+        effective = effective_session_map_info(window_id, info)
+        new_sid = effective["session_id"]
         if not new_sid:
             return False
-        new_cwd = info.get("cwd", "")
-        new_wname = info.get("window_name", "")
-        new_transcript = info.get("transcript_path", "")
+        new_cwd = effective["cwd"]
+        new_wname = effective["window_name"]
+        new_transcript = effective["transcript_path"]
         changed = False
 
         state = window_store.get_window_state(window_id)
@@ -487,7 +572,7 @@ class SessionMapSync:
         if new_transcript and state.transcript_path != new_transcript:
             state.transcript_path = new_transcript
             changed = True
-        new_provider = info.get("provider_name", "").lower()
+        new_provider = effective["provider_name"].lower()
         if new_provider and state.provider_name != new_provider:
             state.provider_name = new_provider
             changed = True

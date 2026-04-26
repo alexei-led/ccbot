@@ -14,6 +14,7 @@ import pytest
 
 from ccgram.claude_task_state import get_claude_task_snapshot
 from ccgram.session_monitor import SessionMonitor
+from ccgram.window_state_store import WindowState, window_store
 
 pytestmark = pytest.mark.integration
 
@@ -196,6 +197,53 @@ async def test_file_truncation_resets_offset(
     new_messages = await monitor.check_for_updates(current)
     assert len(new_messages) == 1
     assert new_messages[0].text == "after truncation"
+
+
+async def test_nested_session_start_does_not_steal_forwarding(state_dir) -> None:
+    parent_id = TEST_SESSION_ID
+    child_id = "11111111-2222-3333-4444-555555555555"
+    parent_transcript = state_dir / "parent.jsonl"
+    child_transcript = state_dir / "child.jsonl"
+    _write_jsonl(parent_transcript, [_make_assistant_entry("parent old")])
+    _write_jsonl(
+        child_transcript, [_make_assistant_entry("child done", session_id=child_id)]
+    )
+    window_store.window_states["@0"] = WindowState(
+        session_id=parent_id,
+        cwd="/tmp/test",
+        window_name="test",
+        transcript_path=str(parent_transcript),
+        provider_name="claude",
+    )
+    (state_dir / "session_map.json").write_text(
+        json.dumps(
+            {
+                "ccgram:@0": {
+                    "session_id": child_id,
+                    "cwd": "/tmp/test",
+                    "window_name": "test",
+                    "transcript_path": str(child_transcript),
+                    "provider_name": "claude",
+                }
+            }
+        )
+    )
+
+    monitor = _make_monitor(state_dir)
+    current = await monitor._load_current_session_map()
+    assert current["@0"]["session_id"] == parent_id
+    assert await monitor.check_for_updates(current) == []
+
+    _append_jsonl(parent_transcript, [_make_assistant_entry("parent new")])
+    _bump_mtime(parent_transcript)
+    current = await monitor._detect_and_cleanup_changes()
+    new_messages = await monitor.check_for_updates(current)
+
+    assert current["@0"]["session_id"] == parent_id
+    assert len(new_messages) == 1
+    assert new_messages[0].session_id == parent_id
+    assert new_messages[0].text == "parent new"
+    assert monitor.state.get_session(child_id) is None
 
 
 async def test_session_change_cleanup(state_dir, session_map_with_transcript) -> None:
