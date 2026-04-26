@@ -339,14 +339,13 @@ class TestNewWindowSyncEdgeCases:
             chat_id=group_id, name="cool-project"
         )
 
-    async def test_session_change_does_not_fire_new_window(
+    async def test_unbound_session_change_fires_new_window(
         self, monitor: SessionMonitor
     ) -> None:
-        callback_fired = False
+        events: list[NewWindowEvent] = []
 
         async def on_new_window(event: NewWindowEvent) -> None:
-            nonlocal callback_fired
-            callback_fired = True
+            events.append(event)
 
         monitor.set_new_window_callback(on_new_window)
         monitor._last_session_map = {
@@ -356,13 +355,48 @@ class TestNewWindowSyncEdgeCases:
         updated_map = {
             "@1": {"session_id": "new-sess", "cwd": "/proj", "window_name": "proj"}
         }
-        with patch.object(
-            monitor,
-            "_load_current_session_map",
-            spec=True,
-            new_callable=AsyncMock,
-            return_value=updated_map,
+        with (
+            patch.object(
+                monitor,
+                "_load_current_session_map",
+                spec=True,
+                new_callable=AsyncMock,
+                return_value=updated_map,
+            ),
+            patch("ccgram.thread_router.thread_router") as mock_router,
         ):
+            mock_router.has_window.return_value = False
             await monitor._detect_and_cleanup_changes()
 
-        assert not callback_fired
+        assert [event.window_id for event in events] == ["@1"]
+
+    async def test_bound_session_change_does_not_fire_new_window(
+        self, monitor: SessionMonitor
+    ) -> None:
+        events: list[NewWindowEvent] = []
+
+        async def on_new_window(event: NewWindowEvent) -> None:
+            events.append(event)
+
+        monitor.set_new_window_callback(on_new_window)
+        monitor._last_session_map = {
+            "@1": {"session_id": "old-sess", "cwd": "/proj", "window_name": "proj"}
+        }
+
+        updated_map = {
+            "@1": {"session_id": "new-sess", "cwd": "/proj", "window_name": "proj"}
+        }
+        with (
+            patch.object(
+                monitor,
+                "_load_current_session_map",
+                spec=True,
+                new_callable=AsyncMock,
+                return_value=updated_map,
+            ),
+            patch("ccgram.thread_router.thread_router") as mock_router,
+        ):
+            mock_router.has_window.return_value = True
+            await monitor._detect_and_cleanup_changes()
+
+        assert events == []

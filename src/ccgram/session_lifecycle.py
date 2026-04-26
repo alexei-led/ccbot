@@ -38,6 +38,7 @@ class ReconcileResult:
 
     sessions_to_remove: set[str] = field(default_factory=set)
     new_windows: dict[str, dict[str, Any]] = field(default_factory=dict)
+    changed_windows: dict[str, dict[str, Any]] = field(default_factory=dict)
     current_map: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
@@ -85,6 +86,7 @@ class SessionLifecycle:
                     new_details["session_id"],
                 )
                 result.sessions_to_remove.add(old_details["session_id"])
+                result.changed_windows[window_id] = new_details
                 idle_tracker.clear_session(old_details["session_id"])
                 claude_task_state.clear_window(window_id)
 

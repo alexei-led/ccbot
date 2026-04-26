@@ -31,3 +31,4 @@ class WindowView:
     window_name: str
     session_id: str
     external: bool
+    origin: str

@@ -21,6 +21,7 @@ from ..session import session_manager
 from ..session_map import session_map_sync
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
+from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .message_sender import safe_reply
 from .polling_strategies import lifecycle_strategy
 from .topic_emoji import format_topic_name_for_mode
@@ -83,6 +84,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if provider.capabilities.supports_hook:
         await session_map_sync.wait_for_session_map_entry(wid)
 
+    session_manager.set_window_origin(wid, CCGRAM_CREATED_WINDOW_ORIGIN)
     session_manager.set_window_provider(wid, provider.capabilities.name)
     session_manager.set_window_approval_mode(wid, approval_mode)
     thread_router.bind_thread(user_id, thread_id, wid, window_name=wname)

@@ -561,6 +561,7 @@ class SessionManager:
             window_name=ws.window_name,
             session_id=ws.session_id,
             external=ws.external,
+            origin=ws.origin,
         )
 
     @property
@@ -610,6 +611,10 @@ class SessionManager:
         state = window_store.get_window_state(window_id)
         state.cwd = cwd
         self._save_state()
+
+    def set_window_origin(self, window_id: str, origin: str) -> None:
+        """Set the lifecycle origin for a window and persist state."""
+        window_store.set_window_origin(window_id, origin)
 
     def get_approval_mode(self, window_id: str) -> str:
         """Get approval mode for a window (default: 'normal')."""

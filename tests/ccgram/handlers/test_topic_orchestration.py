@@ -4,7 +4,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram.error import RetryAfter, TelegramError
+from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ccgram.handlers.topic_orchestration import (
     collect_target_chats,
@@ -436,6 +436,65 @@ class TestHandleNewWindow:
 
         bot.create_forum_topic.assert_called_once_with(
             chat_id=-100200, name="my-project"
+        )
+
+    async def test_rebinds_existing_same_name_topic_for_dead_old_window(self) -> None:
+        event = _make_event(window_id="@3", window_name="reflex-gh")
+        bot = AsyncMock()
+        probe_msg = MagicMock()
+        probe_msg.message_id = 555
+        bot.send_message = AsyncMock(return_value=probe_msg)
+        bot.delete_message = AsyncMock()
+
+        with (
+            patch("ccgram.handlers.topic_orchestration.session_manager"),
+            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux,
+        ):
+            mock_tr.has_window.return_value = False
+            mock_tr.iter_thread_bindings.return_value = iter([(100, 120014, "@1")])
+            mock_tr.get_display_name.return_value = "🟡 reflex-gh"
+            mock_tr.resolve_chat_id.return_value = -100200
+            mock_tmux.find_window_by_id = AsyncMock(return_value=None)
+
+            await handle_new_window(event, bot)
+
+        mock_tr.bind_thread.assert_called_once_with(
+            100, 120014, "@3", window_name="reflex-gh"
+        )
+        mock_tr.set_group_chat_id.assert_called_once_with(100, 120014, -100200)
+        bot.create_forum_topic.assert_not_called()
+
+    async def test_dead_same_name_topic_is_unbound_then_new_topic_created(self) -> None:
+        event = _make_event(window_id="@3", window_name="reflex-gh")
+        bot = AsyncMock()
+        bot.send_message = AsyncMock(side_effect=BadRequest("Topic_id_invalid"))
+        bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=77))
+
+        with (
+            patch("ccgram.handlers.topic_orchestration.session_manager"),
+            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+        ):
+            mock_tr.has_window.return_value = False
+            mock_tr.iter_thread_bindings.side_effect = [
+                iter([(100, 120014, "@1")]),
+                iter([]),
+                iter([]),
+            ]
+            mock_tr.get_display_name.return_value = "reflex-gh"
+            mock_tr.resolve_chat_id.return_value = -100200
+            mock_tmux.find_window_by_id = AsyncMock(return_value=None)
+            mock_tr.group_chat_ids = {"100:120014": -100200}
+            mock_config.group_id = None
+            mock_config.allowed_users = {100}
+
+            await handle_new_window(event, bot)
+
+        mock_tr.unbind_thread.assert_called_once_with(100, 120014)
+        bot.create_forum_topic.assert_called_once_with(
+            chat_id=-100200, name="reflex-gh"
         )
 
 

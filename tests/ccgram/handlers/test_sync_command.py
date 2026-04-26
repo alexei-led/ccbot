@@ -5,6 +5,7 @@ from telegram.error import BadRequest, TelegramError
 
 from ccgram.handlers.callback_data import CB_SYNC_DISMISS, CB_SYNC_FIX
 from ccgram.handlers.sync_command import (
+    _close_ghost_topics,
     _format_report,
     _probe_dead_topics,
     _recreate_dead_topics,
@@ -293,6 +294,7 @@ class TestSyncFix:
             AuditResult(issues=[], total_bindings=0, live_binding_count=0),
         ]
         mock_tr.resolve_chat_id.return_value = -999
+        mock_tr.get_window_for_thread.return_value = "@7"
 
         query = MagicMock()
         mock_bot = AsyncMock()
@@ -336,6 +338,7 @@ class TestSyncFix:
             ),
         ]
         mock_tr.resolve_chat_id.return_value = -999
+        mock_tr.get_window_for_thread.return_value = "@7"
 
         query = MagicMock()
         mock_bot = AsyncMock()
@@ -370,6 +373,7 @@ class TestSyncFix:
             AuditResult(issues=[], total_bindings=0, live_binding_count=0),
         ]
         mock_tr.resolve_chat_id.return_value = 100
+        mock_tr.get_window_for_thread.return_value = "@7"
 
         query = MagicMock()
         mock_bot = AsyncMock()
@@ -479,11 +483,45 @@ class TestDeadTopicDetection:
 
 
 class TestDeadTopicRecreation:
+    async def test_skips_stale_issue_after_topic_was_rebound(self, _patch_deps) -> None:
+        _mock_sm, _mock_sms, mock_wq, mock_tr, _mock_tm, _mock_cfg = _patch_deps
+        mock_wq.view_window.return_value = MagicMock(
+            session_id="old", cwd="/tmp/proj", window_name="reflex-gh"
+        )
+        mock_tr.get_window_for_thread.return_value = None
+        issues = [
+            AuditIssue(
+                "dead_topic",
+                "user:100 thread:42 window:@1 (reflex-gh)",
+                fixable=True,
+            ),
+            AuditIssue(
+                "ghost_binding",
+                "user:100 thread:42 window:@1 (reflex-gh)",
+                fixable=True,
+            ),
+        ]
+        bot = AsyncMock()
+
+        with patch(
+            "ccgram.handlers.topic_orchestration.handle_new_window",
+            new_callable=AsyncMock,
+        ) as mock_handle:
+            recreated = await _recreate_dead_topics(bot, issues)
+            closed = await _close_ghost_topics(bot, issues)
+
+        assert recreated == 0
+        assert closed == 0
+        mock_handle.assert_not_called()
+        mock_tr.unbind_thread.assert_not_called()
+        bot.delete_forum_topic.assert_not_called()
+
     async def test_recreate_unbinds_and_creates_topic(self, _patch_deps) -> None:
         mock_sm, _, mock_wq, mock_tr, _, _ = _patch_deps
         mock_wq.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp/proj", window_name="qmd-go"
         )
+        mock_tr.get_window_for_thread.return_value = "@2"
 
         issues = [
             AuditIssue(
@@ -526,6 +564,7 @@ class TestDeadTopicRecreation:
         mock_wq.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp", window_name="proj"
         )
+        mock_tr.get_window_for_thread.return_value = "@2"
 
         issues = [
             AuditIssue(
@@ -609,6 +648,7 @@ class TestSyncFixDeadTopic:
         ]
         mock_tr.resolve_chat_id.return_value = -999
         mock_tr.get_display_name.return_value = "qmd-go"
+        mock_tr.get_window_for_thread.return_value = "@2"
         mock_wq.view_window.return_value = MagicMock(
             session_id="s1", cwd="/tmp", window_name="qmd-go"
         )

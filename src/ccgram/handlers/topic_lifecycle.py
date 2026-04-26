@@ -23,6 +23,7 @@ from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
 from ..utils import log_throttled
 from ..window_resolver import is_foreign_window
+from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .cleanup import clear_topic_state
 from .message_sender import is_thread_gone
 from .polling_strategies import (
@@ -126,10 +127,15 @@ async def check_unbound_window_ttl(
 
     now = time.monotonic()
     for w in live_windows:
-        if w.window_id not in bound_ids and not is_foreign_window(w.window_id):
-            ws = terminal_poll_state.get_state(w.window_id)
-            if ws.unbound_timer is None:
-                terminal_poll_state.set_unbound_timer(w.window_id, now)
+        if w.window_id in bound_ids or is_foreign_window(w.window_id):
+            continue
+        view = session_manager.view_window(w.window_id)
+        if view is None or view.origin != CCGRAM_CREATED_WINDOW_ORIGIN:
+            terminal_poll_state.clear_unbound_timer(w.window_id)
+            continue
+        ws = terminal_poll_state.get_state(w.window_id)
+        if ws.unbound_timer is None:
+            terminal_poll_state.set_unbound_timer(w.window_id, now)
 
     await _kill_expired_unbound(now, timeout)
     _prune_orphaned_poll_state(live_ids, bound_ids)
@@ -188,14 +194,18 @@ async def probe_topic_existence(bot: Bot) -> None:
                 or "thread not found" in e.message.lower()
             ):
                 w = await tmux_manager.find_window_by_id(wid)
-                if w:
+                view = session_manager.view_window(wid)
+                killed = False
+                if w and view and view.origin == CCGRAM_CREATED_WINDOW_ORIGIN:
                     await tmux_manager.kill_window(w.window_id)
+                    killed = True
                 terminal_poll_state.reset_probe_failures(wid)
                 await clear_topic_state(user_id, thread_id, bot, window_id=wid)
                 thread_router.unbind_thread(user_id, thread_id)
+                action = "killed" if killed else "unbound"
                 logger.info(
-                    "Topic deleted: killed window_id '%s' and "
-                    "unbound thread %d for user %d",
+                    "Topic deleted: %s window_id '%s' and unbound thread %d for user %d",
+                    action,
                     wid,
                     thread_id,
                     user_id,

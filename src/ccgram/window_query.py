@@ -41,6 +41,7 @@ def view_window(window_id: str) -> WindowView | None:
         window_name=ws.window_name,
         session_id=ws.session_id,
         external=ws.external,
+        origin=ws.origin,
     )
 
 

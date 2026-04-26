@@ -28,6 +28,7 @@ from ..session_map import session_map_sync
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import read_session_metadata_from_jsonl
+from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .callback_data import (
     CB_RECOVERY_BACK,
     CB_RECOVERY_CANCEL,
@@ -382,6 +383,7 @@ async def _create_and_bind_window(
         await session_map_sync.wait_for_session_map_entry(created_wid)
 
     # Propagate provider to new window
+    session_manager.set_window_origin(created_wid, CCGRAM_CREATED_WINDOW_ORIGIN)
     session_manager.set_window_provider(created_wid, provider.capabilities.name)
     session_manager.set_window_approval_mode(created_wid, approval_mode)
 

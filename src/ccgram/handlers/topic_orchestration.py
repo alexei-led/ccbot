@@ -11,6 +11,7 @@ Core responsibilities:
 
 from __future__ import annotations
 
+import contextlib
 import time
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from ..session import session_manager
 from ..session_monitor import NewWindowEvent
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
+from .message_sender import is_thread_gone
+from .topic_emoji import strip_emoji_prefix
 
 logger = structlog.get_logger()
 
@@ -192,11 +195,88 @@ async def create_topic_in_chat(
         )
 
 
-async def handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
-    """Create a Telegram forum topic for a newly detected tmux window.
+async def _topic_exists(bot: Bot, chat_id: int, thread_id: int) -> bool | None:
+    """Probe a Telegram topic. True=exists, False=gone, None=unknown."""
+    try:
+        msg = await bot.send_message(
+            chat_id,
+            "\u200b",
+            message_thread_id=thread_id,
+            disable_notification=True,
+        )
+    except TelegramError as exc:
+        if is_thread_gone(exc):
+            return False
+        return None
+    with contextlib.suppress(TelegramError):
+        await bot.delete_message(chat_id, msg.message_id)
+    return True
 
-    Skips if the window is already bound to a topic. Creates one topic per
-    unique group chat, binds all users in that chat.
+
+async def _rebind_existing_topic_by_name(
+    event: NewWindowEvent, bot: Bot, topic_name: str
+) -> bool:
+    """Bind a stale same-name topic to a newly discovered manual window."""
+    clean_topic_name = strip_emoji_prefix(topic_name)
+    matches: list[tuple[int, int, str, int]] = []
+    bindings = list(thread_router.iter_thread_bindings())
+    for user_id, thread_id, old_window_id in bindings:
+        if old_window_id == event.window_id:
+            continue
+        display_name = strip_emoji_prefix(thread_router.get_display_name(old_window_id))
+        if display_name != clean_topic_name:
+            continue
+        if await tmux_manager.find_window_by_id(old_window_id):
+            continue
+        chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+        if chat_id == user_id:
+            continue
+        matches.append((user_id, thread_id, old_window_id, chat_id))
+
+    if len(matches) != 1:
+        if len(matches) > 1:
+            logger.warning(
+                "Multiple stale same-name topics for window %s (%s); not rebinding",
+                event.window_id,
+                clean_topic_name,
+            )
+        return False
+
+    user_id, thread_id, old_window_id, chat_id = matches[0]
+    exists = await _topic_exists(bot, chat_id, thread_id)
+    if exists is False:
+        thread_router.unbind_thread(user_id, thread_id)
+        logger.info(
+            "Dropped dead same-name topic thread %d for stale window %s",
+            thread_id,
+            old_window_id,
+        )
+        return False
+    if exists is None:
+        logger.info(
+            "Could not probe same-name topic thread %d for stale window %s; not rebinding",
+            thread_id,
+            old_window_id,
+        )
+        return False
+
+    thread_router.bind_thread(user_id, thread_id, event.window_id, window_name=topic_name)
+    thread_router.set_group_chat_id(user_id, thread_id, chat_id)
+    logger.info(
+        "Rebound existing topic thread %d from stale window %s to new window %s (%s)",
+        thread_id,
+        old_window_id,
+        event.window_id,
+        clean_topic_name,
+    )
+    return True
+
+
+async def handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
+    """Create or bind a Telegram forum topic for a newly detected tmux window.
+
+    Skips if the window is already bound. Reuses one stale same-name topic when
+    it still exists; otherwise creates one topic per unique group chat.
     """
     if _is_window_already_bound(event.window_id):
         logger.debug(
@@ -207,6 +287,9 @@ async def handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
     await _auto_detect_provider(event.window_id)
 
     topic_name = event.window_name or Path(event.cwd).name or event.window_id
+    if await _rebind_existing_topic_by_name(event, bot, topic_name):
+        return
+
     seen_chats = collect_target_chats(event.window_id)
     if not seen_chats:
         return

@@ -471,6 +471,9 @@ class SessionMapSync:
         if mark_external and not state.external:
             state.external = True
             changed = True
+        if mark_external and state.origin != "external":
+            state.origin = "external"
+            changed = True
         if state.session_id != new_sid or state.cwd != new_cwd:
             logger.info(
                 "Session map: window_id %s updated sid=%s, cwd=%s",

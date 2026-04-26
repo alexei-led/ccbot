@@ -33,6 +33,7 @@ from ..session import session_manager
 from ..session_map import session_map_sync
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
+from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from ..utils import read_session_metadata_from_jsonl
 from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
 from .callback_helpers import get_thread_id
@@ -322,6 +323,7 @@ async def _create_resume_window(
     if success:
         if provider.capabilities.supports_hook:
             await session_map_sync.wait_for_session_map_entry(created_wid)
+        session_manager.set_window_origin(created_wid, CCGRAM_CREATED_WINDOW_ORIGIN)
         session_manager.set_window_provider(created_wid, provider.capabilities.name)
         session_manager.set_window_approval_mode(created_wid, approval_mode)
 

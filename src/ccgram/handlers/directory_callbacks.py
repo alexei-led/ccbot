@@ -27,6 +27,7 @@ from ..providers import registry as provider_registry
 from ..session import session_manager
 from ..session_map import session_map_sync
 from ..user_preferences import user_preferences
+from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import (
@@ -557,6 +558,7 @@ async def _create_window_and_bind(
         return
 
     user_preferences.update_user_mru(user_id, selected_path)
+    session_manager.set_window_origin(created_wid, CCGRAM_CREATED_WINDOW_ORIGIN)
     session_manager.set_window_cwd(created_wid, selected_path)
     session_manager.set_window_provider(created_wid, provider_name)
     session_manager.set_window_approval_mode(created_wid, approval_mode)

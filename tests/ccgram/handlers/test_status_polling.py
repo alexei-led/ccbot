@@ -716,10 +716,7 @@ class TestProbeFailures:
             )
             mock_tm.kill_window = AsyncMock()
             await probe_topic_existence(bot)
-        if window_alive:
-            mock_tm.kill_window.assert_called_once_with("@5")
-        else:
-            mock_tm.kill_window.assert_not_called()
+        mock_tm.kill_window.assert_not_called()
         mock_cleanup.assert_called_once_with(1, 42, bot, window_id="@5")
         mock_tr.unbind_thread.assert_called_once_with(1, 42)
         assert (
@@ -1631,7 +1628,7 @@ class TestDeadWindowNotification:
             mock_tm.kill_window = AsyncMock()
             await probe_topic_existence(bot)
 
-        mock_tm.kill_window.assert_called_once_with("@5")
+        mock_tm.kill_window.assert_not_called()
         mock_cleanup.assert_called_once_with(1, 42, bot, window_id="@5")
         mock_tr.unbind_thread.assert_called_once_with(1, 42)
 

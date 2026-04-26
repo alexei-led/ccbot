@@ -282,10 +282,17 @@ class SessionMonitor:
         if result.sessions_to_remove:
             self.state.save_if_dirty()
 
-        if result.new_windows:
+        adoption_windows = dict(result.new_windows)
+        from .thread_router import thread_router
+
+        for window_id, details in result.changed_windows.items():
+            if not thread_router.has_window(window_id):
+                adoption_windows[window_id] = details
+
+        if adoption_windows:
             from .session import session_manager as _sm
 
-            for window_id, details in result.new_windows.items():
+            for window_id, details in adoption_windows.items():
                 provider_name = details.get("provider_name", "")
                 if provider_name:
                     _sm.set_window_provider(window_id, provider_name)

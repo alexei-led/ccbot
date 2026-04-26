@@ -211,6 +211,9 @@ async def _close_ghost_topics(bot: Bot, issues: list[AuditIssue]) -> int:
         user_id = int(match.group(1))
         thread_id = int(match.group(2))
         window_id = match.group(3)
+        current_window_id = thread_router.get_window_for_thread(user_id, thread_id)
+        if current_window_id != window_id:
+            continue
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         topic_removed = False
         if chat_id == user_id:
@@ -345,6 +348,9 @@ async def _recreate_dead_topics(bot: Bot, issues: list[AuditIssue]) -> int:
         user_id = int(match.group(1))
         thread_id = int(match.group(2))
         window_id = match.group(3)
+        current_window_id = thread_router.get_window_for_thread(user_id, thread_id)
+        if current_window_id != window_id:
+            continue
 
         view = window_query.view_window(window_id)
         name = (view.window_name if view else "") or thread_router.get_display_name(
@@ -435,10 +441,10 @@ async def handle_sync_fix(query: CallbackQuery) -> None:
 
     await _sync_live_topic_names(bot, live_ids)
 
-    # Enforcement: close ghost topics, recreate dead topics, adopt orphans
+    # Enforcement: adopt orphans first so stale same-name topics can be rebound.
+    await _adopt_orphaned_windows(bot, pre_audit.issues)
     closed_count = await _close_ghost_topics(bot, pre_audit.issues)
     recreated_count = await _recreate_dead_topics(bot, pre_audit.issues)
-    await _adopt_orphaned_windows(bot, pre_audit.issues)
 
     # Re-audit and compute actual fixed count (handles partial failures).
     # No skip_threads here: successful recreations use a new thread_id (old

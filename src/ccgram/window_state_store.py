@@ -29,6 +29,14 @@ DEFAULT_BATCH_MODE = "batched"
 
 NOTIFICATION_MODES: tuple[str, ...] = ("all", "errors_only", "muted")
 
+WINDOW_ORIGINS: frozenset[str] = frozenset(
+    {"manual_discovered", "ccgram_created", "external"}
+)
+DEFAULT_WINDOW_ORIGIN = "manual_discovered"
+CCGRAM_CREATED_WINDOW_ORIGIN = "ccgram_created"
+MANUAL_DISCOVERED_WINDOW_ORIGIN = "manual_discovered"
+EXTERNAL_WINDOW_ORIGIN = "external"
+
 
 @dataclass
 class WindowState:
@@ -44,6 +52,7 @@ class WindowState:
         approval_mode: "normal" | "yolo"
         batch_mode: "batched" | "verbose"
         external: True for windows owned by external tools (emdash) — never killed by ccgram
+        origin: Lifecycle origin. Manual/external windows are never auto-killed by ccgram.
     """
 
     session_id: str = ""
@@ -55,6 +64,7 @@ class WindowState:
     approval_mode: str = DEFAULT_APPROVAL_MODE
     batch_mode: str = DEFAULT_BATCH_MODE
     external: bool = False
+    origin: str = DEFAULT_WINDOW_ORIGIN
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -75,6 +85,8 @@ class WindowState:
             d["batch_mode"] = self.batch_mode
         if self.external:
             d["external"] = True
+        if self.origin != DEFAULT_WINDOW_ORIGIN:
+            d["origin"] = self.origin
         return d
 
     @classmethod
@@ -89,6 +101,11 @@ class WindowState:
             approval_mode=data.get("approval_mode", DEFAULT_APPROVAL_MODE),
             batch_mode=data.get("batch_mode", DEFAULT_BATCH_MODE),
             external=data.get("external", False),
+            origin=(
+                data.get("origin", DEFAULT_WINDOW_ORIGIN)
+                if data.get("origin", DEFAULT_WINDOW_ORIGIN) in WINDOW_ORIGINS
+                else DEFAULT_WINDOW_ORIGIN
+            ),
         )
 
 
@@ -147,6 +164,18 @@ class WindowStateStore:
         if window_id in self.window_states:
             self.window_states[window_id].cwd = cwd
             self._schedule_save()
+
+    def set_window_origin(self, window_id: str, origin: str) -> None:
+        """Set the lifecycle origin for a window."""
+        if origin not in WINDOW_ORIGINS:
+            raise ValueError(f"Invalid window origin: {origin!r}")
+        state = self.get_window_state(window_id)
+        if state.origin == origin:
+            return
+        state.origin = origin
+        if origin == EXTERNAL_WINDOW_ORIGIN:
+            state.external = True
+        self._schedule_save()
 
     def clear_session_fields(self, window_id: str) -> None:
         """Clear session_id and cwd for a window (session file gone)."""

@@ -46,6 +46,7 @@ class TestWindowViewProjection:
             window_name="",
             session_id="",
             external=False,
+            origin="manual_discovered",
         )
         # cleanup
         window_store.window_states.pop("@1", None)

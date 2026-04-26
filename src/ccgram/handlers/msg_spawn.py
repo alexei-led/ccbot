@@ -32,6 +32,7 @@ from ..spawn_request import (
     spawns_dir,
 )
 from ..tmux_manager import tmux_manager
+from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .callback_registry import register
 from .message_sender import rate_limit_send_message
 
@@ -86,6 +87,7 @@ async def handle_spawn_approval(
     spawn_file = spawns_dir() / f"{request_id}.json"
     spawn_file.unlink(missing_ok=True)
 
+    session_manager.set_window_origin(window_id, CCGRAM_CREATED_WINDOW_ORIGIN)
     session_manager.set_window_provider(window_id, req.provider, cwd=req.cwd)
 
     try:

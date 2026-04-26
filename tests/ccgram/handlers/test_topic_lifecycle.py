@@ -5,6 +5,8 @@ import pytest
 from telegram import Bot
 from telegram.error import BadRequest
 
+from ccgram.window_view import WindowView
+
 from ccgram.handlers.topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
@@ -67,6 +69,22 @@ class TestCheckAutocloseTimers:
         bot.delete_forum_topic.assert_not_called()
 
 
+def _window_view(origin: str) -> WindowView:
+    return WindowView(
+        window_id="@0",
+        cwd="/tmp",
+        provider_name="claude",
+        approval_mode="normal",
+        notification_mode="all",
+        batch_mode="batched",
+        transcript_path=None,
+        window_name="test",
+        session_id="s1",
+        external=False,
+        origin=origin,
+    )
+
+
 class TestCheckUnboundWindowTtl:
     async def test_no_timeout_is_noop(self):
         with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
@@ -85,6 +103,41 @@ class TestCheckUnboundWindowTtl:
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
             await check_unbound_window_ttl([mock_window])
         assert ws.unbound_timer is None
+
+    async def test_manual_unbound_window_is_not_killed(self):
+        ws = terminal_poll_state.get_state("@0")
+        ws.unbound_timer = time.monotonic() - 100
+        mock_window = MagicMock(window_id="@0", window_name="test")
+        with (
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
+            patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
+        ):
+            mock_config.autoclose_done_minutes = 1
+            mock_router.iter_thread_bindings.return_value = []
+            mock_sm.view_window.return_value = _window_view("manual_discovered")
+            mock_tmux.kill_window = AsyncMock()
+            await check_unbound_window_ttl([mock_window])
+        assert ws.unbound_timer is None
+        mock_tmux.kill_window.assert_not_called()
+
+    async def test_ccgram_created_unbound_window_is_killed_after_ttl(self):
+        ws = terminal_poll_state.get_state("@0")
+        ws.unbound_timer = time.monotonic() - 100
+        mock_window = MagicMock(window_id="@0", window_name="test")
+        with (
+            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
+            patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
+        ):
+            mock_config.autoclose_done_minutes = 1
+            mock_router.iter_thread_bindings.return_value = []
+            mock_sm.view_window.return_value = _window_view("ccgram_created")
+            mock_tmux.kill_window = AsyncMock()
+            await check_unbound_window_ttl([mock_window])
+        mock_tmux.kill_window.assert_called_once_with("@0")
 
 
 class TestPruneStaleState:
@@ -105,6 +158,7 @@ class TestProbeTopicExistence:
         with (
             patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
             patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm,
             patch(
                 "ccgram.handlers.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
@@ -115,9 +169,11 @@ class TestProbeTopicExistence:
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
             )
+            mock_sm.view_window.return_value = _window_view("manual_discovered")
             mock_tmux.kill_window = AsyncMock()
             await probe_topic_existence(bot)
             mock_router.unbind_thread.assert_called_once_with(1, 100)
+            mock_tmux.kill_window.assert_not_called()
 
     async def test_suspended_probe_skipped(self):
         bot = AsyncMock(spec=Bot)
