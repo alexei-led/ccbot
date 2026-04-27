@@ -46,6 +46,57 @@ class TestNotifyToggle:
             )
         query.answer.assert_awaited_once_with("Not your session", show_alert=True)
 
+    async def test_reacts_on_bubble_with_mode_emoji(self):
+        from telegram import Message
+
+        from ccgram.handlers.callback_data import NOTIFY_MODE_REACT
+
+        query = _q()
+        bubble = MagicMock(spec=Message)
+        bubble.chat_id = -100
+        bubble.message_id = 7777
+        query.message = bubble
+
+        with (
+            patch(f"{MOD}.user_owns_window", return_value=True),
+            patch(f"{MOD}.session_manager") as sm,
+            patch(
+                "ccgram.handlers.status_bubble.build_status_keyboard",
+                return_value=MagicMock(),
+            ),
+            patch(f"{MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            sm.cycle_notification_mode.return_value = "muted"
+            await _handle_status_bar_action(
+                query, 1, f"{CB_STATUS_NOTIFY}@0", MagicMock(), MagicMock()
+            )
+
+        mock_react.assert_awaited_once()
+        args = mock_react.call_args.args
+        assert args[1] == -100
+        assert args[2] == 7777
+        assert args[3] == NOTIFY_MODE_REACT["muted"]
+
+    async def test_skips_reaction_for_non_message_bubble(self):
+        query = _q()
+        # Default _q() leaves query.message as a generic MagicMock — not a
+        # real telegram.Message — which mirrors expired/inaccessible bubbles.
+        with (
+            patch(f"{MOD}.user_owns_window", return_value=True),
+            patch(f"{MOD}.session_manager") as sm,
+            patch(
+                "ccgram.handlers.status_bubble.build_status_keyboard",
+                return_value=MagicMock(),
+            ),
+            patch(f"{MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            sm.cycle_notification_mode.return_value = "all"
+            await _handle_status_bar_action(
+                query, 1, f"{CB_STATUS_NOTIFY}@0", MagicMock(), MagicMock()
+            )
+
+        mock_react.assert_not_awaited()
+
 
 class TestStatusEsc:
     async def test_sends_escape_key(self):

@@ -42,7 +42,7 @@ def _clean_shell_state():
 
 class TestPendingState:
     def test_clear_removes_entry(self) -> None:
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
         clear_shell_pending(-100, 42)
         assert _shell_pending.get((-100, 42)) is None
 
@@ -112,7 +112,9 @@ class TestHandleShellMessage:
             await handle_shell_message(bot, 1, 42, "@0", "!ls -la", message)
 
             mock_send.assert_called_once_with("@0", "ls -la", raw=True)
-            mock_mark.assert_called_once_with("@0", "ls -la", 1, 42)
+            mock_mark.assert_called_once()
+            args = mock_mark.call_args.args
+            assert args[:4] == ("@0", "ls -la", 1, 42)
 
     async def test_bang_with_space_strips_leading_space(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -334,13 +336,13 @@ class TestHandleShellCallback:
             mock_tr.get_window_for_thread.return_value = "@0"
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
-            _shell_pending[(-100, 42)] = ("ls -la", 1)
+            _shell_pending[(-100, 42)] = ("ls -la", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
             query.answer.assert_called_once()
             mock_send.assert_called_once_with("@0", "ls -la", raw=True)
-            mock_mark.assert_called_once_with("@0", "ls -la", 1, 42)
+            mock_mark.assert_called_once_with("@0", "ls -la", 1, 42, 0)
             assert _shell_pending.get((-100, 42)) is None
 
     async def test_run_wrong_user_rejects(self) -> None:
@@ -353,7 +355,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("ls -la", 999)
+            _shell_pending[(-100, 42)] = ("ls -la", 999, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
@@ -369,7 +371,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("rm -rf /", 999)
+            _shell_pending[(-100, 42)] = ("rm -rf /", 999, 0)
 
             await handle_shell_callback(
                 query, 1, f"{CB_SHELL_CONFIRM_DANGER}@0", bot, 42
@@ -388,7 +390,7 @@ class TestHandleShellCallback:
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = None
-            _shell_pending[(-100, 42)] = ("ls -la", 1)
+            _shell_pending[(-100, 42)] = ("ls -la", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
@@ -421,7 +423,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("rm -rf /", 1)
+            _shell_pending[(-100, 42)] = ("rm -rf /", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_CANCEL}@0", bot, 42)
 
@@ -440,7 +442,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("grep -r pattern .", 1)
+            _shell_pending[(-100, 42)] = ("grep -r pattern .", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_EDIT}@0", bot, 42)
 
@@ -491,7 +493,7 @@ class TestHandleShellCallback:
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"
-            _shell_pending[(-100, 42)] = ("rm -rf /tmp/test", 1)
+            _shell_pending[(-100, 42)] = ("rm -rf /tmp/test", 1, 0)
 
             await handle_shell_callback(
                 query, 1, f"{CB_SHELL_CONFIRM_DANGER}@0", bot, 42
@@ -641,6 +643,7 @@ class TestShowCommandApprovalPaths:
     async def test_message_present_uses_safe_reply(self) -> None:
         bot = AsyncMock(spec=Bot)
         message = AsyncMock(spec=Message)
+        message.message_id = 7
         result = CommandResult(
             command="ls", explanation="List files", is_dangerous=False
         )
@@ -650,7 +653,7 @@ class TestShowCommandApprovalPaths:
 
         mock_reply.assert_called_once()
         assert "`ls`" in mock_reply.call_args[0][1]
-        assert _shell_pending[(-100, 42)] == ("ls", 1)
+        assert _shell_pending[(-100, 42)] == ("ls", 1, 7)
 
     async def test_message_none_uses_safe_send(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -661,7 +664,7 @@ class TestShowCommandApprovalPaths:
 
         mock_send.assert_called_once()
         assert "`pwd`" in mock_send.call_args[0][2]
-        assert _shell_pending[(-100, 42)] == ("pwd", 1)
+        assert _shell_pending[(-100, 42)] == ("pwd", 1, 0)
 
 
 class TestLazyMarkerRecovery:
@@ -709,11 +712,11 @@ class TestHasShellPending:
         assert has_shell_pending(-100, 42) is False
 
     def test_returns_true_when_entry_exists(self) -> None:
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
         assert has_shell_pending(-100, 42) is True
 
     def test_returns_false_for_different_key(self) -> None:
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
         assert has_shell_pending(-100, 99) is False
 
 
@@ -1006,7 +1009,7 @@ class TestShowCommandApprovalPreventsOverwrite:
         bot = AsyncMock(spec=Bot)
         result = CommandResult(command="pwd", explanation="", is_dangerous=False)
 
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
 
         with patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send:
             returned = await show_command_approval(
@@ -1015,7 +1018,7 @@ class TestShowCommandApprovalPreventsOverwrite:
 
         assert returned is False
         mock_send.assert_not_called()
-        assert _shell_pending[(-100, 42)] == ("ls", 1)
+        assert _shell_pending[(-100, 42)] == ("ls", 1, 0)
 
     async def test_returns_true_when_slot_empty(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -1027,4 +1030,90 @@ class TestShowCommandApprovalPreventsOverwrite:
             )
 
         assert returned is True
-        assert _shell_pending[(-100, 42)] == ("pwd", 1)
+        assert _shell_pending[(-100, 42)] == ("pwd", 1, 0)
+
+
+class TestRunningReaction:
+    async def test_handle_shell_message_reacts_running_on_user_message(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+        message.message_id = 4242
+        message.chat = MagicMock()
+        message.chat.id = -100
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
+
+        mock_react.assert_awaited_once()
+        args = mock_react.call_args.args
+        assert args[1] == -100
+        assert args[2] == 4242
+        from ccgram.handlers.reactions import REACT_RUNNING
+
+        assert args[3] == REACT_RUNNING
+        # mark_telegram_command receives the user-msg id for completion react
+        mock_mark.assert_called_once_with("@0", "ls", 1, 42, 4242)
+
+    async def test_handle_shell_message_no_message_skips_reaction(self) -> None:
+        bot = AsyncMock(spec=Bot)
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message=None)
+
+        mock_react.assert_not_awaited()
+        mock_mark.assert_called_once_with("@0", "ls", 1, 42, 0)
+
+    async def test_run_callback_passes_stored_message_id(self) -> None:
+        query = AsyncMock(spec=CallbackQuery)
+        query.answer = AsyncMock()
+        bot = AsyncMock(spec=Bot)
+
+        with (
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_edit", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tr.get_window_for_thread.return_value = "@0"
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+            _shell_pending[(-100, 42)] = ("uname -a", 1, 9999)
+
+            await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
+
+        mock_mark.assert_called_once_with("@0", "uname -a", 1, 42, 9999)

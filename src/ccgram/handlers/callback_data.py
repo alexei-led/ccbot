@@ -82,6 +82,14 @@ NOTIFY_MODE_ICONS: dict[str, str] = {
 NOTIFY_MODE_LABELS: dict[str, str] = {
     k: f"{v} {k.replace('_', ' ').title()}" for k, v in NOTIFY_MODE_ICONS.items()
 }
+# Reactions on the status bubble after a notify-mode toggle. Picked from
+# Telegram's allowed reaction set (the bell/warning/no-bell glyphs aren't
+# available as reactions for bots).
+NOTIFY_MODE_REACT: dict[str, str] = {
+    "all": "\U0001f440",  # \ud83d\udc40 REACT_SEEN \u2014 watching everything
+    "errors_only": "\U0001f914",  # \ud83e\udd14 REACT_THINKING \u2014 selective
+    "muted": "\U0001f494",  # \ud83d\udc94 REACT_FAIL \u2014 disabled
+}
 
 # Provider selection (directory browser flow)
 CB_PROV_SELECT = "prov:"  # prov:<provider_name>

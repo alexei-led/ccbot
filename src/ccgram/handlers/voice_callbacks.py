@@ -19,7 +19,7 @@ from ..thread_router import thread_router
 from .callback_data import CB_VOICE
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import ack_reaction
+from .message_sender import REACT_DONE, REACT_SEEN, ack_reaction, react
 from .user_state import VOICE_PENDING
 
 logger = structlog.get_logger()
@@ -82,6 +82,11 @@ async def _handle_send(
         await query.answer("⚠️ No session bound.", show_alert=True)
         return
 
+    bot = msg.get_bot()
+
+    # 👀 ack: persistent "I see you" indicator on the original voice message.
+    await react(bot, msg.chat.id, message_id, REACT_SEEN)
+
     # Shell provider: route through LLM for NL→command generation
     provider = get_provider_for_window(
         window_id, provider_name=get_window_provider(window_id)
@@ -90,34 +95,39 @@ async def _handle_send(
         from .shell_commands import handle_shell_message
 
         try:
-            await handle_shell_message(
-                msg.get_bot(), user_id, thread_id, window_id, pending_text
-            )
+            await handle_shell_message(bot, user_id, thread_id, window_id, pending_text)
         except (OSError, TelegramError) as exc:
             logger.warning("Shell message handling failed: %s", exc)
             pending_store[(msg.chat.id, message_id)] = pending_text
             await query.answer("❌ Failed to send", show_alert=True)
             return
-        await ack_reaction(msg.get_bot(), msg.chat.id, message_id)
-        try:
-            await msg.delete()
-        except TelegramError as e:
-            logger.warning("Failed to delete voice confirm message: %s", e)
-        await query.answer("✓ Sent")
+        await _ack_delivered(bot, msg, query, message_id)
         return
 
     success, err = await send_to_window(window_id, pending_text)
 
     if success:
-        await ack_reaction(msg.get_bot(), msg.chat.id, message_id)
-        try:
-            await msg.delete()
-        except TelegramError as e:
-            logger.warning("Failed to delete voice confirm message: %s", e)
-        await query.answer("✓ Sent")
+        await _ack_delivered(bot, msg, query, message_id)
     else:
         pending_store[(msg.chat.id, message_id)] = pending_text
         await query.answer(f"❌ {err}", show_alert=True)
+
+
+async def _ack_delivered(
+    bot, msg: Message, query: CallbackQuery, message_id: int
+) -> None:
+    """Replace the previous "✓ Sent" toast with a persistent reaction.
+
+    Order matters: REACT_DONE replaces the prior 👀; ack_reaction (if user
+    configured ``CCGRAM_ACK_REACTION``) overrides REACT_DONE in turn.
+    """
+    await react(bot, msg.chat.id, message_id, REACT_DONE)
+    await ack_reaction(bot, msg.chat.id, message_id)
+    try:
+        await msg.delete()
+    except TelegramError as e:
+        logger.warning("Failed to delete voice confirm message: %s", e)
+    await query.answer()
 
 
 async def _handle_drop(

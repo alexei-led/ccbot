@@ -742,6 +742,131 @@ class TestPassiveRelayFormatting:
         edit_text = mock_edit.call_args[0][3]  # (bot, chat_id, msg_id, text)
         assert "exit 127" in edit_text
 
+    @pytest.mark.asyncio()
+    async def test_telegram_command_reacts_done_on_success(self) -> None:
+        from ccgram.handlers.shell_capture import (
+            _shell_monitor_state,
+            check_passive_shell_output,
+            mark_telegram_command,
+            reset_shell_monitor_state,
+        )
+
+        reset_shell_monitor_state()
+        mark_telegram_command("@0", "ls", 1, 42, message_id=600)
+
+        bot = AsyncMock(spec=Bot)
+        mock_sent = MagicMock()
+        mock_sent.message_id = 1
+        pane = "ccgram:0❯ ls\nfile.txt\nccgram:0❯"
+
+        with (
+            patch(
+                f"{_MOD}.rate_limit_send_message",
+                new_callable=AsyncMock,
+                return_value=mock_sent,
+            ),
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(f"{_MOD}.thread_router") as mock_sm,
+            patch(
+                f"{_MOD}._capture_with_scrollback",
+                new_callable=AsyncMock,
+                return_value=pane,
+            ),
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            await check_passive_shell_output(bot, 1, 42, "@0", pane)
+
+        from ccgram.handlers.reactions import REACT_DONE
+
+        assert mock_react.call_args.args[3] == REACT_DONE
+        assert mock_react.call_args.args[2] == 600
+        # Once consumed on success, message_id is cleared so re-runs of the
+        # same poll cycle don't double-react.
+        assert _shell_monitor_state["@0"].telegram_message_id == 0
+        reset_shell_monitor_state()
+
+    @pytest.mark.asyncio()
+    async def test_telegram_command_reacts_fail_on_nonzero_exit(self) -> None:
+        from ccgram.handlers.shell_capture import (
+            check_passive_shell_output,
+            mark_telegram_command,
+            reset_shell_monitor_state,
+        )
+
+        reset_shell_monitor_state()
+        mark_telegram_command("@0", "fail", 1, 42, message_id=601)
+
+        bot = AsyncMock(spec=Bot)
+        mock_sent = MagicMock()
+        mock_sent.message_id = 1
+        pane = "ccgram:0❯ fail\nerror\nccgram:1❯"
+
+        with (
+            patch(
+                f"{_MOD}.rate_limit_send_message",
+                new_callable=AsyncMock,
+                return_value=mock_sent,
+            ),
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(f"{_MOD}.thread_router") as mock_sm,
+            patch(
+                f"{_MOD}._capture_with_scrollback",
+                new_callable=AsyncMock,
+                return_value=pane,
+            ),
+            patch(
+                f"{_MOD}._maybe_suggest_fix", new_callable=AsyncMock
+            ),  # silence LLM path
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            await check_passive_shell_output(bot, 1, 42, "@0", pane)
+
+        from ccgram.handlers.reactions import REACT_FAIL
+
+        assert mock_react.call_args.args[3] == REACT_FAIL
+        assert mock_react.call_args.args[2] == 601
+        reset_shell_monitor_state()
+
+    @pytest.mark.asyncio()
+    async def test_no_message_id_skips_reaction(self) -> None:
+        from ccgram.handlers.shell_capture import (
+            check_passive_shell_output,
+            mark_telegram_command,
+            reset_shell_monitor_state,
+        )
+
+        reset_shell_monitor_state()
+        # No message_id passed — typical for legacy callers.
+        mark_telegram_command("@0", "ls", 1, 42)
+
+        bot = AsyncMock(spec=Bot)
+        mock_sent = MagicMock()
+        mock_sent.message_id = 1
+        pane = "ccgram:0❯ ls\nfile\nccgram:0❯"
+
+        with (
+            patch(
+                f"{_MOD}.rate_limit_send_message",
+                new_callable=AsyncMock,
+                return_value=mock_sent,
+            ),
+            patch(f"{_MOD}.edit_with_fallback", new_callable=AsyncMock),
+            patch(f"{_MOD}.thread_router") as mock_sm,
+            patch(
+                f"{_MOD}._capture_with_scrollback",
+                new_callable=AsyncMock,
+                return_value=pane,
+            ),
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_sm.resolve_chat_id.return_value = -100
+            await check_passive_shell_output(bot, 1, 42, "@0", pane)
+
+        mock_react.assert_not_awaited()
+        reset_shell_monitor_state()
+
 
 class TestCaptureWithScrollback:
     @pytest.mark.asyncio()
@@ -802,11 +927,24 @@ class TestMarkTelegramCommand:
         )
 
         reset_shell_monitor_state()
-        mark_telegram_command("@0", "ls -la", 1, 42)
+        mark_telegram_command("@0", "ls -la", 1, 42, 7777)
         state = _shell_monitor_state["@0"]
         assert state.telegram_command == "ls -la"
         assert state.telegram_user_id == 1
         assert state.telegram_thread_id == 42
+        assert state.telegram_message_id == 7777
+        reset_shell_monitor_state()
+
+    def test_default_message_id_is_zero(self) -> None:
+        from ccgram.handlers.shell_capture import (
+            _shell_monitor_state,
+            mark_telegram_command,
+            reset_shell_monitor_state,
+        )
+
+        reset_shell_monitor_state()
+        mark_telegram_command("@0", "ls", 1, 42)
+        assert _shell_monitor_state["@0"].telegram_message_id == 0
         reset_shell_monitor_state()
 
     def test_overwrites_previous(self) -> None:
@@ -817,13 +955,46 @@ class TestMarkTelegramCommand:
         )
 
         reset_shell_monitor_state()
-        mark_telegram_command("@0", "ls", 1, 42)
-        mark_telegram_command("@0", "pwd", 2, 99)
+        mark_telegram_command("@0", "ls", 1, 42, 100)
+        mark_telegram_command("@0", "pwd", 2, 99, 200)
         state = _shell_monitor_state["@0"]
         assert state.telegram_command == "pwd"
         assert state.telegram_user_id == 2
         assert state.telegram_thread_id == 99
+        assert state.telegram_message_id == 200
         reset_shell_monitor_state()
+
+
+class TestExitReaction:
+    async def test_react_exit_zero_uses_done(self) -> None:
+        from ccgram.handlers.shell_capture import _react_exit
+
+        bot = AsyncMock(spec=Bot)
+        with patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react:
+            await _react_exit(bot, -100, 42, 0)
+        mock_react.assert_awaited_once()
+        from ccgram.handlers.reactions import REACT_DONE
+
+        assert mock_react.call_args.args[3] == REACT_DONE
+
+    async def test_react_exit_nonzero_uses_fail(self) -> None:
+        from ccgram.handlers.shell_capture import _react_exit
+
+        bot = AsyncMock(spec=Bot)
+        with patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react:
+            await _react_exit(bot, -100, 42, 1)
+        mock_react.assert_awaited_once()
+        from ccgram.handlers.reactions import REACT_FAIL
+
+        assert mock_react.call_args.args[3] == REACT_FAIL
+
+    async def test_react_exit_zero_message_id_skips(self) -> None:
+        from ccgram.handlers.shell_capture import _react_exit
+
+        bot = AsyncMock(spec=Bot)
+        with patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react:
+            await _react_exit(bot, -100, 0, 1)
+        mock_react.assert_not_awaited()
 
 
 class TestRelayOutputTruncation:

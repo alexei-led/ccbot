@@ -197,14 +197,14 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/handlers/status_bar_actions.py` (notify mode toggle)
 - Modify: existing test files for each handler
 
-- [ ] voice send: react 👀 on receive, ✅ on delivery (replace `query.answer("✓ Sent")`)
-- [ ] /send delivery: react ✅ on success, keep current text for denial reasons
-- [ ] inter-agent peer message arriving: react 📬 on the most recent user message in the topic
-- [ ] shell command run: react ⚙ on start, ✅ on exit-0, ❌ on non-zero
-- [ ] notification mode toggle: react with the new mode's icon on the bubble
-- [ ] keep toast fallback when reaction call fails (helper already does this)
-- [ ] update tests to assert reaction calls instead of toasts where applicable
-- [ ] run `make check`
+- [x] voice send: react 👀 on receive, ✅ on delivery (replace `query.answer("✓ Sent")`)
+- [x] /send delivery: react ✅ on success, keep current text for denial reasons
+- [x] inter-agent peer message arriving: react 📬 on the most recent user message in the topic
+- [x] shell command run: react ⚙ on start, ✅ on exit-0, ❌ on non-zero
+- [x] notification mode toggle: react with the new mode's icon on the bubble
+- [x] keep toast fallback when reaction call fails (helper already does this)
+- [x] update tests to assert reaction calls instead of toasts where applicable
+- [x] run `make check`
 
 ### Task 1.6: Theme 4a — `sendChatAction` for shell LLM + agent forward
 

@@ -18,6 +18,7 @@ import structlog
 from telegram import (
     CallbackQuery,
     InputMediaDocument,
+    Message,
     Update,
 )
 from telegram.error import TelegramError
@@ -36,9 +37,11 @@ from .callback_data import (
     CB_STATUS_RECALL,
     CB_STATUS_REMOTE,
     NOTIFY_MODE_LABELS,
+    NOTIFY_MODE_REACT,
 )
 from .callback_helpers import get_thread_id, parse_target, user_owns_window
 from .callback_registry import register
+from .message_sender import react
 from .screenshot_callbacks import (
     KEY_LABELS,
     KEYS_SEND_MAP,
@@ -81,6 +84,12 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
     )
     with contextlib.suppress(TelegramError):
         await query.edit_message_reply_markup(reply_markup=keyboard)
+    # Persistent reaction so the new mode stays visible after the toast fades.
+
+    bubble = query.message
+    react_emoji = NOTIFY_MODE_REACT.get(new_mode)
+    if isinstance(bubble, Message) and react_emoji is not None:
+        await react(query.get_bot(), bubble.chat_id, bubble.message_id, react_emoji)
     await query.answer(label)
 
 

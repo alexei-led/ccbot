@@ -37,14 +37,16 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import safe_edit, safe_reply, safe_send
+from .message_sender import REACT_RUNNING, react, safe_edit, safe_reply, safe_send
 from .message_queue import enqueue_status_update
 from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 
-_shell_pending: dict[tuple[int, int], tuple[str, int]] = {}
+# pending entry = (command, user_id, source_message_id) — the message id
+# powers ⚡/✅/❌ reaction feedback over the command lifecycle.
+_shell_pending: dict[tuple[int, int], tuple[str, int, int]] = {}
 _generation_counter: dict[tuple[int, int], int] = {}
 _shell_hint_seen: set[tuple[int, int]] = set()
 
@@ -152,11 +154,20 @@ async def handle_shell_message(
     clear_shell_pending(chat_id, thread_id)
     await _ensure_prompt_marker(window_id)
 
+    msg_id = message.message_id if message is not None else 0
+
+    # ⚡ Persistent ack so the user sees the bot is working before
+    # tmux/LLM round-trip completes; replaced by ✅/❌ once exit is known.
+    if message is not None:
+        await react(bot, message.chat.id, message.message_id, REACT_RUNNING)
+
     if text.startswith("!"):
         raw = text[1:].lstrip()
         if not raw:
             return
-        await _execute_raw_command(bot, user_id, thread_id, window_id, raw)
+        await _execute_raw_command(
+            bot, user_id, thread_id, window_id, raw, message_id=msg_id
+        )
         return
 
     try:
@@ -166,15 +177,16 @@ async def handle_shell_message(
         await safe_send(
             bot,
             chat_id,
-            "\u26a0 LLM misconfigured \u2014 command not sent.\n"
-            "Use `!` prefix for raw commands.",
+            "⚠ LLM misconfigured — command not sent.\nUse `!` prefix for raw commands.",
             message_thread_id=thread_id,
         )
         return
 
     if not completer:
         # No LLM configured — raw mode is intentional
-        await _execute_raw_command(bot, user_id, thread_id, window_id, text)
+        await _execute_raw_command(
+            bot, user_id, thread_id, window_id, text, message_id=msg_id
+        )
         return
 
     ctx = await gather_llm_context(window_id)
@@ -201,7 +213,7 @@ async def handle_shell_message(
         await safe_send(
             bot,
             chat_id,
-            "\u26a0 LLM request failed \u2014 command not sent.\n"
+            "⚠ LLM request failed — command not sent.\n"
             "Use `!` prefix for raw commands.",
             message_thread_id=thread_id,
         )
@@ -236,21 +248,25 @@ async def _execute_raw_command(
     thread_id: int,
     window_id: str,
     command: str,
+    message_id: int = 0,
 ) -> None:
-    """Send a raw command to the shell and start output capture."""
+    """Send a raw command to the shell and start output capture.
+
+    ``message_id`` (when non-zero) is the user's source Telegram message —
+    forwarded to ``mark_telegram_command`` so the passive monitor can react
+    on it once the exit code is known.
+    """
     await _cancel_stuck_input(window_id)
 
     success, err_message = await send_to_window(window_id, command, raw=True)
     if not success:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-        await safe_send(
-            bot, chat_id, f"\u274c {err_message}", message_thread_id=thread_id
-        )
+        await safe_send(bot, chat_id, f"❌ {err_message}", message_thread_id=thread_id)
         return
 
     from .shell_capture import mark_telegram_command
 
-    mark_telegram_command(window_id, command, user_id, thread_id)
+    mark_telegram_command(window_id, command, user_id, thread_id, message_id)
 
 
 async def show_command_approval(
@@ -271,15 +287,17 @@ async def show_command_approval(
     if key in _shell_pending:
         return False
 
+    msg_id = message.message_id if message is not None else 0
+
     # Reserve the slot before awaiting to prevent concurrent callers
     # from emitting duplicate approval keyboards for the same topic.
-    _shell_pending[key] = (result.command, user_id)
+    _shell_pending[key] = (result.command, user_id, msg_id)
 
     text = f"`{result.command}`"
     if result.explanation:
         text += f"\n{result.explanation}"
     if result.is_dangerous:
-        text = f"\u26a0\ufe0f *Potentially dangerous*\n{text}"
+        text = f"⚠️ *Potentially dangerous*\n{text}"
 
     keyboard = _build_approval_keyboard(window_id, result.is_dangerous)
     try:
@@ -305,11 +323,11 @@ def _build_approval_keyboard(
             [
                 [
                     InlineKeyboardButton(
-                        "\u26a0 Confirm Run",
+                        "⚠ Confirm Run",
                         callback_data=f"{CB_SHELL_CONFIRM_DANGER}{window_id}",
                     ),
                     InlineKeyboardButton(
-                        "\u2715 Cancel",
+                        "✕ Cancel",
                         callback_data=f"{CB_SHELL_CANCEL}{window_id}",
                     ),
                 ],
@@ -319,15 +337,15 @@ def _build_approval_keyboard(
         [
             [
                 InlineKeyboardButton(
-                    "\u25b6 Run",
+                    "▶ Run",
                     callback_data=f"{CB_SHELL_RUN}{window_id}",
                 ),
                 InlineKeyboardButton(
-                    "\u270f Edit",
+                    "✏ Edit",
                     callback_data=f"{CB_SHELL_EDIT}{window_id}",
                 ),
                 InlineKeyboardButton(
-                    "\u2715 Cancel",
+                    "✕ Cancel",
                     callback_data=f"{CB_SHELL_CANCEL}{window_id}",
                 ),
             ],
@@ -364,29 +382,31 @@ async def _cb_run(
     user_id: int,
     thread_id: int,
     chat_id: int,
-    pending: tuple[str, int] | None,
+    pending: tuple[str, int, int] | None,
 ) -> None:
     """Handle Run / Confirm Danger callbacks."""
     await query.answer()
     if not pending:
-        await safe_edit(query, "\u274c Command expired")
+        await safe_edit(query, "❌ Command expired")
         return
 
-    command, pending_user_id = pending
+    command, pending_user_id, msg_id = pending
     if pending_user_id != user_id:
-        await safe_edit(query, "\u274c Not your command")
+        await safe_edit(query, "❌ Not your command")
         return
 
     # Use window from thread binding (authoritative), not callback data
     window_id = thread_router.get_window_for_thread(user_id, thread_id)
     if not window_id:
         clear_shell_pending(chat_id, thread_id)
-        await safe_edit(query, "\u274c No session bound")
+        await safe_edit(query, "❌ No session bound")
         return
 
     clear_shell_pending(chat_id, thread_id)
-    await safe_edit(query, f"\u25b6 `{command}`")
-    await _execute_raw_command(bot, user_id, thread_id, window_id, command)
+    await safe_edit(query, f"▶ `{command}`")
+    await _execute_raw_command(
+        bot, user_id, thread_id, window_id, command, message_id=msg_id
+    )
 
 
 async def _cb_edit(
@@ -394,12 +414,12 @@ async def _cb_edit(
     user_id: int,
     chat_id: int,
     thread_id: int,
-    pending: tuple[str, int] | None,
+    pending: tuple[str, int, int] | None,
 ) -> None:
     """Handle Edit callback."""
     await query.answer()
     if pending and pending[1] != user_id:
-        await safe_edit(query, "\u274c Not your command")
+        await safe_edit(query, "❌ Not your command")
         return
     clear_shell_pending(chat_id, thread_id)
     if pending:
@@ -408,7 +428,7 @@ async def _cb_edit(
             f"\U0001f4cb Copy, edit, and send back:\n`{pending[0]}`",
         )
     else:
-        await safe_edit(query, "\u274c Command expired")
+        await safe_edit(query, "❌ Command expired")
 
 
 async def _cb_cancel(
@@ -416,7 +436,7 @@ async def _cb_cancel(
     user_id: int,
     chat_id: int,
     thread_id: int,
-    pending: tuple[str, int] | None,
+    pending: tuple[str, int, int] | None,
 ) -> None:
     """Handle Cancel callback."""
     if pending and pending[1] != user_id:
