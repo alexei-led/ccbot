@@ -30,6 +30,7 @@ from .directory_browser import (
 )
 from .interactive_ui import get_interactive_window, handle_interactive_ui
 from .message_queue import enqueue_status_update
+from .pane_callbacks import apply_pane_rename
 from .message_sender import (
     ack_reaction,
     edit_with_fallback,
@@ -383,6 +384,10 @@ async def handle_text_message(
 
     # UI guards (window picker / directory browser active)
     if await _check_ui_guards(context.user_data, thread_id, message):
+        return
+
+    # Pane rename capture (consumes the next text in the same thread)
+    if await apply_pane_rename(context.user_data, thread_id, text, message):
         return
 
     # Must be in a named topic

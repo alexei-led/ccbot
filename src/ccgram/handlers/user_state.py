@@ -18,3 +18,7 @@ SEND_PAGE_KEY = "send_page"
 SEND_ITEMS_KEY = "send_items"
 SEND_WINDOW_ID_KEY = "send_window_id"
 SEND_CWD_KEY = "send_cwd"
+
+PANE_RENAME_WINDOW_ID = "_pane_rename_window_id"
+PANE_RENAME_PANE_ID = "_pane_rename_pane_id"
+PANE_RENAME_THREAD_ID = "_pane_rename_thread_id"

@@ -353,13 +353,13 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Create: `src/ccgram/handlers/pane_callbacks.py`
 - Create: `tests/ccgram/handlers/test_pane_callbacks.py`
 
-- [ ] add callback constants: `CB_PANE_SUBSCRIBE`, `CB_PANE_UNSUBSCRIBE`, `CB_PANE_RENAME`
-- [ ] in `pane_callbacks.py`: handlers for subscribe toggle (sets `PaneInfo.subscribed`), rename (force-reply prompt → text capture)
-- [ ] `/panes` keyboard gains [Subscribe] [Rename] buttons per pane
-- [ ] subscribed pane: forward output via existing transcript discovery + screen-buffer diff (re-uses Phase 1 streaming if available)
-- [ ] auto-clear subscription when pane dies
-- [ ] write tests: subscribe persistence, rename round-trip, output forwarding behavior, auto-clear on pane death
-- [ ] run `make check`
+- [x] add callback constants: `CB_PANE_SUBSCRIBE`, `CB_PANE_UNSUBSCRIBE`, `CB_PANE_RENAME`
+- [x] in `pane_callbacks.py`: handlers for subscribe toggle (sets `PaneInfo.subscribed`), rename (force-reply prompt → text capture)
+- [x] `/panes` keyboard gains [Subscribe] [Rename] buttons per pane
+- [x] subscribed pane: forward output via screen-buffer diff (PaneStatusStrategy emits `on_pane_output` with content-hash dedup; window_tick wires forwarder; transcript-based streaming deferred — pane capture is sufficient and provider-agnostic)
+- [x] auto-clear subscription when pane dies (PaneStatusStrategy.reconcile_dead_panes drops the PaneInfo entry along with its subscribed flag and evicts the content-hash cache)
+- [x] write tests: subscribe persistence, rename round-trip, output forwarding behavior, auto-clear on pane death
+- [x] run `make check`
 
 ### Task 2.5: Pane lifecycle notifications (configurable)
 

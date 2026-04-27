@@ -99,6 +99,11 @@ CB_MODE_SELECT = "mode:"  # mode:<provider_name>:<normal|yolo>
 # Pane screenshot (from /panes command)
 CB_PANE_SCREENSHOT = "pn:ss:"  # pn:ss:<window_id>:<pane_id>
 
+# Pane subscription / rename (Theme 5)
+CB_PANE_SUBSCRIBE = "pn:sub:"  # pn:sub:<window_id>:<pane_id>
+CB_PANE_UNSUBSCRIBE = "pn:uns:"  # pn:uns:<window_id>:<pane_id>
+CB_PANE_RENAME = "pn:rn:"  # pn:rn:<window_id>:<pane_id>
+
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>
 

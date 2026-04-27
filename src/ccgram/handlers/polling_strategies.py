@@ -641,6 +641,11 @@ PaneStateName = Literal["active", "idle", "blocked", "dead"]
 # Surfaces an interactive prompt to the user. Wired by window_tick.
 BlockedAlertCallback = Callable[["Bot", int, str, int, str], Awaitable[None]]
 
+# Forwards subscribed pane output. Wired by window_tick when a pane is marked
+# ``subscribed`` in WindowState.panes; arguments mirror BlockedAlertCallback
+# with the freshly-captured pane text appended.
+PaneOutputCallback = Callable[["Bot", int, str, int, str, str], Awaitable[None]]
+
 
 class PaneStatusStrategy:
     """Multi-pane enumeration, classification, and transition tracking.
@@ -668,6 +673,17 @@ class PaneStatusStrategy:
     ) -> None:
         self._screen_buffer = screen_buffer
         self._interactive = interactive
+        self._pane_content_hash: dict[str, int] = {}
+        topic_state.register_bound("window", self._clear_pane_content_state)
+
+    def _clear_pane_content_state(self, window_id: str) -> None:
+        """Drop cached pane content hashes for a window's panes (cleanup)."""
+        from ..window_state_store import window_store
+
+        state = window_store.window_states.get(window_id)
+        pane_ids = set(state.panes) if state else set()
+        for pid in pane_ids:
+            self._pane_content_hash.pop(pid, None)
 
     @staticmethod
     def classify_pane(active: bool, status: StatusUpdate | None) -> PaneStateName:
@@ -700,6 +716,7 @@ class PaneStatusStrategy:
         for pid in gone:
             window_store.remove_pane(window_id, pid)
             self._interactive.remove_pane_alert(pid)
+            self._pane_content_hash.pop(pid, None)
         return gone
 
     def record_pane_state(
@@ -756,12 +773,13 @@ class PaneStatusStrategy:
 
     async def _classify_non_active(
         self, window_id: str, pane: TmuxPaneInfo, provider: AgentProvider
-    ) -> tuple[PaneStateName, StatusUpdate | None]:
+    ) -> tuple[PaneStateName, StatusUpdate | None, str]:
         """Capture a non-active pane and classify its state.
 
-        Returns ``("idle", None)`` when capture fails (pane briefly empty);
-        otherwise the parsed StatusUpdate is included so the caller can
-        decide whether to surface an interactive alert.
+        Returns ``("idle", None, "")`` when capture fails (pane briefly empty);
+        otherwise the parsed StatusUpdate and the captured pane text are
+        included so the caller can both surface an interactive alert and
+        forward the text to subscribers.
         """
         from ..tmux_manager import tmux_manager
 
@@ -769,9 +787,9 @@ class PaneStatusStrategy:
             pane.pane_id, window_id=window_id
         )
         if not pane_text:
-            return "idle", None
+            return "idle", None, ""
         status = provider.parse_terminal_status(pane_text, pane_title="")
-        return self.classify_pane(pane.active, status), status
+        return self.classify_pane(pane.active, status), status, pane_text
 
     async def _maybe_surface_alert(
         self,
@@ -803,6 +821,7 @@ class PaneStatusStrategy:
         thread_id: int,
         *,
         on_blocked: BlockedAlertCallback,
+        on_pane_output: PaneOutputCallback | None = None,
     ) -> list[PaneTransition]:
         """Enumerate panes for a window and reconcile state.
 
@@ -813,6 +832,9 @@ class PaneStatusStrategy:
           entries for vanished panes.
         * Calls ``on_blocked(bot, user_id, window_id, thread_id, pane_id)``
           when a non-active pane shows a fresh interactive prompt.
+        * Calls ``on_pane_output(bot, user_id, window_id, thread_id,
+          pane_id, pane_text)`` for non-active panes whose ``subscribed``
+          flag is set when the captured text differs from the previous scan.
 
         Returns the list of pane transitions detected this scan (empty when
         all panes kept their previous state). The fast-path (single-pane
@@ -863,6 +885,7 @@ class PaneStatusStrategy:
                 now_wall,
                 transitions,
                 on_blocked,
+                on_pane_output,
             )
         return transitions
 
@@ -897,6 +920,7 @@ class PaneStatusStrategy:
         now_wall: float,
         transitions: list[PaneTransition],
         on_blocked: BlockedAlertCallback,
+        on_pane_output: PaneOutputCallback | None = None,
     ) -> None:
         if pane.active:
             prev = self.record_pane_state(
@@ -909,13 +933,24 @@ class PaneStatusStrategy:
             self._track(transitions, pane.pane_id, prev, "active")
             return
 
-        new_state, status = await self._classify_non_active(
+        new_state, status, pane_text = await self._classify_non_active(
             window_id, pane, window_provider
         )
         prev = self.record_pane_state(
             window_id, pane.pane_id, new_state, provider=pane_provider
         )
         self._track(transitions, pane.pane_id, prev, new_state)
+
+        if pane_text and on_pane_output is not None:
+            await self._maybe_forward_subscribed(
+                bot,
+                user_id,
+                window_id,
+                thread_id,
+                pane.pane_id,
+                pane_text,
+                on_pane_output,
+            )
 
         if new_state != "blocked":
             self._interactive.remove_pane_alert(pane.pane_id)
@@ -932,6 +967,29 @@ class PaneStatusStrategy:
             now_mono,
             on_blocked,
         )
+
+    async def _maybe_forward_subscribed(
+        self,
+        bot: "Bot",
+        user_id: int,
+        window_id: str,
+        thread_id: int,
+        pane_id: str,
+        pane_text: str,
+        on_pane_output: PaneOutputCallback,
+    ) -> None:
+        """Forward freshly-captured pane text to subscribers when content changed."""
+        from ..window_state_store import window_store
+
+        pane = window_store.get_pane(window_id, pane_id)
+        if pane is None or not pane.subscribed:
+            self._pane_content_hash.pop(pane_id, None)
+            return
+        content_hash = hash(pane_text)
+        if self._pane_content_hash.get(pane_id) == content_hash:
+            return
+        self._pane_content_hash[pane_id] = content_hash
+        await on_pane_output(bot, user_id, window_id, thread_id, pane_id, pane_text)
 
 
 pane_status_strategy = PaneStatusStrategy(terminal_screen_buffer, interactive_strategy)

@@ -132,6 +132,50 @@ async def _surface_pane_alert(
     await handle_interactive_ui(bot, user_id, window_id, thread_id, pane_id=pane_id)
 
 
+_PANE_OUTPUT_PREVIEW_LINES = 12
+
+
+async def _forward_pane_output(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int,
+    pane_id: str,
+    pane_text: str,
+) -> None:
+    """Forward a subscribed pane's freshly-captured text to its bound topic.
+
+    Uses the screen buffer to strip ANSI, keeps the tail of the capture so
+    the user sees the most-recent output, and labels the message with the
+    pane's friendly name when one is set.
+    """
+    from ..window_state_store import window_store
+    from .message_sender import safe_send
+
+    pane = window_store.get_pane(window_id, pane_id)
+    if pane is None or not pane.subscribed:
+        return
+    cleaned = terminal_screen_buffer.get_rendered_text(window_id, pane_text).strip()
+    if not cleaned:
+        return
+    lines = cleaned.splitlines()
+    if len(lines) > _PANE_OUTPUT_PREVIEW_LINES:
+        lines = lines[-_PANE_OUTPUT_PREVIEW_LINES:]
+    label = f"{pane.name} ({pane_id})" if pane.name else pane_id
+    body = "\n".join(lines)
+    text = f"\U0001f4e1 {label}\n```\n{body}\n```"
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    try:
+        await safe_send(bot, chat_id, text, message_thread_id=thread_id)
+    except TelegramError as exc:
+        logger.warning(
+            "pane output forward failed",
+            window_id=window_id,
+            pane_id=pane_id,
+            error=str(exc),
+        )
+
+
 async def _scan_window_panes(
     bot: Bot,
     user_id: int,
@@ -141,8 +185,9 @@ async def _scan_window_panes(
     """Delegate multi-pane scanning to ``PaneStatusStrategy``.
 
     The strategy handles enumeration, classification, ``WindowState.panes``
-    upserts, and transition detection. We pass ``_surface_pane_alert`` so
-    blocked panes still surface as inline alerts (FLOW-4a behavior).
+    upserts, and transition detection. ``_surface_pane_alert`` keeps blocked
+    panes surfacing as inline alerts (FLOW-4a behavior); ``_forward_pane_output``
+    forwards content from panes the user has subscribed to via ``/panes``.
     """
     await pane_status_strategy.scan_window(
         bot,
@@ -150,6 +195,7 @@ async def _scan_window_panes(
         window_id,
         thread_id,
         on_blocked=_surface_pane_alert,
+        on_pane_output=_forward_pane_output,
     )
 
 

@@ -507,12 +507,13 @@ async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: C901
     """List all panes in the current topic's window."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import InlineKeyboardMarkup
 
     from ..config import config
     from ..utils import handle_general_topic_message, is_general_topic
-    from .callback_data import CB_PANE_SCREENSHOT
+    from ..window_state_store import window_store
     from .message_sender import safe_reply
+    from .pane_callbacks import build_pane_buttons
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -552,7 +553,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     from .polling_strategies import interactive_strategy
 
     lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]
-    buttons: list[InlineKeyboardButton] = []
+    rows: list[list] = []
     for pane in panes:
         prefix = "\U0001f4cd" if pane.active else "  "
         label = f"Pane {pane.index} ({pane.command})"
@@ -564,16 +565,22 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
             suffix_parts.append("blocked")
         elif not pane.active:
             suffix_parts.append("running")
+        stored = window_store.get_pane(window_id, pane.pane_id)
+        if stored and stored.name:
+            suffix_parts.insert(0, stored.name)
+        if stored and stored.subscribed:
+            suffix_parts.append("subscribed")
         suffix = f" \u2014 {', '.join(suffix_parts)}" if suffix_parts else ""
         lines.append(f"{prefix} {label}{suffix}")
-        buttons.append(
-            InlineKeyboardButton(
-                f"\U0001f4f7 {pane.index}",
-                callback_data=f"{CB_PANE_SCREENSHOT}{window_id}:{pane.pane_id}"[:64],
+        rows.append(
+            build_pane_buttons(
+                window_id,
+                pane.pane_id,
+                subscribed=bool(stored and stored.subscribed),
             )
         )
 
-    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+    keyboard = InlineKeyboardMarkup(rows) if rows else None
     await safe_reply(update.message, "\n".join(lines), reply_markup=keyboard)
 
 
