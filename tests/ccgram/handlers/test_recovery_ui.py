@@ -8,6 +8,7 @@ import ccgram.handlers.command_orchestration as cmd_orch_mod
 from ccgram.bot import text_handler
 from ccgram.handlers.recovery_callbacks import (
     _SessionEntry,
+    _recovery_help_text,
     build_recovery_keyboard,
     handle_recovery_callback,
     scan_sessions_for_cwd,
@@ -183,6 +184,60 @@ class TestBuildRecoveryKeyboard:
             build_recovery_keyboard("@7")
 
         mock_gpw.assert_called_once_with("@7", provider_name=None)
+
+
+class TestRecoveryHelpText:
+    def test_full_capabilities_lists_all_actions(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = True
+            caps.supports_resume = True
+            text = _recovery_help_text("@0")
+
+        assert "Start fresh" in text
+        assert "Continue last session" in text
+        assert "Resume from list" in text
+        assert " · " in text
+
+    def test_omits_continue_when_unsupported(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = False
+            caps.supports_resume = True
+            text = _recovery_help_text("@0")
+
+        assert "Continue" not in text
+        assert "Resume from list" in text
+        assert "Start fresh" in text
+
+    def test_omits_resume_when_unsupported(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = True
+            caps.supports_resume = False
+            text = _recovery_help_text("@0")
+
+        assert "Resume" not in text
+        assert "Continue last session" in text
+        assert "Start fresh" in text
+
+    def test_only_fresh_when_provider_minimal(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = False
+            caps.supports_resume = False
+            text = _recovery_help_text("@0")
+
+        assert text == "Start fresh"
+
+    def test_uses_per_window_provider(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = True
+            caps.supports_resume = True
+            _recovery_help_text("@9")
+
+        mock_gpw.assert_called_once_with("@9", provider_name=None)
 
 
 @pytest.fixture(autouse=True)
@@ -920,6 +975,32 @@ class TestRecoveryBackCallback:
         mock_safe_edit.assert_called_once()
         assert "Choose an option" in mock_safe_edit.call_args.args[1]
         query.answer.assert_called_once()
+
+    @patch(f"{_RC}.get_provider_for_window")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_back_includes_help_text(
+        self,
+        mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_gpw: MagicMock,
+    ) -> None:
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+        caps = mock_gpw.return_value.capabilities
+        caps.supports_continue = True
+        caps.supports_resume = True
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        body = mock_safe_edit.call_args.args[1]
+        assert "Start fresh" in body
+        assert "Continue last session" in body
+        assert "Resume from list" in body
 
     async def test_back_topic_mismatch_rejected(self) -> None:
         update = _make_callback_update(data=f"{CB_RECOVERY_BACK}@0", thread_id=99)

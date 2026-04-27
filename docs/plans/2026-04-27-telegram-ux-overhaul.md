@@ -123,12 +123,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/handlers/test_recovery_callbacks.py`
 - Modify: `tests/ccgram/handlers/test_interactive_ui.py`
 
-- [ ] add `_recovery_help_text()` helper in `recovery_callbacks.py` returning provider-aware subtitle ("Continue last session · Resume from list · Start fresh") and prepend to recovery banner message body
-- [ ] in `interactive_ui.py` `format_interactive_message()`, prepend instruction line: "↑↓ select · Enter confirm · Esc cancel · type to enter text"
-- [ ] verify line stays inside 4096-char limit even with long terminal captures (split if needed)
-- [ ] write tests for new help text rendering (recovery banner, all three modes)
-- [ ] write tests for interactive instruction line presence + length safety
-- [ ] run `make check` — must pass before next task
+- [x] add `_recovery_help_text()` helper in `recovery_callbacks.py` returning provider-aware subtitle ("Continue last session · Resume from list · Start fresh") and prepend to recovery banner message body
+- [x] in `interactive_ui.py` `format_interactive_message()`, prepend instruction line: "↑↓ select · Enter confirm · Esc cancel · type to enter text"
+- [x] verify line stays inside 4096-char limit even with long terminal captures (split if needed)
+- [x] write tests for new help text rendering (recovery banner, all three modes)
+- [x] write tests for interactive instruction line presence + length safety
+- [x] run `make check` — must pass before next task
 
 ### Task 1.2: Theme 1 — Resume picker timestamps + session-id last-4
 

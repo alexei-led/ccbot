@@ -14,7 +14,11 @@ from ccgram.handlers.callback_data import (
     CB_ASK_TAB,
     CB_ASK_UP,
 )
-from ccgram.handlers.interactive_ui import _build_interactive_keyboard
+from ccgram.handlers.interactive_ui import (
+    INTERACTIVE_INSTRUCTION_LINE,
+    _build_interactive_keyboard,
+    format_interactive_message,
+)
 
 
 def _cb_data(kb: InlineKeyboardMarkup, row: int | None = None) -> list[str]:
@@ -75,6 +79,45 @@ class TestBuildInteractiveKeyboard:
             _build_interactive_keyboard("@" + "9" * 60, pane_id="%" + "1" * 60)
         )
         assert all(len(d) <= 64 for d in data)
+
+
+class TestFormatInteractiveMessage:
+    def test_prepends_instruction_line(self) -> None:
+        out = format_interactive_message("Pick one:")
+        assert out.startswith(INTERACTIVE_INSTRUCTION_LINE)
+        assert "Pick one:" in out
+
+    def test_instruction_describes_keys(self) -> None:
+        for token in ("↑↓", "Enter", "Esc"):
+            assert token in INTERACTIVE_INSTRUCTION_LINE
+
+    def test_pane_prefix_with_pane_id(self) -> None:
+        out = format_interactive_message("Body", pane_id="%5")
+        assert "Pane (%5):" in out
+        assert "Body" in out
+        assert out.startswith(INTERACTIVE_INSTRUCTION_LINE)
+
+    def test_no_pane_prefix_without_pane_id(self) -> None:
+        out = format_interactive_message("Body")
+        assert "Pane (" not in out
+
+    def test_short_text_unchanged(self) -> None:
+        out = format_interactive_message("hi")
+        assert out == f"{INTERACTIVE_INSTRUCTION_LINE}\nhi"
+
+    def test_oversized_text_truncated_within_4096(self) -> None:
+        huge = "x" * 5000
+        out = format_interactive_message(huge)
+        assert len(out) <= 4096
+        assert out.startswith(INTERACTIVE_INSTRUCTION_LINE)
+        # Tail of the input must survive (most recent terminal lines)
+        assert out.endswith("x")
+
+    def test_oversized_with_pane_prefix_within_4096(self) -> None:
+        huge = "y" * 5000
+        out = format_interactive_message(huge, pane_id="%9")
+        assert len(out) <= 4096
+        assert "Pane (%9):" in out
 
 
 class TestInteractiveModeTracking:

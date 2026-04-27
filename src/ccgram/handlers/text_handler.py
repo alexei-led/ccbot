@@ -36,7 +36,7 @@ from .message_sender import (
     rate_limit_send_message,
     safe_reply,
 )
-from .recovery_callbacks import build_recovery_keyboard
+from .recovery_callbacks import _recovery_help_text, build_recovery_keyboard
 from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
@@ -296,11 +296,12 @@ async def _handle_dead_window(
         user_data[PENDING_THREAD_TEXT] = text
         user_data[RECOVERY_WINDOW_ID] = window_id
     keyboard = build_recovery_keyboard(window_id)
+    help_text = _recovery_help_text(window_id)
     await safe_reply(
         message,
         f"\u26a0 Window `{display}` is no longer running.\n"
         f"\U0001f4c2 `{cwd}`\n\n"
-        "How would you like to recover?",
+        f"How would you like to recover?\n{help_text}",
         reply_markup=keyboard,
     )
     return True

@@ -210,6 +210,44 @@ class TestHandleDeadWindow:
         assert "no longer running" in mock_reply.call_args.args[1]
         assert user_data[RECOVERY_WINDOW_ID] == "@0"
 
+    @patch(
+        f"{_TH}._recovery_help_text",
+        return_value="Start fresh · Continue last session · Resume from list",
+    )
+    @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(f"{_TH}.build_recovery_keyboard")
+    @patch(f"{_TH}.tmux_manager")
+    @patch(f"{_TH}.window_query")
+    @patch(f"{_TH}.thread_router")
+    async def test_recovery_banner_includes_help_text(
+        self,
+        mock_tr: MagicMock,
+        mock_sm: MagicMock,
+        mock_tm: MagicMock,
+        mock_kb: MagicMock,
+        mock_reply: AsyncMock,
+        mock_help: MagicMock,
+    ) -> None:
+        mock_tm.find_window_by_id = AsyncMock(return_value=None)
+        mock_tr.get_display_name.return_value = "project"
+        ws = MagicMock()
+        ws.cwd = "/tmp/project"
+        mock_sm.view_window.return_value = ws
+        mock_kb.return_value = MagicMock()
+
+        user_data: dict = {}
+        message = AsyncMock()
+
+        with patch(f"{_TH}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await _handle_dead_window("@0", 100, 42, "hello", user_data, message)
+
+        body = mock_reply.call_args.args[1]
+        assert "Start fresh" in body
+        assert "Continue last session" in body
+        assert "Resume from list" in body
+        mock_help.assert_called_once_with("@0")
+
     @pytest.mark.parametrize("cwd", ["", "/nonexistent"])
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_directory_browser")

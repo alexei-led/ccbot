@@ -61,6 +61,25 @@ class _SessionEntry:
     summary: str
 
 
+def _recovery_help_text(window_id: str) -> str:
+    """Return a one-line subtitle explaining the available recovery actions.
+
+    Mirrors the keyboard layout in ``build_recovery_keyboard`` so users can
+    read what each button does without trial and error. Buttons hidden by
+    the active provider's capabilities are omitted from the subtitle too.
+    """
+
+    caps = get_provider_for_window(
+        window_id, provider_name=window_query.get_window_provider(window_id)
+    ).capabilities
+    parts = ["Start fresh"]
+    if caps.supports_continue:
+        parts.append("Continue last session")
+    if caps.supports_resume:
+        parts.append("Resume from list")
+    return " · ".join(parts)
+
+
 def build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
     """Build inline keyboard for dead window recovery options.
 
@@ -442,8 +461,11 @@ async def _handle_back(
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
         return
     kb = build_recovery_keyboard(window_id)
+    help_text = _recovery_help_text(window_id)
     await safe_edit(
-        query, "\u26a0\ufe0f Session ended. Choose an option:", reply_markup=kb
+        query,
+        f"\u26a0\ufe0f Session ended. Choose an option:\n{help_text}",
+        reply_markup=kb,
     )
     await query.answer()
 
