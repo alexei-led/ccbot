@@ -1,0 +1,532 @@
+# Telegram UX Overhaul
+
+## Overview
+
+Six-theme UX overhaul derived from a Telegram Bot API capability audit (2026-04-27) plus a 33-finding UX flow audit of the current ccgram handlers. Goal: close information-design gaps, adopt native Bot API streaming/feedback primitives that landed in 2025-2026 (Bot API 7.0–9.6), make multi-pane agent teams first-class, and lay the groundwork for an optional Mini App dashboard.
+
+Ships across three releases:
+
+- **v2.12 — Telegram polish (Themes 1-4)**: information-design quick wins, reactions as universal feedback, `sendChatAction`/`sendMessageDraft` adoption, recovery/resume rework. All communication-layer + handler code, no new subsystems.
+- **v2.13 — Multi-pane teams (Theme 5)**: per-pane status, subscriptions, naming, lifecycle notifications.
+- **v3.0 — Mini App dashboard (Theme 6)**: optional web view (xterm.js terminal, transcript search, multi-pane grid, AskUserQuestion forms).
+
+Themes are independent within a phase. Phases run sequentially; each phase ships as its own release. Theme 6 is gated on validation that v2.12+v2.13 don't already solve enough.
+
+## Context (from discovery)
+
+- **Audit findings**: 33 UX issues across 10 flows. 9 high-severity, ~14 medium, ~10 low. Cluster around: invisible pending state (FLOW-1a), recovery/resume confusion (FLOW-2a/b), interactive UI cognitive load (FLOW-10a), multi-pane blindness (FLOW-4a/b/c), shell-LLM silence (FLOW-5a).
+- **Capability gaps**: `sendMessageDraft` (Bot API 9.5, native streaming), `setMessageReaction` (Bot API 7.0, persistent acks), `CopyTextButton` (Bot API 8.0, one-tap copy), `show_caption_above_media`, `editForumTopic` icon, scoped `setMyCommands`, Mini App full-screen.
+- **Files affected (Phase 1)**: `handlers/recovery_callbacks.py`, `handlers/restore_command.py`, `handlers/resume_command.py`, `handlers/interactive_ui.py`, `handlers/voice_*.py`, `handlers/shell_commands.py`, `handlers/text_handler.py`, `handlers/topic_orchestration.py`, `handlers/status_bubble.py`, `handlers/tool_batch.py`, `handlers/message_sender.py`, `handlers/message_queue.py`, `handlers/msg_telegram.py`, `handlers/send_callbacks.py`.
+- **Files affected (Phase 2)**: `window_state_store.py`, `handlers/window_tick.py`, `handlers/polling_strategies.py`, `handlers/status_bubble.py`, `handlers/screenshot_callbacks.py`, `handlers/callback_data.py`.
+- **Files affected (Phase 3)**: new `src/ccgram/miniapp/` subpackage, `cli.py`, `bot.py`.
+- **Patterns to follow**: `safe_reply`/`safe_edit`/`safe_send` for entity-based formatting; `rate_limit_send()` for outbound throttling; `TopicStateRegistry.register_bound()` for per-topic state cleanup; `topic_state_registry` decorator for callback registration; tests mirror source under `tests/ccgram/`.
+- **PTB integration for new API methods**: PTB `Bot` exposes raw API access via `Bot.do_api_request(method, data)` (or via the existing httpx layer in `telegram_request.py`). No PTB wrapper required for `sendMessageDraft` / `setMessageReaction`.
+
+## Development Approach
+
+- **Testing approach**: Regular (code first, then tests) — matches ccgram convention.
+- Complete each task fully before moving to the next.
+- Make small, focused changes.
+- **CRITICAL: every task MUST include new/updated tests** for code changes in that task.
+  - Tests are not optional — they are a required part of the checklist.
+  - Cover both success and error scenarios.
+- **CRITICAL: all tests must pass before starting next task** — no exceptions.
+- **CRITICAL: update this plan file when scope changes during implementation**.
+- Run `make check` (fmt + lint + typecheck + test) after each task.
+- Maintain backward compatibility throughout — no breaking config or state-file changes.
+
+## Testing Strategy
+
+- **Unit tests**: required for every task, mirror source layout under `tests/ccgram/`.
+- **Integration tests** (`tests/integration/`): added when handler dispatch or PTB routing changes. Use the `_do_post` patch pattern from `tests/integration/test_message_dispatch.py`.
+- **Manual device testing** (Post-Completion): each theme requires real-device verification on iOS + Android + Desktop because rendering of new entity types and inline-button behavior differs by client.
+- **Bot API method probing**: for `sendMessageDraft`, test bot must run against a real Telegram server (Bot API 9.5+). Add a one-time integration probe that calls the method against `@BotFather`-issued test bot and asserts no `400 method not found`.
+
+## Progress Tracking
+
+- Mark completed items with `[x]` immediately when done.
+- Add newly discovered tasks with ➕ prefix.
+- Document issues/blockers with ⚠️ prefix.
+- Update plan if implementation deviates from original scope.
+
+## Solution Overview
+
+### Phase 1 — v2.12 (Themes 1-4)
+
+Order chosen so each task builds on the last and reuses infrastructure:
+
+1. **Theme 1** first (info-design quick wins) — pure text/keyboard, no API. Fast confidence builder.
+2. **Theme 3** (reactions) — introduces a `react()` helper used by Themes 4 and 2.
+3. **Theme 4a** (`sendChatAction`) — small, instantly visible polish.
+4. **Theme 4b** (`sendMessageDraft`) — architecture change to streaming. Biggest task in Phase 1.
+5. **Theme 2** (recovery rework) — touches recovery flow comprehensively, can use Theme 3 reactions.
+
+### Phase 2 — v2.13 (Theme 5)
+
+`WindowState` gains a `panes: dict[pane_id, PaneInfo]` map. Polling-strategy layer surfaces pane state continuously. Status bubble renders per-pane status block. Inline alerts include pane names. New `pane_subscribe` and `pane_rename` callbacks. Lifecycle notifications gated by per-window setting.
+
+### Phase 3 — v3.0 (Theme 6)
+
+New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a configurable port. Telegram inline button opens `https://<host>/app/<signed_token>`. Token validates `Telegram.WebApp.initData` HMAC. Three Phase 3 surfaces: live xterm.js terminal, transcript search, multi-pane grid. AskUserQuestion HTML form is Phase 3.5 (deferred to v3.1 if v3.0 lands smaller).
+
+## Technical Details
+
+### `sendMessageDraft` integration
+
+- Helper at `src/ccgram/telegram_draft.py`: `class DraftStream` with `async start(initial_text)`, `async append(delta)`, `async finalize(final_text)`.
+- Calls API via `bot.do_api_request("sendMessageDraft", data={...})`.
+- Fallback path: on first call returning `400 method not found`, set process-wide flag `_DRAFT_UNAVAILABLE = True`, all subsequent `DraftStream` instances degrade to `editMessageText` polling (current code).
+- Probed once at startup: `ccgram doctor` adds a `[draft-streaming]` check.
+- Tool-batch (`tool_batch.py`) uses `DraftStream` for tool_use messages so the batched output streams as it grows.
+- Status bubble (`status_bubble.py`) uses `DraftStream` for the bubble itself; content-hash gating becomes a no-op when streaming is active.
+
+### `setMessageReaction` helper
+
+- New helper `react(bot, chat_id, message_id, emoji)` in `handlers/message_sender.py`.
+- Wraps `bot.set_message_reaction(chat_id, message_id, [ReactionTypeEmoji(emoji=emoji)])` (PTB exposes this directly since v21).
+- Allowed emojis are restricted by Telegram to a fixed set; helper validates against `ALLOWED_REACTIONS = {"👀","✅","❌","🤔","📬","⚙","🔥",...}` (subset of Telegram's allowed list — verify exact set during Task 3.1).
+- Failure modes: graceful — log warning, fall back to existing toast.
+
+### Recovery banner unification
+
+- `RecoveryBanner` dataclass in `handlers/recovery_callbacks.py`: holds chat_id, thread_id, window_id, mode (`dead` / `restore` / `resume`).
+- One render function builds the keyboard with subtitle help text and provider-aware button labels.
+- `/restore` invokes the same render (no new logic — just re-shows the banner).
+- `/resume` keeps the cross-project picker but uses the new entry formatter (timestamp + last-4 + msg count).
+
+### Per-pane WindowState
+
+- New `PaneInfo` dataclass in `window_state_store.py`: `pane_id`, `name`, `provider`, `last_active_ts`, `subscribed`, `state` (active/idle/blocked).
+- `WindowState.panes: dict[str, PaneInfo]`.
+- Migration: empty dict on load — backward compatible.
+- Pane scanner (currently in `window_tick.py`) becomes a `PaneStatusStrategy` in `polling_strategies.py`.
+
+## What Goes Where
+
+- **Implementation Steps** (`[ ]` checkboxes): all code, tests, doc updates inside the ccgram repo.
+- **Post-Completion** (no checkboxes): manual device testing (iOS/Android/Desktop), Bot API method probing in production-like environment, deployment of Mini App backend (Phase 3 only).
+
+## Implementation Steps
+
+---
+
+### Phase 1 — v2.12 — Themes 1-4
+
+---
+
+### Task 1.1: Theme 1 — Recovery keyboard subtitles + interactive UI instructions
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/recovery_callbacks.py`
+- Modify: `src/ccgram/handlers/interactive_ui.py`
+- Modify: `tests/ccgram/handlers/test_recovery_callbacks.py`
+- Modify: `tests/ccgram/handlers/test_interactive_ui.py`
+
+- [ ] add `_recovery_help_text()` helper in `recovery_callbacks.py` returning provider-aware subtitle ("Continue last session · Resume from list · Start fresh") and prepend to recovery banner message body
+- [ ] in `interactive_ui.py` `format_interactive_message()`, prepend instruction line: "↑↓ select · Enter confirm · Esc cancel · type to enter text"
+- [ ] verify line stays inside 4096-char limit even with long terminal captures (split if needed)
+- [ ] write tests for new help text rendering (recovery banner, all three modes)
+- [ ] write tests for interactive instruction line presence + length safety
+- [ ] run `make check` — must pass before next task
+
+### Task 1.2: Theme 1 — Resume picker timestamps + session-id last-4
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/recovery_callbacks.py`
+- Modify: `src/ccgram/handlers/resume_command.py`
+- Modify: `tests/ccgram/handlers/test_recovery_callbacks.py`
+- Modify: `tests/ccgram/handlers/test_resume_command.py`
+
+- [ ] add `_format_session_entry(session_meta)` helper rendering "{relative_time} · {summary[:40]} · {sid_last4}"
+- [ ] use new formatter in both `_send_resume_picker` (recovery callbacks) and `/resume` command picker
+- [ ] sort entries newest-first (by mtime)
+- [ ] handle missing/zero mtime ("never" fallback)
+- [ ] write unit tests for `_format_session_entry` (today/yesterday/n-days-ago/never)
+- [ ] write tests for picker ordering (newest first)
+- [ ] run `make check`
+
+### Task 1.3: Theme 1 — Pending message disclosure + remaining info-design fixes
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/text_handler.py`
+- Modify: `src/ccgram/handlers/topic_orchestration.py`
+- Modify: `src/ccgram/handlers/voice_handler.py`
+- Modify: `src/ccgram/handlers/send_callbacks.py`
+- Modify: `src/ccgram/handlers/shell_commands.py`
+- Modify: `src/ccgram/cli.py` (register `/live` alias)
+- Modify: `src/ccgram/handlers/screenshot_callbacks.py` (handle `/live` direct invocation)
+- Modify: `tests/ccgram/handlers/test_text_handler.py`
+- Modify: `tests/ccgram/handlers/test_voice_handler.py`
+- Modify: `tests/ccgram/test_shell_commands.py`
+
+- [ ] in `text_handler.py` queue-pending path: send disclosure "💬 Will deliver once the agent starts." after directory browser opens
+- [ ] in `voice_handler.py` unbound-topic path: same disclosure pattern
+- [ ] rewrite `send_callbacks.py` "Session expired" → "Browser expired — use /send to restart"
+- [ ] in `shell_commands.py`: on first message in a shell topic per session, append one-time hint "Tip: prefix `!` to skip LLM."
+- [ ] in `cli.py` register `/live` slash command → opens live view directly without screenshot first
+- [ ] update bot command list (`setMyCommands`) to include `/live`
+- [ ] write tests: pending disclosure (text + voice), browser-expired wording, `/live` shortcut, `!` hint shows once per session
+- [ ] run `make check`
+
+### Task 1.4: Theme 3 — `react()` helper + reaction allowlist
+
+**Files:**
+
+- Create: `src/ccgram/handlers/reactions.py`
+- Modify: `src/ccgram/handlers/message_sender.py` (re-export `react`)
+- Create: `tests/ccgram/handlers/test_reactions.py`
+
+- [ ] verify exact Telegram-allowed reaction set for bots (Bot API docs, `getAvailableReactions` if applicable)
+- [ ] create `reactions.py` with `ALLOWED_REACTIONS: frozenset[str]` and `async react(bot, chat_id, message_id, emoji, *, fallback_toast: str | None = None)`
+- [ ] graceful failure: catch `BadRequest`, log warning, optionally answer with `fallback_toast` via callback
+- [ ] dedupe: track last reaction per (chat_id, message_id) in-memory to skip no-op edits
+- [ ] write tests for: success path, disallowed emoji rejection, BadRequest fallback, dedupe behavior
+- [ ] run `make check`
+
+### Task 1.5: Theme 3 — Replace toasts with reactions across handlers
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/voice_callbacks.py`
+- Modify: `src/ccgram/handlers/msg_telegram.py`
+- Modify: `src/ccgram/handlers/send_callbacks.py`
+- Modify: `src/ccgram/handlers/shell_commands.py`
+- Modify: `src/ccgram/handlers/status_bar_actions.py` (notify mode toggle)
+- Modify: existing test files for each handler
+
+- [ ] voice send: react 👀 on receive, ✅ on delivery (replace `query.answer("✓ Sent")`)
+- [ ] /send delivery: react ✅ on success, keep current text for denial reasons
+- [ ] inter-agent peer message arriving: react 📬 on the most recent user message in the topic
+- [ ] shell command run: react ⚙ on start, ✅ on exit-0, ❌ on non-zero
+- [ ] notification mode toggle: react with the new mode's icon on the bubble
+- [ ] keep toast fallback when reaction call fails (helper already does this)
+- [ ] update tests to assert reaction calls instead of toasts where applicable
+- [ ] run `make check`
+
+### Task 1.6: Theme 4a — `sendChatAction` for shell LLM + agent forward
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/shell_commands.py`
+- Modify: `src/ccgram/handlers/text_handler.py`
+- Modify: `tests/ccgram/test_shell_commands.py`
+- Modify: `tests/ccgram/handlers/test_text_handler.py`
+
+- [ ] in `shell_commands.py` `handle_shell_message`: send `sendChatAction("typing")` immediately on entry, before LLM call; refresh every 4s while generating (Telegram action expires after 5s)
+- [ ] in `text_handler.py` agent-forward path: send `sendChatAction("typing")` once on text dispatch (cheap signal that bot saw the message)
+- [ ] cancel/clear chat action when reply arrives or generation aborts
+- [ ] write tests: action sent before LLM, refresh loop, cleared on completion
+- [ ] run `make check`
+
+### Task 1.7: Theme 4b — `DraftStream` helper + Bot API probe
+
+**Files:**
+
+- Create: `src/ccgram/telegram_draft.py`
+- Modify: `src/ccgram/doctor_cmd.py`
+- Create: `tests/ccgram/test_telegram_draft.py`
+
+- [ ] implement `class DraftStream` in `telegram_draft.py`: `start(initial_text) -> message_id`, `append(delta)`, `finalize(final_text)`, `abort()`
+- [ ] internal mode: `streaming` (uses `sendMessageDraft`) or `legacy` (current `editMessageText` loop). Mode is process-wide, set by first probe.
+- [ ] startup probe in `doctor_cmd.py`: try `bot.do_api_request("sendMessageDraft", {"chat_id": <self_id>, "text": "_probe_"})`; on `400` set `_DRAFT_UNAVAILABLE = True` and log
+- [ ] doctor adds `[draft-streaming] available` / `[draft-streaming] degraded — Bot API <9.5` line
+- [ ] handle rate-limit/flood errors with backoff + degrade to legacy for that stream
+- [ ] write tests: streaming mode happy path, legacy fallback path, abort cleans up, append ordering
+- [ ] run `make check`
+
+### Task 1.8: Theme 4b — Adopt `DraftStream` in tool_batch + status_bubble
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/tool_batch.py`
+- Modify: `src/ccgram/handlers/status_bubble.py`
+- Modify: `src/ccgram/handlers/message_queue.py`
+- Modify: `tests/ccgram/handlers/test_tool_batch.py`
+- Modify: `tests/ccgram/handlers/test_status_bubble.py`
+
+- [ ] tool_batch: replace edit-in-place sequence with `DraftStream` for tool_use accumulation; on tool_result, finalize the stream
+- [ ] status_bubble: replace `editMessageText` polling with single `DraftStream` per bubble lifetime; bubble close = `finalize`
+- [ ] keep content-hash gating active only in legacy mode (skip when streaming)
+- [ ] message_queue: ensure DraftStream usage doesn't break merge logic (drafts are not mergeable — they're a single message)
+- [ ] write tests: streaming bubble updates, tool_use → tool_result transition, legacy fallback path still works (mock probe to disabled)
+- [ ] run `make check`
+
+### Task 1.9: Theme 2 — Unified `RecoveryBanner` dataclass + render
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/recovery_callbacks.py`
+- Modify: `src/ccgram/handlers/restore_command.py`
+- Create: `tests/ccgram/handlers/test_recovery_banner.py`
+
+- [ ] add `RecoveryBanner` dataclass: `chat_id, thread_id, window_id, mode, provider`
+- [ ] add `render_banner(banner) -> (text, keyboard)` building both message body and inline keyboard with subtitle text from Task 1.1
+- [ ] migrate existing dead-window notification path to use `render_banner`
+- [ ] migrate `/restore` command to invoke `render_banner` with `mode="restore"` (same UI, just re-shows)
+- [ ] write tests: banner renders correctly for each mode, button counts, callback data shapes preserved
+- [ ] run `make check`
+
+### Task 1.10: Theme 2 — Resume picker upgrades + Continue→Resume fallback + empty-state
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/recovery_callbacks.py`
+- Modify: `src/ccgram/handlers/resume_command.py`
+- Modify: `tests/ccgram/handlers/test_recovery_callbacks.py`
+- Modify: `tests/ccgram/handlers/test_resume_command.py`
+
+- [ ] resume picker: include msg-count when transcript parser returns it cheaply; otherwise omit
+- [ ] empty-state for resume in cwd: edit keyboard message to "No sessions in this folder. [Browse other projects] [Start fresh]" instead of toast
+- [ ] continue → resume fallback: if `--continue` produces no session for cwd, auto-show resume picker
+- [ ] update toast wording for unrecoverable cases ("session file gone" etc.) to be specific
+- [ ] write tests: empty-state rendering, continue→resume fallback path, error toast wordings
+- [ ] run `make check`
+
+### Task 1.11: Phase 1 — Verify + ship v2.12
+
+- [ ] run full test suite: `make test-all`
+- [ ] run integration tests: `make test-integration`
+- [ ] manual device testing matrix (see Post-Completion below)
+- [ ] update CHANGELOG.md with v2.12 entry covering all four themes
+- [ ] verify no regressions in `ccgram doctor`
+- [ ] tag `v2.12.0` and let release workflow run
+
+---
+
+### Phase 2 — v2.13 — Theme 5 (Multi-pane teams)
+
+---
+
+### Task 2.1: `PaneInfo` dataclass + `WindowState.panes` migration
+
+**Files:**
+
+- Modify: `src/ccgram/window_state_store.py`
+- Modify: `tests/ccgram/test_window_state_store.py`
+
+- [ ] add `PaneInfo` dataclass: `pane_id: str`, `name: str | None`, `provider: str`, `last_active_ts: float`, `state: Literal["active","idle","blocked","dead"]`, `subscribed: bool`
+- [ ] add `panes: dict[str, PaneInfo] = field(default_factory=dict)` to `WindowState`
+- [ ] state-file backward compat: existing entries without `panes` load as empty dict
+- [ ] add `get_pane(window_id, pane_id)`, `upsert_pane(...)`, `remove_pane(window_id, pane_id)` helpers
+- [ ] write tests: load/save round-trip, missing-panes-key tolerance, helper CRUD
+- [ ] run `make check`
+
+### Task 2.2: `PaneStatusStrategy` polling
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/polling_strategies.py`
+- Modify: `src/ccgram/handlers/window_tick.py`
+- Create: `tests/ccgram/handlers/test_pane_status_strategy.py`
+
+- [ ] extract pane scanning from `window_tick.py` into new `PaneStatusStrategy` in `polling_strategies.py`
+- [ ] strategy responsibilities: enumerate panes, classify state (active/idle/blocked/dead), update `WindowState.panes`, detect transitions
+- [ ] auto-detect provider per pane via `detect_provider_from_pane`
+- [ ] preserve existing blocked-pane interactive UI behavior (FLOW-4a)
+- [ ] write tests: pane enumeration, state classification, transition detection, dead-pane removal
+- [ ] run `make check`
+
+### Task 2.3: Per-pane status block in main bubble + pane-named alerts
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/status_bubble.py`
+- Modify: `src/ccgram/handlers/interactive_ui.py`
+- Modify: `tests/ccgram/handlers/test_status_bubble.py`
+- Modify: `tests/ccgram/handlers/test_interactive_ui.py`
+
+- [ ] when window has >1 pane, render per-pane block under main agent line: "└ %5 active · %6 idle 2m · %7 ⏸ blocked"
+- [ ] block is collapsible (expandable_blockquote entity) when 4+ panes
+- [ ] interactive UI alert prepends pane name: "🔀 api-gateway (%5):" instead of "🔀 Pane (%5):"
+- [ ] write tests: bubble with 1/2/4+ panes, alert wording with named/unnamed panes
+- [ ] run `make check`
+
+### Task 2.4: Pane subscribe / rename callbacks + keyboard
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/callback_data.py`
+- Modify: `src/ccgram/handlers/screenshot_callbacks.py`
+- Create: `src/ccgram/handlers/pane_callbacks.py`
+- Create: `tests/ccgram/handlers/test_pane_callbacks.py`
+
+- [ ] add callback constants: `CB_PANE_SUBSCRIBE`, `CB_PANE_UNSUBSCRIBE`, `CB_PANE_RENAME`
+- [ ] in `pane_callbacks.py`: handlers for subscribe toggle (sets `PaneInfo.subscribed`), rename (force-reply prompt → text capture)
+- [ ] `/panes` keyboard gains [Subscribe] [Rename] buttons per pane
+- [ ] subscribed pane: forward output via existing transcript discovery + screen-buffer diff (re-uses Phase 1 streaming if available)
+- [ ] auto-clear subscription when pane dies
+- [ ] write tests: subscribe persistence, rename round-trip, output forwarding behavior, auto-clear on pane death
+- [ ] run `make check`
+
+### Task 2.5: Pane lifecycle notifications (configurable)
+
+**Files:**
+
+- Modify: `src/ccgram/window_state_store.py` (add `pane_lifecycle_notify: bool`)
+- Modify: `src/ccgram/handlers/polling_strategies.py`
+- Modify: `src/ccgram/config.py` (new env var `CCGRAM_PANE_LIFECYCLE_NOTIFY`, default `false`)
+- Modify: `tests/ccgram/handlers/test_pane_status_strategy.py`
+
+- [ ] when `pane_lifecycle_notify=true`, send one-line message "➕ pane %6 created" / "➖ pane %6 closed" in topic
+- [ ] toggle via `/panes` keyboard (per-window)
+- [ ] write tests: notifications fire on transitions when enabled, suppressed when disabled
+- [ ] run `make check`
+
+### Task 2.6: Phase 2 — Verify + ship v2.13
+
+- [ ] run full test suite + integration
+- [ ] manual device testing for multi-pane scenarios (2-pane, 4-pane, mixed-provider teams)
+- [ ] update CHANGELOG.md with v2.13 entry
+- [ ] update `.claude/rules/architecture.md` with new pane-as-first-class model
+- [ ] tag `v2.13.0`
+
+---
+
+### Phase 3 — v3.0 — Theme 6 (Mini App dashboard)
+
+---
+
+### Task 3.1: Mini App backend skeleton (aiohttp + signed tokens)
+
+**Files:**
+
+- Create: `src/ccgram/miniapp/__init__.py`
+- Create: `src/ccgram/miniapp/server.py`
+- Create: `src/ccgram/miniapp/auth.py`
+- Create: `src/ccgram/miniapp/static/index.html`
+- Modify: `src/ccgram/main.py` (start/stop server alongside bot)
+- Modify: `src/ccgram/config.py` (add `CCGRAM_MINIAPP_HOST`, `CCGRAM_MINIAPP_PORT`, `CCGRAM_MINIAPP_BASE_URL`, default disabled)
+- Create: `tests/ccgram/miniapp/test_server.py`
+- Create: `tests/ccgram/miniapp/test_auth.py`
+
+- [ ] aiohttp app with one route `/app/<token>` + static file serving
+- [ ] `auth.py`: HMAC-signed token generation (window_id + user_id + expiry), validation against Telegram WebApp `initData`
+- [ ] `index.html`: minimal SPA shell, loads JS modules per surface
+- [ ] start server in `main.py` only when `CCGRAM_MINIAPP_BASE_URL` configured
+- [ ] write tests: token sign/verify round-trip, expiry, initData HMAC validation, server route auth
+- [ ] run `make check`
+
+### Task 3.2: Inline button + WebApp launch
+
+**Files:**
+
+- Modify: `src/ccgram/handlers/status_bar_actions.py` (add 🪟 dashboard button)
+- Modify: `src/ccgram/handlers/status_bubble.py` (button only when MINIAPP enabled)
+- Modify: `tests/ccgram/handlers/test_status_bubble.py`
+
+- [ ] new button "🪟 Dashboard" using `WebAppInfo(url=signed_url)` opens Mini App scoped to current window
+- [ ] hide button when `CCGRAM_MINIAPP_BASE_URL` unset
+- [ ] write tests: button presence/absence, URL signing
+- [ ] run `make check`
+
+### Task 3.3: Live xterm.js terminal surface
+
+**Files:**
+
+- Create: `src/ccgram/miniapp/static/terminal.js`
+- Create: `src/ccgram/miniapp/api/terminal.py` (websocket endpoint streaming `tmux capture-pane`)
+- Modify: `src/ccgram/miniapp/server.py` (mount websocket route)
+- Create: `tests/ccgram/miniapp/test_terminal_api.py`
+
+- [ ] websocket `/ws/terminal/<token>` streams pane content (delta-based) at 200ms cadence
+- [ ] xterm.js client renders ANSI colors, handles resize
+- [ ] read-only Phase 3 (input is Phase 3.5)
+- [ ] write tests: websocket auth, delta streaming, disconnect cleanup
+- [ ] run `make check`
+
+### Task 3.4: Transcript search surface
+
+**Files:**
+
+- Create: `src/ccgram/miniapp/static/transcript.js`
+- Create: `src/ccgram/miniapp/api/transcript.py`
+- Modify: `src/ccgram/miniapp/server.py`
+- Create: `tests/ccgram/miniapp/test_transcript_api.py`
+
+- [ ] HTTP `/api/transcript/<window_id>` returns paginated JSON (cursor-based)
+- [ ] HTTP `/api/transcript/<window_id>/search?q=...` returns matches with line context
+- [ ] re-uses existing transcript reader infrastructure
+- [ ] frontend renders threaded view with date markers
+- [ ] write tests: pagination cursor, search relevance ordering, auth scoping (token sees only its window)
+- [ ] run `make check`
+
+### Task 3.5: Multi-pane grid surface
+
+**Files:**
+
+- Create: `src/ccgram/miniapp/static/panes.js`
+- Modify: `src/ccgram/miniapp/api/terminal.py` (multi-pane multiplex)
+- Create: `tests/ccgram/miniapp/test_panes_grid.py`
+
+- [ ] grid view subscribes to all panes in window
+- [ ] click pane → expand to focused terminal view
+- [ ] re-uses subscription model from Theme 5
+- [ ] write tests: grid layout for 1/2/4 panes, focus transition, subscription lifecycle
+- [ ] run `make check`
+
+### Task 3.6: Phase 3 — Verify + ship v3.0
+
+- [ ] run full test suite + integration
+- [ ] manual device testing (Mini App on iOS Telegram, Android Telegram, Telegram Desktop, Telegram Web)
+- [ ] verify Mini App falls back gracefully when `CCGRAM_MINIAPP_BASE_URL` unset
+- [ ] update CHANGELOG.md with v3.0 entry — major version note
+- [ ] update README.md with Mini App setup guide (TLS, reverse proxy, BotFather Web App URL config)
+- [ ] update CLAUDE.md with new `miniapp/` subpackage in module inventory
+- [ ] tag `v3.0.0`
+
+---
+
+### Task N-1: Verify acceptance criteria across all phases
+
+- [ ] verify all Theme 1 audit findings (FLOW-1a, 2a, 2b, 5a, 9b, 10a, /live discoverability) closed
+- [ ] verify Theme 3 reactions used in voice, /send, peer messages, shell, notify-toggle (≥5 sites)
+- [ ] verify Theme 4 streaming active when probe succeeds; legacy fallback verified by mocking unavailable API
+- [ ] verify Theme 2 recovery flow uses single `RecoveryBanner` everywhere (no remaining ad-hoc dead-window keyboards)
+- [ ] verify Theme 5 panes are first-class (visible in bubble, named, subscribable) on a 3-pane test team
+- [ ] verify Theme 6 Mini App is fully optional (default-off path works exactly as v2.13)
+- [ ] run final test suite: `make check && make test-integration && make test-e2e`
+- [ ] verify test coverage report meets ≥80% for new modules
+
+### Task N: Final — Update documentation
+
+- [ ] update `README.md` with new commands (`/live`), Mini App setup section
+- [ ] update `CLAUDE.md` Configuration section with new env vars (`CCGRAM_PANE_LIFECYCLE_NOTIFY`, `CCGRAM_MINIAPP_*`)
+- [ ] update `.claude/rules/architecture.md` with Mini App subsystem and pane-as-first-class
+- [ ] move this plan to `docs/plans/completed/`
+
+## Post-Completion
+
+_Items requiring manual intervention or external systems — informational only_
+
+**Manual device testing matrix** (per phase):
+
+- iOS Telegram (latest + N-1)
+- Android Telegram (latest)
+- Telegram Desktop (macOS, Windows)
+- Telegram Web
+
+For each phase, exercise:
+
+- new entity rendering (instruction lines, expandable blockquotes for pane block)
+- reactions (Theme 3) — verify all chosen emojis are accepted by server
+- streaming (Theme 4) — verify draft updates render smoothly without flicker
+- Mini App (Theme 6) — verify launch button, WebApp initData parsing, websocket stability on cellular network
+
+**External system updates**:
+
+- BotFather: register Mini App URL after Phase 3 deploy (`/setdomain`, `/newapp`)
+- TLS termination + reverse proxy required for Mini App in production (cloudflared, caddy, or nginx)
+- Bot API version monitoring: announce v2.12 dependency on Bot API 9.5+ (graceful degradation, but feature parity requires it)
+
+**Bot API method probing** (Phase 1):
+
+- `sendMessageDraft` probe runs in `ccgram doctor`. After v2.12 ships, monitor Sentry/logs for the `_DRAFT_UNAVAILABLE` flag flips — indicates API regression or bot account on a stale region.
+- `setMessageReaction` allowlist may shift; if Telegram changes allowed reactions, helper logs warnings — re-verify `ALLOWED_REACTIONS` quarterly.
+
+**Performance considerations**:
+
+- Streaming (Theme 4): observe per-message edit count vs current baseline; expect ~80% reduction in `editMessageText` calls.
+- Mini App websocket: target ≤10 concurrent connections per ccgram instance for typical use; benchmark before announcing.
