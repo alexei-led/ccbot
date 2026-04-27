@@ -139,13 +139,13 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/handlers/test_recovery_callbacks.py`
 - Modify: `tests/ccgram/handlers/test_resume_command.py`
 
-- [ ] add `_format_session_entry(session_meta)` helper rendering "{relative_time} · {summary[:40]} · {sid_last4}"
-- [ ] use new formatter in both `_send_resume_picker` (recovery callbacks) and `/resume` command picker
-- [ ] sort entries newest-first (by mtime)
-- [ ] handle missing/zero mtime ("never" fallback)
-- [ ] write unit tests for `_format_session_entry` (today/yesterday/n-days-ago/never)
-- [ ] write tests for picker ordering (newest first)
-- [ ] run `make check`
+- [x] add `_format_session_entry(session_meta)` helper rendering "{relative_time} · {summary[:40]} · {sid_last4}"
+- [x] use new formatter in both `_send_resume_picker` (recovery callbacks) and `/resume` command picker
+- [x] sort entries newest-first (by mtime)
+- [x] handle missing/zero mtime ("never" fallback)
+- [x] write unit tests for `_format_session_entry` (today/yesterday/n-days-ago/never)
+- [x] write tests for picker ordering (newest first)
+- [x] run `make check`
 
 ### Task 1.3: Theme 1 — Pending message disclosure + remaining info-design fixes
 

@@ -9,6 +9,8 @@ from ccgram.handlers.callback_data import (
 from ccgram.handlers.resume_command import (
     ResumeEntry,
     _build_resume_keyboard,
+    _relative_time,
+    format_session_entry,
     handle_resume_command_callback,
     resume_command,
     scan_all_sessions,
@@ -357,6 +359,170 @@ class TestScanAllSessions:
         assert len(result) == 1
         assert result[0].summary == "Implement auth"
 
+    def test_entries_carry_mtime_from_index(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        session_file = proj_dir / "sess-1.jsonl"
+        session_file.write_text('{"type":"summary"}\n')
+        expected_mtime = session_file.stat().st_mtime
+
+        index = {
+            "originalPath": "/tmp/myproj",
+            "entries": [
+                {
+                    "sessionId": "sess-1",
+                    "fullPath": str(session_file),
+                    "projectPath": "/tmp/myproj",
+                    "summary": "Fix bug",
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert len(result) == 1
+        assert result[0].mtime == expected_mtime
+
+    def test_bare_jsonl_entries_carry_mtime(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        jsonl = proj_dir / "abc-123.jsonl"
+        jsonl.write_text(
+            '{"type":"user","cwd":"/tmp/myproj","message":{"content":"hi"}}\n'
+        )
+        expected_mtime = jsonl.stat().st_mtime
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert len(result) == 1
+        assert result[0].mtime == expected_mtime
+
+
+class TestRelativeTime:
+    _NOW = 1_700_000_000.0
+
+    def test_never_when_zero_mtime(self) -> None:
+        assert _relative_time(0.0, now=self._NOW) == "never"
+
+    def test_never_when_negative_mtime(self) -> None:
+        assert _relative_time(-1.0, now=self._NOW) == "never"
+
+    def test_today_under_24h(self) -> None:
+        assert _relative_time(self._NOW - 60, now=self._NOW) == "today"
+        assert _relative_time(self._NOW - 3600 * 23, now=self._NOW) == "today"
+
+    def test_yesterday_within_two_days(self) -> None:
+        assert _relative_time(self._NOW - 86400 * 1.5, now=self._NOW) == "yesterday"
+
+    def test_n_days_ago(self) -> None:
+        assert _relative_time(self._NOW - 86400 * 3, now=self._NOW) == "3d ago"
+        assert _relative_time(self._NOW - 86400 * 14, now=self._NOW) == "14d ago"
+
+    def test_future_mtime_treated_as_today(self) -> None:
+        assert _relative_time(self._NOW + 60, now=self._NOW) == "today"
+
+
+class TestFormatSessionEntry:
+    _NOW = 1_700_000_000.0
+
+    def test_full_format(self) -> None:
+        out = format_session_entry(
+            summary="Fix login bug",
+            session_id="a1b2c3d4-0000-0000-0000-deadbeefcafe",
+            mtime=self._NOW - 60,
+            now=self._NOW,
+        )
+        assert out == "today · Fix login bug · cafe"
+
+    def test_yesterday_label(self) -> None:
+        out = format_session_entry(
+            summary="Add tests",
+            session_id="x1y2z3-0000-1111-2222-3333abcd9999",
+            mtime=self._NOW - 86400 * 1.5,
+            now=self._NOW,
+        )
+        assert out.startswith("yesterday · ")
+        assert out.endswith(" · 9999")
+
+    def test_n_days_ago_label(self) -> None:
+        out = format_session_entry(
+            summary="Refactor parser",
+            session_id="aaaaaa-bbbb-cccc-dddd-eeeeffff1234",
+            mtime=self._NOW - 86400 * 5,
+            now=self._NOW,
+        )
+        assert "5d ago" in out
+        assert out.endswith(" · 1234")
+
+    def test_never_label_for_missing_mtime(self) -> None:
+        out = format_session_entry(
+            summary="Old session",
+            session_id="aaaaaaaa-bbbb-cccc-dddd-eeeeffff5678",
+            mtime=0.0,
+            now=self._NOW,
+        )
+        assert out.startswith("never · ")
+        assert out.endswith(" · 5678")
+
+    def test_summary_truncated_to_40(self) -> None:
+        long = "A" * 80
+        out = format_session_entry(
+            summary=long,
+            session_id="abcd",
+            mtime=self._NOW,
+            now=self._NOW,
+        )
+        parts = out.split(" · ")
+        assert len(parts[1]) == 40
+
+    def test_summary_newlines_collapsed(self) -> None:
+        out = format_session_entry(
+            summary="line one\nline two\nline three",
+            session_id="abcd",
+            mtime=self._NOW,
+            now=self._NOW,
+        )
+        assert "\n" not in out
+        assert "line one" in out
+        assert "line two" not in out
+
+    def test_empty_summary_falls_back_to_session_id_prefix(self) -> None:
+        out = format_session_entry(
+            summary="",
+            session_id="ab12cd34-ef56-7890-aaaa-bbbbccccdddd",
+            mtime=self._NOW,
+            now=self._NOW,
+        )
+        parts = out.split(" · ")
+        assert parts[1] == "ab12cd34-ef5"
+
+    def test_short_session_id_last4(self) -> None:
+        out = format_session_entry(
+            summary="x",
+            session_id="abc",
+            mtime=self._NOW,
+            now=self._NOW,
+        )
+        assert out.endswith(" · abc")
+
+    def test_empty_session_id(self) -> None:
+        out = format_session_entry(
+            summary="x",
+            session_id="",
+            mtime=self._NOW,
+            now=self._NOW,
+        )
+        assert out.endswith(" · ????")
+
 
 class TestBuildResumeKeyboard:
     def _sessions(self, count: int = 3) -> list[dict[str, str]]:
@@ -437,6 +603,37 @@ class TestBuildResumeKeyboard:
             row[0] for row in kb.inline_keyboard if row[0].callback_data == "noop"
         ]
         assert len(headers) == 2
+
+    def test_label_uses_format_session_entry(self) -> None:
+        import time as _time
+
+        recent = _time.time() - 10
+        sessions = [
+            {
+                "session_id": "abcd1234-eeee-ffff-0000-1111deadbeef",
+                "summary": "Implement auth",
+                "cwd": "/proj/a",
+                "mtime": recent,
+            }
+        ]
+        kb = _build_resume_keyboard(sessions)
+        # First row is the project header, second row is the session button.
+        button = kb.inline_keyboard[1][0]
+        assert "today" in button.text
+        assert "Implement auth" in button.text
+        assert button.text.endswith(" · beef")
+
+    def test_label_handles_missing_mtime(self) -> None:
+        sessions = [
+            {
+                "session_id": "abcd1234-eeee-ffff-0000-1111deadbe99",
+                "summary": "Old",
+                "cwd": "/proj/a",
+            }
+        ]
+        kb = _build_resume_keyboard(sessions)
+        button = kb.inline_keyboard[1][0]
+        assert button.text.startswith("never · ")
 
 
 class TestResumeCommand:

@@ -1353,6 +1353,124 @@ class TestScanSessionsForCwd:
         assert len(result) == 1
         assert result[0].summary == "Implement auth"
 
+    def test_session_entries_carry_mtime(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        work_dir = tmp_path / "myproj"
+        work_dir.mkdir()
+        resolved = str(work_dir.resolve())
+
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+
+        session_file = proj_dir / "sess-1.jsonl"
+        session_file.write_text('{"type":"summary"}\n')
+        expected_mtime = session_file.stat().st_mtime
+
+        index = {
+            "originalPath": resolved,
+            "entries": [
+                {
+                    "sessionId": "sess-1",
+                    "fullPath": str(session_file),
+                    "projectPath": resolved,
+                    "summary": "Fix bug",
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_sessions_for_cwd(str(work_dir))
+
+        assert len(result) == 1
+        assert result[0].mtime == expected_mtime
+
+
+class TestRecoveryResumePickerLabels:
+    @patch(f"{_RC}.scan_sessions_for_cwd")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_picker_labels_use_formatter(
+        self,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_scan: MagicMock,
+    ) -> None:
+        import time as _time
+
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+        recent = _time.time() - 10
+        mock_scan.return_value = [
+            _SessionEntry("a1b2c3-0000-1111-2222-3333deadbeef", "Fix login bug", recent)
+        ]
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_RESUME}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        kb = _mock_safe_edit.call_args.kwargs["reply_markup"]
+        button_text = kb.inline_keyboard[0][0].text
+        assert "today" in button_text
+        assert "Fix login bug" in button_text
+        assert button_text.endswith(" · beef")
+
+    @patch(f"{_RC}.scan_sessions_for_cwd")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_picker_labels_fall_back_to_never(
+        self,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_scan: MagicMock,
+    ) -> None:
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+        mock_scan.return_value = [
+            _SessionEntry("a1b2c3-0000-1111-2222-3333deadbe99", "Old", 0.0)
+        ]
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_RESUME}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        kb = _mock_safe_edit.call_args.kwargs["reply_markup"]
+        button_text = kb.inline_keyboard[0][0].text
+        assert button_text.startswith("never · ")
+
+    @patch(f"{_RC}.scan_sessions_for_cwd")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_picker_stores_mtime_for_pick_callback(
+        self,
+        _mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_scan: MagicMock,
+    ) -> None:
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+        mock_scan.return_value = [_SessionEntry("sess-1", "X", 12345.0)]
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_RESUME}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        stored = user_data[RECOVERY_SESSIONS]
+        assert stored[0]["mtime"] == 12345.0
+
 
 class TestRecoveryPerWindowProvider:
     @patch(f"{_RC}.get_provider_for_window")

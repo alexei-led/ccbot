@@ -59,6 +59,7 @@ class _SessionEntry:
 
     session_id: str
     summary: str
+    mtime: float = 0.0
 
 
 def _recovery_help_text(window_id: str) -> str:
@@ -123,9 +124,15 @@ def _build_resume_picker_keyboard(
     window_id: str,
 ) -> InlineKeyboardMarkup:
     """Build inline keyboard listing recent sessions for resume."""
+    from .resume_command import format_session_entry
+
     rows: list[list[InlineKeyboardButton]] = []
     for idx, entry in enumerate(sessions[:_MAX_RESUME_SESSIONS]):
-        label = entry.summary[:40] or entry.session_id[:12]
+        label = format_session_entry(
+            summary=entry.summary,
+            session_id=entry.session_id,
+            mtime=entry.mtime,
+        )
         rows.append(
             [
                 InlineKeyboardButton(
@@ -222,7 +229,7 @@ def _scan_index_for_cwd(
             entry.get("summary", "") or entry.get("firstPrompt", "") or session_id[:12]
         )
         seen_ids.add(session_id)
-        candidates.append((mtime, _SessionEntry(session_id, summary)))
+        candidates.append((mtime, _SessionEntry(session_id, summary, mtime)))
 
 
 def _scan_bare_jsonl_for_cwd(
@@ -261,7 +268,7 @@ def _scan_bare_jsonl_for_cwd(
 
         seen_ids.add(session_id)
         candidates.append(
-            (mtime, _SessionEntry(session_id, summary or session_id[:12]))
+            (mtime, _SessionEntry(session_id, summary or session_id[:12], mtime))
         )
 
 
@@ -567,7 +574,8 @@ async def _handle_resume(
     # Store session list for pick callback
     if context.user_data is not None:
         context.user_data[RECOVERY_SESSIONS] = [
-            {"session_id": s.session_id, "summary": s.summary} for s in sessions
+            {"session_id": s.session_id, "summary": s.summary, "mtime": s.mtime}
+            for s in sessions
         ]
 
     keyboard = _build_resume_picker_keyboard(sessions, old_wid)

@@ -10,9 +10,11 @@ Key functions:
   - resume_command: /resume handler
   - handle_resume_command_callback: callback dispatcher for resume UI
   - scan_all_sessions: discover all resumable sessions across all projects
+  - format_session_entry: shared label renderer for session pickers
 """
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +58,50 @@ class ResumeEntry:
     session_id: str
     summary: str
     cwd: str
+    mtime: float = 0.0
+
+
+_SECONDS_PER_DAY = 86400
+
+
+def _relative_time(mtime: float, *, now: float | None = None) -> str:
+    """Return a short relative-time label like ``today``, ``yesterday``,
+    ``3d ago``, or ``never`` when no mtime is known.
+
+    ``now`` is injectable so tests can pin the reference time.
+    """
+    if mtime <= 0:
+        return "never"
+    current = now if now is not None else time.time()
+    diff = max(0.0, current - mtime)
+    if diff < _SECONDS_PER_DAY:
+        return "today"
+    if diff < _SECONDS_PER_DAY * 2:
+        return "yesterday"
+    days = int(diff // _SECONDS_PER_DAY)
+    return f"{days}d ago"
+
+
+def format_session_entry(
+    *,
+    summary: str,
+    session_id: str,
+    mtime: float,
+    now: float | None = None,
+) -> str:
+    """Render a session-picker row.
+
+    Output: ``"{relative_time} · {summary[:40]} · {sid_last4}"``. Summary is
+    stripped of newlines and truncated; falls back to the first 12 chars of
+    ``session_id`` when empty. ``last4`` is the trailing 4 chars of the
+    session id (``????`` if missing).
+    """
+    rel = _relative_time(mtime, now=now)
+    text = (summary or "").strip().split("\n", 1)[0][:40]
+    if not text:
+        text = (session_id[:12] if session_id else "") or "(unknown)"
+    last4 = session_id[-4:] if session_id else "????"
+    return f"{rel} · {text} · {last4}"
 
 
 def scan_all_sessions() -> list[ResumeEntry]:
@@ -121,7 +167,7 @@ def _scan_index_file(
             entry.get("summary", "") or entry.get("firstPrompt", "") or session_id[:12]
         )
         seen_ids.add(session_id)
-        candidates.append((mtime, ResumeEntry(session_id, summary, cwd)))
+        candidates.append((mtime, ResumeEntry(session_id, summary, cwd, mtime)))
 
 
 def _scan_bare_jsonl(
@@ -151,7 +197,7 @@ def _scan_bare_jsonl(
 
         seen_ids.add(session_id)
         candidates.append(
-            (mtime, ResumeEntry(session_id, summary or session_id[:12], cwd))
+            (mtime, ResumeEntry(session_id, summary or session_id[:12], cwd, mtime))
         )
 
 
@@ -182,7 +228,15 @@ def _build_resume_keyboard(
                     )
                 ]
             )
-        label = entry.get("summary", "")[:40] or entry["session_id"][:12]
+        try:
+            entry_mtime = float(entry.get("mtime", 0.0) or 0.0)
+        except TypeError, ValueError:
+            entry_mtime = 0.0
+        label = format_session_entry(
+            summary=entry.get("summary", ""),
+            session_id=entry.get("session_id", ""),
+            mtime=entry_mtime,
+        )
         rows.append(
             [
                 InlineKeyboardButton(
@@ -257,7 +311,12 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     session_dicts = [
-        {"session_id": s.session_id, "summary": s.summary, "cwd": s.cwd}
+        {
+            "session_id": s.session_id,
+            "summary": s.summary,
+            "cwd": s.cwd,
+            "mtime": s.mtime,
+        }
         for s in sessions
     ]
     if context.user_data is not None:
