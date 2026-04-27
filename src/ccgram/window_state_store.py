@@ -29,6 +29,9 @@ DEFAULT_BATCH_MODE = "batched"
 
 NOTIFICATION_MODES: tuple[str, ...] = ("all", "errors_only", "muted")
 
+TOOL_CALL_VISIBILITY_MODES: tuple[str, ...] = ("default", "shown", "hidden")
+DEFAULT_TOOL_CALL_VISIBILITY: str = "default"
+
 WINDOW_ORIGINS: frozenset[str] = frozenset(
     {"manual_discovered", "ccgram_created", "external"}
 )
@@ -112,6 +115,7 @@ class WindowState:
         provider_name: Name of the agent provider for this window
         approval_mode: "normal" | "yolo"
         batch_mode: "batched" | "verbose"
+        tool_call_visibility: "default" | "shown" | "hidden"
         external: True for windows owned by external tools (emdash) — never killed by ccgram
         origin: Lifecycle origin. Manual/external windows are never auto-killed by ccgram.
         panes: Per-pane runtime state, keyed by tmux pane id (e.g. ``%5``).
@@ -127,6 +131,7 @@ class WindowState:
     provider_name: str = ""
     approval_mode: str = DEFAULT_APPROVAL_MODE
     batch_mode: str = DEFAULT_BATCH_MODE
+    tool_call_visibility: str = DEFAULT_TOOL_CALL_VISIBILITY
     external: bool = False
     origin: str = DEFAULT_WINDOW_ORIGIN
     panes: dict[str, PaneInfo] = field(default_factory=dict)
@@ -149,6 +154,8 @@ class WindowState:
             d["approval_mode"] = self.approval_mode
         if self.batch_mode != DEFAULT_BATCH_MODE:
             d["batch_mode"] = self.batch_mode
+        if self.tool_call_visibility != DEFAULT_TOOL_CALL_VISIBILITY:
+            d["tool_call_visibility"] = self.tool_call_visibility
         if self.external:
             d["external"] = True
         if self.origin != DEFAULT_WINDOW_ORIGIN:
@@ -180,6 +187,9 @@ class WindowState:
             provider_name=data.get("provider_name", ""),
             approval_mode=data.get("approval_mode", DEFAULT_APPROVAL_MODE),
             batch_mode=data.get("batch_mode", DEFAULT_BATCH_MODE),
+            tool_call_visibility=data.get(
+                "tool_call_visibility", DEFAULT_TOOL_CALL_VISIBILITY
+            ),
             external=data.get("external", False),
             origin=(
                 data.get("origin", DEFAULT_WINDOW_ORIGIN)
@@ -497,6 +507,35 @@ class WindowStateStore:
         current = self.get_batch_mode(window_id)
         new_mode = "verbose" if current == "batched" else "batched"
         self.set_batch_mode(window_id, new_mode)
+        return new_mode
+
+    # ------------------------------------------------------------------
+    # Tool-call visibility
+    # ------------------------------------------------------------------
+
+    _TOOL_CALL_VISIBILITY_MODES = TOOL_CALL_VISIBILITY_MODES
+
+    def get_tool_call_visibility(self, window_id: str) -> str:
+        """Get tool-call visibility for a window (default: 'default')."""
+        state = self.window_states.get(window_id)
+        return state.tool_call_visibility if state else DEFAULT_TOOL_CALL_VISIBILITY
+
+    def set_tool_call_visibility(self, window_id: str, mode: str) -> None:
+        """Set tool-call visibility for a window."""
+        if mode not in self._TOOL_CALL_VISIBILITY_MODES:
+            raise ValueError(f"Invalid tool_call_visibility: {mode!r}")
+        state = self.get_window_state(window_id)
+        if state.tool_call_visibility != mode:
+            state.tool_call_visibility = mode
+            self._schedule_save()
+
+    def cycle_tool_call_visibility(self, window_id: str) -> str:
+        """Cycle tool-call visibility: default → shown → hidden → default. Returns new mode."""
+        current = self.get_tool_call_visibility(window_id)
+        modes = self._TOOL_CALL_VISIBILITY_MODES
+        idx = modes.index(current) if current in modes else 0
+        new_mode = modes[(idx + 1) % len(modes)]
+        self.set_tool_call_visibility(window_id, new_mode)
         return new_mode
 
     # ------------------------------------------------------------------

@@ -27,6 +27,7 @@ class WindowView:
     approval_mode: str
     notification_mode: str
     batch_mode: str
+    tool_call_visibility: str
     transcript_path: Path | None
     window_name: str
     session_id: str

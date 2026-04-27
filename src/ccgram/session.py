@@ -557,6 +557,7 @@ class SessionManager:
             approval_mode=ws.approval_mode,
             notification_mode=ws.notification_mode,
             batch_mode=ws.batch_mode,
+            tool_call_visibility=ws.tool_call_visibility,
             transcript_path=Path(ws.transcript_path) if ws.transcript_path else None,
             window_name=ws.window_name,
             session_id=ws.session_id,
@@ -681,6 +682,20 @@ class SessionManager:
         new_mode = "verbose" if current == "batched" else "batched"
         self.set_batch_mode(window_id, new_mode)
         return new_mode
+
+    # --- Tool-call visibility ---
+
+    def get_tool_call_visibility(self, window_id: str) -> str:
+        """Get tool-call visibility for a window (default: 'default')."""
+        return window_store.get_tool_call_visibility(window_id)
+
+    def set_tool_call_visibility(self, window_id: str, mode: str) -> None:
+        """Set tool-call visibility for a window."""
+        window_store.set_tool_call_visibility(window_id, mode)
+
+    def cycle_tool_call_visibility(self, window_id: str) -> str:
+        """Cycle tool-call visibility: default → shown → hidden → default. Returns new mode."""
+        return window_store.cycle_tool_call_visibility(window_id)
 
 
 session_manager = SessionManager()

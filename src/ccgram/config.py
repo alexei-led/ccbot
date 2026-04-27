@@ -179,6 +179,12 @@ class Config:
         self._init_send()
         self._init_lifecycle()
 
+        # Global default for hiding tool_use/tool_result content in Telegram.
+        # Per-window override via WindowState.tool_call_visibility takes precedence.
+        self.hide_tool_calls: bool = os.getenv(
+            "CCGRAM_HIDE_TOOL_CALLS", ""
+        ).lower() in ("1", "true", "yes")
+
         logger.debug(
             "Config initialized: dir=%s, token=%s..., allowed_users=%d, "
             "tmux_session=%s",

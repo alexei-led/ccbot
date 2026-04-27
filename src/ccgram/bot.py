@@ -284,6 +284,59 @@ async def verbose_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         )
 
 
+async def toolcalls_command(
+    update: Update, _context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Cycle tool-call visibility for this topic: default \u2192 shown \u2192 hidden \u2192 default."""
+    user = update.effective_user
+    if not user or not is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    if thread_id is None:
+        if (
+            update.message
+            and update.effective_chat
+            and is_general_topic(update.message)
+        ):
+            await handle_general_topic_message(
+                update.get_bot(), update.message, update.effective_chat.id
+            )
+        else:
+            await safe_reply(update.message, "\u274c Use this command inside a topic.")
+        return
+
+    window_id = thread_router.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(
+            update.message, "\u274c This topic is not bound to any session."
+        )
+        return
+
+    new_mode = session_manager.cycle_tool_call_visibility(window_id)
+    if new_mode == "shown":
+        await safe_reply(
+            update.message,
+            "\u26a1 Tool calls *shown* for this topic (overrides global default).",
+        )
+    elif new_mode == "hidden":
+        await safe_reply(
+            update.message,
+            "\U0001f507 Tool calls *hidden* for this topic (overrides global default).",
+        )
+    else:
+        # new_mode == "default" \u2014 describe the resolved global behavior
+        from .config import config
+
+        resolved = "hidden" if config.hide_tool_calls else "shown"
+        await safe_reply(
+            update.message,
+            f"\U0001f504 Tool calls follow the global default (currently *{resolved}*).",
+        )
+
+
 async def inline_query_handler(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -609,6 +662,9 @@ def create_bot() -> Application:
     application.add_handler(CommandHandler("send", send_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("verbose", verbose_command, filters=_group_filter)
+    )
+    application.add_handler(
+        CommandHandler("toolcalls", toolcalls_command, filters=_group_filter)
     )
     application.add_handler(
         CommandHandler("restore", restore_command, filters=_group_filter)

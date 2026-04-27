@@ -77,6 +77,7 @@ def _window_view(origin: str) -> WindowView:
         approval_mode="normal",
         notification_mode="all",
         batch_mode="batched",
+        tool_call_visibility="default",
         transcript_path=None,
         window_name="test",
         session_id="s1",

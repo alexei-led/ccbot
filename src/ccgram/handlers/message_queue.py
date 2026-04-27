@@ -211,6 +211,13 @@ async def _handle_content_task(
 
     Returns the number of additional merged tasks (caller must call task_done for each).
     """
+    from ..window_query import is_tool_calls_hidden
+
+    if task.content_type in ("tool_use", "tool_result") and is_tool_calls_hidden(
+        task.window_id
+    ):
+        return 0
+
     if is_batch_eligible(task):
         followup = await process_tool_event(bot, user_id, task)
         if followup is not None:

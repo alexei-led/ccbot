@@ -11,6 +11,7 @@ from ccgram.handlers.message_queue import (
     _can_merge_tasks,
     _coalesce_status_updates,
     _dispatch,
+    _handle_content_task,
     _merge_content_tasks,
     get_or_create_queue,
     shutdown_workers,
@@ -375,3 +376,122 @@ class TestMessageQueueWorker:
 
         assert worker.done()
         assert not worker.exception() if not worker.cancelled() else True
+
+
+class TestToolCallsGate:
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    async def test_hidden_suppresses_tool_use(
+        self,
+        mock_hidden,
+        mock_eligible,
+        mock_flush,
+        mock_tool_event,
+        mock_process,
+        bot,
+        queue,
+        lock,
+    ):
+        ct = _content_task("tool", content_type="tool_use")
+        extra = await _handle_content_task(bot, 1, ct, queue, lock)
+        assert extra == 0
+        mock_tool_event.assert_not_awaited()
+        mock_process.assert_not_awaited()
+        mock_flush.assert_not_awaited()
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    async def test_hidden_suppresses_tool_result(
+        self,
+        mock_hidden,
+        mock_eligible,
+        mock_flush,
+        mock_tool_event,
+        mock_process,
+        bot,
+        queue,
+        lock,
+    ):
+        ct = _content_task("res", content_type="tool_result", tool_use_id="t1")
+        extra = await _handle_content_task(bot, 1, ct, queue, lock)
+        assert extra == 0
+        mock_tool_event.assert_not_awaited()
+        mock_process.assert_not_awaited()
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=False)
+    async def test_shown_allows_tool_use(
+        self,
+        mock_hidden,
+        mock_eligible,
+        mock_tool_event,
+        mock_process,
+        bot,
+        queue,
+        lock,
+    ):
+        ct = _content_task("tool", content_type="tool_use")
+        mock_tool_event.return_value = None
+        extra = await _handle_content_task(bot, 1, ct, queue, lock)
+        assert extra == 0
+        mock_tool_event.assert_awaited_once_with(bot, 1, ct)
+
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=False)
+    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    async def test_text_unaffected_when_hidden(
+        self,
+        mock_hidden,
+        mock_eligible,
+        mock_flush,
+        mock_process,
+        bot,
+        queue,
+        lock,
+    ):
+        ct = _content_task("hello", content_type="text")
+        extra = await _handle_content_task(bot, 1, ct, queue, lock)
+        assert extra == 0
+        mock_flush.assert_awaited_once_with(bot, 1, ct)
+        mock_process.assert_awaited_once()
+
+    @patch("ccgram.handlers.message_queue._tool_msg_ids", {})
+    @patch(
+        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
+    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    async def test_hidden_does_not_register_tool_msg_ids(
+        self,
+        mock_hidden,
+        mock_eligible,
+        mock_tool_event,
+        mock_process,
+        bot,
+        queue,
+        lock,
+    ):
+        from ccgram.handlers import message_queue as mq
+
+        mq._tool_msg_ids.clear()
+        ct = _content_task("tool", content_type="tool_use", tool_use_id="t-xyz")
+        await _handle_content_task(bot, 1, ct, queue, lock)
+        assert not mq._tool_msg_ids
