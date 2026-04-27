@@ -24,9 +24,11 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
+from ..config import config
 from ..thread_router import thread_router
 from ..window_state_store import window_store
 from .callback_data import (
+    CB_PANE_LIFECYCLE_TOGGLE,
     CB_PANE_RENAME,
     CB_PANE_SCREENSHOT,
     CB_PANE_SUBSCRIBE,
@@ -81,6 +83,18 @@ def build_pane_buttons(
             callback_data=f"{CB_PANE_RENAME}{window_id}:{pane_id}"[:64],
         ),
     ]
+
+
+def build_pane_lifecycle_button(
+    window_id: str, *, enabled: bool
+) -> InlineKeyboardButton:
+    """Return the per-window pane lifecycle notifications toggle button."""
+    icon = "\U0001f514" if enabled else "\U0001f515"
+    state = "on" if enabled else "off"
+    return InlineKeyboardButton(
+        f"{icon} Lifecycle: {state}",
+        callback_data=f"{CB_PANE_LIFECYCLE_TOGGLE}{window_id}"[:64],
+    )
 
 
 async def _toggle_subscribe(
@@ -190,7 +204,28 @@ async def apply_pane_rename(
     return True
 
 
-@register(CB_PANE_SUBSCRIBE, CB_PANE_UNSUBSCRIBE, CB_PANE_RENAME)
+async def _handle_lifecycle_toggle(
+    query: CallbackQuery, user_id: int, data: str
+) -> None:
+    window_id = data[len(CB_PANE_LIFECYCLE_TOGGLE) :]
+    if not window_id:
+        await query.answer("Invalid window")
+        return
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    current = window_store.get_pane_lifecycle_notify(
+        window_id, config.pane_lifecycle_notify
+    )
+    new_value = not current
+    window_store.set_pane_lifecycle_notify(window_id, new_value)
+    label = "on" if new_value else "off"
+    await query.answer(f"✓ Pane lifecycle notifications {label}")
+
+
+@register(
+    CB_PANE_SUBSCRIBE, CB_PANE_UNSUBSCRIBE, CB_PANE_RENAME, CB_PANE_LIFECYCLE_TOGGLE
+)
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
@@ -202,3 +237,5 @@ async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _handle_unsubscribe(query, user.id, data)
     elif data.startswith(CB_PANE_RENAME):
         await _handle_rename(query, user.id, data, update, context)
+    elif data.startswith(CB_PANE_LIFECYCLE_TOGGLE):
+        await _handle_lifecycle_toggle(query, user.id, data)

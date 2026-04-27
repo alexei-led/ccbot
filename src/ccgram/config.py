@@ -236,6 +236,9 @@ class Config:
         self.autoclose_dead_minutes: int = int(
             os.getenv("AUTOCLOSE_DEAD_MINUTES", "10")
         )
+        self.pane_lifecycle_notify: bool = os.getenv(
+            "CCGRAM_PANE_LIFECYCLE_NOTIFY", ""
+        ).lower() in ("1", "true", "yes")
 
     def is_user_allowed(self, user_id: int) -> bool:
         """Check if a user is in the allowed list."""

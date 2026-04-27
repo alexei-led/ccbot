@@ -40,6 +40,7 @@ from .message_queue import (
 from .message_sender import rate_limit_send_message
 from .polling_strategies import (
     STARTUP_TIMEOUT,
+    PaneTransition,
     TickContext,
     TickDecision,
     is_shell_prompt,
@@ -188,8 +189,10 @@ async def _scan_window_panes(
     upserts, and transition detection. ``_surface_pane_alert`` keeps blocked
     panes surfacing as inline alerts (FLOW-4a behavior); ``_forward_pane_output``
     forwards content from panes the user has subscribed to via ``/panes``.
+    Returned transitions feed ``_notify_pane_lifecycle`` for opt-in
+    created/closed announcements.
     """
-    await pane_status_strategy.scan_window(
+    transitions = await pane_status_strategy.scan_window(
         bot,
         user_id,
         window_id,
@@ -197,6 +200,55 @@ async def _scan_window_panes(
         on_blocked=_surface_pane_alert,
         on_pane_output=_forward_pane_output,
     )
+    if transitions:
+        await _notify_pane_lifecycle(bot, user_id, window_id, thread_id, transitions)
+
+
+async def _notify_pane_lifecycle(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int,
+    transitions: list[PaneTransition],
+) -> None:
+    """Emit one-line "pane created"/"pane closed" notifications when enabled.
+
+    The flag is per-window with a global config default. Only first-sight
+    (``prev_state is None``) transitions trigger output: a non-dead new state
+    means the pane was just discovered ("created"); a ``"dead"`` new state
+    means the pane vanished ("closed"). Intra-pane state changes (idle ↔
+    active ↔ blocked) are intentionally suppressed to keep the channel
+    quiet.
+    """
+    from ..config import config
+    from ..window_state_store import window_store
+    from .message_sender import safe_send
+
+    enabled = window_store.get_pane_lifecycle_notify(
+        window_id, config.pane_lifecycle_notify
+    )
+    if not enabled:
+        return
+
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    for t in transitions:
+        if t.prev_state is not None:
+            continue
+        pane = window_store.get_pane(window_id, t.pane_id)
+        label = f"{pane.name} ({t.pane_id})" if pane and pane.name else t.pane_id
+        if t.new_state == "dead":
+            text = f"➖ pane {label} closed"
+        else:
+            text = f"➕ pane {label} created"
+        try:
+            await safe_send(bot, chat_id, text, message_thread_id=thread_id)
+        except TelegramError as exc:
+            logger.warning(
+                "pane lifecycle notify failed",
+                window_id=window_id,
+                pane_id=t.pane_id,
+                error=str(exc),
+            )
 
 
 # ── Interactive-only check ───────────────────────────────────────────────

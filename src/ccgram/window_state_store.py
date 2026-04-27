@@ -115,6 +115,8 @@ class WindowState:
         external: True for windows owned by external tools (emdash) — never killed by ccgram
         origin: Lifecycle origin. Manual/external windows are never auto-killed by ccgram.
         panes: Per-pane runtime state, keyed by tmux pane id (e.g. ``%5``).
+        pane_lifecycle_notify: Per-window override for pane created/closed
+            notifications. ``None`` means "use the global config default".
     """
 
     session_id: str = ""
@@ -128,8 +130,9 @@ class WindowState:
     external: bool = False
     origin: str = DEFAULT_WINDOW_ORIGIN
     panes: dict[str, PaneInfo] = field(default_factory=dict)
+    pane_lifecycle_notify: bool | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:  # noqa: C901
         d: dict[str, Any] = {
             "session_id": self.session_id,
             "cwd": self.cwd,
@@ -152,10 +155,12 @@ class WindowState:
             d["origin"] = self.origin
         if self.panes:
             d["panes"] = {pid: p.to_dict() for pid, p in self.panes.items()}
+        if self.pane_lifecycle_notify is not None:
+            d["pane_lifecycle_notify"] = self.pane_lifecycle_notify
         return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
+    def from_dict(cls, data: dict[str, Any]) -> Self:  # noqa: C901
         raw_panes = data.get("panes") or {}
         panes: dict[str, PaneInfo] = {}
         if isinstance(raw_panes, dict):
@@ -182,6 +187,7 @@ class WindowState:
                 else DEFAULT_WINDOW_ORIGIN
             ),
             panes=panes,
+            pane_lifecycle_notify=data.get("pane_lifecycle_notify"),
         )
 
 
@@ -349,6 +355,28 @@ class WindowStateStore:
         del state.panes[pane_id]
         self._schedule_save()
         return True
+
+    def get_pane_lifecycle_notify(self, window_id: str, default: bool) -> bool:
+        """Effective pane lifecycle notification setting for a window.
+
+        Returns the per-window override when set, otherwise ``default``
+        (typically the global config flag).
+        """
+        state = self.window_states.get(window_id)
+        if state is None or state.pane_lifecycle_notify is None:
+            return default
+        return state.pane_lifecycle_notify
+
+    def set_pane_lifecycle_notify(self, window_id: str, value: bool | None) -> None:
+        """Persist the per-window pane lifecycle notification override.
+
+        Pass ``None`` to clear the override and fall back to the global default.
+        """
+        state = self.get_window_state(window_id)
+        if state.pane_lifecycle_notify == value:
+            return
+        state.pane_lifecycle_notify = value
+        self._schedule_save()
 
     # ------------------------------------------------------------------
     # Provider management

@@ -204,3 +204,70 @@ class TestStoreCRUD:
         }
         store.from_dict(legacy)
         assert store.window_states["@1"].panes == {}
+
+
+class TestPaneLifecycleNotify:
+    def test_window_state_default_is_none(self) -> None:
+        ws = WindowState()
+        assert ws.pane_lifecycle_notify is None
+
+    def test_to_dict_omits_when_none(self) -> None:
+        ws = WindowState(cwd="/p")
+        assert "pane_lifecycle_notify" not in ws.to_dict()
+
+    def test_to_dict_includes_when_set(self) -> None:
+        ws = WindowState(cwd="/p", pane_lifecycle_notify=True)
+        d = ws.to_dict()
+        assert d["pane_lifecycle_notify"] is True
+
+    def test_to_dict_includes_when_explicitly_false(self) -> None:
+        ws = WindowState(cwd="/p", pane_lifecycle_notify=False)
+        d = ws.to_dict()
+        assert d["pane_lifecycle_notify"] is False
+
+    def test_from_dict_round_trip(self) -> None:
+        original = WindowState(cwd="/p", pane_lifecycle_notify=True)
+        loaded = WindowState.from_dict(original.to_dict())
+        assert loaded.pane_lifecycle_notify is True
+
+    def test_from_dict_missing_field_defaults_to_none(self) -> None:
+        ws = WindowState.from_dict({"session_id": "s", "cwd": "/p"})
+        assert ws.pane_lifecycle_notify is None
+
+    def test_get_returns_default_when_unknown_window(
+        self, store: WindowStateStore
+    ) -> None:
+        assert store.get_pane_lifecycle_notify("@missing", default=False) is False
+        assert store.get_pane_lifecycle_notify("@missing", default=True) is True
+
+    def test_get_returns_default_when_override_unset(
+        self, store: WindowStateStore
+    ) -> None:
+        store.get_window_state("@1")
+        assert store.get_pane_lifecycle_notify("@1", default=False) is False
+        assert store.get_pane_lifecycle_notify("@1", default=True) is True
+
+    def test_get_returns_override_when_set(self, store: WindowStateStore) -> None:
+        store.set_pane_lifecycle_notify("@1", True)
+        assert store.get_pane_lifecycle_notify("@1", default=False) is True
+        store.set_pane_lifecycle_notify("@1", False)
+        assert store.get_pane_lifecycle_notify("@1", default=True) is False
+
+    def test_set_schedules_save(self, store: WindowStateStore) -> None:
+        save_calls = store._save_calls  # type: ignore[attr-defined]
+        save_calls.clear()
+        store.set_pane_lifecycle_notify("@1", True)
+        assert len(save_calls) == 1
+
+    def test_set_to_same_value_does_not_save(self, store: WindowStateStore) -> None:
+        store.set_pane_lifecycle_notify("@1", True)
+        save_calls = store._save_calls  # type: ignore[attr-defined]
+        save_calls.clear()
+        store.set_pane_lifecycle_notify("@1", True)
+        assert save_calls == []
+
+    def test_set_to_none_clears_override(self, store: WindowStateStore) -> None:
+        store.set_pane_lifecycle_notify("@1", True)
+        store.set_pane_lifecycle_notify("@1", None)
+        assert store.get_pane_lifecycle_notify("@1", default=False) is False
+        assert store.get_pane_lifecycle_notify("@1", default=True) is True

@@ -17,6 +17,7 @@ from telegram import Bot
 
 from ccgram.handlers import pane_callbacks
 from ccgram.handlers.callback_data import (
+    CB_PANE_LIFECYCLE_TOGGLE,
     CB_PANE_RENAME,
     CB_PANE_SUBSCRIBE,
     CB_PANE_UNSUBSCRIBE,
@@ -24,6 +25,7 @@ from ccgram.handlers.callback_data import (
 from ccgram.handlers.pane_callbacks import (
     apply_pane_rename,
     build_pane_buttons,
+    build_pane_lifecycle_button,
 )
 from ccgram.handlers.polling_strategies import (
     InteractiveUIStrategy,
@@ -427,3 +429,57 @@ class TestSubscribedOutputForwarding:
         assert window_store.get_pane("@0", "%2") is None
         # Hash cache also evicted
         assert "%2" not in strategy._pane_content_hash
+
+
+class TestBuildPaneLifecycleButton:
+    def test_disabled_state_label_and_callback(self) -> None:
+        btn = build_pane_lifecycle_button("@0", enabled=False)
+        assert "off" in btn.text.lower()
+        data = btn.callback_data
+        assert isinstance(data, str)
+        assert data.startswith(CB_PANE_LIFECYCLE_TOGGLE)
+        assert data.endswith("@0")
+
+    def test_enabled_state_label(self) -> None:
+        btn = build_pane_lifecycle_button("@0", enabled=True)
+        assert "on" in btn.text.lower()
+
+    def test_callback_data_under_64_bytes(self) -> None:
+        btn = build_pane_lifecycle_button("ccgram:@1234567890", enabled=True)
+        data = btn.callback_data
+        assert isinstance(data, str)
+        assert len(data) <= 64
+
+
+class TestLifecycleToggle:
+    async def test_toggle_off_to_on_persists(self) -> None:
+        _bind(1, 99, "@0")
+        query = _query(f"{CB_PANE_LIFECYCLE_TOGGLE}@0")
+        await pane_callbacks._dispatch(_update(query), _ctx())
+        ws = window_store.get_window_state("@0")
+        assert ws.pane_lifecycle_notify is True
+        query.answer.assert_called_once()
+        assert "on" in query.answer.call_args.args[0].lower()
+
+    async def test_toggle_on_to_off_persists(self) -> None:
+        _bind(1, 99, "@0")
+        window_store.set_pane_lifecycle_notify("@0", True)
+        query = _query(f"{CB_PANE_LIFECYCLE_TOGGLE}@0")
+        await pane_callbacks._dispatch(_update(query), _ctx())
+        ws = window_store.get_window_state("@0")
+        assert ws.pane_lifecycle_notify is False
+        assert "off" in query.answer.call_args.args[0].lower()
+
+    async def test_toggle_rejects_non_owner(self) -> None:
+        _bind(1, 99, "@0")
+        query = _query(f"{CB_PANE_LIFECYCLE_TOGGLE}@0", user_id=2)
+        await pane_callbacks._dispatch(_update(query, user_id=2), _ctx())
+        ws = window_store.get_window_state("@0")
+        assert ws.pane_lifecycle_notify is None
+        assert query.answer.call_args.kwargs.get("show_alert") is True
+
+    async def test_toggle_rejects_missing_window_id(self) -> None:
+        _bind(1, 99, "@0")
+        query = _query(CB_PANE_LIFECYCLE_TOGGLE)  # no window_id suffix
+        await pane_callbacks._dispatch(_update(query), _ctx())
+        query.answer.assert_called_once_with("Invalid window")

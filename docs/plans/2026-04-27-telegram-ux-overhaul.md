@@ -370,10 +370,10 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/config.py` (new env var `CCGRAM_PANE_LIFECYCLE_NOTIFY`, default `false`)
 - Modify: `tests/ccgram/handlers/test_pane_status_strategy.py`
 
-- [ ] when `pane_lifecycle_notify=true`, send one-line message "➕ pane %6 created" / "➖ pane %6 closed" in topic
-- [ ] toggle via `/panes` keyboard (per-window)
-- [ ] write tests: notifications fire on transitions when enabled, suppressed when disabled
-- [ ] run `make check`
+- [x] when `pane_lifecycle_notify=true`, send one-line message "➕ pane %6 created" / "➖ pane %6 closed" in topic
+- [x] toggle via `/panes` keyboard (per-window)
+- [x] write tests: notifications fire on transitions when enabled, suppressed when disabled
+- [x] run `make check`
 
 ### Task 2.6: Phase 2 — Verify + ship v2.13
 

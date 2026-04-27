@@ -513,7 +513,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     from ..utils import handle_general_topic_message, is_general_topic
     from ..window_state_store import window_store
     from .message_sender import safe_reply
-    from .pane_callbacks import build_pane_buttons
+    from .pane_callbacks import build_pane_buttons, build_pane_lifecycle_button
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -580,6 +580,10 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
             )
         )
 
+    lifecycle_on = window_store.get_pane_lifecycle_notify(
+        window_id, config.pane_lifecycle_notify
+    )
+    rows.append([build_pane_lifecycle_button(window_id, enabled=lifecycle_on)])
     keyboard = InlineKeyboardMarkup(rows) if rows else None
     await safe_reply(update.message, "\n".join(lines), reply_markup=keyboard)
 
