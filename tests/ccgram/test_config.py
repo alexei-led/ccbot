@@ -122,6 +122,26 @@ class TestShowHiddenDirs:
 
 
 @pytest.mark.usefixtures("_base_env")
+class TestHideToolCalls:
+    def test_hide_tool_calls_default_false(self, monkeypatch):
+        monkeypatch.delenv("CCGRAM_HIDE_TOOL_CALLS", raising=False)
+        cfg = Config()
+        assert cfg.hide_tool_calls is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "yes", "True", "YES", "Yes"])
+    def test_hide_tool_calls_enabled(self, monkeypatch, value):
+        monkeypatch.setenv("CCGRAM_HIDE_TOOL_CALLS", value)
+        cfg = Config()
+        assert cfg.hide_tool_calls is True
+
+    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off"])
+    def test_hide_tool_calls_disabled(self, monkeypatch, value):
+        monkeypatch.setenv("CCGRAM_HIDE_TOOL_CALLS", value)
+        cfg = Config()
+        assert cfg.hide_tool_calls is False
+
+
+@pytest.mark.usefixtures("_base_env")
 class TestMessagingConfig:
     def test_msg_auto_spawn_default_false(self):
         cfg = Config()
