@@ -15,6 +15,7 @@ from ccgram.handlers.recovery_callbacks import (
 )
 from ccgram.handlers.callback_data import (
     CB_RECOVERY_BACK,
+    CB_RECOVERY_BROWSE,
     CB_RECOVERY_CANCEL,
     CB_RECOVERY_CONTINUE,
     CB_RECOVERY_FRESH,
@@ -650,6 +651,7 @@ class TestRecoveryFreshCallback:
 
 
 class TestRecoveryContinueCallback:
+    @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[_SessionEntry("s1", "x")])
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.session_manager")
@@ -660,6 +662,7 @@ class TestRecoveryContinueCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
         mock_tr: MagicMock,
+        _mock_scan: MagicMock,
     ) -> None:
         mock_sm.view_window.return_value = MagicMock(
             cwd="/tmp/project", provider_name=""
@@ -687,6 +690,7 @@ class TestRecoveryContinueCallback:
             100, 42, "@5", window_name="project"
         )
 
+    @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[_SessionEntry("s1", "x")])
     @patch(f"{_RC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
@@ -701,6 +705,7 @@ class TestRecoveryContinueCallback:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
         mock_send_to_window: AsyncMock,
+        _mock_scan: MagicMock,
     ) -> None:
         mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
@@ -790,8 +795,10 @@ class TestRecoveryResumeCallback:
 
     @patch(f"{_RC}.scan_sessions_for_cwd")
     @patch(f"{_RC}.session_manager")
-    async def test_resume_no_sessions_shows_alert(
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_resume_no_sessions_shows_empty_state(
         self,
+        mock_safe_edit: AsyncMock,
         mock_sm: MagicMock,
         mock_scan: MagicMock,
     ) -> None:
@@ -807,8 +814,13 @@ class TestRecoveryResumeCallback:
             mock_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        query.answer.assert_called_once()
-        assert "no sessions" in query.answer.call_args.args[0].lower()
+        mock_safe_edit.assert_called_once()
+        body = mock_safe_edit.call_args.args[1]
+        assert "No sessions" in body
+        kb = mock_safe_edit.call_args.kwargs["reply_markup"]
+        button_texts = [b.text for row in kb.inline_keyboard for b in row]
+        assert any("Browse" in t for t in button_texts)
+        assert any("fresh" in t.lower() for t in button_texts)
 
     async def test_resume_topic_mismatch_rejected(self) -> None:
         update = _make_callback_update(data=f"{CB_RECOVERY_RESUME}@0", thread_id=99)
@@ -928,7 +940,7 @@ class TestRecoveryResumePickCallback:
         await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         query.answer.assert_called_once()
-        assert "invalid" in query.answer.call_args.args[0].lower()
+        assert "no longer" in query.answer.call_args.args[0].lower()
 
     async def test_pick_no_sessions_stored_rejected(self) -> None:
         update = _make_callback_update(data=f"{CB_RECOVERY_PICK}0")
@@ -939,7 +951,7 @@ class TestRecoveryResumePickCallback:
         await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         query.answer.assert_called_once()
-        assert "invalid" in query.answer.call_args.args[0].lower()
+        assert "no longer" in query.answer.call_args.args[0].lower()
 
     async def test_pick_topic_mismatch_rejected(self) -> None:
         update = _make_callback_update(data=f"{CB_RECOVERY_PICK}0", thread_id=99)
@@ -1473,6 +1485,7 @@ class TestRecoveryResumePickerLabels:
 
 
 class TestRecoveryPerWindowProvider:
+    @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[_SessionEntry("s1", "x")])
     @patch(f"{_RC}.get_provider_for_window")
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
@@ -1485,6 +1498,7 @@ class TestRecoveryPerWindowProvider:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
         mock_gpw: MagicMock,
+        _mock_scan: MagicMock,
     ) -> None:
         mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_tm.create_window = AsyncMock(
@@ -1547,3 +1561,186 @@ class TestRecoveryPerWindowProvider:
         mock_gpw.return_value.make_launch_args.assert_called_once_with(
             resume_id="sess-1"
         )
+
+
+class TestRecoveryEmptyStateAndBrowseFallback:
+    @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[])
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_continue_with_no_sessions_shows_empty_state(
+        self,
+        mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        _mock_scan: MagicMock,
+    ) -> None:
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_CONTINUE}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        mock_safe_edit.assert_called_once()
+        body = mock_safe_edit.call_args.args[1]
+        assert "No sessions" in body
+        kb = mock_safe_edit.call_args.kwargs["reply_markup"]
+        button_texts = [b.text for row in kb.inline_keyboard for b in row]
+        assert any("Browse" in t for t in button_texts)
+        assert any("fresh" in t.lower() for t in button_texts)
+
+    @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[])
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_empty_state_buttons_target_fresh_and_browse(
+        self,
+        mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        _mock_scan: MagicMock,
+    ) -> None:
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_RESUME}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.Path") as mock_path:
+            mock_path.return_value.is_dir.return_value = True
+            await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        kb = mock_safe_edit.call_args.kwargs["reply_markup"]
+        datas = [
+            b.callback_data
+            for row in kb.inline_keyboard
+            for b in row
+            if isinstance(b.callback_data, str)
+        ]
+        assert any(d.startswith(CB_RECOVERY_BROWSE) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_FRESH) for d in datas)
+        assert CB_RECOVERY_CANCEL in datas
+
+    @patch("ccgram.handlers.resume_command.scan_all_sessions")
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_browse_loads_cross_project_picker(
+        self,
+        mock_safe_edit: AsyncMock,
+        mock_sm: MagicMock,
+        mock_scan_all: MagicMock,
+    ) -> None:
+        from ccgram.handlers.resume_command import ResumeEntry
+
+        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+        mock_scan_all.return_value = [
+            ResumeEntry("sess-x", "From other project", "/other", 12345.0),
+        ]
+
+        update = _make_callback_update(data=f"{CB_RECOVERY_BROWSE}@0")
+        user_data = _recovery_user_data(text="pending text")
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        from ccgram.handlers.user_state import RESUME_SESSIONS as _RS
+
+        assert _RS in user_data
+        assert user_data[_RS][0]["session_id"] == "sess-x"
+        assert PENDING_THREAD_TEXT not in user_data
+        body = mock_safe_edit.call_args.args[1]
+        assert "Select a session" in body
+
+    @patch("ccgram.handlers.resume_command.scan_all_sessions", return_value=[])
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_browse_with_no_sessions_anywhere(
+        self,
+        mock_safe_edit: AsyncMock,
+        _mock_scan_all: MagicMock,
+    ) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_BROWSE}@0")
+        user_data = _recovery_user_data()
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        mock_safe_edit.assert_called_once()
+        body = mock_safe_edit.call_args.args[1]
+        assert "No past sessions" in body
+
+    async def test_browse_topic_mismatch_rejected(self) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_BROWSE}@0", thread_id=99)
+        user_data = {PENDING_THREAD_ID: 42, RECOVERY_WINDOW_ID: "@0"}
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        query.answer.assert_called_once()
+        assert "mismatch" in query.answer.call_args.args[0].lower()
+
+
+class TestEmptyStateKeyboardBuilder:
+    def test_empty_keyboard_has_browse_fresh_and_cancel(self) -> None:
+        from ccgram.handlers.recovery_callbacks import _build_empty_resume_keyboard
+
+        kb = _build_empty_resume_keyboard("@0")
+        datas = [
+            b.callback_data
+            for row in kb.inline_keyboard
+            for b in row
+            if isinstance(b.callback_data, str)
+        ]
+        assert any(d.startswith(CB_RECOVERY_BROWSE) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_FRESH) for d in datas)
+        assert CB_RECOVERY_CANCEL in datas
+
+    def test_empty_keyboard_callback_data_within_64_bytes(self) -> None:
+        from ccgram.handlers.recovery_callbacks import _build_empty_resume_keyboard
+
+        long_id = "@" + "x" * 60
+        kb = _build_empty_resume_keyboard(long_id)
+        for row in kb.inline_keyboard:
+            for btn in row:
+                assert isinstance(btn.callback_data, str)
+                assert len(btn.callback_data) <= 64
+
+
+class TestUpdatedToastWordings:
+    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_pick_says_no_longer_in_list(
+        self,
+        _mock_safe_edit: AsyncMock,
+        _mock_sm: MagicMock,
+    ) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_PICK}99")
+        user_data = _recovery_user_data()
+        user_data[RECOVERY_SESSIONS] = [
+            {"session_id": "x", "summary": "x"},
+        ]
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        text = query.answer.call_args.args[0]
+        assert "no longer" in text.lower()
+
+    async def test_pick_invalid_value_says_couldnt_read(self) -> None:
+        update = _make_callback_update(data=f"{CB_RECOVERY_PICK}notanumber")
+        user_data = _recovery_user_data()
+        user_data[RECOVERY_SESSIONS] = [
+            {"session_id": "x", "summary": "x"},
+        ]
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        await handle_recovery_callback(query, 100, query.data, update, ctx)
+
+        text = query.answer.call_args.args[0]
+        assert "couldn" in text.lower()

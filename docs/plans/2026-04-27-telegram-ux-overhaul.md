@@ -278,12 +278,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/handlers/test_recovery_callbacks.py`
 - Modify: `tests/ccgram/handlers/test_resume_command.py`
 
-- [ ] resume picker: include msg-count when transcript parser returns it cheaply; otherwise omit
-- [ ] empty-state for resume in cwd: edit keyboard message to "No sessions in this folder. [Browse other projects] [Start fresh]" instead of toast
-- [ ] continue → resume fallback: if `--continue` produces no session for cwd, auto-show resume picker
-- [ ] update toast wording for unrecoverable cases ("session file gone" etc.) to be specific
-- [ ] write tests: empty-state rendering, continue→resume fallback path, error toast wordings
-- [ ] run `make check`
+- [x] resume picker: include msg-count when transcript parser returns it cheaply; otherwise omit
+- [x] empty-state for resume in cwd: edit keyboard message to "No sessions in this folder. [Browse other projects] [Start fresh]" instead of toast
+- [x] continue → resume fallback: if `--continue` produces no session for cwd, auto-show resume picker
+- [x] update toast wording for unrecoverable cases ("session file gone" etc.) to be specific
+- [x] write tests: empty-state rendering, continue→resume fallback path, error toast wordings
+- [x] run `make check`
 
 ### Task 1.11: Phase 1 — Verify + ship v2.12
 

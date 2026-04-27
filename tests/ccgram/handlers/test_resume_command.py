@@ -523,6 +523,177 @@ class TestFormatSessionEntry:
         )
         assert out.endswith(" · ????")
 
+    def test_msg_count_appended_when_set(self) -> None:
+        out = format_session_entry(
+            summary="Fix bug",
+            session_id="abcd1234-eeee-ffff-0000-1111deadbeef",
+            mtime=self._NOW,
+            msg_count=42,
+            now=self._NOW,
+        )
+        assert out.endswith(" · 42 msgs")
+
+    def test_msg_count_omitted_when_none(self) -> None:
+        out = format_session_entry(
+            summary="Fix bug",
+            session_id="abcd",
+            mtime=self._NOW,
+            msg_count=None,
+            now=self._NOW,
+        )
+        assert "msgs" not in out
+
+    def test_msg_count_omitted_when_zero(self) -> None:
+        out = format_session_entry(
+            summary="Fix bug",
+            session_id="abcd",
+            mtime=self._NOW,
+            msg_count=0,
+            now=self._NOW,
+        )
+        assert "msgs" not in out
+
+
+class TestIndexMsgCount:
+    def test_pulls_message_count_field(self) -> None:
+        from ccgram.handlers.resume_command import _index_msg_count
+
+        assert _index_msg_count({"messageCount": 7}) == 7
+
+    def test_pulls_msg_count_alias(self) -> None:
+        from ccgram.handlers.resume_command import _index_msg_count
+
+        assert _index_msg_count({"msgCount": 9}) == 9
+
+    def test_returns_none_for_missing_field(self) -> None:
+        from ccgram.handlers.resume_command import _index_msg_count
+
+        assert _index_msg_count({"otherField": 5}) is None
+
+    def test_returns_none_for_zero(self) -> None:
+        from ccgram.handlers.resume_command import _index_msg_count
+
+        assert _index_msg_count({"messageCount": 0}) is None
+
+    def test_returns_none_for_non_int(self) -> None:
+        from ccgram.handlers.resume_command import _index_msg_count
+
+        assert _index_msg_count({"messageCount": "many"}) is None
+
+
+class TestResumeEntryMsgCount:
+    def test_default_msg_count_is_none(self) -> None:
+        entry = ResumeEntry("sid", "summary", "/cwd", 1.0)
+        assert entry.msg_count is None
+
+    def test_msg_count_round_trips(self) -> None:
+        entry = ResumeEntry("sid", "summary", "/cwd", 1.0, msg_count=15)
+        assert entry.msg_count == 15
+
+    def test_scan_pulls_msg_count_from_index(self, tmp_path) -> None:
+        projects_path = tmp_path / "projects"
+        proj_dir = projects_path / "-tmp-myproj"
+        proj_dir.mkdir(parents=True)
+        sf = proj_dir / "sess-1.jsonl"
+        sf.write_text('{"type":"summary"}\n')
+        index = {
+            "originalPath": "/tmp/myproj",
+            "entries": [
+                {
+                    "sessionId": "sess-1",
+                    "fullPath": str(sf),
+                    "projectPath": "/tmp/myproj",
+                    "summary": "Indexed",
+                    "messageCount": 23,
+                }
+            ],
+        }
+        (proj_dir / "sessions-index.json").write_text(json.dumps(index))
+
+        with patch(f"{_RC}.config") as mock_config:
+            mock_config.claude_projects_path = projects_path
+            result = scan_all_sessions()
+
+        assert len(result) == 1
+        assert result[0].msg_count == 23
+
+
+class TestResumeKeyboardMsgCount:
+    def test_label_includes_msg_count_when_supplied(self) -> None:
+        import time as _time
+
+        recent = _time.time() - 10
+        sessions = [
+            {
+                "session_id": "abcd1234-eeee-ffff-0000-1111deadbeef",
+                "summary": "Implement auth",
+                "cwd": "/proj/a",
+                "mtime": recent,
+                "msg_count": 42,
+            }
+        ]
+        kb = _build_resume_keyboard(sessions)
+        button = kb.inline_keyboard[1][0]
+        assert "42 msgs" in button.text
+
+    def test_label_omits_msg_count_when_missing(self) -> None:
+        import time as _time
+
+        recent = _time.time() - 10
+        sessions = [
+            {
+                "session_id": "abcd1234-eeee-ffff-0000-1111deadbeef",
+                "summary": "No count",
+                "cwd": "/proj/a",
+                "mtime": recent,
+            }
+        ]
+        kb = _build_resume_keyboard(sessions)
+        button = kb.inline_keyboard[1][0]
+        assert "msgs" not in button.text
+
+
+class TestResumeImprovedToastWordings:
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_pick_invalid_index_says_no_longer(
+        self,
+        _mock_safe_edit: AsyncMock,
+    ) -> None:
+        update = _make_callback_update(data=f"{CB_RESUME_PICK}99")
+        user_data: dict = {
+            RESUME_SESSIONS: [
+                {"session_id": "x", "summary": "x", "cwd": "/tmp"},
+            ],
+        }
+        ctx = _make_context(user_data)
+        query = update.callback_query
+
+        with patch(f"{_RC}.get_thread_id", return_value=42):
+            await handle_resume_command_callback(query, 100, query.data, update, ctx)
+
+        text = query.answer.call_args.kwargs.get(
+            "text",
+            query.answer.call_args.args[0] if query.answer.call_args.args else "",
+        )
+        assert "no longer" in text.lower()
+
+    @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
+    async def test_pick_invalid_value_says_couldnt_read(
+        self,
+        _mock_safe_edit: AsyncMock,
+    ) -> None:
+        update = _make_callback_update(data=f"{CB_RESUME_PICK}notanumber")
+        ctx = _make_context({})
+        query = update.callback_query
+
+        await handle_resume_command_callback(query, 100, query.data, update, ctx)
+
+        text = query.answer.call_args.kwargs.get(
+            "text",
+            query.answer.call_args.args[0] if query.answer.call_args.args else "",
+        )
+        assert "couldn" in text.lower()
+
 
 class TestBuildResumeKeyboard:
     def _sessions(self, count: int = 3) -> list[dict[str, str]]:
@@ -846,7 +1017,7 @@ class TestResumePickCallback:
 
         query.answer.assert_called_once()
         assert (
-            "invalid"
+            "no longer"
             in query.answer.call_args.kwargs.get(
                 "text",
                 query.answer.call_args.args[0] if query.answer.call_args.args else "",
