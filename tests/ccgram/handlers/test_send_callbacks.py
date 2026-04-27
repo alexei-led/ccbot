@@ -105,7 +105,9 @@ class TestStaleGuard:
             mock_router.resolve_window_for_thread.return_value = "@99"
             await _dispatch(update, ctx)
 
-        query.answer.assert_awaited_once_with("Session expired", show_alert=True)
+        query.answer.assert_awaited_once_with(
+            "Browser expired — use /send to restart", show_alert=True
+        )
         assert SEND_WINDOW_ID_KEY not in ctx.user_data
 
     async def test_matching_window_proceeds(self, tmp_path: Path) -> None:

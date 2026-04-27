@@ -424,6 +424,87 @@ async def screenshot_command(
         await safe_reply(update.message, "\u274c Failed to send screenshot.")
 
 
+async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Open auto-refreshing live terminal view directly, skipping the screenshot step."""
+    from ..config import config
+    from ..utils import handle_general_topic_message, is_general_topic
+    from .live_view import (
+        LiveViewState,
+        build_live_keyboard,
+        content_hash,
+        is_live,
+        start_live_view,
+    )
+    from .message_sender import safe_reply
+
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        if (
+            update.message
+            and update.effective_chat
+            and is_general_topic(update.message)
+        ):
+            await handle_general_topic_message(
+                update.get_bot(), update.message, update.effective_chat.id
+            )
+        else:
+            await safe_reply(update.message, "❌ Use this command inside a topic.")
+        return
+
+    if is_live(user.id, thread_id):
+        await safe_reply(update.message, "\U0001f4fa Live view already running.")
+        return
+
+    window_id = thread_router.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(update.message, "❌ This topic is not bound to any session.")
+        return
+
+    w = await tmux_manager.find_window_by_id(window_id)
+    if not w:
+        await safe_reply(update.message, "❌ Window no longer exists.")
+        return
+
+    text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+    if not text:
+        await safe_reply(update.message, "❌ Failed to capture terminal.")
+        return
+
+    chat_id = thread_router.resolve_chat_id(user.id, thread_id)
+    png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
+    keyboard = build_live_keyboard(window_id)
+    try:
+        sent = await update.message.get_bot().send_photo(
+            chat_id=chat_id,
+            photo=io.BytesIO(png_bytes),
+            caption=f"Live · {time.strftime('%H:%M:%S')}",
+            reply_markup=keyboard,
+            message_thread_id=thread_id,
+        )
+    except TelegramError as e:
+        logger.error("Failed to start live view: %s", e)
+        await safe_reply(update.message, "❌ Failed to start live view.")
+        return
+
+    start_live_view(
+        LiveViewState(
+            chat_id=chat_id,
+            message_id=sent.message_id,
+            thread_id=thread_id,
+            user_id=user.id,
+            window_id=window_id,
+            pane_id=None,
+            last_hash=content_hash(text),
+        )
+    )
+
+
 async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: C901
     """List all panes in the current topic's window."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup

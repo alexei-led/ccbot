@@ -46,6 +46,11 @@ logger = structlog.get_logger()
 
 _shell_pending: dict[tuple[int, int], tuple[str, int]] = {}
 _generation_counter: dict[tuple[int, int], int] = {}
+_shell_hint_seen: set[tuple[int, int]] = set()
+
+_BANG_HINT_TEXT = (
+    "\U0001f4a1 Tip: prefix `!` to skip the LLM and run the command directly."
+)
 
 
 # gather_llm_context, redact_for_llm, and _detect_shell_tools moved to
@@ -66,6 +71,12 @@ def clear_shell_pending(chat_id: int, thread_id: int) -> None:
     """Clear any pending shell command for this topic (used by cleanup)."""
     _shell_pending.pop((chat_id, thread_id), None)
     _generation_counter.pop((chat_id, thread_id), None)
+
+
+@topic_state.register("chat")
+def _clear_shell_hint_seen(chat_id: int, thread_id: int) -> None:
+    """Forget the once-per-session bang hint when the topic is torn down."""
+    _shell_hint_seen.discard((chat_id, thread_id))
 
 
 async def _ensure_prompt_marker(window_id: str) -> None:
@@ -203,9 +214,20 @@ async def handle_shell_message(
 
     record_command(user_id, thread_id, text)
 
+    await _show_bang_hint_once(bot, chat_id, thread_id)
+
     await show_command_approval(
         bot, chat_id, thread_id, window_id, result, user_id, message
     )
+
+
+async def _show_bang_hint_once(bot: Bot, chat_id: int, thread_id: int) -> None:
+    """Send the once-per-session ``!`` prefix tip the first time it would help."""
+    key = (chat_id, thread_id)
+    if key in _shell_hint_seen:
+        return
+    _shell_hint_seen.add(key)
+    await safe_send(bot, chat_id, _BANG_HINT_TEXT, message_thread_id=thread_id)
 
 
 async def _execute_raw_command(

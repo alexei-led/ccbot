@@ -123,7 +123,12 @@ async def handle_voice_message(
     thread_id = get_thread_id(update)
     window_id = thread_router.resolve_window_for_thread(user.id, thread_id)
     if not window_id:
-        await safe_reply(message, "⚠️ Bind this topic to an agent session first.")
+        await safe_reply(
+            message,
+            "⚠ Topic not bound — send a text message first to pick a "
+            "directory, then re-record.\n"
+            "\U0001f4ac Voice messages aren't queued.",
+        )
         return
 
     voice = message.voice

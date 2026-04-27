@@ -53,6 +53,7 @@ _BOT_COMMANDS: list[tuple[str, str]] = [
     ("sessions", "Sessions dashboard"),
     ("resume", "Browse and resume past sessions"),
     ("screenshot", "Capture terminal screenshot"),
+    ("live", "Open auto-refreshing terminal view"),
     ("panes", "List panes in this window"),
     ("restore", "Recover a dead topic"),
     ("sync", "Audit and fix state"),

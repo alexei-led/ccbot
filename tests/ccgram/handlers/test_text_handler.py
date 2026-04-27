@@ -109,7 +109,7 @@ class TestHandleUnboundTopic:
 
         assert result is True
         mock_picker.assert_called_once()
-        mock_reply.assert_called_once()
+        assert mock_reply.call_count == 2
         assert user_data[STATE_KEY] == STATE_SELECTING_WINDOW
         assert user_data[PENDING_THREAD_TEXT] == "hello"
 
@@ -138,6 +138,7 @@ class TestHandleUnboundTopic:
         assert result is True
         mock_browser.assert_called_once()
         assert user_data[STATE_KEY] == STATE_BROWSING_DIRECTORY
+        assert mock_reply.call_count == 2
 
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_window_picker")
@@ -164,6 +165,61 @@ class TestHandleUnboundTopic:
 
         assert user_data[PENDING_THREAD_ID] == 42
         assert user_data[PENDING_THREAD_TEXT] == "my text"
+
+    @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(f"{_TH}.build_window_picker")
+    @patch(f"{_TH}.tmux_manager")
+    @patch(f"{_TH}.thread_router")
+    async def test_window_picker_sends_pending_disclosure(
+        self,
+        mock_tr: MagicMock,
+        mock_tm: MagicMock,
+        mock_picker: MagicMock,
+        mock_reply: AsyncMock,
+    ) -> None:
+        mock_tr.get_window_for_thread.return_value = None
+        mock_tr.iter_thread_bindings.return_value = []
+        w = MagicMock(window_id="@5", window_name="proj", cwd="/tmp")
+        mock_tm.list_windows = AsyncMock(return_value=[w])
+        mock_tm.discover_external_sessions = AsyncMock(return_value=[])
+        mock_picker.return_value = ("Pick:", MagicMock(), ["@5"])
+
+        user_data: dict = {}
+        message = AsyncMock()
+
+        await _handle_unbound_topic(100, 42, "hello", user_data, message)
+
+        from ccgram.handlers.text_handler import PENDING_DELIVERY_NOTICE
+
+        assert mock_reply.call_count == 2
+        assert mock_reply.call_args_list[1].args[1] == PENDING_DELIVERY_NOTICE
+
+    @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(f"{_TH}.build_directory_browser")
+    @patch(f"{_TH}.tmux_manager")
+    @patch(f"{_TH}.thread_router")
+    async def test_directory_browser_sends_pending_disclosure(
+        self,
+        mock_tr: MagicMock,
+        mock_tm: MagicMock,
+        mock_browser: MagicMock,
+        mock_reply: AsyncMock,
+    ) -> None:
+        mock_tr.get_window_for_thread.return_value = None
+        mock_tr.iter_thread_bindings.return_value = []
+        mock_tm.list_windows = AsyncMock(return_value=[])
+        mock_tm.discover_external_sessions = AsyncMock(return_value=[])
+        mock_browser.return_value = ("Browse:", MagicMock(), [])
+
+        user_data: dict = {}
+        message = AsyncMock()
+
+        await _handle_unbound_topic(100, 42, "hello", user_data, message)
+
+        from ccgram.handlers.text_handler import PENDING_DELIVERY_NOTICE
+
+        assert mock_reply.call_count == 2
+        assert mock_reply.call_args_list[1].args[1] == PENDING_DELIVERY_NOTICE
 
 
 class TestHandleDeadWindow:

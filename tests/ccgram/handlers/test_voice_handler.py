@@ -127,7 +127,9 @@ class TestHandleVoiceMessage:
         )
 
         mock_reply.assert_called_once()
-        assert "Bind this topic" in mock_reply.call_args.args[1]
+        body = mock_reply.call_args.args[1]
+        assert "not bound" in body
+        assert "Voice messages aren't queued" in body
 
     @patch(f"{_VH}.thread_router")
     @patch(f"{_VH}.config")

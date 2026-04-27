@@ -69,7 +69,11 @@ from .handlers.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
 from .handlers.command_history import recall_command
 from .handlers.message_routing import handle_new_message
-from .handlers.screenshot_callbacks import panes_command, screenshot_command
+from .handlers.screenshot_callbacks import (
+    live_command,
+    panes_command,
+    screenshot_command,
+)
 from .handlers.topic_lifecycle import topic_closed_handler, topic_edited_handler
 from .handlers.history import send_history
 from .handlers.sessions_dashboard import sessions_command
@@ -583,6 +587,7 @@ def create_bot() -> Application:
     application.add_handler(
         CommandHandler("screenshot", screenshot_command, filters=_group_filter)
     )
+    application.add_handler(CommandHandler("live", live_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("panes", panes_command, filters=_group_filter)
     )

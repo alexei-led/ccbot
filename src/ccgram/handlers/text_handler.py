@@ -51,6 +51,8 @@ logger = structlog.get_logger()
 # Maximum characters for bash output before truncation (fits Telegram 4096-char limit)
 _BASH_OUTPUT_LIMIT = 3800
 
+PENDING_DELIVERY_NOTICE = "\U0001f4ac Will deliver once the agent starts."
+
 # Active bash capture tasks: (user_id, thread_id) -> asyncio.Task
 _bash_capture_tasks: dict[tuple[int, int], asyncio.Task[None]] = {}
 
@@ -217,6 +219,7 @@ async def _handle_unbound_topic(
             user_data[PENDING_THREAD_ID] = thread_id
             user_data[PENDING_THREAD_TEXT] = text
         await safe_reply(message, msg_text, reply_markup=keyboard)
+        await safe_reply(message, PENDING_DELIVERY_NOTICE)
         return True
 
     # No unbound windows — show directory browser to create a new session
@@ -235,6 +238,7 @@ async def _handle_unbound_topic(
         user_data[PENDING_THREAD_ID] = thread_id
         user_data[PENDING_THREAD_TEXT] = text
     await safe_reply(message, msg_text, reply_markup=keyboard)
+    await safe_reply(message, PENDING_DELIVERY_NOTICE)
     return True
 
 

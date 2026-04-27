@@ -162,14 +162,14 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/handlers/test_voice_handler.py`
 - Modify: `tests/ccgram/test_shell_commands.py`
 
-- [ ] in `text_handler.py` queue-pending path: send disclosure "💬 Will deliver once the agent starts." after directory browser opens
-- [ ] in `voice_handler.py` unbound-topic path: same disclosure pattern
-- [ ] rewrite `send_callbacks.py` "Session expired" → "Browser expired — use /send to restart"
-- [ ] in `shell_commands.py`: on first message in a shell topic per session, append one-time hint "Tip: prefix `!` to skip LLM."
-- [ ] in `cli.py` register `/live` slash command → opens live view directly without screenshot first
-- [ ] update bot command list (`setMyCommands`) to include `/live`
-- [ ] write tests: pending disclosure (text + voice), browser-expired wording, `/live` shortcut, `!` hint shows once per session
-- [ ] run `make check`
+- [x] in `text_handler.py` queue-pending path: send disclosure "💬 Will deliver once the agent starts." after directory browser opens
+- [x] in `voice_handler.py` unbound-topic path: same disclosure pattern (rejection reworded — voice has no queue, so message clarifies that voice messages aren't queued and the user should send text first)
+- [x] rewrite `send_callbacks.py` "Session expired" → "Browser expired — use /send to restart"
+- [x] in `shell_commands.py`: on first message in a shell topic per session, append one-time hint "Tip: prefix `!` to skip LLM."
+- [x] register `/live` slash command in `bot.py` + `screenshot_callbacks.py` (plan said `cli.py` but that file is the Click CLI; Telegram command handlers live in `bot.py`)
+- [x] update bot command list (`setMyCommands`) to include `/live` (added to `_BOT_COMMANDS` in `cc_commands.py`)
+- [x] write tests: pending disclosure (text + voice), browser-expired wording, `/live` shortcut, `!` hint shows once per session
+- [x] run `make check`
 
 ### Task 1.4: Theme 3 — `react()` helper + reaction allowlist
 

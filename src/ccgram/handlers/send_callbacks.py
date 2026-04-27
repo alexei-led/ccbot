@@ -87,7 +87,7 @@ async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     current_window_id = thread_router.resolve_window_for_thread(user.id, thread_id)
     if stored_window_id is None or stored_window_id != current_window_id:
         _clear_send_state(context)
-        await query.answer("Session expired", show_alert=True)
+        await query.answer("Browser expired — use /send to restart", show_alert=True)
         return
 
     data = query.data
