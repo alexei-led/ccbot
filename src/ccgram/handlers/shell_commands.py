@@ -11,6 +11,8 @@ Key components:
 
 import asyncio
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 
@@ -22,6 +24,7 @@ from telegram import (
     Message,
     Update,
 )
+from telegram.constants import ChatAction
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
@@ -53,6 +56,44 @@ _shell_hint_seen: set[tuple[int, int]] = set()
 _BANG_HINT_TEXT = (
     "\U0001f4a1 Tip: prefix `!` to skip the LLM and run the command directly."
 )
+
+# Telegram chat-action expires after ~5s; refresh slightly faster.
+_TYPING_REFRESH_INTERVAL = 4.0
+
+
+async def _send_typing(bot: Bot, chat_id: int, thread_id: int) -> None:
+    """Fire one ``typing`` chat action; swallow non-fatal transport errors."""
+    try:
+        await bot.send_chat_action(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            action=ChatAction.TYPING,
+        )
+    except TelegramError, OSError:
+        logger.debug("send_chat_action failed", exc_info=True)
+
+
+@asynccontextmanager
+async def _typing_pulse(bot: Bot, chat_id: int, thread_id: int) -> AsyncIterator[None]:
+    """Keep the ``typing`` indicator alive while a slow op runs.
+
+    The indicator self-expires after ~5s server-side, so refresh every
+    ``_TYPING_REFRESH_INTERVAL`` seconds. Cancellation on context exit is
+    sufficient to stop the loop — Telegram has no explicit cancel.
+    """
+
+    async def pulse() -> None:
+        while True:
+            await _send_typing(bot, chat_id, thread_id)
+            await asyncio.sleep(_TYPING_REFRESH_INTERVAL)
+
+    task = asyncio.create_task(pulse())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 # gather_llm_context, redact_for_llm, and _detect_shell_tools moved to
@@ -154,6 +195,11 @@ async def handle_shell_message(
     clear_shell_pending(chat_id, thread_id)
     await _ensure_prompt_marker(window_id)
 
+    # Immediate ``typing`` action so the user sees the bot is processing
+    # before any reply lands. Self-expires after ~5s; pulse() refreshes it
+    # for the duration of the LLM call below.
+    await _send_typing(bot, chat_id, thread_id)
+
     msg_id = message.message_id if message is not None else 0
 
     # ⚡ Persistent ack so the user sees the bot is working before
@@ -201,13 +247,14 @@ async def handle_shell_message(
     _generation_counter[gen_key] = gen_id
 
     try:
-        result = await completer.generate_command(
-            text,
-            cwd=ctx["cwd"],
-            shell=ctx["shell"],
-            shell_tools=ctx["shell_tools"],
-            recent_output=recent_output,
-        )
+        async with _typing_pulse(bot, chat_id, thread_id):
+            result = await completer.generate_command(
+                text,
+                cwd=ctx["cwd"],
+                shell=ctx["shell"],
+                shell_tools=ctx["shell_tools"],
+                recent_output=recent_output,
+            )
     except RuntimeError:
         logger.warning("LLM command generation failed")
         await safe_send(

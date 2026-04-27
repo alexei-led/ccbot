@@ -215,11 +215,11 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/test_shell_commands.py`
 - Modify: `tests/ccgram/handlers/test_text_handler.py`
 
-- [ ] in `shell_commands.py` `handle_shell_message`: send `sendChatAction("typing")` immediately on entry, before LLM call; refresh every 4s while generating (Telegram action expires after 5s)
-- [ ] in `text_handler.py` agent-forward path: send `sendChatAction("typing")` once on text dispatch (cheap signal that bot saw the message)
-- [ ] cancel/clear chat action when reply arrives or generation aborts
-- [ ] write tests: action sent before LLM, refresh loop, cleared on completion
-- [ ] run `make check`
+- [x] in `shell_commands.py` `handle_shell_message`: send `sendChatAction("typing")` immediately on entry, before LLM call; refresh every 4s while generating (Telegram action expires after 5s)
+- [x] in `text_handler.py` agent-forward path: send `sendChatAction("typing")` once on text dispatch (cheap signal that bot saw the message)
+- [x] cancel/clear chat action when reply arrives or generation aborts
+- [x] write tests: action sent before LLM, refresh loop, cleared on completion
+- [x] run `make check`
 
 ### Task 1.7: Theme 4b — `DraftStream` helper + Bot API probe
 
