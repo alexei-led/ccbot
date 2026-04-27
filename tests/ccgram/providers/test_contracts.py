@@ -511,7 +511,7 @@ class TestStatusSnapshot:
 
     def test_supports_status_snapshot_flag(self, provider: AgentProvider) -> None:
         caps = provider.capabilities
-        if caps.name == "codex":
+        if caps.name in ("codex", "gemini"):
             assert caps.supports_status_snapshot is True
         else:
             assert caps.supports_status_snapshot is False

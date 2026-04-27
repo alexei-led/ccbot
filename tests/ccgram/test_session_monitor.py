@@ -773,21 +773,28 @@ class TestScanProjects:
         assert result == []
 
 
-class TestWholeFileTranscriptReading:
-    """Test _read_new_lines delegation for providers with supports_incremental_read=False."""
+class TestGeminiTranscriptReading:
+    """Test _read_new_lines delegation for Gemini with supports_incremental_read=True."""
 
-    _GEMINI_TRANSCRIPT = {
+    _GEMINI_META = {
         "sessionId": "g1",
-        "messages": [
-            {"type": "user", "content": "hello"},
-            {"type": "gemini", "content": "hi there"},
-            {"type": "user", "content": "thanks"},
-        ],
+        "projectHash": "h1",
     }
+    _GEMINI_MESSAGES = [
+        {"type": "user", "content": [{"text": "hello"}]},
+        {"type": "gemini", "content": [{"text": "hi there"}]},
+        {"type": "user", "content": [{"text": "thanks"}]},
+    ]
 
-    async def test_gemini_reads_whole_file(self, tmp_path) -> None:
-        transcript = tmp_path / "transcript.json"
-        transcript.write_text(json.dumps(self._GEMINI_TRANSCRIPT))
+    def _write_jsonl(self, path, meta, messages):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(meta) + "\n")
+            for msg in messages:
+                f.write(json.dumps(msg) + "\n")
+
+    async def test_gemini_reads_jsonl_incrementally(self, tmp_path) -> None:
+        transcript = tmp_path / "transcript.jsonl"
+        self._write_jsonl(transcript, self._GEMINI_META, self._GEMINI_MESSAGES)
 
         monitor = SessionMonitor(
             projects_path=tmp_path / "projects",
@@ -803,54 +810,45 @@ class TestWholeFileTranscriptReading:
             "ccgram.transcript_reader.get_provider_for_window",
             return_value=_make_gemini_provider(),
         ):
+            # First read: gets everything
             entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
+            assert len(entries) == 4  # meta + 3 messages
+            assert entries[0]["sessionId"] == "g1"
+            assert entries[1]["type"] == "user"
 
-        assert len(entries) == 3
-        assert tracked.last_byte_offset == 3
-
-    async def test_gemini_incremental_after_update(self, tmp_path) -> None:
-        transcript = tmp_path / "transcript.json"
-        data = dict(self._GEMINI_TRANSCRIPT)
-        data["messages"] = list(data["messages"][:2])
-        transcript.write_text(json.dumps(data))
-
-        monitor = SessionMonitor(
-            projects_path=tmp_path / "projects",
-            state_file=tmp_path / "ms.json",
-        )
-        tracked = TrackedSession(
-            session_id="g1",
-            file_path=str(transcript),
-            last_byte_offset=2,
-        )
-
-        data["messages"] = list(self._GEMINI_TRANSCRIPT["messages"])
-        transcript.write_text(json.dumps(data))
-
-        with patch(
-            "ccgram.transcript_reader.get_provider_for_window",
-            return_value=_make_gemini_provider(),
-        ):
+            # Second read: nothing new
             entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
+            assert len(entries) == 0
 
-        assert len(entries) == 1
-        assert entries[0]["content"] == "thanks"
-        assert tracked.last_byte_offset == 3
+            # Third read: append a message
+            with open(transcript, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "gemini", "content": [{"text": "bye"}]}) + "\n")
+
+            entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
+            assert len(entries) == 1
+            assert entries[0]["type"] == "gemini"
 
     async def test_gemini_end_to_end_process_session(self, tmp_path) -> None:
-        transcript = tmp_path / "transcript.json"
-        transcript.write_text(json.dumps(self._GEMINI_TRANSCRIPT))
+        transcript = tmp_path / "transcript.jsonl"
+        self._write_jsonl(transcript, self._GEMINI_META, self._GEMINI_MESSAGES)
 
         monitor = SessionMonitor(
             projects_path=tmp_path / "projects",
             state_file=tmp_path / "ms.json",
         )
+        # We start tracking with offset pointing at the end of the file
+        # (simulating a session that was already active at startup)
+        st = transcript.stat()
         tracked = TrackedSession(
             session_id="g1",
             file_path=str(transcript),
-            last_byte_offset=0,
+            last_byte_offset=st.st_size,
         )
         monitor.state.update_session(tracked)
+
+        # Append new message
+        with open(transcript, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "gemini", "content": [{"text": "new!"}]}) + "\n")
 
         new_messages: list = []
         with patch(
@@ -861,9 +859,9 @@ class TestWholeFileTranscriptReading:
                 "g1", transcript, new_messages, window_id="@5"
             )
 
-        assert len(new_messages) == 3
-        assert new_messages[0].text == "hello"
-        assert new_messages[1].text == "hi there"
+        assert len(new_messages) == 1
+        assert new_messages[0].text == "new!"
+        assert new_messages[0].role == "assistant"
 
 
 def _make_gemini_provider():
