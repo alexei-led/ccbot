@@ -338,11 +338,11 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/handlers/test_status_bubble.py`
 - Modify: `tests/ccgram/handlers/test_interactive_ui.py`
 
-- [ ] when window has >1 pane, render per-pane block under main agent line: "└ %5 active · %6 idle 2m · %7 ⏸ blocked"
-- [ ] block is collapsible (expandable_blockquote entity) when 4+ panes
-- [ ] interactive UI alert prepends pane name: "🔀 api-gateway (%5):" instead of "🔀 Pane (%5):"
-- [ ] write tests: bubble with 1/2/4+ panes, alert wording with named/unnamed panes
-- [ ] run `make check`
+- [x] when window has >1 pane, render per-pane block under main agent line: "└ %5 active · %6 idle 2m · %7 ⏸ blocked"
+- [x] block is collapsible (expandable_blockquote entity) when 4+ panes
+- [x] interactive UI alert prepends pane name: "🔀 api-gateway (%5):" instead of "🔀 Pane (%5):"
+- [x] write tests: bubble with 1/2/4+ panes, alert wording with named/unnamed panes
+- [x] run `make check`
 
 ### Task 2.4: Pane subscribe / rename callbacks + keyboard
 

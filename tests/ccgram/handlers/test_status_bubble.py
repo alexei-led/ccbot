@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ccgram.expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ccgram.handlers.message_task import StatusClearTask, StatusUpdateTask
 from ccgram.handlers.status_bubble import (
     _status_drafts,
@@ -12,11 +13,13 @@ from ccgram.handlers.status_bubble import (
     clear_status_msg_info,
     convert_status_to_content,
     format_claude_task_status,
+    format_pane_block,
     process_status_clear,
     process_status_update,
     send_status_text,
 )
 from ccgram.telegram_draft import mark_draft_unavailable, reset_draft_state
+from ccgram.window_state_store import PaneInfo, WindowState, window_store
 
 USER_ID = 1
 THREAD_ID = 10
@@ -335,3 +338,214 @@ class TestNoImportFromMessageQueue:
         assert violations == [], (
             f"status_bubble imports from message_queue: {violations}"
         )
+
+
+@pytest.fixture
+def _isolated_window_store():
+    saved = dict(window_store.window_states)
+    window_store.window_states.clear()
+    try:
+        yield
+    finally:
+        window_store.window_states.clear()
+        window_store.window_states.update(saved)
+
+
+def _seed_panes(window_id: str, panes: list[PaneInfo]) -> None:
+    state = WindowState()
+    state.panes = {p.pane_id: p for p in panes}
+    window_store.window_states[window_id] = state
+
+
+class TestFormatPaneBlock:
+    def test_returns_none_for_unknown_window(self, _isolated_window_store):
+        assert format_pane_block("@99") is None
+
+    def test_returns_none_for_single_pane(self, _isolated_window_store):
+        _seed_panes("@0", [PaneInfo(pane_id="%1", state="active")])
+        assert format_pane_block("@0") is None
+
+    def test_returns_none_when_only_dead_panes(self, _isolated_window_store):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%1", state="dead"),
+                PaneInfo(pane_id="%2", state="dead"),
+            ],
+        )
+        assert format_pane_block("@0") is None
+
+    def test_two_panes_inline_list(self, _isolated_window_store):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%5", state="active"),
+                PaneInfo(pane_id="%6", state="blocked"),
+            ],
+        )
+        result = format_pane_block("@0")
+        assert result is not None
+        assert result.startswith("└ ")
+        assert "%5 active" in result
+        assert "%6 ⏸ blocked" in result
+        # Single line for ≤3 panes — no expandable quote sentinel.
+        assert "\n" not in result
+        assert EXPANDABLE_QUOTE_START not in result
+
+    def test_three_panes_uses_pane_name_when_set(self, _isolated_window_store):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%5", name="api-gateway", state="active"),
+                PaneInfo(pane_id="%6", state="blocked"),
+                PaneInfo(pane_id="%7", state="idle"),
+            ],
+        )
+        result = format_pane_block("@0")
+        assert result is not None
+        assert "api-gateway active" in result
+        assert "%5 active" not in result  # name preferred over pane_id
+        assert "%6 ⏸ blocked" in result
+        assert " · " in result
+
+    def test_idle_age_renders_minutes(self, _isolated_window_store):
+        with patch("ccgram.handlers.status_bubble.time") as mock_time:
+            mock_time.time.return_value = 1_000_000.0
+            _seed_panes(
+                "@0",
+                [
+                    PaneInfo(pane_id="%5", state="active"),
+                    PaneInfo(
+                        pane_id="%6", state="idle", last_active_ts=1_000_000.0 - 120.0
+                    ),
+                ],
+            )
+            result = format_pane_block("@0")
+        assert result is not None
+        assert "%6 idle 2m" in result
+
+    def test_idle_age_renders_hours(self, _isolated_window_store):
+        with patch("ccgram.handlers.status_bubble.time") as mock_time:
+            mock_time.time.return_value = 1_000_000.0
+            _seed_panes(
+                "@0",
+                [
+                    PaneInfo(pane_id="%5", state="active"),
+                    PaneInfo(
+                        pane_id="%6",
+                        state="idle",
+                        last_active_ts=1_000_000.0 - 7200.0,
+                    ),
+                ],
+            )
+            result = format_pane_block("@0")
+        assert result is not None
+        assert "%6 idle 2h" in result
+
+    def test_four_panes_wrapped_in_expandable_quote(self, _isolated_window_store):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%5", state="active"),
+                PaneInfo(pane_id="%6", state="idle"),
+                PaneInfo(pane_id="%7", state="blocked"),
+                PaneInfo(pane_id="%8", state="idle"),
+            ],
+        )
+        result = format_pane_block("@0")
+        assert result is not None
+        assert result.startswith(EXPANDABLE_QUOTE_START)
+        assert result.endswith(EXPANDABLE_QUOTE_END)
+        assert "└ %5 active" in result
+        assert "└ %8" in result
+        # 4 panes → multi-line content inside the quote.
+        assert result.count("\n") >= 3
+
+    def test_panes_sorted_for_stable_output(self, _isolated_window_store):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%9", state="active"),
+                PaneInfo(pane_id="%2", state="idle"),
+            ],
+        )
+        result = format_pane_block("@0")
+        assert result is not None
+        # %2 comes before %9 lexicographically — stable order.
+        assert result.index("%2") < result.index("%9")
+
+    def test_dead_panes_excluded_when_others_visible(self, _isolated_window_store):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%5", state="active"),
+                PaneInfo(pane_id="%6", state="idle"),
+                PaneInfo(pane_id="%7", state="dead"),
+            ],
+        )
+        result = format_pane_block("@0")
+        assert result is not None
+        assert "%7" not in result
+
+
+class TestFormatClaudeTaskStatusWithPanes:
+    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot", return_value=None)
+    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    def test_pane_block_appended_to_base_text(
+        self, mock_wait, mock_snap, _isolated_window_store
+    ):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%5", state="active"),
+                PaneInfo(pane_id="%6", state="idle"),
+            ],
+        )
+        result = format_claude_task_status("@0", "Running")
+        assert result is not None
+        assert result.splitlines()[0] == "Running"
+        assert "└ %5 active" in result
+        assert "%6" in result
+
+    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot", return_value=None)
+    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    def test_no_pane_block_for_single_pane(
+        self, mock_wait, mock_snap, _isolated_window_store
+    ):
+        _seed_panes("@0", [PaneInfo(pane_id="%5", state="active")])
+        result = format_claude_task_status("@0", "Running")
+        assert result == "Running"
+
+    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot")
+    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    def test_pane_block_inserted_between_header_and_tasks(
+        self, mock_wait, mock_snap, _isolated_window_store
+    ):
+        _seed_panes(
+            "@0",
+            [
+                PaneInfo(pane_id="%5", state="active"),
+                PaneInfo(pane_id="%6", state="idle"),
+            ],
+        )
+        item = MagicMock()
+        item.status = "in_progress"
+        item.active_form = "writing tests"
+        item.subject = "Task A"
+        item.task_id = 1
+        item.owner = None
+        item.blocked_by = []
+        snapshot = MagicMock()
+        snapshot.total_count = 1
+        snapshot.done_count = 0
+        snapshot.open_count = 1
+        snapshot.items = [item]
+        mock_snap.return_value = snapshot
+
+        result = format_claude_task_status("@0", "Running")
+        assert result is not None
+        lines = result.splitlines()
+        # header → pane block → task summary → task item
+        assert lines[0] == "Running"
+        assert lines[1].startswith("└ ")
+        assert "1 tasks (0 done, 1 open)" in lines[2]

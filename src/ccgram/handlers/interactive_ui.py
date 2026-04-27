@@ -75,18 +75,23 @@ _TELEGRAM_MAX_TEXT = 4096
 def format_interactive_message(
     text: str,
     pane_id: str | None = None,
+    pane_name: str | None = None,
 ) -> str:
     """Build the body of an interactive UI message.
 
     Prepends the navigation instruction line so users see the keyboard
     shortcuts without trial and error, and adds a pane prefix for
-    non-active pane alerts. Truncates the captured terminal text from
-    the top (most recent lines win) when the combined message would
-    exceed Telegram's 4096-char per-message limit.
+    non-active pane alerts. When ``pane_name`` is set, the prefix uses
+    it instead of the generic word "Pane" so multi-pane teams surface
+    a recognizable label (e.g. ``api-gateway (%5)`` instead of
+    ``Pane (%5)``). Truncates the captured terminal text from the top
+    (most recent lines win) when the combined message would exceed
+    Telegram's 4096-char per-message limit.
     """
     header = INTERACTIVE_INSTRUCTION_LINE
     if pane_id:
-        header = f"{header}\n\U0001f500 Pane ({pane_id}):"
+        label = pane_name.strip() if pane_name and pane_name.strip() else "Pane"
+        header = f"{header}\n\U0001f500 {label} ({pane_id}):"
 
     body = text
     overhead = len(header) + 1  # +1 for the newline between header and body
@@ -270,6 +275,14 @@ async def _capture_interactive_content(
     return status.ui_type, status.raw_text
 
 
+def _lookup_pane_name(window_id: str, pane_id: str) -> str | None:
+    """Return the user-supplied pane name if recorded, else None."""
+    from ..window_state_store import window_store
+
+    pane_info = window_store.get_pane(window_id, pane_id)
+    return pane_info.name if pane_info else None
+
+
 async def handle_interactive_ui(
     bot: Bot,
     user_id: int,
@@ -292,7 +305,8 @@ async def handle_interactive_ui(
         return False
 
     ui_name, text = captured
-    text = format_interactive_message(text, pane_id=pane_id)
+    pane_name = _lookup_pane_name(window_id, pane_id) if pane_id else None
+    text = format_interactive_message(text, pane_id=pane_id, pane_name=pane_name)
     ikey = (user_id, thread_id or 0)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     keyboard = _build_interactive_keyboard(window_id, ui_name=ui_name, pane_id=pane_id)

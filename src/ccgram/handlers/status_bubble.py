@@ -10,6 +10,7 @@ here; ``convert_status_to_content`` is defined here and imported by
 from __future__ import annotations
 
 import contextlib
+import time
 from collections.abc import Callable
 
 import structlog
@@ -17,9 +18,11 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
+from ..expandable_quote import format_expandable_quote
 from ..telegram_draft import DraftStream
 from ..thread_router import thread_router
 from ..window_query import get_notification_mode
+from ..window_state_store import PaneInfo, window_store
 from .callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -145,52 +148,127 @@ def _get_idle_history(
 
 
 # ---------------------------------------------------------------------------
+# Per-pane status block
+# ---------------------------------------------------------------------------
+
+# When a window has this many or more visible panes, the per-pane block is
+# rendered as an expandable blockquote so the bubble stays compact.
+_PANE_BLOCK_EXPAND_THRESHOLD = 4
+_PANE_BLOCKED_GLYPH = "⏸"  # ⏸
+_SECONDS_PER_MINUTE = 60
+_MINUTES_PER_HOUR = 60
+
+
+def _format_pane_idle_age(pane: PaneInfo, now_wall: float) -> str:
+    """Format a pane's idle duration relative to ``now_wall``."""
+    if not pane.last_active_ts:
+        return "idle"
+    delta = max(0.0, now_wall - pane.last_active_ts)
+    if delta < _SECONDS_PER_MINUTE:
+        return "idle"
+    minutes = int(delta // _SECONDS_PER_MINUTE)
+    if minutes < _MINUTES_PER_HOUR:
+        return f"idle {minutes}m"
+    hours = int(minutes // _MINUTES_PER_HOUR)
+    return f"idle {hours}h"
+
+
+def _format_pane_item(pane: PaneInfo, now_wall: float) -> str:
+    """Render a single pane as ``"<label> <state>"``."""
+    label = pane.name.strip() if pane.name and pane.name.strip() else pane.pane_id
+    if pane.state == "active":
+        return f"{label} active"
+    if pane.state == "blocked":
+        return f"{label} {_PANE_BLOCKED_GLYPH} blocked"
+    if pane.state == "dead":
+        return f"{label} dead"
+    return f"{label} {_format_pane_idle_age(pane, now_wall)}"
+
+
+def format_pane_block(window_id: str) -> str | None:
+    """Render a per-pane status block for windows with multiple panes.
+
+    Returns ``None`` for single-pane windows (or windows without recorded
+    panes). For 2-3 panes returns a single ``└``-prefixed line listing each
+    pane's state. For 4+ panes wraps the list in an expandable blockquote
+    so the status bubble stays compact while still letting users tap to
+    reveal every pane.
+
+    Dead panes are excluded from the rendered list — pane lifecycle
+    notifications are owned by ``PaneStatusStrategy`` and Theme 5 Task 2.5.
+    """
+    state = window_store.window_states.get(window_id)
+    if state is None or len(state.panes) <= 1:
+        return None
+    visible = [p for p in state.panes.values() if p.state != "dead"]
+    if len(visible) <= 1:
+        return None
+    visible.sort(key=lambda p: p.pane_id)
+    now_wall = time.time()
+    items = [_format_pane_item(p, now_wall) for p in visible]
+    if len(visible) >= _PANE_BLOCK_EXPAND_THRESHOLD:
+        body = "\n".join(f"└ {item}" for item in items)
+        return format_expandable_quote(body)
+    return "└ " + " · ".join(items)
+
+
+# ---------------------------------------------------------------------------
 # Claude task-status formatting
 # ---------------------------------------------------------------------------
 
 
+_TASK_STATUS_GLYPHS = {
+    "completed": "\u2714",
+    "in_progress": "\u25d4",
+}
+_TASK_DEFAULT_GLYPH = "\u25fb"
+_VISIBLE_TASK_LIMIT = 8
+
+
+def _format_task_lines(snapshot: object) -> list[str]:
+    """Render the task snapshot into status-bubble lines."""
+    total = getattr(snapshot, "total_count", 0)
+    done = getattr(snapshot, "done_count", 0)
+    open_count = getattr(snapshot, "open_count", 0)
+    items = list(getattr(snapshot, "items", []))
+    visible_items = items[:_VISIBLE_TASK_LIMIT]
+    lines: list[str] = [f"{total} tasks ({done} done, {open_count} open)"]
+    for item in visible_items:
+        glyph = _TASK_STATUS_GLYPHS.get(item.status, _TASK_DEFAULT_GLYPH)
+        label = (
+            item.active_form
+            if item.status == "in_progress" and item.active_form
+            else item.subject
+        )
+        if item.owner:
+            label = f"{label} ({item.owner})"
+        line = f"{glyph} #{item.task_id} {label}".rstrip()
+        if item.blocked_by:
+            blocked = ", ".join(f"#{task_id}" for task_id in item.blocked_by)
+            line = f"{line} blocked by {blocked}"
+        lines.append(line)
+    hidden_count = total - len(visible_items)
+    if hidden_count > 0:
+        lines.append(f"+{hidden_count} more")
+    return lines
+
+
 def format_claude_task_status(window_id: str, base_text: str | None) -> str | None:
-    """Compose Claude wait/task state into the status bubble text."""
+    """Compose Claude wait/task state plus the per-pane block (if any)."""
     snapshot = get_claude_task_snapshot(window_id)
     wait_header = get_claude_wait_header(window_id)
-    if snapshot is None and not wait_header:
+    pane_block = format_pane_block(window_id)
+    if snapshot is None and not wait_header and pane_block is None:
         return base_text
 
     lines: list[str] = []
     header = wait_header or base_text
     if header:
         lines.append(header)
-
+    if pane_block is not None:
+        lines.append(pane_block)
     if snapshot is not None:
-        lines.append(
-            f"{snapshot.total_count} tasks ({snapshot.done_count} done, {snapshot.open_count} open)"
-        )
-        visible_items = snapshot.items[:8]
-        for item in visible_items:
-            if item.status == "completed":
-                glyph = "\u2714"
-            elif item.status == "in_progress":
-                glyph = "\u25d4"
-            else:
-                glyph = "\u25fb"
-
-            label = (
-                item.active_form
-                if item.status == "in_progress" and item.active_form
-                else item.subject
-            )
-            if item.owner:
-                label = f"{label} ({item.owner})"
-            line = f"{glyph} #{item.task_id} {label}".rstrip()
-            if item.blocked_by:
-                blocked = ", ".join(f"#{task_id}" for task_id in item.blocked_by)
-                line = f"{line} blocked by {blocked}"
-            lines.append(line)
-
-        hidden_count = snapshot.total_count - len(visible_items)
-        if hidden_count > 0:
-            lines.append(f"+{hidden_count} more")
-
+        lines.extend(_format_task_lines(snapshot))
     return "\n".join(lines) if lines else base_text
 
 
