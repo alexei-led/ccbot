@@ -18,6 +18,7 @@ from pathlib import Path
 from collections.abc import Callable
 
 from .providers import resolve_capabilities
+from .telegram_draft import draft_unavailable_reason, is_draft_unavailable
 from .utils import ccgram_dir, tmux_session_name
 
 _PASS = "pass"
@@ -156,6 +157,20 @@ def _check_allowed_users() -> tuple[str, str]:
         return _PASS, f"ALLOWED_USERS: {len(users)} user(s)"
     except ValueError:
         return _FAIL, "ALLOWED_USERS contains non-numeric values"
+
+
+def _check_draft_streaming() -> tuple[str, str]:
+    """Report cached state of the Bot API 9.5+ draft-streaming probe.
+
+    The probe itself runs at bot startup (or on first DraftStream use) —
+    doctor only reads the process-wide flag set in `telegram_draft`. When
+    doctor is invoked outside a running bot process the flag is False by
+    default, so the message is informational rather than a hard pass.
+    """
+    if is_draft_unavailable():
+        reason = draft_unavailable_reason() or "Bot API <9.5"
+        return _WARN, f"[draft-streaming] degraded — {reason}"
+    return _PASS, "[draft-streaming] available (probe at startup)"
 
 
 def _check_events_file() -> tuple[str, str]:
@@ -321,6 +336,9 @@ def doctor_main(fix: bool = False) -> None:
     # Events file check
     _, _, failed = _run_check(_check_events_file)
     has_failures = has_failures or failed
+
+    # Bot API draft-streaming availability (Bot API 9.5+)
+    _run_check(_check_draft_streaming)
 
     # Orphaned windows
     orphans = _find_orphaned_windows()

@@ -229,13 +229,13 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/doctor_cmd.py`
 - Create: `tests/ccgram/test_telegram_draft.py`
 
-- [ ] implement `class DraftStream` in `telegram_draft.py`: `start(initial_text) -> message_id`, `append(delta)`, `finalize(final_text)`, `abort()`
-- [ ] internal mode: `streaming` (uses `sendMessageDraft`) or `legacy` (current `editMessageText` loop). Mode is process-wide, set by first probe.
-- [ ] startup probe in `doctor_cmd.py`: try `bot.do_api_request("sendMessageDraft", {"chat_id": <self_id>, "text": "_probe_"})`; on `400` set `_DRAFT_UNAVAILABLE = True` and log
-- [ ] doctor adds `[draft-streaming] available` / `[draft-streaming] degraded — Bot API <9.5` line
-- [ ] handle rate-limit/flood errors with backoff + degrade to legacy for that stream
-- [ ] write tests: streaming mode happy path, legacy fallback path, abort cleans up, append ordering
-- [ ] run `make check`
+- [x] implement `class DraftStream` in `telegram_draft.py`: `start(initial_text) -> message_id`, `append(delta)`, `finalize(final_text)`, `abort()`
+- [x] internal mode: `streaming` (uses `sendMessageDraft`) or `legacy` (current `editMessageText` loop). Mode is process-wide, set by first probe.
+- [x] startup probe in `doctor_cmd.py`: try `bot.do_api_request("sendMessageDraft", {"chat_id": <self_id>, "text": "_probe_"})`; on `400` set `_DRAFT_UNAVAILABLE = True` and log (probe helper `probe_draft_availability` exposed; doctor reports cached flag — actual probe runs at bot startup)
+- [x] doctor adds `[draft-streaming] available` / `[draft-streaming] degraded — Bot API <9.5` line
+- [x] handle rate-limit/flood errors with backoff + degrade to legacy for that stream
+- [x] write tests: streaming mode happy path, legacy fallback path, abort cleans up, append ordering
+- [x] run `make check`
 
 ### Task 1.8: Theme 4b — Adopt `DraftStream` in tool_batch + status_bubble
 
