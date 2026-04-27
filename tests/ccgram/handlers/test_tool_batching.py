@@ -16,10 +16,10 @@ from ccgram.handlers.tool_batch import (
     ToolBatch,
     ToolBatchEntry,
     _active_batches,
-    is_batch_eligible,
     clear_batch_for_topic,
     flush_batch,
     format_batch_message,
+    is_batch_eligible,
     process_tool_event,
 )
 from ccgram.session import (
@@ -29,27 +29,43 @@ from ccgram.session import (
     WindowState,
     window_store,
 )
+from ccgram.telegram_draft import mark_draft_unavailable, reset_draft_state
 
 
 @pytest.fixture
 def batch_env():
-    with (
-        patch(
-            "ccgram.handlers.status_bubble.clear_status_message",
-            new_callable=AsyncMock,
-        ) as mock_clear,
-        patch(
-            "ccgram.handlers.tool_batch.get_batch_mode",
-            return_value="batched",
-        ),
-        patch("ccgram.handlers.tool_batch.rate_limit_send_message") as mock_send,
-        patch("ccgram.handlers.tool_batch.thread_router") as mock_tr,
-    ):
-        mock_tr.resolve_chat_id.return_value = 42
-        sent_msg = MagicMock()
-        sent_msg.message_id = 100
-        mock_send.return_value = sent_msg
-        yield AsyncMock(), mock_send, mock_clear
+    """Force DraftStream into legacy mode and patch DraftStream collaborators.
+
+    Returns ``(bot, mock_send, mock_clear)`` where ``mock_send`` is the
+    bot.send_message AsyncMock that DraftStream.start() drives in legacy mode.
+    """
+    reset_draft_state()
+    mark_draft_unavailable("test")
+    try:
+        with (
+            patch(
+                "ccgram.handlers.status_bubble.clear_status_message",
+                new_callable=AsyncMock,
+            ) as mock_clear,
+            patch(
+                "ccgram.handlers.tool_batch.get_batch_mode",
+                return_value="batched",
+            ),
+            patch(
+                "ccgram.handlers.tool_batch._rate_limit_chat",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("ccgram.handlers.tool_batch.thread_router") as mock_tr,
+        ):
+            mock_tr.resolve_chat_id.return_value = 42
+            bot = AsyncMock()
+            sent_msg = MagicMock()
+            sent_msg.message_id = 100
+            bot.send_message.return_value = sent_msg
+            yield bot, bot.send_message, mock_clear
+    finally:
+        reset_draft_state()
+        _active_batches.clear()
 
 
 class TestFormatBatchMessage:
@@ -439,7 +455,8 @@ class TestProcessBatchTask:
                 tool_name="TaskCreate",
             ),
         )
-        sent_text = mock_send.await_args.args[2]
+        # DraftStream.start (legacy) drives bot.send_message with kwargs.
+        sent_text = mock_send.await_args.kwargs["text"]
 
         assert sent_text.startswith("Creating 1 task\u2026\n")
         assert "1. Understand the Problem Domain" in sent_text
@@ -823,25 +840,35 @@ class TestTopicCleanupClearsBatch:
 
 
 class TestFlushSendFallback:
+    @patch(
+        "ccgram.handlers.tool_batch._rate_limit_chat",
+        new=AsyncMock(return_value=None),
+    )
     @patch("ccgram.handlers.tool_batch.thread_router")
-    @patch("ccgram.handlers.tool_batch.rate_limit_send_message")
-    async def test_flush_sends_when_no_telegram_msg_id(
-        self, mock_send, mock_tr
-    ) -> None:
-        mock_tr.resolve_chat_id.return_value = 42
-        _active_batches[(1, 0)] = ToolBatch(
-            window_id="@0",
-            thread_id=0,
-            entries=[ToolBatchEntry("t1", "Read x", "ok")],
-            telegram_msg_id=None,  # first send failed
-        )
+    async def test_flush_sends_when_no_telegram_msg_id(self, mock_tr) -> None:
+        # No prior message and no draft → flush_batch opens a fresh
+        # DraftStream, which uses bot.send_message in legacy mode.
+        reset_draft_state()
+        mark_draft_unavailable("test")
+        try:
+            mock_tr.resolve_chat_id.return_value = 42
+            _active_batches[(1, 0)] = ToolBatch(
+                window_id="@0",
+                thread_id=0,
+                entries=[ToolBatchEntry("t1", "Read x", "ok")],
+                telegram_msg_id=None,
+            )
 
-        bot = AsyncMock()
-        await flush_batch(bot, 1, 0)
-        mock_send.assert_awaited_once()
-        send_args = mock_send.call_args
-        assert "Read x" in send_args.args[2]
-        assert (1, 0) not in _active_batches
+            bot = AsyncMock()
+            sent = MagicMock()
+            sent.message_id = 100
+            bot.send_message.return_value = sent
+            await flush_batch(bot, 1, 0)
+            bot.send_message.assert_awaited_once()
+            assert "Read x" in bot.send_message.call_args.kwargs["text"]
+            assert (1, 0) not in _active_batches
+        finally:
+            reset_draft_state()
 
 
 class TestDefensiveElseBranch:

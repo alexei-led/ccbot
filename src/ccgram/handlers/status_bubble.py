@@ -17,8 +17,9 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
 from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
-from ..window_query import get_notification_mode
+from ..telegram_draft import DraftStream
 from ..thread_router import thread_router
+from ..window_query import get_notification_mode
 from .callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -27,7 +28,7 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
+from .message_sender import edit_with_fallback, rate_limit_send
 from .message_task import StatusClearTask, StatusUpdateTask, thread_key
 
 logger = structlog.get_logger()
@@ -61,6 +62,9 @@ def register_rc_active_provider(fn: Callable[[str], bool]) -> None:
 
 # Status message tracking: (user_id, thread_key) -> (message_id, window_id, last_text, chat_id)
 _status_msg_info: dict[tuple[int, int], tuple[int, str, str, int]] = {}
+
+# Active DraftStream per status bubble: (user_id, thread_key) -> DraftStream
+_status_drafts: dict[tuple[int, int], DraftStream] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +209,9 @@ async def send_status_text(
     """Send a new status message with action buttons and track it.
 
     If a status message already exists for this (user, thread), edit it
-    in-place instead of sending a new one.
+    in-place via the bubble's ``DraftStream`` (streaming when the Bot API
+    supports it, ``editMessageText`` otherwise).  Same-window same-text
+    calls are a no-op.
     """
     skey = (user_id, thread_id_or_0)
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
@@ -224,21 +230,68 @@ async def send_status_text(
         if stored_wid == window_id and text == last_text:
             return
         if stored_wid == window_id:
-            success = await edit_with_fallback(
-                bot, stored_chat_id, msg_id, text, reply_markup=keyboard
+            success = await _replace_or_edit_bubble(
+                bot, skey, stored_chat_id, msg_id, text, keyboard
             )
             if success:
                 _status_msg_info[skey] = (msg_id, window_id, text, stored_chat_id)
                 return
             _status_msg_info.pop(skey, None)
+            _status_drafts.pop(skey, None)
         else:
             await clear_status_message(bot, user_id, thread_id_or_0)
 
-    sent = await rate_limit_send_message(
-        bot, chat_id, text, reply_markup=keyboard, **send_kwargs(thread_id)
+    msg_id = await _start_bubble(bot, skey, chat_id, thread_id, text, keyboard)
+    if msg_id is not None:
+        _status_msg_info[skey] = (msg_id, window_id, text, chat_id)
+
+
+async def _start_bubble(
+    bot: Bot,
+    skey: tuple[int, int],
+    chat_id: int,
+    thread_id: int | None,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+) -> int | None:
+    """Open a fresh DraftStream for a status bubble; return message_id."""
+    await rate_limit_send(chat_id)
+    stream = DraftStream(
+        bot,
+        chat_id,
+        message_thread_id=thread_id,
+        reply_markup=keyboard,
     )
-    if sent:
-        _status_msg_info[skey] = (sent.message_id, window_id, text, chat_id)
+    msg_id = await stream.start(text)
+    if msg_id is None:
+        return None
+    _status_drafts[skey] = stream
+    return msg_id
+
+
+async def _replace_or_edit_bubble(
+    bot: Bot,
+    skey: tuple[int, int],
+    chat_id: int,
+    msg_id: int,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+) -> bool:
+    """Update an existing bubble. Use the active DraftStream if present;
+    otherwise fall back to ``edit_with_fallback`` (legacy entity path).
+    """
+    stream = _status_drafts.get(skey)
+    if stream is not None and not stream.closed:
+        try:
+            await stream.replace(text, reply_markup=keyboard)
+        except TelegramError as exc:
+            logger.debug("DraftStream.replace failed for %s: %s", skey, exc)
+            _status_drafts.pop(skey, None)
+            return await edit_with_fallback(
+                bot, chat_id, msg_id, text, reply_markup=keyboard
+            )
+        return True
+    return await edit_with_fallback(bot, chat_id, msg_id, text, reply_markup=keyboard)
 
 
 async def clear_status_message(
@@ -249,6 +302,12 @@ async def clear_status_message(
     """Delete the status message for a user."""
     skey = (user_id, thread_id_or_0)
     info = _status_msg_info.pop(skey, None)
+    stream = _status_drafts.pop(skey, None)
+    if stream is not None and not stream.closed:
+        # abort() deletes the underlying message and closes the stream.
+        with contextlib.suppress(TelegramError):
+            await stream.abort()
+        return
     if info:
         msg_id, _, _, chat_id = info
         try:
@@ -270,14 +329,26 @@ async def convert_status_to_content(
     """
     skey = (user_id, thread_id_or_0)
     info = _status_msg_info.pop(skey, None)
+    stream = _status_drafts.pop(skey, None)
     if not info:
         return None
 
     msg_id, stored_wid, _, chat_id = info
     if stored_wid != window_id:
+        if stream is not None and not stream.closed:
+            with contextlib.suppress(TelegramError):
+                await stream.abort()
+            return None
         with contextlib.suppress(TelegramError):
             await bot.delete_message(chat_id=chat_id, message_id=msg_id)
         return None
+
+    if stream is not None and not stream.closed:
+        try:
+            await stream.finalize(content_text, reply_markup=None)
+            return msg_id
+        except TelegramError as exc:
+            logger.debug("DraftStream.finalize failed for %s: %s", skey, exc)
 
     success = await edit_with_fallback(
         bot,
@@ -344,3 +415,4 @@ def clear_status_msg_info(user_id: int, thread_id: int | None = None) -> None:
     """
     skey = (user_id, thread_key(thread_id))
     _status_msg_info.pop(skey, None)
+    _status_drafts.pop(skey, None)

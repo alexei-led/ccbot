@@ -21,10 +21,10 @@ from dataclasses import dataclass, field
 import structlog
 from telegram import Bot
 
-from ..window_query import get_batch_mode
+from ..telegram_draft import DraftStream
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
-from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
+from ..window_query import get_batch_mode
 from .message_task import ContentTask, thread_key
 
 logger = structlog.get_logger()
@@ -52,6 +52,7 @@ class ToolBatch:
     entries: list[ToolBatchEntry] = field(default_factory=list)
     telegram_msg_id: int | None = None
     total_length: int = 0
+    draft: DraftStream | None = None
 
 
 # Active tool batches: (user_id, thread_id_or_0) -> ToolBatch
@@ -308,27 +309,35 @@ async def _send_or_edit_batch(
     raw_thread_id: int | None,
     thread_id_or_0: int,
 ) -> None:
-    """Send a new batch message or edit the existing one in place."""
+    """Send a new batch message or replace the existing draft text."""
     from ..claude_task_state import build_subagent_label, get_subagent_names
     from .status_bubble import clear_status_message
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
 
-    if batch.telegram_msg_id is None:
+    if batch.draft is None:
         await clear_status_message(bot, user_id, thread_id_or_0)
-        sent = await rate_limit_send_message(
-            bot, chat_id, batch_text, **send_kwargs(raw_thread_id)
-        )
-        if sent:
-            batch.telegram_msg_id = sent.message_id
-    else:
-        await edit_with_fallback(
+        await _rate_limit_chat(chat_id)
+        batch.draft = DraftStream(
             bot,
             chat_id,
-            batch.telegram_msg_id,
-            batch_text,
+            message_thread_id=raw_thread_id,
         )
+        msg_id = await batch.draft.start(batch_text)
+        if msg_id is not None:
+            batch.telegram_msg_id = msg_id
+        else:
+            batch.draft = None
+    else:
+        await batch.draft.replace(batch_text)
+
+
+async def _rate_limit_chat(chat_id: int) -> None:
+    """Acquire the per-chat rate-limit slot before opening a new draft."""
+    from .message_sender import rate_limit_send
+
+    await rate_limit_send(chat_id)
 
 
 async def _handle_tool_result(
@@ -460,6 +469,8 @@ async def flush_if_active(bot: Bot, user_id: int, task: ContentTask) -> None:
 
 async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
     """Finalize the active batch: do a final edit and clear state."""
+    from telegram.error import TelegramError
+
     bkey = (user_id, thread_id_or_0)
     batch = _active_batches.pop(bkey, None)
     if not batch or not batch.entries:
@@ -473,18 +484,34 @@ async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
 
-    if batch.telegram_msg_id is None:
-        await rate_limit_send_message(
-            bot, chat_id, batch_text, **send_kwargs(thread_id)
-        )
+    if batch.draft is not None and not batch.draft.closed:
+        try:
+            await batch.draft.finalize(batch_text)
+        except TelegramError as exc:
+            logger.warning("flush_batch finalize failed: %s", exc)
         return
 
-    await edit_with_fallback(
-        bot,
-        chat_id,
-        batch.telegram_msg_id,
-        batch_text,
-    )
+    if batch.telegram_msg_id is not None:
+        # Existing message but no active draft (e.g. batch built before
+        # adoption, or draft already closed).  Edit the message in place.
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=batch.telegram_msg_id,
+                text=batch_text,
+            )
+        except TelegramError as exc:
+            logger.warning("flush_batch edit failed: %s", exc)
+        return
+
+    # No prior message at all — open a fresh draft and finalize immediately.
+    await _rate_limit_chat(chat_id)
+    draft = DraftStream(bot, chat_id, message_thread_id=thread_id)
+    try:
+        await draft.start(batch_text)
+        await draft.finalize()
+    except TelegramError as exc:
+        logger.warning("flush_batch start+finalize failed: %s", exc)
 
 
 def has_active_batch(user_id: int, thread_id_or_0: int) -> bool:

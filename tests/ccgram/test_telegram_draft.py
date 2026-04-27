@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ccgram import telegram_draft
@@ -308,3 +309,94 @@ class TestModuleStateHelpers:
         reset_draft_state()
         assert is_draft_unavailable() is False
         assert telegram_draft.draft_unavailable_reason() == ""
+
+
+class TestDraftStreamReplace:
+    async def test_replace_streaming_pushes_full_text(self) -> None:
+        bot = _make_bot(draft_result={"message_id": 7})
+        stream = DraftStream(bot, chat_id=100)
+
+        await stream.start("first")
+        await stream.replace("second")
+
+        called_methods = [c.args[0] for c in bot.do_api_request.call_args_list]
+        assert called_methods == ["sendMessageDraft", "editMessageDraft"]
+        last = bot.do_api_request.call_args_list[-1]
+        assert last.kwargs["api_kwargs"]["text"] == "second"
+        assert stream.text == "second"
+
+    async def test_replace_legacy_pushes_via_edit_message_text(self) -> None:
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+
+        stream = DraftStream(bot, chat_id=100)
+        await stream.start("first")
+        await stream.replace("second")
+
+        bot.send_message.assert_awaited_once()
+        bot.edit_message_text.assert_awaited_once()
+        last = bot.edit_message_text.call_args_list[-1]
+        assert last.kwargs["text"] == "second"
+        assert stream.text == "second"
+
+    async def test_replace_after_finalize_raises(self) -> None:
+        bot = _make_bot(draft_result={"message_id": 7})
+        stream = DraftStream(bot, chat_id=100)
+        await stream.start("first")
+        await stream.finalize()
+
+        with pytest.raises(RuntimeError, match="already closed"):
+            await stream.replace("second")
+
+
+class TestDraftStreamReplyMarkup:
+    @staticmethod
+    def _markup() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Esc", callback_data="esc")]]
+        )
+
+    async def test_streaming_includes_serialized_markup(self) -> None:
+        bot = _make_bot(draft_result={"message_id": 7})
+        stream = DraftStream(bot, chat_id=100, reply_markup=self._markup())
+        await stream.start("hi")
+
+        kw = bot.do_api_request.call_args.kwargs["api_kwargs"]
+        assert "reply_markup" in kw
+        assert isinstance(kw["reply_markup"], dict)
+        assert kw["reply_markup"]["inline_keyboard"][0][0]["text"] == "Esc"
+
+    async def test_legacy_passes_inline_keyboard_through(self) -> None:
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+        markup = self._markup()
+        stream = DraftStream(bot, chat_id=100, reply_markup=markup)
+
+        await stream.start("hi")
+        assert bot.send_message.call_args.kwargs["reply_markup"] is markup
+
+        await stream.replace("more")
+        assert bot.edit_message_text.call_args.kwargs["reply_markup"] is markup
+
+    async def test_replace_can_clear_markup(self) -> None:
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+        stream = DraftStream(bot, chat_id=100, reply_markup=self._markup())
+
+        await stream.start("hi")
+        await stream.replace("bye", reply_markup=None)
+
+        # Markup explicitly cleared on the second push.
+        last_edit = bot.edit_message_text.call_args_list[-1]
+        assert "reply_markup" not in last_edit.kwargs
+
+    async def test_finalize_can_update_markup(self) -> None:
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+        stream = DraftStream(bot, chat_id=100)
+
+        await stream.start("hi")
+        await stream.finalize("done", reply_markup=self._markup())
+
+        last_edit = bot.edit_message_text.call_args_list[-1]
+        assert isinstance(last_edit.kwargs["reply_markup"], InlineKeyboardMarkup)

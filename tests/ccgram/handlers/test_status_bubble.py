@@ -6,6 +6,7 @@ import pytest
 
 from ccgram.handlers.message_task import StatusClearTask, StatusUpdateTask
 from ccgram.handlers.status_bubble import (
+    _status_drafts,
     _status_msg_info,
     clear_status_message,
     clear_status_msg_info,
@@ -15,6 +16,7 @@ from ccgram.handlers.status_bubble import (
     process_status_update,
     send_status_text,
 )
+from ccgram.telegram_draft import mark_draft_unavailable, reset_draft_state
 
 USER_ID = 1
 THREAD_ID = 10
@@ -25,71 +27,90 @@ CHAT_ID = 42
 @pytest.fixture(autouse=True)
 def _clear_status_tracking():
     _status_msg_info.clear()
+    _status_drafts.clear()
+    reset_draft_state()
+    # All tests run with draft streaming disabled (legacy edit path) so we
+    # observe a deterministic bot.send_message / bot.edit_message_text call
+    # pattern.  Streaming-mode behaviour is covered by test_telegram_draft.py.
+    mark_draft_unavailable("test")
     yield
     _status_msg_info.clear()
+    _status_drafts.clear()
+    reset_draft_state()
+
+
+def _make_bot(send_id: int = 99) -> AsyncMock:
+    """Build an AsyncMock bot that returns a sensible Message on send."""
+    bot = AsyncMock()
+    sent = MagicMock()
+    sent.message_id = send_id
+    bot.send_message.return_value = sent
+    return bot
 
 
 class TestSendStatusText:
     @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.status_bubble.rate_limit_send_message",
-        new_callable=AsyncMock,
-    )
-    async def test_sends_new_message(self, mock_send, mock_edit, mock_router):
+    async def test_sends_new_message(self, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
-        sent = MagicMock()
-        sent.message_id = 99
-        mock_send.return_value = sent
 
-        bot = AsyncMock()
+        bot = _make_bot(send_id=99)
         await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "running...")
 
-        mock_send.assert_called_once()
+        # Legacy DraftStream calls bot.send_message
+        bot.send_message.assert_awaited_once()
         assert _status_msg_info[(USER_ID, THREAD_ID)] == (
             99,
             WINDOW_ID,
             "running...",
             CHAT_ID,
         )
+        # A DraftStream is recorded for the bubble lifetime
+        assert (USER_ID, THREAD_ID) in _status_drafts
 
     @patch("ccgram.handlers.status_bubble.thread_router")
     @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.status_bubble.rate_limit_send_message",
-        new_callable=AsyncMock,
-    )
-    async def test_edits_existing_same_window(self, mock_send, mock_edit, mock_router):
+    async def test_edits_existing_same_window(self, mock_edit, mock_router):
+        # No active DraftStream for this skey — falls back to edit_with_fallback.
         mock_router.resolve_chat_id.return_value = CHAT_ID
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
         mock_edit.return_value = True
 
-        bot = AsyncMock()
+        bot = _make_bot()
         await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "new text")
 
-        mock_edit.assert_called_once()
-        mock_send.assert_not_called()
+        mock_edit.assert_awaited_once()
+        bot.send_message.assert_not_called()
         assert _status_msg_info[(USER_ID, THREAD_ID)][2] == "new text"
 
     @patch("ccgram.handlers.status_bubble.thread_router")
+    async def test_edit_via_draft_stream_replace(self, mock_router):
+        # When a DraftStream is tracked for this skey, replace() drives the edit.
+        mock_router.resolve_chat_id.return_value = CHAT_ID
+        bot = _make_bot(send_id=99)
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "first")
+        bot.send_message.assert_awaited_once()
+
+        # Second call with new text triggers the streaming/legacy edit path.
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "second")
+        bot.edit_message_text.assert_awaited_once()
+        assert _status_msg_info[(USER_ID, THREAD_ID)][2] == "second"
+
+    @patch("ccgram.handlers.status_bubble.thread_router")
     @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.status_bubble.rate_limit_send_message",
-        new_callable=AsyncMock,
-    )
-    async def test_dedup_identical_content(self, mock_send, mock_edit, mock_router):
+    async def test_dedup_identical_content(self, mock_edit, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "same", CHAT_ID)
 
-        bot = AsyncMock()
+        bot = _make_bot()
         await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "same")
 
         mock_edit.assert_not_called()
-        mock_send.assert_not_called()
+        bot.send_message.assert_not_called()
 
 
 class TestClearStatusMessage:
     async def test_deletes_tracked_message(self):
+        # No DraftStream tracked → falls back to bot.delete_message.
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "text", CHAT_ID)
 
         bot = AsyncMock()
@@ -97,6 +118,23 @@ class TestClearStatusMessage:
 
         bot.delete_message.assert_called_once_with(chat_id=CHAT_ID, message_id=50)
         assert (USER_ID, THREAD_ID) not in _status_msg_info
+
+    async def test_aborts_active_draft_stream(self):
+        # When a DraftStream is tracked, abort() is what cleans up the message.
+        _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "text", CHAT_ID)
+        stream = MagicMock()
+        stream.closed = False
+        stream.abort = AsyncMock()
+        _status_drafts[(USER_ID, THREAD_ID)] = stream
+
+        bot = AsyncMock()
+        await clear_status_message(bot, USER_ID, THREAD_ID)
+
+        stream.abort.assert_awaited_once()
+        # bot.delete_message must NOT be called when abort handles cleanup.
+        bot.delete_message.assert_not_called()
+        assert (USER_ID, THREAD_ID) not in _status_msg_info
+        assert (USER_ID, THREAD_ID) not in _status_drafts
 
     async def test_noop_when_no_tracking(self):
         bot = AsyncMock()
@@ -119,6 +157,23 @@ class TestConvertStatusToContent:
         assert result == 50
         mock_edit.assert_called_once()
         assert (USER_ID, THREAD_ID) not in _status_msg_info
+
+    async def test_finalizes_draft_stream_on_convert(self):
+        _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
+        stream = MagicMock()
+        stream.closed = False
+        stream.finalize = AsyncMock()
+        _status_drafts[(USER_ID, THREAD_ID)] = stream
+
+        bot = AsyncMock()
+        result = await convert_status_to_content(
+            bot, USER_ID, THREAD_ID, WINDOW_ID, "content text"
+        )
+
+        assert result == 50
+        stream.finalize.assert_awaited_once_with("content text", reply_markup=None)
+        assert (USER_ID, THREAD_ID) not in _status_msg_info
+        assert (USER_ID, THREAD_ID) not in _status_drafts
 
     async def test_returns_none_when_no_status(self):
         bot = AsyncMock()
@@ -196,35 +251,24 @@ class TestClearStatusMsgInfo:
 
 class TestProcessStatusUpdate:
     @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch(
-        "ccgram.handlers.status_bubble.rate_limit_send_message",
-        new_callable=AsyncMock,
-    )
-    async def test_returns_none_when_absorbed(self, mock_send, mock_router):
+    async def test_returns_none_when_absorbed(self, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
-        sent = MagicMock()
-        sent.message_id = 99
-        mock_send.return_value = sent
 
-        bot = AsyncMock()
+        bot = _make_bot(send_id=99)
         task = StatusUpdateTask(
             window_id=WINDOW_ID, text="thinking", thread_id=THREAD_ID
         )
         result = await process_status_update(bot, USER_ID, task)
 
         assert result is None
-        mock_send.assert_called_once()
+        # Legacy DraftStream uses bot.send_message for the initial bubble.
+        bot.send_message.assert_awaited_once()
 
     @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
-    @patch(
-        "ccgram.handlers.status_bubble.rate_limit_send_message",
-        new_callable=AsyncMock,
-    )
-    async def test_clears_when_no_status_text(self, mock_send, mock_edit, mock_router):
+    async def test_clears_when_no_status_text(self, mock_router):
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
 
-        bot = AsyncMock()
+        bot = _make_bot()
         task = StatusUpdateTask(window_id=WINDOW_ID, text=None, thread_id=THREAD_ID)
         with patch(
             "ccgram.handlers.status_bubble.format_claude_task_status", return_value=None

@@ -17,10 +17,11 @@ deletes it) used at bot startup to set the flag deterministically. Doctor
 reports the cached flag — it does not perform a network call by default.
 
 Public surface:
-  - DraftStream(bot, chat_id, *, message_thread_id=None, reply_to_message_id=None)
+  - DraftStream(bot, chat_id, *, message_thread_id=None, reply_to_message_id=None, reply_markup=None)
   - DraftStream.start(text) -> message_id | None
   - DraftStream.append(delta) -> None
-  - DraftStream.finalize(text=None) -> None
+  - DraftStream.replace(text, *, reply_markup=...) -> None
+  - DraftStream.finalize(text=None, *, reply_markup=...) -> None
   - DraftStream.abort() -> None
   - probe_draft_availability(bot, chat_id) -> bool
   - is_draft_unavailable() -> bool
@@ -35,8 +36,11 @@ import contextlib
 from typing import Any, Final, Literal
 
 import structlog
-from telegram import Bot
+from telegram import Bot, InlineKeyboardMarkup
 from telegram.error import BadRequest, RetryAfter, TelegramError
+
+# Sentinel for "leave reply_markup as-is" vs "explicitly clear it".
+_KEEP_MARKUP: Final[Any] = object()
 
 logger = structlog.get_logger()
 
@@ -143,11 +147,13 @@ class DraftStream:
         *,
         message_thread_id: int | None = None,
         reply_to_message_id: int | None = None,
+        reply_markup: InlineKeyboardMarkup | None = None,
     ) -> None:
         self._bot = bot
         self._chat_id = chat_id
         self._thread_id = message_thread_id
         self._reply_to = reply_to_message_id
+        self._reply_markup: InlineKeyboardMarkup | None = reply_markup
         self._message_id: int | None = None
         self._buffer: str = ""
         self._mode: Literal["streaming", "legacy", "unset"] = DRAFT_UNSET  # type: ignore[assignment]
@@ -192,11 +198,36 @@ class DraftStream:
         self._buffer += delta
         await self._push_update()
 
-    async def finalize(self, final_text: str | None = None) -> None:
+    async def replace(
+        self,
+        text: str,
+        *,
+        reply_markup: InlineKeyboardMarkup | None | Any = _KEEP_MARKUP,
+    ) -> None:
+        """Replace the buffer with `text` and push the update.
+
+        When passed, `reply_markup` updates the persisted markup for this
+        and subsequent pushes; ``None`` clears the markup, ``_KEEP_MARKUP``
+        (default) leaves it untouched.
+        """
+        self._ensure_open()
+        self._buffer = text
+        if reply_markup is not _KEEP_MARKUP:
+            self._reply_markup = reply_markup
+        await self._push_update()
+
+    async def finalize(
+        self,
+        final_text: str | None = None,
+        *,
+        reply_markup: InlineKeyboardMarkup | None | Any = _KEEP_MARKUP,
+    ) -> None:
         """Push a terminal update (optionally replacing the text) and close."""
         self._ensure_open()
         if final_text is not None:
             self._buffer = final_text
+        if reply_markup is not _KEEP_MARKUP:
+            self._reply_markup = reply_markup
         await self._push_update(final=True)
         self._closed = True
 
@@ -227,7 +258,17 @@ class DraftStream:
             kw["message_thread_id"] = self._thread_id
         if self._reply_to is not None:
             kw["reply_to_message_id"] = self._reply_to
+        if self._reply_markup is not None:
+            kw["reply_markup"] = self._reply_markup
         return kw
+
+    def _markup_dict(self) -> Any | None:
+        if self._reply_markup is None:
+            return None
+        to_dict = getattr(self._reply_markup, "to_dict", None)
+        if callable(to_dict):
+            return to_dict()
+        return self._reply_markup
 
     async def _start_streaming(self) -> None:
         data: dict[str, Any] = {
@@ -238,6 +279,9 @@ class DraftStream:
             data["message_thread_id"] = self._thread_id
         if self._reply_to is not None:
             data["reply_to_message_id"] = self._reply_to
+        markup = self._markup_dict()
+        if markup is not None:
+            data["reply_markup"] = markup
         try:
             result = await self._bot.do_api_request("sendMessageDraft", api_kwargs=data)
         except BadRequest as exc:
@@ -281,11 +325,14 @@ class DraftStream:
 
     async def _push_streaming(self, *, final: bool) -> None:
         method = "finalizeMessageDraft" if final else "editMessageDraft"
-        data = {
+        data: dict[str, Any] = {
             "chat_id": self._chat_id,
             "message_id": self._message_id,
             "text": self.text,
         }
+        markup = self._markup_dict()
+        if markup is not None:
+            data["reply_markup"] = markup
         try:
             await self._bot.do_api_request(method, api_kwargs=data)
         except BadRequest as exc:
@@ -301,11 +348,15 @@ class DraftStream:
             await self._handle_stream_failure(exc)
 
     async def _push_legacy(self) -> None:
+        edit_kwargs: dict[str, Any] = {}
+        if self._reply_markup is not None:
+            edit_kwargs["reply_markup"] = self._reply_markup
         try:
             await self._bot.edit_message_text(
                 chat_id=self._chat_id,
                 message_id=self._message_id,
                 text=self.text,
+                **edit_kwargs,
             )
         except BadRequest as exc:
             # message not modified — treat as success (no-op edit)
@@ -319,6 +370,7 @@ class DraftStream:
                     chat_id=self._chat_id,
                     message_id=self._message_id,
                     text=self.text,
+                    **edit_kwargs,
                 )
         except TelegramError as exc:
             logger.warning("DraftStream legacy edit failed: %s", exc)

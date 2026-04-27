@@ -247,12 +247,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `tests/ccgram/handlers/test_tool_batch.py`
 - Modify: `tests/ccgram/handlers/test_status_bubble.py`
 
-- [ ] tool_batch: replace edit-in-place sequence with `DraftStream` for tool_use accumulation; on tool_result, finalize the stream
-- [ ] status_bubble: replace `editMessageText` polling with single `DraftStream` per bubble lifetime; bubble close = `finalize`
-- [ ] keep content-hash gating active only in legacy mode (skip when streaming)
-- [ ] message_queue: ensure DraftStream usage doesn't break merge logic (drafts are not mergeable — they're a single message)
-- [ ] write tests: streaming bubble updates, tool_use → tool_result transition, legacy fallback path still works (mock probe to disabled)
-- [ ] run `make check`
+- [x] tool_batch: replace edit-in-place sequence with `DraftStream` for tool_use accumulation; on tool_result, finalize the stream
+- [x] status_bubble: replace `editMessageText` polling with single `DraftStream` per bubble lifetime; bubble close = `finalize`
+- [x] keep content-hash gating active only in legacy mode (skip when streaming)
+- [x] message_queue: ensure DraftStream usage doesn't break merge logic (drafts are not mergeable — they're a single message)
+- [x] write tests: streaming bubble updates, tool_use → tool_result transition, legacy fallback path still works (mock probe to disabled)
+- [x] run `make check`
 
 ### Task 1.9: Theme 2 — Unified `RecoveryBanner` dataclass + render
 
