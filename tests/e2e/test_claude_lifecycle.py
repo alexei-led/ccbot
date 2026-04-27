@@ -135,14 +135,14 @@ async def test_recovery_fresh_start(e2e_app, work_dir):
     # Should get recovery keyboard
     recovery_data = await wait_for_send(
         calls,
-        predicate=lambda d: "no longer running" in d.get("text", ""),
+        predicate=lambda d: "ended" in d.get("text", ""),
         timeout=10,
     )
     assert recovery_data is not None
 
     recovery_msg_id = find_message_id_for(
         calls,
-        predicate=lambda d: "no longer running" in d.get("text", ""),
+        predicate=lambda d: "ended" in d.get("text", ""),
     )
     assert recovery_msg_id is not None
 
@@ -192,14 +192,14 @@ async def test_recovery_continue(e2e_app, work_dir):
 
     recovery_data = await wait_for_send(
         calls,
-        predicate=lambda d: "no longer running" in d.get("text", ""),
+        predicate=lambda d: "ended" in d.get("text", ""),
         timeout=10,
     )
     assert recovery_data is not None
 
     recovery_msg_id = find_message_id_for(
         calls,
-        predicate=lambda d: "no longer running" in d.get("text", ""),
+        predicate=lambda d: "ended" in d.get("text", ""),
     )
 
     # Click "Continue" recovery button

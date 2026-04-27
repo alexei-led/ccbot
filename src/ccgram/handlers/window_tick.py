@@ -48,7 +48,7 @@ from .polling_strategies import (
     terminal_poll_state,
     terminal_screen_buffer,
 )
-from .recovery_callbacks import build_recovery_keyboard
+from .recovery_callbacks import RecoveryBanner, render_banner
 from .topic_emoji import update_topic_emoji
 from .transcript_discovery import discover_and_register_transcript
 
@@ -265,12 +265,16 @@ async def _handle_dead_window_notification(
     except OSError:
         dir_exists = False
     if dir_exists:
-        keyboard = build_recovery_keyboard(wid)
-        text = (
-            f"\u26a0 Session `{display}` ended.\n"
-            f"\U0001f4c2 `{cwd}`\n\n"
-            "Tap a button or send a message to recover."
+        banner = RecoveryBanner(
+            chat_id=chat_id,
+            thread_id=thread_id,
+            window_id=wid,
+            mode="dead",
+            provider=window_query.get_window_provider(wid),
+            display=display,
+            cwd=cwd,
         )
+        text, keyboard = render_banner(banner)
     else:
         text = f"\u26a0 Session `{display}` ended."
         keyboard = None

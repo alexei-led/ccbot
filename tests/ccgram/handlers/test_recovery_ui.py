@@ -291,7 +291,7 @@ class TestTextHandlerDeadWindow:
             if len(call_kwargs.args) > 1
             else call_kwargs.kwargs.get("text", "")
         )
-        assert "no longer running" in msg_text
+        assert "ended" in msg_text
         assert "recover" in msg_text.lower()
 
     @patch(f"{_TH}.thread_router")
@@ -973,7 +973,7 @@ class TestRecoveryBackCallback:
         await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_safe_edit.assert_called_once()
-        assert "Choose an option" in mock_safe_edit.call_args.args[1]
+        assert "Choose how to continue" in mock_safe_edit.call_args.args[1]
         query.answer.assert_called_once()
 
     @patch(f"{_RC}.get_provider_for_window")

@@ -8,12 +8,19 @@ Handles inline keyboard callbacks for dead window recovery:
   - CB_RECOVERY_BACK: Return to recovery options menu from session picker
   - CB_RECOVERY_CANCEL: Cancel recovery
 
+Also exposes ``RecoveryBanner`` + ``render_banner`` — the unified text+keyboard
+contract used by every entry point that surfaces the recovery UI (proactive
+dead-window notification, /restore, recovery from a typed message). Keeping
+the rendering in one place is what Task 1.9 of the Telegram UX overhaul plan
+calls for.
+
 Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import structlog
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -60,6 +67,59 @@ class _SessionEntry:
     session_id: str
     summary: str
     mtime: float = 0.0
+
+
+RecoveryMode = Literal["dead", "restore", "resume"]
+
+
+@dataclass(frozen=True)
+class RecoveryBanner:
+    """Inputs for the unified recovery banner.
+
+    The banner is the dead-window notification ccgram shows in three
+    situations: a window died proactively (``dead``), the user invoked
+    /restore (``restore``), or the user opened the resume picker
+    (``resume``). All three flow through ``render_banner`` so the keyboard,
+    subtitle, and copy stay consistent across entry points.
+    """
+
+    chat_id: int
+    thread_id: int
+    window_id: str
+    mode: RecoveryMode
+    provider: str | None = None
+    display: str = ""
+    cwd: str = ""
+
+
+def render_banner(banner: RecoveryBanner) -> tuple[str, InlineKeyboardMarkup]:
+    """Render the recovery banner text and inline keyboard.
+
+    Returns the message body and a :class:`InlineKeyboardMarkup` ready to
+    pass to ``safe_reply`` / ``rate_limit_send_message``. The keyboard is
+    the provider-aware action keyboard from :func:`build_recovery_keyboard`
+    in every mode — modes only differ in the surrounding copy so the user
+    knows whether the banner appeared on its own or in response to a
+    request.
+    """
+
+    keyboard = build_recovery_keyboard(banner.window_id)
+    help_text = _recovery_help_text(banner.window_id)
+    cwd_line = f"\n\U0001f4c2 `{banner.cwd}`" if banner.cwd else ""
+    label = banner.display or banner.window_id
+
+    if banner.mode == "restore":
+        title = f"\U0001f504 Restore `{label}`."
+        prompt = f"Choose how to continue.\n{help_text}"
+    elif banner.mode == "resume":
+        title = f"⏪ Resume `{label}`."
+        prompt = f"Pick a session below or use the menu.\n{help_text}"
+    else:
+        title = f"⚠ Session `{label}` ended."
+        prompt = f"Tap a button or send a message to recover.\n{help_text}"
+
+    text = f"{title}{cwd_line}\n\n{prompt}"
+    return text, keyboard
 
 
 def _recovery_help_text(window_id: str) -> str:
@@ -467,13 +527,20 @@ async def _handle_back(
     if validated is None:
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
         return
-    kb = build_recovery_keyboard(window_id)
-    help_text = _recovery_help_text(window_id)
-    await safe_edit(
-        query,
-        f"\u26a0\ufe0f Session ended. Choose an option:\n{help_text}",
-        reply_markup=kb,
+    thread_id, _, cwd = validated
+    chat_id = query.message.chat.id if query.message and query.message.chat else 0
+    display = thread_router.get_display_name(window_id) or window_id
+    banner = RecoveryBanner(
+        chat_id=chat_id,
+        thread_id=thread_id,
+        window_id=window_id,
+        mode="restore",
+        provider=window_query.get_window_provider(window_id),
+        display=display,
+        cwd=cwd,
     )
+    text, kb = render_banner(banner)
+    await safe_edit(query, text, reply_markup=kb)
     await query.answer()
 
 

@@ -1,0 +1,168 @@
+from typing import Any
+from unittest.mock import patch
+
+import pytest
+from telegram import InlineKeyboardMarkup
+
+from ccgram.handlers.callback_data import (
+    CB_RECOVERY_CANCEL,
+    CB_RECOVERY_CONTINUE,
+    CB_RECOVERY_FRESH,
+    CB_RECOVERY_RESUME,
+)
+from ccgram.handlers.recovery_callbacks import (
+    RecoveryBanner,
+    RecoveryMode,
+    render_banner,
+)
+
+_RC = "ccgram.handlers.recovery_callbacks"
+
+
+@pytest.fixture()
+def _full_caps():
+    with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+        caps = mock_gpw.return_value.capabilities
+        caps.supports_continue = True
+        caps.supports_resume = True
+        yield mock_gpw
+
+
+def _banner(mode: RecoveryMode, **overrides: Any) -> RecoveryBanner:
+    fields: dict[str, Any] = {
+        "chat_id": -100,
+        "thread_id": 42,
+        "window_id": "@0",
+        "provider": None,
+        "display": "my-project",
+        "cwd": "/tmp/myproj",
+    }
+    fields.update(overrides)
+    return RecoveryBanner(mode=mode, **fields)
+
+
+class TestRecoveryBannerDataclass:
+    def test_is_frozen(self) -> None:
+        banner = _banner("dead")
+        with pytest.raises(Exception):
+            banner.window_id = "@1"  # type: ignore[misc]
+
+    def test_default_provider_and_display_optional(self) -> None:
+        banner = RecoveryBanner(chat_id=1, thread_id=2, window_id="@5", mode="dead")
+        assert banner.provider is None
+        assert banner.display == ""
+        assert banner.cwd == ""
+
+
+class TestRenderBannerDeadMode:
+    def test_returns_text_and_keyboard(self, _full_caps) -> None:
+        text, kb = render_banner(_banner("dead"))
+        assert isinstance(text, str)
+        assert isinstance(kb, InlineKeyboardMarkup)
+
+    def test_dead_text_says_session_ended(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("dead"))
+        assert "Session" in text
+        assert "ended" in text
+        assert "my-project" in text
+
+    def test_includes_cwd_when_present(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("dead"))
+        assert "/tmp/myproj" in text
+
+    def test_omits_cwd_when_blank(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("dead", cwd=""))
+        assert "📂" not in text
+
+    def test_falls_back_to_window_id_when_no_display(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("dead", display="", window_id="@7"))
+        assert "@7" in text
+
+    def test_includes_help_text(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("dead"))
+        assert "Start fresh" in text
+        assert "Continue last session" in text
+        assert "Resume from list" in text
+
+    def test_keyboard_has_three_action_buttons(self, _full_caps) -> None:
+        _, kb = render_banner(_banner("dead"))
+        assert len(kb.inline_keyboard[0]) == 3
+        assert kb.inline_keyboard[1][0].callback_data == CB_RECOVERY_CANCEL
+
+
+class TestRenderBannerRestoreMode:
+    def test_restore_text_announces_restore(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("restore"))
+        assert "Restore" in text
+        assert "my-project" in text
+
+    def test_includes_help_text(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("restore"))
+        assert "Start fresh" in text
+        assert "Continue last session" in text
+
+    def test_uses_action_keyboard(self, _full_caps) -> None:
+        _, kb = render_banner(_banner("restore"))
+        datas = [
+            b.callback_data
+            for b in kb.inline_keyboard[0]
+            if isinstance(b.callback_data, str)
+        ]
+        assert any(d.startswith(CB_RECOVERY_FRESH) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_CONTINUE) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_RESUME) for d in datas)
+
+
+class TestRenderBannerResumeMode:
+    def test_resume_text_says_resume(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("resume"))
+        assert "Resume" in text or "resume" in text.lower()
+        assert "my-project" in text
+
+    def test_includes_help_text(self, _full_caps) -> None:
+        text, _ = render_banner(_banner("resume"))
+        assert "Start fresh" in text
+
+
+class TestRenderBannerKeyboardCapabilities:
+    def test_hides_continue_when_unsupported(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = False
+            caps.supports_resume = True
+            _, kb = render_banner(_banner("dead"))
+
+        datas = [
+            b.callback_data
+            for b in kb.inline_keyboard[0]
+            if isinstance(b.callback_data, str)
+        ]
+        assert not any(d.startswith(CB_RECOVERY_CONTINUE) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_FRESH) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_RESUME) for d in datas)
+
+    def test_hides_resume_when_unsupported(self) -> None:
+        with patch(f"{_RC}.get_provider_for_window") as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = True
+            caps.supports_resume = False
+            _, kb = render_banner(_banner("dead"))
+
+        datas = [
+            b.callback_data
+            for b in kb.inline_keyboard[0]
+            if isinstance(b.callback_data, str)
+        ]
+        assert any(d.startswith(CB_RECOVERY_FRESH) for d in datas)
+        assert any(d.startswith(CB_RECOVERY_CONTINUE) for d in datas)
+        assert not any(d.startswith(CB_RECOVERY_RESUME) for d in datas)
+
+
+class TestRenderBannerCallbackBudget:
+    def test_callback_data_within_64_bytes_for_long_window_id(self, _full_caps) -> None:
+        long_id = "@" + "x" * 60
+        _, kb = render_banner(_banner("dead", window_id=long_id))
+        for row in kb.inline_keyboard:
+            for btn in row:
+                assert isinstance(btn.callback_data, str)
+                assert len(btn.callback_data) <= 64

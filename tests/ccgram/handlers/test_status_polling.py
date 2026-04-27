@@ -1553,8 +1553,8 @@ class TestDeadWindowNotification:
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.window_tick.build_recovery_keyboard",
-                return_value=None,
+                "ccgram.handlers.window_tick.render_banner",
+                return_value=("⚠ Session ended", None),
             ),
             patch(
                 "ccgram.handlers.window_tick.asyncio.to_thread",
@@ -1584,8 +1584,8 @@ class TestDeadWindowNotification:
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.window_tick.build_recovery_keyboard",
-                return_value=None,
+                "ccgram.handlers.window_tick.render_banner",
+                return_value=("⚠ Session ended", None),
             ),
             patch(
                 "ccgram.handlers.window_tick.asyncio.to_thread",

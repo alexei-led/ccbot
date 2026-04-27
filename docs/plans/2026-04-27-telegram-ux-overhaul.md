@@ -262,12 +262,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/handlers/restore_command.py`
 - Create: `tests/ccgram/handlers/test_recovery_banner.py`
 
-- [ ] add `RecoveryBanner` dataclass: `chat_id, thread_id, window_id, mode, provider`
-- [ ] add `render_banner(banner) -> (text, keyboard)` building both message body and inline keyboard with subtitle text from Task 1.1
-- [ ] migrate existing dead-window notification path to use `render_banner`
-- [ ] migrate `/restore` command to invoke `render_banner` with `mode="restore"` (same UI, just re-shows)
-- [ ] write tests: banner renders correctly for each mode, button counts, callback data shapes preserved
-- [ ] run `make check`
+- [x] add `RecoveryBanner` dataclass: `chat_id, thread_id, window_id, mode, provider`
+- [x] add `render_banner(banner) -> (text, keyboard)` building both message body and inline keyboard with subtitle text from Task 1.1
+- [x] migrate existing dead-window notification path to use `render_banner` (window_tick proactive + text_handler reactive both routed through it)
+- [x] migrate `/restore` command to invoke `render_banner` with `mode="restore"` — re-shows banner instead of auto-running `--continue`
+- [x] write tests: banner renders correctly for each mode, button counts, callback data shapes preserved
+- [x] run `make check`
 
 ### Task 1.10: Theme 2 — Resume picker upgrades + Continue→Resume fallback + empty-state
 
