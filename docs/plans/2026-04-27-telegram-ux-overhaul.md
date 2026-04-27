@@ -179,12 +179,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/handlers/message_sender.py` (re-export `react`)
 - Create: `tests/ccgram/handlers/test_reactions.py`
 
-- [ ] verify exact Telegram-allowed reaction set for bots (Bot API docs, `getAvailableReactions` if applicable)
-- [ ] create `reactions.py` with `ALLOWED_REACTIONS: frozenset[str]` and `async react(bot, chat_id, message_id, emoji, *, fallback_toast: str | None = None)`
-- [ ] graceful failure: catch `BadRequest`, log warning, optionally answer with `fallback_toast` via callback
-- [ ] dedupe: track last reaction per (chat_id, message_id) in-memory to skip no-op edits
-- [ ] write tests for: success path, disallowed emoji rejection, BadRequest fallback, dedupe behavior
-- [ ] run `make check`
+- [x] verify exact Telegram-allowed reaction set for bots (Bot API docs, `getAvailableReactions` if applicable)
+- [x] create `reactions.py` with `ALLOWED_REACTIONS: frozenset[str]` and `async react(bot, chat_id, message_id, emoji, *, fallback_toast: str | None = None)`
+- [x] graceful failure: catch `BadRequest`, log warning, optionally answer with `fallback_toast` via callback
+- [x] dedupe: track last reaction per (chat_id, message_id) in-memory to skip no-op edits
+- [x] write tests for: success path, disallowed emoji rejection, BadRequest fallback, dedupe behavior
+- [x] run `make check`
 
 ### Task 1.5: Theme 3 — Replace toasts with reactions across handlers
 
