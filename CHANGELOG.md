@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-04-27
+
+Telegram UX overhaul (Phase 2 — Theme 5: Multi-pane teams). Panes inside a tmux window become first-class citizens: tracked in `WindowState`, classified by their own polling strategy, surfaced in the status bubble, addressable by name in interactive UI alerts, individually subscribable, renameable, and (optionally) announced on lifecycle transitions.
+
+### Added
+
+- `PaneInfo` dataclass and `WindowState.panes: dict[str, PaneInfo]` map (`pane_id`, `name`, `provider`, `last_active_ts`, `state`, `subscribed`). Backward-compatible state-file load (missing `panes` → empty dict). New CRUD helpers: `get_pane`, `upsert_pane`, `remove_pane` with sentinel-pattern partial updates.
+- `PaneStatusStrategy` in `handlers/polling_strategies.py` — extracted multi-pane scanning out of `window_tick.py`. Owns enumeration, state classification (active/idle/blocked/dead), per-pane provider auto-detection, transition tracking, dead-pane reconciliation, and content-hash deduplication for subscribed-pane output forwarding.
+- Per-pane status block under the main agent line in the status bubble for windows with >1 pane (e.g. `└ %5 active · %6 idle 2m · %7 ⏸ blocked`); collapsed via expandable blockquote when ≥4 panes.
+- Interactive UI alerts now prepend the pane name when set: `🔀 api-gateway (%5):` instead of `🔀 Pane (%5):`.
+- New `handlers/pane_callbacks.py` with `CB_PANE_SUBSCRIBE`/`CB_PANE_UNSUBSCRIBE`/`CB_PANE_RENAME` handlers. `/panes` keyboard gains [Subscribe]/[Rename] buttons per pane. Subscribed-pane output is forwarded through `PaneOutputCallback` with content-hash dedup; subscriptions auto-clear when a pane dies.
+- Pane lifecycle notifications (per-window toggle, default off): one-line `➕ pane %6 created` / `➖ pane %6 closed` events in the bound topic. Toggle via `/panes` keyboard. Default driven by new `CCGRAM_PANE_LIFECYCLE_NOTIFY` env var.
+
+### Changed
+
+- `window_tick.py` delegates multi-pane scanning to `PaneStatusStrategy`; the legacy in-tick scan is gone. Module-level `_window_store` reference replaces lazy imports.
+
 ## [2.12.0] - 2026-04-27
 
 Telegram UX overhaul (Phase 1 — Themes 1-4): information-design polish, native Bot API streaming and reactions, recovery/resume rework. Requires Bot API 9.5+ for full feature parity; older deployments degrade gracefully.
