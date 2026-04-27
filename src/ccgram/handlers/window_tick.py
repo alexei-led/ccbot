@@ -42,9 +42,9 @@ from .polling_strategies import (
     STARTUP_TIMEOUT,
     TickContext,
     TickDecision,
-    interactive_strategy,
     is_shell_prompt,
     lifecycle_strategy,
+    pane_status_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
 )
@@ -126,57 +126,31 @@ async def _transition_to_idle(
 # ── Multi-pane scanning (agent teams) ─────────────────────────────────
 
 
+async def _surface_pane_alert(
+    bot: Bot, user_id: int, window_id: str, thread_id: int, pane_id: str
+) -> None:
+    await handle_interactive_ui(bot, user_id, window_id, thread_id, pane_id=pane_id)
+
+
 async def _scan_window_panes(
     bot: Bot,
     user_id: int,
     window_id: str,
     thread_id: int,
 ) -> None:
-    if terminal_screen_buffer.is_single_pane_cached(window_id):
-        return
+    """Delegate multi-pane scanning to ``PaneStatusStrategy``.
 
-    panes = await tmux_manager.list_panes(window_id)
-    terminal_screen_buffer.update_pane_count_cache(window_id, len(panes))
-    live_pane_ids = {p.pane_id for p in panes}
-
-    interactive_strategy.prune_stale_pane_alerts(window_id, live_pane_ids)
-
-    if len(panes) <= 1:
-        return
-
-    now = time.monotonic()
-
-    for pane in panes:
-        if pane.active:
-            continue
-
-        pane_text = await tmux_manager.capture_pane_by_id(
-            pane.pane_id, window_id=window_id
-        )
-        if not pane_text:
-            continue
-
-        provider = _get_provider(window_id)
-        status = provider.parse_terminal_status(pane_text, pane_title="")
-        if status is None or not status.is_interactive:
-            interactive_strategy.remove_pane_alert(pane.pane_id)
-            continue
-
-        prompt_text = status.raw_text or ""
-
-        existing = interactive_strategy.get_pane_alert(pane.pane_id)
-        if existing and existing[0] == prompt_text:
-            continue
-
-        interactive_strategy.set_pane_alert(pane.pane_id, prompt_text, now, window_id)
-        logger.info(
-            "Pane %s in window %s has interactive UI, surfacing alert",
-            pane.pane_id,
-            window_id,
-        )
-        await handle_interactive_ui(
-            bot, user_id, window_id, thread_id, pane_id=pane.pane_id
-        )
+    The strategy handles enumeration, classification, ``WindowState.panes``
+    upserts, and transition detection. We pass ``_surface_pane_alert`` so
+    blocked panes still surface as inline alerts (FLOW-4a behavior).
+    """
+    await pane_status_strategy.scan_window(
+        bot,
+        user_id,
+        window_id,
+        thread_id,
+        on_blocked=_surface_pane_alert,
+    )
 
 
 # ── Interactive-only check ───────────────────────────────────────────────

@@ -322,12 +322,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/handlers/window_tick.py`
 - Create: `tests/ccgram/handlers/test_pane_status_strategy.py`
 
-- [ ] extract pane scanning from `window_tick.py` into new `PaneStatusStrategy` in `polling_strategies.py`
-- [ ] strategy responsibilities: enumerate panes, classify state (active/idle/blocked/dead), update `WindowState.panes`, detect transitions
-- [ ] auto-detect provider per pane via `detect_provider_from_pane`
-- [ ] preserve existing blocked-pane interactive UI behavior (FLOW-4a)
-- [ ] write tests: pane enumeration, state classification, transition detection, dead-pane removal
-- [ ] run `make check`
+- [x] extract pane scanning from `window_tick.py` into new `PaneStatusStrategy` in `polling_strategies.py`
+- [x] strategy responsibilities: enumerate panes, classify state (active/idle/blocked/dead), update `WindowState.panes`, detect transitions
+- [x] auto-detect provider per pane via `detect_provider_from_pane` (sync `detect_provider_from_command` is used; tmux PaneInfo lacks pane_tty so the async ps fallback can't run during scan)
+- [x] preserve existing blocked-pane interactive UI behavior (FLOW-4a)
+- [x] write tests: pane enumeration, state classification, transition detection, dead-pane removal
+- [x] run `make check`
 
 ### Task 2.3: Per-pane status block in main bubble + pane-named alerts
 

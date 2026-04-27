@@ -390,19 +390,19 @@ class TestScanPanes:
         bot = AsyncMock(spec=Bot)
         terminal_screen_buffer.update_pane_count_cache("@0", 1)
 
-        with patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm:
+        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
             await _scan_window_panes(bot, 1, "@0", 100)
             mock_tm.list_panes.assert_not_called()
 
     async def test_surfaces_interactive_alert(self):
         bot = AsyncMock(spec=Bot)
-        pane_active = MagicMock(pane_id="%0", active=True)
-        pane_blocked = MagicMock(pane_id="%1", active=False)
+        pane_active = MagicMock(pane_id="%0", active=True, command="claude")
+        pane_blocked = MagicMock(pane_id="%1", active=False, command="claude")
         interactive_status = _make_status(raw_text="Permission?", is_interactive=True)
 
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
+            patch("ccgram.providers.get_provider_for_window") as mock_prov,
             patch(
                 "ccgram.handlers.window_tick.handle_interactive_ui",
                 new_callable=AsyncMock,
