@@ -402,12 +402,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Create: `tests/ccgram/miniapp/test_server.py`
 - Create: `tests/ccgram/miniapp/test_auth.py`
 
-- [ ] aiohttp app with one route `/app/<token>` + static file serving
-- [ ] `auth.py`: HMAC-signed token generation (window_id + user_id + expiry), validation against Telegram WebApp `initData`
-- [ ] `index.html`: minimal SPA shell, loads JS modules per surface
-- [ ] start server in `main.py` only when `CCGRAM_MINIAPP_BASE_URL` configured
-- [ ] write tests: token sign/verify round-trip, expiry, initData HMAC validation, server route auth
-- [ ] run `make check`
+- [x] aiohttp app with one route `/app/<token>` + static file serving (also `/healthz` for readiness, `/static/{path}` for assets)
+- [x] `auth.py`: HMAC-signed token generation (window_id + user_id + expiry), validation against Telegram WebApp `initData`
+- [x] `index.html`: minimal SPA shell, loads JS modules per surface (Telegram WebApp SDK + payload meta-tag readback)
+- [x] start server in `main.py` only when `CCGRAM_MINIAPP_BASE_URL` configured (`start_miniapp_if_enabled`/`stop_miniapp_if_enabled` wired into bot.py post_init/post_shutdown)
+- [x] write tests: token sign/verify round-trip, expiry, initData HMAC validation, server route auth (22 tests across `test_auth.py` + `test_server.py`)
+- [x] run `make check` (fmt + lint + typecheck + deptry + test + test-integration all green)
 
 ### Task 3.2: Inline button + WebApp launch
 

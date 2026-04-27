@@ -464,6 +464,11 @@ async def post_init(application: Application) -> None:
     _status_poll_task.add_done_callback(task_done_callback)
     logger.info("Status polling task started")
 
+    # Optional Mini App server — starts only when CCGRAM_MINIAPP_BASE_URL is set.
+    from .main import start_miniapp_if_enabled
+
+    await start_miniapp_if_enabled()
+
 
 async def _send_shutdown_notification(application: Application) -> None:
     """Send a shutdown notification to the General topic if a group is configured."""
@@ -516,6 +521,11 @@ async def post_shutdown(_application: Application) -> None:
     from .mailbox import Mailbox
 
     Mailbox(config.mailbox_dir).sweep()
+
+    # Tear down the Mini App server if it was started.
+    from .main import stop_miniapp_if_enabled
+
+    await stop_miniapp_if_enabled()
 
     # Flush debounced state to disk AFTER workers/monitor stop (captures final mutations)
     session_manager.flush_state()

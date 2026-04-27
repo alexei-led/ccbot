@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ccgram dashboard</title>
+    <!-- CCGRAM_PAYLOAD -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: var(--tg-theme-bg-color, #0e1116);
+            --fg: var(--tg-theme-text-color, #e6edf3);
+            --hint: var(--tg-theme-hint-color, #768390);
+            --accent: var(--tg-theme-button-color, #2f81f7);
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            -webkit-text-size-adjust: 100%;
+        }
+        main {
+            padding: 1.5rem;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0.5rem;
+        }
+        p { color: var(--hint); margin: 0.25rem 0; }
+        .placeholder {
+            margin-top: 2rem;
+            padding: 1rem;
+            border: 1px dashed var(--hint);
+            border-radius: 8px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>ccgram</h1>
+        <p id="ccgram-status">Loading…</p>
+        <div class="placeholder" id="ccgram-surface">
+            <strong>SPA shell ready.</strong>
+            <p>Phase 3 surfaces (terminal, transcript, panes) load here.</p>
+        </div>
+    </main>
+    <script>
+        (function () {
+            const tg = window.Telegram && window.Telegram.WebApp;
+            const meta = document.querySelector('meta[name="ccgram-payload"]');
+            const status = document.getElementById('ccgram-status');
+            if (!meta) {
+                status.textContent = 'No window context — open from Telegram.';
+                return;
+            }
+            const windowId = meta.dataset.windowId;
+            const userId = meta.dataset.userId;
+            status.textContent = `Window ${windowId} · user ${userId}`;
+            if (tg) {
+                tg.ready();
+                tg.expand();
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -30,6 +30,7 @@ dependencies = [
     "click>=8.1.0",
     "pyte>=0.8.2",
     "pathspec>=0.12",
+    "aiohttp>=3.10",
 ]
 
 [project.urls]
