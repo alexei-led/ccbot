@@ -307,12 +307,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/window_state_store.py`
 - Modify: `tests/ccgram/test_window_state_store.py`
 
-- [ ] add `PaneInfo` dataclass: `pane_id: str`, `name: str | None`, `provider: str`, `last_active_ts: float`, `state: Literal["active","idle","blocked","dead"]`, `subscribed: bool`
-- [ ] add `panes: dict[str, PaneInfo] = field(default_factory=dict)` to `WindowState`
-- [ ] state-file backward compat: existing entries without `panes` load as empty dict
-- [ ] add `get_pane(window_id, pane_id)`, `upsert_pane(...)`, `remove_pane(window_id, pane_id)` helpers
-- [ ] write tests: load/save round-trip, missing-panes-key tolerance, helper CRUD
-- [ ] run `make check`
+- [x] add `PaneInfo` dataclass: `pane_id: str`, `name: str | None`, `provider: str`, `last_active_ts: float`, `state: Literal["active","idle","blocked","dead"]`, `subscribed: bool`
+- [x] add `panes: dict[str, PaneInfo] = field(default_factory=dict)` to `WindowState`
+- [x] state-file backward compat: existing entries without `panes` load as empty dict
+- [x] add `get_pane(window_id, pane_id)`, `upsert_pane(...)`, `remove_pane(window_id, pane_id)` helpers
+- [x] write tests: load/save round-trip, missing-panes-key tolerance, helper CRUD
+- [x] run `make check`
 
 ### Task 2.2: `PaneStatusStrategy` polling
 
