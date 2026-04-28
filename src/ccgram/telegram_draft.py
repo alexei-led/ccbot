@@ -12,10 +12,6 @@ A process-wide flag (`_DRAFT_UNAVAILABLE`) flips to True the first time the
 draft API returns ``400 method not found`` (or the equivalent), after which
 all subsequent streams open in legacy mode without a probe round-trip.
 
-`probe_draft_availability` performs an explicit probe (sends a tiny draft and
-deletes it) used at bot startup to set the flag deterministically. Doctor
-reports the cached flag — it does not perform a network call by default.
-
 Public surface:
   - DraftStream(bot, chat_id, *, message_thread_id=None, reply_to_message_id=None, reply_markup=None)
   - DraftStream.start(text) -> message_id | None
@@ -23,7 +19,6 @@ Public surface:
   - DraftStream.replace(text, *, reply_markup=...) -> None
   - DraftStream.finalize(text=None, *, reply_markup=...) -> None
   - DraftStream.abort() -> None
-  - probe_draft_availability(bot, chat_id) -> bool
   - is_draft_unavailable() -> bool
   - mark_draft_unavailable(reason: str) -> None
   - reset_draft_state() -> None  (test helper)
@@ -75,7 +70,6 @@ __all__ = [
     "is_peer_draft_unsupported",
     "mark_draft_unavailable",
     "mark_peer_draft_unsupported",
-    "probe_draft_availability",
     "reset_draft_state",
 ]
 
@@ -246,6 +240,10 @@ class DraftStream:
         """
         if self._mode != DRAFT_UNSET:
             raise RuntimeError("DraftStream.start called twice")
+        # Telegram rejects empty text with BadRequest. Treat empty as
+        # "nothing to send" rather than letting the request fail server-side.
+        if not initial_text:
+            return None
         self._buffer = initial_text
 
         try:
@@ -257,6 +255,12 @@ class DraftStream:
                 await self._start_streaming()
         except (TimedOut, NetworkError) as exc:
             logger.warning("DraftStream.start transient failure: %s", exc)
+            return None
+        except RetryAfter as exc:
+            logger.warning("DraftStream.start rate-limited: %s", exc)
+            return None
+        except TelegramError as exc:
+            logger.warning("DraftStream.start telegram error: %s", exc)
             return None
         return self._message_id
 
@@ -490,36 +494,3 @@ def _extract_message_id(result: Any) -> int | None:
         return int(mid) if mid is not None else None
     mid = getattr(result, "message_id", None)
     return int(mid) if mid is not None else None
-
-
-async def probe_draft_availability(bot: Bot, chat_id: int) -> bool:
-    """Probe ``sendMessageDraft`` availability against a real chat.
-
-    Sends a tiny draft and immediately deletes it. On
-    ``400 method not found`` (or equivalent), flips the process-wide
-    flag and returns False. Returns True if the call succeeds; on any
-    other error, leaves the flag untouched and returns False.
-    """
-    if _DRAFT_UNAVAILABLE:
-        return False
-    try:
-        result = await bot.do_api_request(
-            "sendMessageDraft",
-            api_kwargs={"chat_id": chat_id, "text": "_probe_"},
-        )
-    except BadRequest as exc:
-        if _is_unsupported_error(exc):
-            mark_draft_unavailable(f"probe sendMessageDraft: {exc.message}")
-        else:
-            logger.warning("Draft probe BadRequest: %s", exc)
-        return False
-    except TelegramError as exc:
-        logger.warning("Draft probe failed: %s", exc)
-        return False
-
-    mid = _extract_message_id(result)
-    if mid is None:
-        return False
-    with contextlib.suppress(TelegramError):
-        await bot.delete_message(chat_id=chat_id, message_id=mid)
-    return True

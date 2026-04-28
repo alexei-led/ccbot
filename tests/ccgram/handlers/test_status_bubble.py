@@ -100,6 +100,30 @@ class TestSendStatusText:
 
     @patch("ccgram.handlers.status_bubble.thread_router")
     @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    async def test_replace_failure_deletes_old_bubble_before_resending(
+        self, mock_edit, mock_router
+    ):
+        # When the in-place edit can't update the existing bubble, the old
+        # message must be deleted before a fresh one is created — otherwise
+        # the topic ends up with two status bubbles, the first one orphaned.
+        mock_router.resolve_chat_id.return_value = CHAT_ID
+        _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
+        mock_edit.return_value = False
+
+        bot = _make_bot(send_id=99)
+        await send_status_text(bot, USER_ID, THREAD_ID, WINDOW_ID, "new text")
+
+        bot.delete_message.assert_awaited_once_with(chat_id=CHAT_ID, message_id=50)
+        bot.send_message.assert_awaited_once()
+        assert _status_msg_info[(USER_ID, THREAD_ID)] == (
+            99,
+            WINDOW_ID,
+            "new text",
+            CHAT_ID,
+        )
+
+    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
     async def test_dedup_identical_content(self, mock_edit, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "same", CHAT_ID)

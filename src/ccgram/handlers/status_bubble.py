@@ -210,7 +210,8 @@ def format_pane_block(window_id: str) -> str | None:
     visible = [p for p in state.panes.values() if p.state != "dead"]
     if len(visible) <= 1:
         return None
-    visible.sort(key=lambda p: p.pane_id)
+    # Sort numerically so %2 comes before %10 — lexicographic puts %10 first.
+    visible.sort(key=lambda p: (int(p.pane_id.lstrip("%")), p.pane_id))
     now_wall = time.time()
     items = [_format_pane_item(p, now_wall) for p in visible]
     if len(visible) >= _PANE_BLOCK_EXPAND_THRESHOLD:
@@ -322,6 +323,11 @@ async def send_status_text(
             if success:
                 _status_msg_info[skey] = (msg_id, window_id, text, stored_chat_id)
                 return
+            # Both stream replace and legacy edit failed. The original message
+            # may still exist server-side — best-effort delete to avoid an
+            # orphan bubble before creating its replacement.
+            with contextlib.suppress(TelegramError):
+                await bot.delete_message(chat_id=stored_chat_id, message_id=msg_id)
             _status_msg_info.pop(skey, None)
             _status_drafts.pop(skey, None)
         else:

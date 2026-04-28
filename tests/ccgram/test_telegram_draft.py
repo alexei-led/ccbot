@@ -13,7 +13,6 @@ from ccgram.telegram_draft import (
     is_peer_draft_unsupported,
     mark_draft_unavailable,
     mark_peer_draft_unsupported,
-    probe_draft_availability,
     reset_draft_state,
 )
 
@@ -212,6 +211,30 @@ class TestDraftStreamTransientLegacyFailure:
 
         assert mid is None
 
+    async def test_legacy_only_path_telegram_error_returns_none(self) -> None:
+        from telegram.error import TelegramError as TgError
+
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+        # Non-transient TelegramError (e.g. BadRequest, RetryAfter, generic)
+        # must not propagate — the stream is best-effort and silent.
+        bot.send_message.side_effect = TgError("flood")
+
+        stream = DraftStream(bot, chat_id=100)
+        mid = await stream.start("hi")
+
+        assert mid is None
+
+    async def test_empty_initial_text_returns_none_without_api_call(self) -> None:
+        bot = _make_bot()
+
+        stream = DraftStream(bot, chat_id=100)
+        mid = await stream.start("")
+
+        assert mid is None
+        bot.do_api_request.assert_not_awaited()
+        bot.send_message.assert_not_awaited()
+
 
 class TestDraftStreamPeerCache:
     async def test_peer_invalid_caches_per_peer(self) -> None:
@@ -351,46 +374,6 @@ class TestDraftStreamTextSafety:
         # Should not raise
         await stream.append("a")
         assert stream.mode == DRAFT_LEGACY
-
-
-class TestProbeDraftAvailability:
-    async def test_probe_success(self) -> None:
-        bot = _make_bot(draft_result={"message_id": 99})
-
-        ok = await probe_draft_availability(bot, chat_id=42)
-
-        assert ok is True
-        bot.do_api_request.assert_awaited_once()
-        bot.delete_message.assert_awaited_once_with(chat_id=42, message_id=99)
-        assert is_draft_unavailable() is False
-
-    async def test_probe_method_not_found_sets_flag(self) -> None:
-        bot = _make_bot()
-        bot.do_api_request.side_effect = BadRequest("method not found")
-
-        ok = await probe_draft_availability(bot, chat_id=42)
-
-        assert ok is False
-        assert is_draft_unavailable() is True
-
-    async def test_probe_skipped_when_already_unavailable(self) -> None:
-        mark_draft_unavailable("prior")
-        bot = _make_bot()
-
-        ok = await probe_draft_availability(bot, chat_id=42)
-
-        assert ok is False
-        bot.do_api_request.assert_not_awaited()
-
-    async def test_probe_other_error_returns_false(self) -> None:
-        bot = _make_bot()
-        bot.do_api_request.side_effect = TelegramError("network down")
-
-        ok = await probe_draft_availability(bot, chat_id=42)
-
-        assert ok is False
-        # Generic errors don't flip the flag
-        assert is_draft_unavailable() is False
 
 
 class TestModuleStateHelpers:
