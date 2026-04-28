@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-04-28
+
+Telegram UX overhaul (Phase 3 — Theme 6: Mini App dashboard). Optional web surface that opens from a Telegram inline button and runs inside Telegram's WebApp container. Three surfaces ship in v3.0: a live xterm.js terminal, a paginated transcript with full-text search, and a multi-pane grid view. Disabled by default — set `CCGRAM_MINIAPP_BASE_URL` to opt in. When unset, neither the HTTP server nor the dashboard button are exposed; behavior is identical to v2.13.
+
+### Added
+
+- New `src/ccgram/miniapp/` subpackage with a token-gated aiohttp server. Public API: `start_server`, `stop_server`, `build_app`, `sign_token`, `verify_token`, `validate_init_data`.
+- HMAC-signed window tokens (`window_id` + `user_id` + expiry) plus Telegram WebApp `initData` validation. Tokens scope every API surface to the user's own window — no cross-window access.
+- aiohttp server with three route families: `/healthz` (liveness), `/app/{token}` (SPA shell with payload injection), `/static/` (assets), and the per-surface API routes below.
+- Live terminal surface — websocket `/ws/terminal/{token}` streams tmux pane output (delta-based, ~200ms cadence). xterm.js client renders ANSI colors and handles resize. Read-only in v3.0; input is queued for v3.1.
+- Transcript surface — `GET /api/transcript/{token}` (cursor-paginated history) and `GET /api/transcript/{token}/search?q=...` (case-insensitive full-text search with ±1 entry context, capped at 50 hits). Reuses `session_query.get_recent_messages`.
+- Multi-pane grid surface — `GET /api/panes/{token}` enumerates panes in the bound window; the websocket multiplex (`?pane=...`) drives per-tile streams. Click a tile to focus a single pane; back navigation restores the grid.
+- New "🪟 Dashboard" button on the status bubble (only shown when Mini App is enabled) opens the WebApp scoped to the current window.
+- Three new env vars: `CCGRAM_MINIAPP_BASE_URL` (externally reachable URL — Mini App is fully disabled until this is set), `CCGRAM_MINIAPP_HOST` (local bind, default `127.0.0.1`), `CCGRAM_MINIAPP_PORT` (default `8765`).
+- Bot lifecycle integration: `start_miniapp_if_enabled` / `stop_miniapp_if_enabled` wired into `bot.py` `post_init` / `post_shutdown`. Server start failures are logged and swallowed — the bot keeps running even if the optional server can't bind.
+
+### Notes
+
+- Production deployment requires TLS termination + reverse proxy (cloudflared, caddy, nginx). The aiohttp server binds to a local host/port and expects an external proxy to forward HTTPS.
+- BotFather configuration: register the Mini App URL via `/setdomain` and `/newapp` after deploying.
+- AskUserQuestion HTML form (Phase 3.5) is deferred to v3.1.
+
 ## [2.13.0] - 2026-04-27
 
 Telegram UX overhaul (Phase 2 — Theme 5: Multi-pane teams). Panes inside a tmux window become first-class citizens: tracked in `WindowState`, classified by their own polling strategy, surfaced in the status bubble, addressable by name in interactive UI alerts, individually subscribable, renameable, and (optionally) announced on lifecycle transitions.
