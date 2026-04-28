@@ -176,3 +176,46 @@ def validate_init_data(
         raise InvalidTokenError("initData stale")
 
     return params
+
+
+def init_data_user_id(params: Mapping[str, str]) -> int:
+    """Extract the Telegram user id from validated ``initData`` params.
+
+    The ``user`` field is a JSON-encoded Telegram User object; we only need
+    its ``id``. Raises :class:`InvalidTokenError` when the field is missing
+    or malformed.
+    """
+    raw = params.get("user")
+    if not raw:
+        raise InvalidTokenError("initData missing user")
+    try:
+        user = json.loads(raw)
+        return int(user["id"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise InvalidTokenError("initData user malformed") from exc
+
+
+def authorize_api_request(
+    *,
+    bot_token: str,
+    token: str,
+    init_data: str | None,
+    now: float | None = None,
+) -> TokenPayload:
+    """Verify a path token AND the accompanying Telegram ``initData``.
+
+    The bearer token alone proves the URL was issued by the bot, but it
+    travels in the URL and may leak. Telegram's ``initData`` is signed by
+    the bot token inside the WebApp container and binds the request to the
+    actual Telegram user. Requiring both — and matching the user ids —
+    closes the URL-leak window.
+
+    Raises :class:`InvalidTokenError` on any failure.
+    """
+    payload = verify_token(token, bot_token=bot_token, now=now)
+    if not init_data:
+        raise InvalidTokenError("missing initData")
+    params = validate_init_data(init_data, bot_token=bot_token, now=now)
+    if init_data_user_id(params) != payload.user_id:
+        raise InvalidTokenError("initData user mismatch")
+    return payload

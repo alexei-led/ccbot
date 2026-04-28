@@ -26,6 +26,7 @@ from telegram.ext import ContextTypes
 
 from ..config import config
 from ..thread_router import thread_router
+from ..tmux_manager import tmux_manager
 from ..window_state_store import window_store
 from .callback_data import (
     CB_PANE_LIFECYCLE_TOGGLE,
@@ -110,8 +111,19 @@ async def _toggle_subscribe(
         return
     pane = window_store.get_pane(window_id, pane_id)
     if pane is None:
-        await query.answer("Pane not tracked yet", show_alert=True)
-        return
+        # Pane scanner hasn't seen this pane yet (common right after a split).
+        # If tmux still reports the pane, hydrate the entry inline so the
+        # subscribe action succeeds; otherwise the keyboard is showing a
+        # stale pane and we should fail loudly.
+        try:
+            live = await tmux_manager.list_panes(window_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pane subscribe lookup failed: %s", exc)
+            await query.answer("Pane lookup failed", show_alert=True)
+            return
+        if not any(p.pane_id == pane_id for p in live):
+            await query.answer("Pane not found", show_alert=True)
+            return
     window_store.upsert_pane(window_id, pane_id, subscribed=subscribed)
     label = "Subscribed" if subscribed else "Unsubscribed"
     await query.answer(f"✓ {label} {pane_id}")

@@ -116,13 +116,28 @@
             const tg = window.Telegram && window.Telegram.WebApp;
             const meta = document.querySelector('meta[name="ccgram-payload"]');
             const status = document.getElementById('ccgram-status');
+            // Surfaces (terminal/panes/transcript) check this flag at startup
+            // so they don't pound the server with 403s when auth is impossible
+            // (page opened outside Telegram, or initData missing/expired).
+            window.__ccgramAuthFailed = false;
+            window.__ccgramAuthMessage = '';
+            function failAuth(msg) {
+                window.__ccgramAuthFailed = true;
+                window.__ccgramAuthMessage = msg;
+                status.textContent = msg;
+            }
             if (!meta) {
-                status.textContent = 'No window context — open from Telegram.';
+                failAuth('No window context — open from Telegram.');
                 return;
             }
-            if (tg) {
-                tg.ready();
-                tg.expand();
+            if (!tg) {
+                failAuth('Telegram WebApp unavailable — open from Telegram.');
+                return;
+            }
+            tg.ready();
+            tg.expand();
+            if (!tg.initData) {
+                failAuth('Authentication required — open from Telegram.');
             }
         })();
     </script>

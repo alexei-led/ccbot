@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 
-from ..auth import InvalidTokenError, verify_token
+from ..auth import InvalidTokenError, authorize_api_request
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -53,12 +53,24 @@ async def _default_reader(window_id: str) -> list[dict[str, Any]]:
     return messages
 
 
+_INIT_DATA_HEADER = "X-Telegram-Init-Data"
+
+
+def _init_data_from_header(request: web.Request) -> str | None:
+    """Read initData from the header only — keep secrets out of URLs/logs."""
+    raw = request.headers.get(_INIT_DATA_HEADER)
+    return raw or None
+
+
 def _verify(request: web.Request) -> str | web.Response:
-    """Return ``window_id`` from the path token, or a 403 response."""
+    """Return ``window_id`` from the path token + initData, or a 403 response."""
     token = request.match_info["token"]
     bot_token = request.app[_BOT_TOKEN_KEY]
+    init_data = _init_data_from_header(request)
     try:
-        payload = verify_token(token, bot_token=bot_token)
+        payload = authorize_api_request(
+            bot_token=bot_token, token=token, init_data=init_data
+        )
     except InvalidTokenError as exc:
         logger.info("rejected transcript token: %s", exc)
         return web.Response(status=403, text="invalid or expired token")

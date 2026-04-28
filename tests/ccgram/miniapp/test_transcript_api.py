@@ -10,8 +10,14 @@ from ccgram.miniapp.api.transcript import (
     register_transcript_routes,
 )
 
+from ._helpers import make_init_data
+
 BOT = "1234:abcdef"
 WINDOW_ID = "ccgram:@9"
+
+
+def _hdr(*, user_id: int = 42) -> dict[str, str]:
+    return {"X-Telegram-Init-Data": make_init_data(bot_token=BOT, user_id=user_id)}
 
 
 def _msg(
@@ -83,7 +89,7 @@ async def test_list_rejects_token_for_other_bot(app_client):
 async def test_list_returns_first_page_with_cursor(app_client):
     c, reader = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}?cursor=0&limit=2")
+    resp = await c.get(f"/api/transcript/{tok}?cursor=0&limit=2", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     assert data["total"] == 5
@@ -96,7 +102,7 @@ async def test_list_returns_first_page_with_cursor(app_client):
 async def test_list_paginates_to_end(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}?cursor=4&limit=10")
+    resp = await c.get(f"/api/transcript/{tok}?cursor=4&limit=10", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     assert data["next_cursor"] is None
@@ -106,7 +112,7 @@ async def test_list_paginates_to_end(app_client):
 async def test_list_cursor_past_end_is_empty(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}?cursor=999")
+    resp = await c.get(f"/api/transcript/{tok}?cursor=999", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     assert data["messages"] == []
@@ -116,7 +122,7 @@ async def test_list_cursor_past_end_is_empty(app_client):
 async def test_list_limit_clamped_to_max(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}?limit=99999")
+    resp = await c.get(f"/api/transcript/{tok}?limit=99999", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     # total is small, but the endpoint must still accept oversized limit values.
@@ -126,7 +132,7 @@ async def test_list_limit_clamped_to_max(app_client):
 async def test_list_invalid_cursor_falls_back_to_zero(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}?cursor=abc")
+    resp = await c.get(f"/api/transcript/{tok}?cursor=abc", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     assert (
@@ -139,7 +145,7 @@ async def test_list_empty_session_returns_404():
     app = _make_app(reader)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/transcript/{tok}")
+        resp = await c.get(f"/api/transcript/{tok}", headers=_hdr())
         assert resp.status == 404
         data = await resp.json()
         assert data["reason"] == "no_session"
@@ -149,7 +155,7 @@ async def test_list_empty_session_returns_404():
 async def test_search_finds_case_insensitive(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}/search?q=foo")
+    resp = await c.get(f"/api/transcript/{tok}/search?q=foo", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     assert data["total"] == 1
@@ -164,7 +170,7 @@ async def test_search_finds_case_insensitive(app_client):
 async def test_search_no_matches(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}/search?q=xyzzy")
+    resp = await c.get(f"/api/transcript/{tok}/search?q=xyzzy", headers=_hdr())
     assert resp.status == 200
     data = await resp.json()
     assert data["matches"] == []
@@ -174,13 +180,27 @@ async def test_search_no_matches(app_client):
 async def test_search_missing_query_rejected(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-    resp = await c.get(f"/api/transcript/{tok}/search?q=")
+    resp = await c.get(f"/api/transcript/{tok}/search?q=", headers=_hdr())
     assert resp.status == 400
 
 
 async def test_search_rejects_invalid_token(app_client):
     c, _ = app_client
     resp = await c.get("/api/transcript/badtoken/search?q=hi")
+    assert resp.status == 403
+
+
+async def test_list_rejects_missing_init_data(app_client):
+    c, _ = app_client
+    tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+    resp = await c.get(f"/api/transcript/{tok}")
+    assert resp.status == 403
+
+
+async def test_list_rejects_init_data_user_mismatch(app_client):
+    c, _ = app_client
+    tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+    resp = await c.get(f"/api/transcript/{tok}", headers=_hdr(user_id=999))
     assert resp.status == 403
 
 
@@ -192,7 +212,7 @@ async def test_search_caps_results():
     app = _make_app(reader)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/transcript/{tok}/search?q=hit")
+        resp = await c.get(f"/api/transcript/{tok}/search?q=hit", headers=_hdr())
         data = await resp.json()
         assert data["total"] == MAX_SEARCH_RESULTS
 
@@ -202,7 +222,7 @@ async def test_search_empty_session_returns_404():
     app = _make_app(reader)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/transcript/{tok}/search?q=hello")
+        resp = await c.get(f"/api/transcript/{tok}/search?q=hello", headers=_hdr())
         assert resp.status == 404
         data = await resp.json()
         assert data["reason"] == "no_session"
@@ -219,7 +239,7 @@ async def test_auth_scopes_to_token_window():
     app = _make_app(reader)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id="ccgram:@1", user_id=42)
-        resp = await c.get(f"/api/transcript/{tok}")
+        resp = await c.get(f"/api/transcript/{tok}", headers=_hdr())
         data = await resp.json()
         assert data["messages"][0]["text"] == "window1 only"
         assert reader.calls == ["ccgram:@1"]

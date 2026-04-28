@@ -23,12 +23,20 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import WSMsgType, web
 
-from ..auth import InvalidTokenError, verify_token
+from ..auth import (
+    InvalidTokenError,
+    TokenPayload,
+    authorize_api_request,
+    init_data_user_id,
+    validate_init_data,
+    verify_token,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -113,6 +121,31 @@ def _truncate(text: str) -> str:
     return encoded[:MAX_FRAME_BYTES].decode("utf-8", errors="ignore")
 
 
+_INIT_DATA_HEADER = "X-Telegram-Init-Data"
+
+# WS auth wait — clients send the auth frame immediately after the upgrade
+# response. Five seconds is generous for cellular networks.
+_WS_AUTH_TIMEOUT = 5.0
+
+# WS close codes for auth failures (4000-4999 reserved for app use). Distinct
+# codes let the client tell auth failure (hard stop) from transport blips
+# (retry with backoff) without an HTTP probe round-trip.
+_WS_AUTH_TIMEOUT_CODE = 4001
+_WS_AUTH_BAD_FRAME_CODE = 4002
+_WS_AUTH_FAILED_CODE = 4003
+
+
+def _init_data_from_header(request: web.Request) -> str | None:
+    """HTTP endpoints read initData from the header — never the URL.
+
+    The header keeps the secret out of access logs and browser history.
+    The WS upgrade can't carry custom headers from the browser API, so it
+    uses a separate post-upgrade auth frame instead of a query parameter.
+    """
+    raw = request.headers.get(_INIT_DATA_HEADER)
+    return raw or None
+
+
 async def _send_json(ws: web.WebSocketResponse, payload: dict[str, Any]) -> bool:
     """Send a JSON message; return False when the socket is no longer open."""
     if ws.closed:
@@ -124,6 +157,46 @@ async def _send_json(ws: web.WebSocketResponse, payload: dict[str, Any]) -> bool
     return True
 
 
+async def _authenticate_websocket(
+    ws: web.WebSocketResponse,
+    *,
+    bot_token: str,
+    payload: TokenPayload,
+) -> bool:
+    """Read the first WS frame and validate it as Telegram initData.
+
+    Auth-after-upgrade keeps initData out of the URL, so the path token and
+    initData never appear together in access logs. On failure the socket is
+    closed with a 4xxx code distinct enough for the client to stop retrying.
+    """
+    try:
+        first = await asyncio.wait_for(ws.receive(), timeout=_WS_AUTH_TIMEOUT)
+    except TimeoutError:
+        await ws.close(code=_WS_AUTH_TIMEOUT_CODE, message=b"auth timeout")
+        return False
+    if first.type != WSMsgType.TEXT:
+        await ws.close(code=_WS_AUTH_BAD_FRAME_CODE, message=b"expected auth frame")
+        return False
+    try:
+        msg = json.loads(first.data)
+    except json.JSONDecodeError:
+        await ws.close(code=_WS_AUTH_BAD_FRAME_CODE, message=b"auth not json")
+        return False
+    init_data = msg.get("init_data") if isinstance(msg, dict) else None
+    if not isinstance(init_data, str) or not init_data:
+        await ws.close(code=_WS_AUTH_FAILED_CODE, message=b"missing initData")
+        return False
+    try:
+        params = validate_init_data(init_data, bot_token=bot_token)
+        if init_data_user_id(params) != payload.user_id:
+            raise InvalidTokenError("user mismatch")
+    except InvalidTokenError as exc:
+        logger.info("rejected ws auth: %s", exc)
+        await ws.close(code=_WS_AUTH_FAILED_CODE, message=b"auth failed")
+        return False
+    return True
+
+
 async def _terminal_handler(request: web.Request) -> web.StreamResponse:
     token = request.match_info["token"]
     bot_token = request.app[_BOT_TOKEN_KEY]
@@ -131,6 +204,8 @@ async def _terminal_handler(request: web.Request) -> web.StreamResponse:
     pane_capture = request.app[_PANE_CAPTURE_KEY]
     interval = request.app[_POLL_INTERVAL_KEY]
 
+    # Verify the path token before upgrade. initData arrives in the first
+    # WS frame so it never lands in URLs/access logs alongside the token.
     try:
         payload = verify_token(token, bot_token=bot_token)
     except InvalidTokenError as exc:
@@ -141,6 +216,9 @@ async def _terminal_handler(request: web.Request) -> web.StreamResponse:
 
     ws = web.WebSocketResponse(heartbeat=30.0)
     await ws.prepare(request)
+
+    if not await _authenticate_websocket(ws, bot_token=bot_token, payload=payload):
+        return ws
 
     await _send_json(
         ws,
@@ -174,8 +252,11 @@ async def _panes_handler(request: web.Request) -> web.Response:
     bot_token = request.app[_BOT_TOKEN_KEY]
     pane_list = request.app[_PANE_LIST_KEY]
 
+    init_data = _init_data_from_header(request)
     try:
-        payload = verify_token(token, bot_token=bot_token)
+        payload = authorize_api_request(
+            bot_token=bot_token, token=token, init_data=init_data
+        )
     except InvalidTokenError as exc:
         logger.info("rejected panes list token: %s", exc)
         return web.Response(status=403, text="invalid or expired token")

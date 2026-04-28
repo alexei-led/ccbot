@@ -16,6 +16,12 @@
         return m ? m[1] : null;
     }
 
+    function initDataHeaders() {
+        const tg = window.Telegram && window.Telegram.WebApp;
+        const raw = tg && tg.initData ? tg.initData : "";
+        return raw ? { "X-Telegram-Init-Data": raw } : {};
+    }
+
     function fmtDate(iso) {
         if (!iso) return "";
         const d = new Date(iso);
@@ -74,10 +80,17 @@
         return lastDate;
     }
 
+    function authError(message) {
+        const err = new Error(message);
+        err.authFailed = true;
+        return err;
+    }
+
     async function fetchPage(token, cursor) {
         const url = "/api/transcript/" + encodeURIComponent(token) +
             "?cursor=" + cursor + "&limit=" + PAGE_SIZE;
-        const resp = await fetch(url, { credentials: "omit" });
+        const resp = await fetch(url, { credentials: "omit", headers: initDataHeaders() });
+        if (resp.status === 403) throw authError("authentication failed");
         if (resp.status === 404) {
             return { messages: [], total: 0, next_cursor: null, missing: true };
         }
@@ -88,7 +101,8 @@
     async function fetchSearch(token, query) {
         const url = "/api/transcript/" + encodeURIComponent(token) +
             "/search?q=" + encodeURIComponent(query);
-        const resp = await fetch(url, { credentials: "omit" });
+        const resp = await fetch(url, { credentials: "omit", headers: initDataHeaders() });
+        if (resp.status === 403) throw authError("authentication failed");
         if (resp.status === 404) return { matches: [], missing: true };
         if (!resp.ok) throw new Error("search failed: " + resp.status);
         return await resp.json();
@@ -191,6 +205,7 @@
         const token = tokenFromPath();
         const root = document.getElementById("ccgram-transcript");
         if (!token || !root) return;
+        if (window.__ccgramAuthFailed) return;
 
         ensureStyles();
 
@@ -237,6 +252,14 @@
                     status.textContent = "Loaded " + cursor + " of " + total + ".";
                 }
             } catch (err) {
+                if (err && err.authFailed) {
+                    status.textContent =
+                        "Authentication expired — reopen from Telegram.";
+                    moreBtn.disabled = true;
+                    searchBtn.disabled = true;
+                    input.disabled = true;
+                    return;
+                }
                 status.textContent = "Error: " + err.message;
             }
         }
@@ -251,6 +274,14 @@
                 mode = "search";
                 moreBtn.disabled = true;
             } catch (err) {
+                if (err && err.authFailed) {
+                    status.textContent =
+                        "Authentication expired — reopen from Telegram.";
+                    moreBtn.disabled = true;
+                    searchBtn.disabled = true;
+                    input.disabled = true;
+                    return;
+                }
                 status.textContent = "Error: " + err.message;
             }
         }

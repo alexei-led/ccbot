@@ -12,8 +12,18 @@ from ccgram.miniapp.api.terminal import (
     register_terminal_routes,
 )
 
+from ._helpers import make_init_data
+
 BOT = "1234:abcdef"
 WINDOW_ID = "ccgram:@7"
+
+
+def _init_headers(*, user_id: int = 42) -> dict[str, str]:
+    return {"X-Telegram-Init-Data": make_init_data(bot_token=BOT, user_id=user_id)}
+
+
+async def _ws_authenticate(ws, *, user_id: int = 42) -> None:
+    await ws.send_json({"init_data": make_init_data(bot_token=BOT, user_id=user_id)})
 
 
 class FakePane:
@@ -67,10 +77,50 @@ async def test_websocket_rejects_token_for_other_bot(app_client):
     assert resp.status == 403
 
 
+async def test_websocket_closes_when_first_frame_missing_init_data(app_client):
+    c, _ = app_client
+    tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+    async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+        await ws.send_json({"not_init_data": "anything"})
+        msg = await asyncio.wait_for(ws.receive(), timeout=1.0)
+        assert msg.type == WSMsgType.CLOSE
+        assert msg.data == 4003
+
+
+async def test_websocket_closes_when_first_frame_user_mismatch(app_client):
+    c, _ = app_client
+    tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+    async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+        # Wrong user id → server closes with auth-failed code.
+        await _ws_authenticate(ws, user_id=999)
+        msg = await asyncio.wait_for(ws.receive(), timeout=1.0)
+        assert msg.type == WSMsgType.CLOSE
+        assert msg.data == 4003
+
+
+async def test_websocket_closes_on_auth_timeout(app_client):
+    # Server gives clients _WS_AUTH_TIMEOUT (5s) to send the auth frame; we
+    # poke the timeout knob to keep the test snappy.
+    from ccgram.miniapp.api import terminal as term_mod
+
+    original = term_mod._WS_AUTH_TIMEOUT
+    term_mod._WS_AUTH_TIMEOUT = 0.1
+    try:
+        c, _ = app_client
+        tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+        async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+            msg = await asyncio.wait_for(ws.receive(), timeout=1.0)
+            assert msg.type == WSMsgType.CLOSE
+            assert msg.data == 4001
+    finally:
+        term_mod._WS_AUTH_TIMEOUT = original
+
+
 async def test_websocket_streams_hello_then_frame(app_client):
     c, capture = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
     async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+        await _ws_authenticate(ws)
         hello = await _read_one(ws)
         assert hello["type"] == "hello"
         assert hello["window_id"] == WINDOW_ID
@@ -90,6 +140,7 @@ async def test_websocket_dedupes_unchanged_frames(app_client):
     c, _ = app_client
     tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
     async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+        await _ws_authenticate(ws)
         hello = await _read_one(ws)
         assert hello["type"] == "hello"
 
@@ -113,6 +164,7 @@ async def test_websocket_disconnect_stops_capture():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+            await _ws_authenticate(ws)
             await _read_one(ws)  # hello
             await _read_one(ws)  # first frame
             await ws.close()
@@ -140,6 +192,7 @@ async def test_websocket_capture_failure_emits_error_then_continues():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+            await _ws_authenticate(ws)
             await _read_one(ws)  # hello
             err = await _read_one(ws, timeout=1.0)
             assert err["type"] == "error"
@@ -157,6 +210,7 @@ async def test_websocket_truncates_oversized_frame():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+            await _ws_authenticate(ws)
             await _read_one(ws)  # hello
             frame = await _read_one(ws)
             assert frame["type"] == "frame"
@@ -170,6 +224,7 @@ async def test_websocket_handles_none_capture_as_empty():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+            await _ws_authenticate(ws)
             await _read_one(ws)  # hello
             frame = await _read_one(ws)
             assert frame["type"] == "frame"
@@ -313,3 +368,26 @@ async def test_default_pane_list_handles_missing_window(monkeypatch):
     out = await term_mod._default_pane_list("ccgram:@nonexistent")
     assert out and out[0]["name"] is None
     assert out[0]["state"] == "active"
+
+
+async def test_panes_endpoint_accepts_init_data_header():
+    """HTTP /api/panes/* must read initData from the header, not the URL."""
+
+    async def pane_list(_window_id: str) -> list[dict]:
+        return [{"pane_id": "%1", "active": True, "name": "x"}]
+
+    app = web.Application()
+    register_terminal_routes(
+        app, bot_token=BOT, capture=FakePane([]), pane_list=pane_list
+    )
+    async with TestClient(TestServer(app)) as c:
+        tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+        # Without header → 403.
+        resp = await c.get(f"/api/panes/{tok}")
+        assert resp.status == 403
+        # With valid header → 200.
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
+        assert resp.status == 200
+        body = await resp.json()
+        assert body["window_id"] == WINDOW_ID
+        assert body["panes"][0]["pane_id"] == "%1"

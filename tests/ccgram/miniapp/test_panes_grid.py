@@ -7,8 +7,18 @@ from aiohttp.test_utils import TestClient, TestServer
 from ccgram.miniapp import build_app, sign_token
 from ccgram.miniapp.api.terminal import register_terminal_routes
 
+from ._helpers import make_init_data
+
 BOT = "1234:abcdef"
 WINDOW_ID = "ccgram:@7"
+
+
+def _init_headers(*, user_id: int = 42) -> dict[str, str]:
+    return {"X-Telegram-Init-Data": make_init_data(bot_token=BOT, user_id=user_id)}
+
+
+async def _ws_authenticate(ws, *, user_id: int = 42) -> None:
+    await ws.send_json({"init_data": make_init_data(bot_token=BOT, user_id=user_id)})
 
 
 def _pane(pane_id, *, active=False, name=None, state="idle", subscribed=False):
@@ -95,7 +105,16 @@ async def test_panes_endpoint_rejects_token_for_other_bot():
     app = _make_app(pane_list=panes)
     async with TestClient(TestServer(app)) as c:
         bad = sign_token(bot_token="9999:other", window_id=WINDOW_ID, user_id=1)
-        resp = await c.get(f"/api/panes/{bad}")
+        resp = await c.get(f"/api/panes/{bad}", headers=_init_headers())
+        assert resp.status == 403
+
+
+async def test_panes_endpoint_rejects_missing_init_data_header():
+    panes = FakePaneList({WINDOW_ID: [_pane("%5", active=True)]})
+    app = _make_app(pane_list=panes)
+    async with TestClient(TestServer(app)) as c:
+        tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
+        resp = await c.get(f"/api/panes/{tok}")
         assert resp.status == 403
 
 
@@ -104,7 +123,7 @@ async def test_panes_endpoint_returns_one_pane():
     app = _make_app(pane_list=panes)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/panes/{tok}")
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
         assert resp.status == 200
         data = await resp.json()
         assert data["window_id"] == WINDOW_ID
@@ -126,7 +145,7 @@ async def test_panes_endpoint_returns_two_panes():
     app = _make_app(pane_list=panes)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/panes/{tok}")
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
         assert resp.status == 200
         data = await resp.json()
         assert [p["pane_id"] for p in data["panes"]] == ["%5", "%6"]
@@ -143,7 +162,7 @@ async def test_panes_endpoint_returns_four_panes():
     app = _make_app(pane_list=panes)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/panes/{tok}")
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
         data = await resp.json()
         assert [p["pane_id"] for p in data["panes"]] == ["%5", "%6", "%7", "%8"]
         # Blocked state preserved end-to-end.
@@ -158,7 +177,7 @@ async def test_panes_endpoint_handles_lister_failure():
     app = _make_app(pane_list=Boom())
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/panes/{tok}")
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
         assert resp.status == 500
         body = await resp.json()
         assert body["error"] == "list failed"
@@ -171,6 +190,7 @@ async def test_websocket_streams_specific_pane_when_query_set():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}?pane=%256") as ws:
+            await _ws_authenticate(ws)
             hello = await _read_one(ws)
             assert hello["type"] == "hello"
             assert hello["pane_id"] == "%6"
@@ -190,6 +210,7 @@ async def test_websocket_falls_back_to_active_pane_when_query_missing():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}") as ws:
+            await _ws_authenticate(ws)
             hello = await _read_one(ws)
             assert hello["pane_id"] is None
             frame = await _read_one(ws)
@@ -215,6 +236,7 @@ async def test_websocket_per_pane_capture_failure_emits_error():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}?pane=%255") as ws:
+            await _ws_authenticate(ws)
             await _read_one(ws)  # hello
             err = await _read_one(ws)
             assert err["type"] == "error"
@@ -230,6 +252,7 @@ async def test_subscription_lifecycle_per_pane_disconnect_stops_capture():
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
         async with c.ws_connect(f"/ws/terminal/{tok}?pane=%255") as ws:
+            await _ws_authenticate(ws)
             await _read_one(ws)  # hello
             await _read_one(ws)  # frame
             await ws.close()
@@ -251,7 +274,7 @@ async def test_panes_endpoint_empty_window():
     app = _make_app(pane_list=FakePaneList({WINDOW_ID: []}))
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id=WINDOW_ID, user_id=42)
-        resp = await c.get(f"/api/panes/{tok}")
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
         assert resp.status == 200
         data = await resp.json()
         assert data["panes"] == []
@@ -268,7 +291,7 @@ async def test_panes_endpoint_window_isolation():
     app = _make_app(pane_list=panes)
     async with TestClient(TestServer(app)) as c:
         tok = sign_token(bot_token=BOT, window_id="ccgram:@1", user_id=42)
-        resp = await c.get(f"/api/panes/{tok}")
+        resp = await c.get(f"/api/panes/{tok}", headers=_init_headers())
         data = await resp.json()
         assert [p["pane_id"] for p in data["panes"]] == ["%1"]
         assert panes.calls == ["ccgram:@1"]

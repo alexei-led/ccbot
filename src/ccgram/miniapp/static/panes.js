@@ -11,11 +11,31 @@
     "use strict";
 
     const REFRESH_INTERVAL_MS = 5000;
+    // The refresh loop below already polls /api/panes/<token> at this cadence
+    // and treats HTTP 403 as the authoritative auth-failure signal. Per-tile
+    // WebSockets therefore back off transport failures forever — the refresh
+    // loop will tear them down within one tick if the server is rejecting us.
+    const XTERM_CSS = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css";
+    const XTERM_JS = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js";
+    const FIT_JS = "https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js";
 
     function tokenFromLocation() {
         const m = window.location.pathname.match(/^\/app\/([^/]+)/);
         return m ? m[1] : null;
     }
+
+    function initDataRaw() {
+        const tg = window.Telegram && window.Telegram.WebApp;
+        return tg && tg.initData ? tg.initData : "";
+    }
+
+    function initDataHeaders() {
+        const raw = initDataRaw();
+        return raw ? { "X-Telegram-Init-Data": raw } : {};
+    }
+
+    // Server WS close codes for auth failures (mirror terminal.py).
+    const WS_AUTH_CODES = new Set([4001, 4002, 4003]);
 
     function wsUrlFor(token, paneId) {
         const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -30,10 +50,67 @@
         return 3;
     }
 
+    function loadStyle(href) {
+        return new Promise((resolve, reject) => {
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = href;
+            link.onload = () => resolve();
+            link.onerror = () => reject(new Error("css load failed: " + href));
+            document.head.appendChild(link);
+        });
+    }
+
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = src;
+            s.async = false;
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error("script load failed: " + src));
+            document.head.appendChild(s);
+        });
+    }
+
+    // Single shared promise that resolves once xterm.js + fit-addon are
+    // available on window. Both terminal.js and panes.js reuse the same
+    // global so the second caller never re-issues the script tags or races
+    // the first loader. A rejected promise is evicted so the next caller
+    // can retry — otherwise a transient CDN blip would brick every later
+    // xterm consumer for the rest of the page lifetime.
+    function ensureXtermLoaded() {
+        if (window.__ccgramXtermReady) return window.__ccgramXtermReady;
+        if (window.Terminal && window.FitAddon && window.FitAddon.FitAddon) {
+            window.__ccgramXtermReady = Promise.resolve();
+            return window.__ccgramXtermReady;
+        }
+        const p = (async () => {
+            await Promise.all([loadStyle(XTERM_CSS), loadScript(XTERM_JS)]);
+            await loadScript(FIT_JS);
+        })();
+        p.catch(() => {
+            if (window.__ccgramXtermReady === p) {
+                window.__ccgramXtermReady = null;
+            }
+        });
+        window.__ccgramXtermReady = p;
+        return window.__ccgramXtermReady;
+    }
+
+    function authError(message) {
+        const err = new Error(message);
+        err.authFailed = true;
+        return err;
+    }
+
     async function fetchPanes(token) {
         const resp = await fetch("/api/panes/" + token, {
             credentials: "same-origin",
+            headers: initDataHeaders(),
         });
+        if (resp.status === 403) {
+            throw authError("authentication failed");
+        }
         if (!resp.ok) throw new Error("panes fetch failed: " + resp.status);
         const data = await resp.json();
         return Array.isArray(data.panes) ? data.panes : [];
@@ -70,6 +147,12 @@
     }
 
     async function attachTerminal(termEl, token, paneId, statusEl) {
+        try {
+            await ensureXtermLoaded();
+        } catch (err) {
+            statusEl.textContent = "xterm.js failed to load: " + err.message;
+            return null;
+        }
         const Terminal = window.Terminal;
         const FitAddon = window.FitAddon && window.FitAddon.FitAddon;
         if (!Terminal || !FitAddon) {
@@ -93,7 +176,20 @@
         let ws = null;
 
         const connect = () => {
+            if (closed) return;
             ws = new WebSocket(wsUrlFor(token, paneId));
+            ws.onopen = () => {
+                reconnectDelay = 500;
+                // Server reads initData from the first WS frame. The
+                // browser WebSocket API can't carry custom headers, and
+                // putting initData in the URL would leak it into access
+                // logs alongside the token.
+                try {
+                    ws.send(JSON.stringify({ init_data: initDataRaw() }));
+                } catch (e) {
+                    // Socket already gone — onclose will drive reconnect.
+                }
+            };
             ws.onmessage = (ev) => {
                 let msg;
                 try { msg = JSON.parse(ev.data); } catch (e) { return; }
@@ -104,8 +200,17 @@
                 reconnectDelay = 500;
             };
             ws.onerror = () => { /* close handler will follow */ };
-            ws.onclose = () => {
+            ws.onclose = (ev) => {
                 if (closed) return;
+                // Server-driven auth-failure codes are authoritative —
+                // stop immediately so we don't churn through retries with
+                // bad credentials.
+                if (ev && WS_AUTH_CODES.has(ev.code)) {
+                    closed = true;
+                    return;
+                }
+                // The refresh loop's HTTP 403 detection covers the rest;
+                // here we just back off and keep retrying transport blips.
                 setTimeout(() => {
                     if (!closed) connect();
                 }, reconnectDelay);
@@ -195,6 +300,10 @@
         const container = document.getElementById("ccgram-panes-grid");
         const statusEl = document.getElementById("ccgram-status");
         if (!container) return;
+        if (window.__ccgramAuthFailed) {
+            container.style.display = "none";
+            return;
+        }
         const token = tokenFromLocation();
         if (!token) return;
 
@@ -202,6 +311,15 @@
         try {
             panes = await fetchPanes(token);
         } catch (err) {
+            if (err.authFailed) {
+                container.textContent =
+                    "Authentication failed — reopen from Telegram.";
+                if (statusEl) {
+                    statusEl.textContent =
+                        "Authentication failed — reopen from Telegram.";
+                }
+                return;
+            }
             container.textContent = "panes unavailable: " + err.message;
             return;
         }
@@ -214,33 +332,94 @@
         }
 
         let active = null;
+        let focusedPaneId = null;
         const showGrid = () => {
             if (active) active.teardown();
+            focusedPaneId = null;
             active = renderGrid(container, panes, token, statusEl, (p) => {
                 if (active) active.teardown();
+                focusedPaneId = p.pane_id;
                 active = renderFocused(container, p, token, statusEl, showGrid);
             });
         };
 
         showGrid();
 
+        // Per-pane fingerprint covers every property visible in tile/header:
+        // rename, command, state, active flag, subscription badge. Used both
+        // to decide whether the grid needs rebuilding and whether a focused
+        // pane's header needs refreshing.
+        const fingerprintPane = (p) => [
+            p.pane_id,
+            p.active ? "1" : "0",
+            p.name || "",
+            p.command || "",
+            p.state || "",
+            p.subscribed ? "s" : "",
+        ].join("|");
+
+        const fingerprintPanes = (list) => list
+            .map(fingerprintPane)
+            .sort()
+            .join(",");
+
         const refreshTimer = window.setInterval(async () => {
             try {
                 const fresh = await fetchPanes(token);
-                // Only rebuild grid when pane composition changes (count or IDs).
-                const oldKey = panes.map((p) => p.pane_id).sort().join(",");
-                const newKey = fresh.map((p) => p.pane_id).sort().join(",");
-                if (oldKey !== newKey) {
-                    panes = fresh;
-                    if (panes.length <= 1) {
-                        container.style.display = "none";
-                        if (active) active.teardown();
+                if (fingerprintPanes(panes) === fingerprintPanes(fresh)) {
+                    return;
+                }
+                const previousPanes = panes;
+                panes = fresh;
+                if (panes.length <= 1) {
+                    container.style.display = "none";
+                    if (active) active.teardown();
+                    active = null;
+                    focusedPaneId = null;
+                    return;
+                }
+                container.style.display = "";
+                if (focusedPaneId !== null) {
+                    const focusedPane = panes.find(
+                        (p) => p.pane_id === focusedPaneId
+                    );
+                    if (!focusedPane) {
+                        // Focused pane disappeared — fall back to the grid.
+                        showGrid();
                         return;
                     }
-                    container.style.display = "";
-                    showGrid();
+                    const previous = previousPanes.find(
+                        (p) => p.pane_id === focusedPaneId
+                    );
+                    if (
+                        !previous ||
+                        fingerprintPane(previous) !== fingerprintPane(focusedPane)
+                    ) {
+                        // Focused pane's own metadata changed — re-render so
+                        // the header label/state badge stay fresh. Other
+                        // panes' changes are invisible in focused view, so
+                        // leave the WebSocket untouched in that case.
+                        if (active) active.teardown();
+                        active = renderFocused(
+                            container, focusedPane, token, statusEl, showGrid
+                        );
+                    }
+                    return;
                 }
-            } catch (e) { /* transient — try again */ }
+                showGrid();
+            } catch (e) {
+                if (e && e.authFailed) {
+                    window.clearInterval(refreshTimer);
+                    if (active) active.teardown();
+                    container.textContent =
+                        "Authentication expired — reopen from Telegram.";
+                    if (statusEl) {
+                        statusEl.textContent =
+                            "Authentication expired — reopen from Telegram.";
+                    }
+                }
+                /* otherwise transient — try again */
+            }
         }, REFRESH_INTERVAL_MS);
 
         window.addEventListener("beforeunload", () => {
