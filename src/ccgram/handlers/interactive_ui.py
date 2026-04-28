@@ -14,13 +14,14 @@ Provides:
 State dicts are keyed by (user_id, thread_id_or_0) for Telegram topic support.
 """
 
+import asyncio
 import contextlib
 import time
 
 import structlog
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from telegram.error import BadRequest, RetryAfter, TelegramError
+from telegram.error import BadRequest, NetworkError, RetryAfter, TelegramError, TimedOut
 
 from ..providers import get_provider_for_window
 from ..window_query import get_window_provider
@@ -62,6 +63,10 @@ _interactive_mode: dict[tuple[int, int], str] = {}
 _send_cooldowns: dict[tuple[int, int], float] = {}
 _SEND_RETRY_INTERVAL = 5.0  # seconds between retries for failed sends
 _DEAD_TOPIC_RETRY_INTERVAL = 60.0  # longer backoff when topic is deleted
+
+# Single in-call retry on transient transport errors when sending interactive UI.
+_INTERACTIVE_SEND_RETRIES = 1
+_INTERACTIVE_SEND_RETRY_BACKOFF_S = 1.0
 
 # One-line cheatsheet prepended to every interactive UI message.
 INTERACTIVE_INSTRUCTION_LINE = (
@@ -283,6 +288,56 @@ def _lookup_pane_name(window_id: str, pane_id: str) -> str | None:
     return pane_info.name if pane_info else None
 
 
+async def _send_interactive_with_retry(
+    bot: Bot,
+    *,
+    chat_id: int,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+    thread_kwargs: dict[str, int],
+    ikey: tuple[int, int],
+    thread_id: int | None,
+    window_id: str,
+    now: float,
+) -> Message | None:
+    """Send interactive UI with one retry on transient transport errors."""
+    for attempt in range(_INTERACTIVE_SEND_RETRIES + 1):
+        try:
+            return await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=keyboard,
+                **thread_kwargs,  # type: ignore[arg-type]
+            )
+        except BadRequest as e:
+            if is_thread_gone(e):
+                logger.warning(
+                    "Topic gone for interactive UI (chat=%s thread=%s window=%s), "
+                    "backing off %ss — use /sync to recreate",
+                    chat_id,
+                    thread_id,
+                    window_id,
+                    int(_DEAD_TOPIC_RETRY_INTERVAL),
+                )
+                _send_cooldowns[ikey] = (
+                    now + _DEAD_TOPIC_RETRY_INTERVAL - _SEND_RETRY_INTERVAL
+                )
+            else:
+                logger.error("Failed to send interactive UI to %s: %s", chat_id, e)
+            return None
+        except (TimedOut, NetworkError) as e:
+            if attempt < _INTERACTIVE_SEND_RETRIES:
+                logger.info("Interactive UI send transient error, retrying: %s", e)
+                await asyncio.sleep(_INTERACTIVE_SEND_RETRY_BACKOFF_S)
+                continue
+            logger.error("Failed to send interactive UI to %s: %s", chat_id, e)
+            return None
+        except TelegramError as e:
+            logger.error("Failed to send interactive UI to %s: %s", chat_id, e)
+            return None
+    return None
+
+
 async def handle_interactive_ui(
     bot: Bot,
     user_id: int,
@@ -337,32 +392,18 @@ async def handle_interactive_ui(
     )
     _send_cooldowns[ikey] = now
     # Send as plain text — terminal content should not be formatted.
-    sent: Message | None = None
     await rate_limit_send(chat_id)
-    try:
-        sent = await bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_markup=keyboard,
-            **thread_kwargs,  # type: ignore[arg-type]
-        )
-    except BadRequest as e:
-        if is_thread_gone(e):
-            logger.warning(
-                "Topic gone for interactive UI (chat=%s thread=%s window=%s), "
-                "backing off %ss — use /sync to recreate",
-                chat_id,
-                thread_id,
-                window_id,
-                int(_DEAD_TOPIC_RETRY_INTERVAL),
-            )
-            _send_cooldowns[ikey] = (
-                now + _DEAD_TOPIC_RETRY_INTERVAL - _SEND_RETRY_INTERVAL
-            )
-        else:
-            logger.error("Failed to send interactive UI to %s: %s", chat_id, e)
-    except TelegramError as e:
-        logger.error("Failed to send interactive UI to %s: %s", chat_id, e)
+    sent = await _send_interactive_with_retry(
+        bot,
+        chat_id=chat_id,
+        text=text,
+        keyboard=keyboard,
+        thread_kwargs=thread_kwargs,
+        ikey=ikey,
+        thread_id=thread_id,
+        window_id=window_id,
+        now=now,
+    )
     if sent:
         _interactive_msgs[ikey] = sent.message_id
         _interactive_mode[ikey] = window_id

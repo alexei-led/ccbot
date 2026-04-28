@@ -396,3 +396,87 @@ class TestHandleInteractiveUIPaneName:
         assert ok is True
         sent_text = mock_bot.send_message.call_args.kwargs["text"]
         assert "Pane (%5):" in sent_text
+
+
+class TestHandleInteractiveUITransientRetry:
+    @pytest.fixture(autouse=True)
+    def _clear_state(self):
+        from ccgram.handlers.interactive_ui import (
+            _interactive_mode,
+            _interactive_msgs,
+            _send_cooldowns,
+        )
+
+        _interactive_mode.clear()
+        _interactive_msgs.clear()
+        _send_cooldowns.clear()
+        yield
+        _interactive_mode.clear()
+        _interactive_msgs.clear()
+        _send_cooldowns.clear()
+
+    async def test_timed_out_retries_then_succeeds(self) -> None:
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from telegram.error import TimedOut
+
+        from ccgram.handlers.interactive_ui import handle_interactive_ui
+
+        mock_bot = AsyncMock()
+        sent = MagicMock()
+        sent.message_id = 42
+        mock_bot.send_message.side_effect = [TimedOut("blip"), sent]
+
+        with (
+            patch(
+                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                new_callable=AsyncMock,
+                return_value=("AskUserQuestion", "Pick one:"),
+            ),
+            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
+            patch(
+                "ccgram.handlers.interactive_ui.rate_limit_send",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ccgram.handlers.interactive_ui.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_sm.resolve_chat_id.return_value = -999
+            ok = await handle_interactive_ui(mock_bot, 100, "@2", thread_id=42)
+
+        assert ok is True
+        assert mock_bot.send_message.call_count == 2
+
+    async def test_timed_out_exhausts_retries(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from telegram.error import TimedOut
+
+        from ccgram.handlers.interactive_ui import handle_interactive_ui
+
+        mock_bot = AsyncMock()
+        mock_bot.send_message.side_effect = TimedOut("persistent")
+
+        with (
+            patch(
+                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                new_callable=AsyncMock,
+                return_value=("AskUserQuestion", "Pick one:"),
+            ),
+            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
+            patch(
+                "ccgram.handlers.interactive_ui.rate_limit_send",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "ccgram.handlers.interactive_ui.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_sm.resolve_chat_id.return_value = -999
+            ok = await handle_interactive_ui(mock_bot, 100, "@2", thread_id=42)
+
+        assert ok is False
+        assert mock_bot.send_message.call_count == 2

@@ -204,6 +204,35 @@ class TestEditWithFallback:
             await edit_with_fallback(bot, 123, 1, "hello")
 
 
+class TestEmptyAndOverlongGuards:
+    async def test_empty_text_skips_send(self) -> None:
+        bot = AsyncMock()
+        result = await _send_with_fallback(bot, 123, "")
+        assert result is None
+        bot.send_message.assert_not_called()
+
+    async def test_whitespace_only_text_skips_send(self) -> None:
+        bot = AsyncMock()
+        result = await _send_with_fallback(bot, 123, "   \n\t  ")
+        assert result is None
+        bot.send_message.assert_not_called()
+
+    async def test_overlong_text_truncates_under_limit(self) -> None:
+        from ccgram.telegram_sender import TELEGRAM_MAX_MESSAGE_LENGTH
+
+        bot = AsyncMock()
+        sent = AsyncMock(spec=Message)
+        bot.send_message.return_value = sent
+
+        long_text = "x" * 8000
+        await _send_with_fallback(bot, 123, long_text)
+
+        call_kwargs = bot.send_message.call_args.kwargs
+        sent_text = call_kwargs["text"]
+        assert len(sent_text) <= TELEGRAM_MAX_MESSAGE_LENGTH
+        assert sent_text.endswith("…")
+
+
 class TestFallbackNoSentinelLeak:
     async def test_no_sentinel_bytes_in_fallback(self) -> None:
         bot = AsyncMock()
