@@ -195,3 +195,121 @@ async def test_build_app_includes_terminal_route():
         getattr(r.resource, "canonical", str(r.resource)) for r in app.router.routes()
     }
     assert any("/ws/terminal" in r for r in routes)
+
+
+async def test_default_capture_delegates_to_tmux_singleton(monkeypatch):
+    from ccgram.miniapp.api import terminal as term_mod
+    from ccgram import tmux_manager as tmux_mod
+
+    captured: list[tuple[str, bool]] = []
+
+    async def fake_capture(window_id: str, *, with_ansi: bool = False) -> str:
+        captured.append((window_id, with_ansi))
+        return "tmux-out"
+
+    monkeypatch.setattr(tmux_mod.tmux_manager, "capture_pane", fake_capture)
+    out = await term_mod._default_capture("ccgram:@1")
+    assert out == "tmux-out"
+    assert captured == [("ccgram:@1", True)]
+
+
+async def test_default_pane_capture_delegates_to_tmux_singleton(monkeypatch):
+    from ccgram.miniapp.api import terminal as term_mod
+    from ccgram import tmux_manager as tmux_mod
+
+    seen: list[tuple[str, str, bool]] = []
+
+    async def fake_pane(
+        pane_id: str, *, with_ansi: bool = False, window_id: str = ""
+    ) -> str:
+        seen.append((pane_id, window_id, with_ansi))
+        return "pane-out"
+
+    monkeypatch.setattr(tmux_mod.tmux_manager, "capture_pane_by_id", fake_pane)
+    out = await term_mod._default_pane_capture("ccgram:@1", "%5")
+    assert out == "pane-out"
+    assert seen == [("%5", "ccgram:@1", True)]
+
+
+async def test_default_pane_list_merges_window_state(monkeypatch):
+    from ccgram.miniapp.api import terminal as term_mod
+    from ccgram import tmux_manager as tmux_mod
+    from ccgram.window_state_store import (
+        WindowState,
+        PaneInfo as StatePaneInfo,
+        window_store,
+    )
+    from ccgram.tmux_manager import PaneInfo as TmuxPaneInfo
+
+    tmux_panes = [
+        TmuxPaneInfo(
+            pane_id="%5",
+            index=0,
+            active=True,
+            command="claude",
+            path="/tmp",
+            width=80,
+            height=24,
+        ),
+        TmuxPaneInfo(
+            pane_id="%6",
+            index=1,
+            active=False,
+            command="bash",
+            path="/tmp",
+            width=80,
+            height=24,
+        ),
+    ]
+
+    async def fake_list(window_id: str):
+        return tmux_panes
+
+    monkeypatch.setattr(tmux_mod.tmux_manager, "list_panes", fake_list)
+
+    state = WindowState()
+    state.panes["%5"] = StatePaneInfo(
+        pane_id="%5",
+        name="api",
+        provider="claude",
+        last_active_ts=0.0,
+        state="active",
+        subscribed=True,
+    )
+    monkeypatch.setitem(window_store.window_states, "ccgram:@9", state)
+    try:
+        out = await term_mod._default_pane_list("ccgram:@9")
+    finally:
+        window_store.window_states.pop("ccgram:@9", None)
+
+    by_id = {entry["pane_id"]: entry for entry in out}
+    assert by_id["%5"]["name"] == "api"
+    assert by_id["%5"]["subscribed"] is True
+    assert by_id["%5"]["state"] == "active"
+    assert by_id["%6"]["name"] is None
+    assert by_id["%6"]["subscribed"] is False
+    assert by_id["%6"]["state"] == "idle"
+
+
+async def test_default_pane_list_handles_missing_window(monkeypatch):
+    from ccgram.miniapp.api import terminal as term_mod
+    from ccgram import tmux_manager as tmux_mod
+    from ccgram.tmux_manager import PaneInfo as TmuxPaneInfo
+
+    async def fake_list(window_id: str):
+        return [
+            TmuxPaneInfo(
+                pane_id="%1",
+                index=0,
+                active=True,
+                command="zsh",
+                path="/",
+                width=80,
+                height=24,
+            )
+        ]
+
+    monkeypatch.setattr(tmux_mod.tmux_manager, "list_panes", fake_list)
+    out = await term_mod._default_pane_list("ccgram:@nonexistent")
+    assert out and out[0]["name"] is None
+    assert out[0]["state"] == "active"
