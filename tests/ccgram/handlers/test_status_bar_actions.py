@@ -35,7 +35,7 @@ class TestNotifyToggle:
                 query, 1, f"{CB_STATUS_NOTIFY}@0", MagicMock(), MagicMock()
             )
         sm.cycle_notification_mode.assert_called_once_with("@0")
-        bsk.assert_called_once_with("@0", rc_active=ANY)
+        bsk.assert_called_once_with("@0", rc_active=ANY, user_id=1)
         query.answer.assert_awaited_once()
 
     async def test_rejects_non_owner(self):
@@ -205,3 +205,68 @@ class TestClearKeyRefreshes:
         task1.cancel.assert_called_once()
         task2.cancel.assert_not_called()
         _pending_key_refreshes.clear()
+
+
+class TestBuildDashboardButton:
+    def test_returns_none_when_miniapp_disabled(self):
+        from ccgram.handlers.status_bar_actions import build_dashboard_button
+
+        with patch(f"{MOD}.config") as cfg:
+            cfg.miniapp_base_url = ""
+            assert build_dashboard_button("@0", 42) is None
+
+    def test_returns_none_for_whitespace_url(self):
+        from ccgram.handlers.status_bar_actions import build_dashboard_button
+
+        # Config strips at load, but defensively guard against runtime mutation.
+        with patch(f"{MOD}.config") as cfg:
+            cfg.miniapp_base_url = ""
+            assert build_dashboard_button("@0", 42) is None
+
+    def test_builds_webapp_button_when_enabled(self):
+        from telegram import WebAppInfo
+
+        from ccgram.handlers.status_bar_actions import build_dashboard_button
+
+        with (
+            patch(f"{MOD}.config") as cfg,
+            patch(f"{MOD}.sign_token", return_value="signed-tok") as mock_sign,
+        ):
+            cfg.miniapp_base_url = "https://miniapp.example/"
+            cfg.telegram_bot_token = "bot:abc"
+            btn = build_dashboard_button("@7", 42)
+
+        assert btn is not None
+        assert btn.text == "\U0001fa9f Dashboard"
+        assert isinstance(btn.web_app, WebAppInfo)
+        assert btn.web_app.url == "https://miniapp.example/app/signed-tok"
+        # No trailing-slash duplication from base_url.
+        assert "//app/" not in btn.web_app.url
+        mock_sign.assert_called_once_with(
+            bot_token="bot:abc", window_id="@7", user_id=42
+        )
+
+    def test_token_signed_per_window(self):
+        from ccgram.handlers.status_bar_actions import build_dashboard_button
+
+        captured: list[tuple[str, int]] = []
+
+        def fake_sign(*, bot_token: str, window_id: str, user_id: int) -> str:
+            assert bot_token == "bot:abc"
+            captured.append((window_id, user_id))
+            return f"tok-{window_id}-{user_id}"
+
+        with (
+            patch(f"{MOD}.config") as cfg,
+            patch(f"{MOD}.sign_token", side_effect=fake_sign),
+        ):
+            cfg.miniapp_base_url = "https://miniapp.example"
+            cfg.telegram_bot_token = "bot:abc"
+            b1 = build_dashboard_button("@5", 1)
+            b2 = build_dashboard_button("@9", 2)
+
+        assert b1 is not None and b2 is not None
+        assert b1.web_app is not None and b2.web_app is not None
+        assert b1.web_app.url.endswith("/app/tok-@5-1")
+        assert b2.web_app.url.endswith("/app/tok-@9-2")
+        assert captured == [("@5", 1), ("@9", 2)]

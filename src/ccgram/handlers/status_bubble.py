@@ -80,14 +80,17 @@ def build_status_keyboard(
     history: list[str] | None = None,
     *,
     rc_active: bool = False,
+    user_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Build inline keyboard for status messages.
 
     Layout:
       Row 1 (optional): up to 2 history-recall buttons
       Row 2: [Esc] [Screenshot] [Bell] [RC]
+      Row 3 (optional): [🪟 Dashboard] when Mini App is enabled and user_id is set
     """
     from .command_history import truncate_for_display
+    from .status_bar_actions import build_dashboard_button
 
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -126,6 +129,10 @@ def build_status_keyboard(
             ),
         ]
     )
+    if user_id is not None:
+        dashboard = build_dashboard_button(window_id, user_id)
+        if dashboard is not None:
+            rows.append([dashboard])
     return InlineKeyboardMarkup(rows)
 
 
@@ -300,6 +307,7 @@ async def send_status_text(
         window_id,
         history=history,
         rc_active=_rc_active_fn(window_id),
+        user_id=user_id,
     )
 
     existing = _status_msg_info.get(skey)

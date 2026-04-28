@@ -417,10 +417,10 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/handlers/status_bubble.py` (button only when MINIAPP enabled)
 - Modify: `tests/ccgram/handlers/test_status_bubble.py`
 
-- [ ] new button "🪟 Dashboard" using `WebAppInfo(url=signed_url)` opens Mini App scoped to current window
-- [ ] hide button when `CCGRAM_MINIAPP_BASE_URL` unset
-- [ ] write tests: button presence/absence, URL signing
-- [ ] run `make check`
+- [x] new button "🪟 Dashboard" using `WebAppInfo(url=signed_url)` opens Mini App scoped to current window
+- [x] hide button when `CCGRAM_MINIAPP_BASE_URL` unset
+- [x] write tests: button presence/absence, URL signing
+- [x] run `make check`
 
 ### Task 3.3: Live xterm.js terminal surface
 
