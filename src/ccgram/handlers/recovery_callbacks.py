@@ -561,7 +561,10 @@ async def _handle_back(
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
         return
     thread_id, _, cwd = validated
-    chat_id = query.message.chat.id if query.message and query.message.chat else 0
+    if query.message is None or query.message.chat is None:
+        await query.answer("Chat unavailable", show_alert=True)
+        return
+    chat_id = query.message.chat.id
     display = thread_router.get_display_name(window_id) or window_id
     banner = RecoveryBanner(
         chat_id=chat_id,

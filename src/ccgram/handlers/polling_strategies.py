@@ -20,11 +20,13 @@ This separation enables independent testing of state logic without mocking exter
 
 from __future__ import annotations
 
-import structlog
 import time
+import zlib
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
+
+import structlog
 
 from ..providers.base import StatusUpdate
 from ..topic_state_registry import topic_state
@@ -1038,7 +1040,10 @@ class PaneStatusStrategy:
             self._pane_content_hash.pop(pane_id, None)
             self._pane_forward_ts.pop(pane_id, None)
             return
-        content_hash = hash(pane_text)
+        # zlib.crc32 is stable across processes — Python's built-in hash() is
+        # PYTHONHASHSEED-randomized so a restart re-forwards every subscribed
+        # pane's first capture, not just genuinely changed content.
+        content_hash = zlib.crc32(pane_text.encode("utf-8", errors="replace"))
         if self._pane_content_hash.get(pane_id) == content_hash:
             return
         now = time.monotonic()
