@@ -386,9 +386,13 @@ class TestDraftStreamReplyMarkup:
         await stream.start("hi")
         await stream.replace("bye", reply_markup=None)
 
-        # Markup explicitly cleared on the second push.
+        # Telegram leaves the existing keyboard untouched when reply_markup
+        # is omitted, so an explicit clear must serialize to an empty
+        # InlineKeyboardMarkup for the keyboard to actually disappear.
         last_edit = bot.edit_message_text.call_args_list[-1]
-        assert "reply_markup" not in last_edit.kwargs
+        markup = last_edit.kwargs["reply_markup"]
+        assert isinstance(markup, InlineKeyboardMarkup)
+        assert markup.inline_keyboard == ()
 
     async def test_finalize_can_update_markup(self) -> None:
         mark_draft_unavailable("test")

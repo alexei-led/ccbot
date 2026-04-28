@@ -198,7 +198,13 @@ async def apply_pane_rename(
         await safe_reply(message, f"✓ Cleared name for {pane_id}")
         return True
     if len(name) > _MAX_PANE_NAME_LEN:
-        name = name[:_MAX_PANE_NAME_LEN]
+        # Reject loudly so the user doesn't see a different name from what
+        # they typed. They can resend a shorter version.
+        await safe_reply(
+            message,
+            f"❌ Name too long ({len(name)} chars, max {_MAX_PANE_NAME_LEN}).",
+        )
+        return True
     window_store.upsert_pane(window_id, pane_id, name=name)
     await safe_reply(message, f"✓ Renamed {pane_id} → {name}")
     return True

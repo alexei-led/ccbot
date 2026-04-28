@@ -173,8 +173,10 @@
             host.appendChild(el("div", { cls: "ccgram-status", text: "No matches." }));
             return;
         }
-        const header = el("div", { cls: "ccgram-status",
-            text: data.matches.length + " match" + (data.matches.length === 1 ? "" : "es") });
+        const headerText = data.matches.length + " match"
+            + (data.matches.length === 1 ? "" : "es")
+            + (data.truncated ? " (more — refine your query)" : "");
+        const header = el("div", { cls: "ccgram-status", text: headerText });
         host.appendChild(header);
         for (const match of data.matches) {
             if (match.before) host.appendChild(renderEntry(match.before));

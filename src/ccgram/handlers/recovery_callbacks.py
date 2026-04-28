@@ -17,6 +17,7 @@ calls for.
 Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
+import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -634,7 +635,7 @@ async def _handle_continue(
         await query.answer("Project gone")
         return
 
-    if not scan_sessions_for_cwd(cwd):
+    if not await asyncio.to_thread(scan_sessions_for_cwd, cwd):
         await _send_empty_state(query, old_wid, cwd)
         return
 
@@ -674,7 +675,7 @@ async def _handle_resume(
         await query.answer("Project gone")
         return
 
-    sessions = scan_sessions_for_cwd(cwd)
+    sessions = await asyncio.to_thread(scan_sessions_for_cwd, cwd)
     if not sessions:
         await _send_empty_state(query, old_wid, cwd)
         return
@@ -739,7 +740,7 @@ async def _handle_browse(
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
         return
 
-    sessions = scan_all_sessions()
+    sessions = await asyncio.to_thread(scan_all_sessions)
     if not sessions:
         await safe_edit(query, "\u26a0 No past sessions found in any project.")
         _clear_recovery_state(context.user_data)

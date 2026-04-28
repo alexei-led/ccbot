@@ -207,7 +207,7 @@ class TestApplyPaneRename:
         pane = window_store.get_pane("@0", "%5")
         assert pane is not None and pane.name is None
 
-    async def test_truncates_over_long_name(self) -> None:
+    async def test_rejects_over_long_name(self) -> None:
         window_store.upsert_pane("@0", "%5", state="idle")
         ud = {
             PANE_RENAME_WINDOW_ID: "@0",
@@ -219,8 +219,11 @@ class TestApplyPaneRename:
         handled = await apply_pane_rename(ud, 99, "x" * 200, msg)
         assert handled is True
         pane = window_store.get_pane("@0", "%5")
-        assert pane is not None and pane.name is not None
-        assert len(pane.name) == 32
+        # Name not assigned — user must resend a shorter version.
+        assert pane is not None and pane.name is None
+        msg.reply_text.assert_awaited_once()
+        reply_text = msg.reply_text.call_args.args[0]
+        assert "Name too long" in reply_text or "too long" in reply_text.lower()
 
     async def test_skips_when_no_pending_rename(self) -> None:
         msg = MagicMock()
@@ -365,8 +368,14 @@ class TestSubscribedOutputForwarding:
         assert on_pane_output.await_count == 1
 
     async def test_resends_when_content_changes(
-        self, strategy: PaneStatusStrategy
+        self,
+        strategy: PaneStatusStrategy,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        # Disable per-pane forward rate limit so back-to-back scans both
+        # forward when content changes. The rate limit is exercised
+        # separately in `test_rate_limits_back_to_back_forwards`.
+        monkeypatch.setattr(PaneStatusStrategy, "PANE_FORWARD_MIN_INTERVAL", 0.0)
         window_store.upsert_pane("@0", "%2", state="idle", subscribed=True)
         bot = AsyncMock(spec=Bot)
         on_pane_output = AsyncMock()
@@ -400,6 +409,46 @@ class TestSubscribedOutputForwarding:
                 on_pane_output=on_pane_output,
             )
         assert on_pane_output.await_count == 2
+
+    async def test_rate_limits_back_to_back_forwards(
+        self, strategy: PaneStatusStrategy
+    ) -> None:
+        # With the default 5s minimum interval, the second scan within
+        # the same monotonic window must NOT forward even when content
+        # genuinely changed — protects Telegram from busy-pane floods.
+        window_store.upsert_pane("@0", "%2", state="idle", subscribed=True)
+        bot = AsyncMock(spec=Bot)
+        on_pane_output = AsyncMock()
+        provider = MagicMock()
+        provider.parse_terminal_status.return_value = None
+        outputs = iter(["first\n", "second\n"])
+        with (
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
+            patch("ccgram.providers.get_provider_for_window", return_value=provider),
+        ):
+            mock_tm.list_panes = AsyncMock(
+                return_value=[_pane("%1", active=True, index=0), _pane("%2")]
+            )
+            mock_tm.capture_pane_by_id = AsyncMock(
+                side_effect=lambda *_a, **_k: next(outputs)
+            )
+            await strategy.scan_window(
+                bot,
+                1,
+                "@0",
+                42,
+                on_blocked=AsyncMock(),
+                on_pane_output=on_pane_output,
+            )
+            await strategy.scan_window(
+                bot,
+                1,
+                "@0",
+                42,
+                on_blocked=AsyncMock(),
+                on_pane_output=on_pane_output,
+            )
+        assert on_pane_output.await_count == 1
 
     async def test_dead_pane_drops_subscription(
         self, strategy: PaneStatusStrategy

@@ -88,20 +88,36 @@
         term.open(termEl);
         try { fit.fit(); } catch (e) { /* tile may be 0×0 momentarily */ }
 
-        const ws = new WebSocket(wsUrlFor(token, paneId));
-        ws.onmessage = (ev) => {
-            let msg;
-            try { msg = JSON.parse(ev.data); } catch (e) { return; }
-            if (msg.type === "frame" && typeof msg.text === "string") {
-                term.reset();
-                term.write(msg.text);
-            }
+        let closed = false;
+        let reconnectDelay = 500;
+        let ws = null;
+
+        const connect = () => {
+            ws = new WebSocket(wsUrlFor(token, paneId));
+            ws.onmessage = (ev) => {
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch (e) { return; }
+                if (msg.type === "frame" && typeof msg.text === "string") {
+                    term.reset();
+                    term.write(msg.text);
+                }
+                reconnectDelay = 500;
+            };
+            ws.onerror = () => { /* close handler will follow */ };
+            ws.onclose = () => {
+                if (closed) return;
+                setTimeout(() => {
+                    if (!closed) connect();
+                }, reconnectDelay);
+                reconnectDelay = Math.min(reconnectDelay * 2, 8000);
+            };
         };
-        ws.onerror = () => { /* close handler will follow */ };
+        connect();
 
         return {
             close() {
-                try { ws.close(); } catch (e) { /* ignore */ }
+                closed = true;
+                try { if (ws) ws.close(); } catch (e) { /* ignore */ }
                 try { term.dispose(); } catch (e) { /* ignore */ }
             },
             refit() {
@@ -116,11 +132,19 @@
             "--ccgram-grid-cols", String(gridColumnsFor(panes.length))
         );
         const tiles = [];
+        let tornDown = false;
         for (const pane of panes) {
             const { tile, term } = makeTile(pane);
             container.appendChild(tile);
             attachTerminal(term, token, pane.pane_id, statusEl).then((handle) => {
-                if (handle) tiles.push(handle);
+                if (!handle) return;
+                if (tornDown) {
+                    // Teardown happened while attach was pending — close
+                    // the late-arriving handle so we don't leak the WS.
+                    handle.close();
+                    return;
+                }
+                tiles.push(handle);
             });
             tile.addEventListener("click", () => onFocus(pane));
             tile.addEventListener("keydown", (ev) => {
@@ -132,6 +156,7 @@
         }
         return {
             teardown() {
+                tornDown = true;
                 for (const t of tiles) t.close();
                 tiles.length = 0;
             },

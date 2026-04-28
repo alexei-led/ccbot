@@ -634,6 +634,9 @@ class PaneTransition:
     pane_id: str
     prev_state: "PaneStateName | None"
     new_state: "PaneStateName"
+    # Captured at transition time so a dead pane's name is preserved for
+    # downstream notifications even after the PaneInfo entry is removed.
+    name: str | None = None
 
 
 PaneStateName = Literal["active", "idle", "blocked", "dead"]
@@ -674,6 +677,12 @@ class PaneStatusStrategy:
         self._screen_buffer = screen_buffer
         self._interactive = interactive
         self._pane_content_hash: dict[str, int] = {}
+        # Per-pane forward timestamps gate Telegram flood when a subscribed
+        # pane streams continuously-changing output (build/log).
+        self._pane_forward_ts: dict[str, float] = {}
+        # Windows whose first scan completed — used to suppress lifecycle
+        # "created" notifications for panes already alive at bot startup.
+        self._scanned_windows: set[str] = set()
         topic_state.register_bound("window", self._clear_pane_content_state)
 
     def _clear_pane_content_state(self, window_id: str) -> None:
@@ -684,6 +693,16 @@ class PaneStatusStrategy:
         pane_ids = set(state.panes) if state else set()
         for pid in pane_ids:
             self._pane_content_hash.pop(pid, None)
+            self._pane_forward_ts.pop(pid, None)
+        self._scanned_windows.discard(window_id)
+
+    def has_scanned_window(self, window_id: str) -> bool:
+        """Return True after the first ``scan_window`` for ``window_id``.
+
+        Lifecycle notifications gate "created" events on this so a fresh
+        bot process doesn't announce every existing pane on its first poll.
+        """
+        return window_id in self._scanned_windows
 
     @staticmethod
     def classify_pane(active: bool, status: StatusUpdate | None) -> PaneStateName:
@@ -700,20 +719,25 @@ class PaneStatusStrategy:
 
     def reconcile_dead_panes(
         self, window_id: str, live_pane_ids: set[str]
-    ) -> list[str]:
+    ) -> list[tuple[str, str | None]]:
         """Drop ``WindowState.panes`` entries for panes no longer in tmux.
 
-        Returns the list of pane IDs that disappeared so callers can emit
-        lifecycle notifications. Also purges any cached interactive alerts
-        for those panes so they don't linger if the pane is later recreated.
+        Returns ``(pane_id, name)`` pairs for panes that disappeared so callers
+        can emit lifecycle notifications using the user-assigned name even
+        after the ``PaneInfo`` entry has been removed. Also purges any cached
+        interactive alerts so they don't linger if the pane is later recreated.
         """
         from ..window_state_store import window_store
 
         state = window_store.window_states.get(window_id)
         if state is None:
             return []
-        gone = [pid for pid in state.panes if pid not in live_pane_ids]
-        for pid in gone:
+        gone = [
+            (pid, state.panes[pid].name)
+            for pid in state.panes
+            if pid not in live_pane_ids
+        ]
+        for pid, _ in gone:
             window_store.remove_pane(window_id, pid)
             self._interactive.remove_pane_alert(pid)
             self._pane_content_hash.pop(pid, None)
@@ -848,19 +872,33 @@ class PaneStatusStrategy:
         if self._screen_buffer.is_single_pane_cached(window_id):
             return []
 
+        is_first_scan = window_id not in self._scanned_windows
+
         panes = await tmux_manager.list_panes(window_id)
         self._screen_buffer.update_pane_count_cache(window_id, len(panes))
         live_pane_ids = {p.pane_id for p in panes}
         self._interactive.prune_stale_pane_alerts(window_id, live_pane_ids)
 
         transitions: list[PaneTransition] = []
-        for gone_pid in self.reconcile_dead_panes(window_id, live_pane_ids):
+        for gone_pid, gone_name in self.reconcile_dead_panes(window_id, live_pane_ids):
             transitions.append(
-                PaneTransition(pane_id=gone_pid, prev_state=None, new_state="dead")
+                PaneTransition(
+                    pane_id=gone_pid,
+                    prev_state=None,
+                    new_state="dead",
+                    name=gone_name,
+                )
             )
 
         if len(panes) <= 1:
             self._record_single_pane(window_id, panes, transitions)
+            self._scanned_windows.add(window_id)
+            if is_first_scan:
+                transitions[:] = [
+                    t
+                    for t in transitions
+                    if t.new_state == "dead" or t.prev_state is not None
+                ]
             return transitions
 
         now_mono = time.monotonic()
@@ -887,6 +925,16 @@ class PaneStatusStrategy:
                 on_blocked,
                 on_pane_output,
             )
+        self._scanned_windows.add(window_id)
+        if is_first_scan:
+            # Drop "created" transitions on the very first scan so a bot
+            # restart doesn't announce every existing pane as freshly born.
+            # Dead-pane transitions are kept — those genuinely happened.
+            transitions[:] = [
+                t
+                for t in transitions
+                if t.new_state == "dead" or t.prev_state is not None
+            ]
         return transitions
 
     def _record_single_pane(
@@ -968,6 +1016,10 @@ class PaneStatusStrategy:
             on_blocked,
         )
 
+    # Minimum seconds between Telegram forwards for the same pane. Prevents
+    # flooding when a subscribed pane streams continuously-changing output.
+    PANE_FORWARD_MIN_INTERVAL = 5.0
+
     async def _maybe_forward_subscribed(
         self,
         bot: "Bot",
@@ -984,11 +1036,20 @@ class PaneStatusStrategy:
         pane = window_store.get_pane(window_id, pane_id)
         if pane is None or not pane.subscribed:
             self._pane_content_hash.pop(pane_id, None)
+            self._pane_forward_ts.pop(pane_id, None)
             return
         content_hash = hash(pane_text)
         if self._pane_content_hash.get(pane_id) == content_hash:
             return
+        now = time.monotonic()
+        last_forward = self._pane_forward_ts.get(pane_id)
+        if (
+            last_forward is not None
+            and now - last_forward < self.PANE_FORWARD_MIN_INTERVAL
+        ):
+            return
         self._pane_content_hash[pane_id] = content_hash
+        self._pane_forward_ts[pane_id] = now
         await on_pane_output(bot, user_id, window_id, thread_id, pane_id, pane_text)
 
 

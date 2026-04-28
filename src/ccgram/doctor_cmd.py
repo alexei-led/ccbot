@@ -160,17 +160,18 @@ def _check_allowed_users() -> tuple[str, str]:
 
 
 def _check_draft_streaming() -> tuple[str, str]:
-    """Report cached state of the Bot API 9.5+ draft-streaming probe.
+    """Report cached state of the Bot API 9.5+ draft-streaming flag.
 
-    The probe itself runs at bot startup (or on first DraftStream use) —
-    doctor only reads the process-wide flag set in `telegram_draft`. When
-    doctor is invoked outside a running bot process the flag is False by
-    default, so the message is informational rather than a hard pass.
+    The flag flips on the first ``DraftStream.start`` failure (lazy probe);
+    until then ``DraftStream`` opens optimistically and the legacy fallback
+    kicks in transparently on any 400 response. doctor only reads the
+    process-wide flag, so outside a running bot process it always reports
+    "untested" rather than a hard pass.
     """
     if is_draft_unavailable():
         reason = draft_unavailable_reason() or "Bot API <9.5"
         return _WARN, f"[draft-streaming] degraded — {reason}"
-    return _PASS, "[draft-streaming] available (probe at startup)"
+    return _PASS, "[draft-streaming] untested (probes lazily on first stream)"
 
 
 def _check_events_file() -> tuple[str, str]:

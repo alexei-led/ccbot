@@ -156,7 +156,11 @@ async def _forward_pane_output(
     pane = window_store.get_pane(window_id, pane_id)
     if pane is None or not pane.subscribed:
         return
-    cleaned = terminal_screen_buffer.get_rendered_text(window_id, pane_text).strip()
+    # capture_pane_by_id (in PaneStatusStrategy._classify_non_active) returns
+    # ANSI-stripped text already; using the window-level rendered cache here
+    # would surface another pane's output because that cache is keyed by
+    # window, not pane.
+    cleaned = pane_text.strip()
     if not cleaned:
         return
     lines = cleaned.splitlines()
@@ -234,11 +238,15 @@ async def _notify_pane_lifecycle(
     for t in transitions:
         if t.prev_state is not None:
             continue
-        pane = window_store.get_pane(window_id, t.pane_id)
-        label = f"{pane.name} ({t.pane_id})" if pane and pane.name else t.pane_id
         if t.new_state == "dead":
+            # PaneTransition captures the user-assigned name at reconcile
+            # time so the notification still reads correctly even though
+            # the PaneInfo has already been removed.
+            label = f"{t.name} ({t.pane_id})" if t.name else t.pane_id
             text = f"➖ pane {label} closed"
         else:
+            pane = window_store.get_pane(window_id, t.pane_id)
+            label = f"{pane.name} ({t.pane_id})" if pane and pane.name else t.pane_id
             text = f"➕ pane {label} created"
         try:
             await safe_send(bot, chat_id, text, message_thread_id=thread_id)

@@ -129,10 +129,17 @@ async def _handle_search(request: web.Request) -> web.Response:
 
     needle = query.casefold()
     matches: list[dict[str, Any]] = []
+    truncated = False
     for idx, msg in enumerate(messages):
         text = msg.get("text") or ""
         if needle not in text.casefold():
             continue
+        if len(matches) >= MAX_SEARCH_RESULTS:
+            # Result cap reached — surface a truncated flag so the SPA can
+            # show a "more results — refine your query" hint instead of
+            # implying the cap is the whole match count.
+            truncated = True
+            break
         matches.append(
             {
                 "index": idx,
@@ -141,11 +148,14 @@ async def _handle_search(request: web.Request) -> web.Response:
                 "after": messages[idx + 1] if idx + 1 < len(messages) else None,
             }
         )
-        if len(matches) >= MAX_SEARCH_RESULTS:
-            break
 
     return web.json_response(
-        {"matches": matches, "query": query, "total": len(matches)}
+        {
+            "matches": matches,
+            "query": query,
+            "total": len(matches),
+            "truncated": truncated,
+        }
     )
 
 

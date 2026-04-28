@@ -330,9 +330,11 @@ class DraftStream:
             "message_id": self._message_id,
             "text": self.text,
         }
+        # Always include reply_markup so an explicit None clears any prior
+        # keyboard. Telegram leaves the existing keyboard untouched when the
+        # field is omitted, so omitting on None would silently fail to clear.
         markup = self._markup_dict()
-        if markup is not None:
-            data["reply_markup"] = markup
+        data["reply_markup"] = markup if markup is not None else {"inline_keyboard": []}
         try:
             await self._bot.do_api_request(method, api_kwargs=data)
         except BadRequest as exc:
@@ -348,9 +350,13 @@ class DraftStream:
             await self._handle_stream_failure(exc)
 
     async def _push_legacy(self) -> None:
-        edit_kwargs: dict[str, Any] = {}
-        if self._reply_markup is not None:
-            edit_kwargs["reply_markup"] = self._reply_markup
+        # Always pass reply_markup: Telegram keeps the existing keyboard when
+        # the field is omitted, so reply_markup=None must serialize to an
+        # empty inline keyboard for the clear to take effect.
+        markup = self._reply_markup
+        if markup is None:
+            markup = InlineKeyboardMarkup([])
+        edit_kwargs: dict[str, Any] = {"reply_markup": markup}
         try:
             await self._bot.edit_message_text(
                 chat_id=self._chat_id,

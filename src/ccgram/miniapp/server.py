@@ -16,6 +16,7 @@ The bot token is captured at server-build time and used to verify all tokens.
 
 from __future__ import annotations
 
+import html
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -38,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_FILE = _STATIC_DIR / "index.html"
+# Cached at import time — the template never changes at runtime, so re-reading
+# it on every authenticated page hit is wasted I/O.
+_INDEX_TEMPLATE = _INDEX_FILE.read_text(encoding="utf-8")
 
 # Key used to stash the bot token on the aiohttp Application.
 _BOT_TOKEN_KEY = web.AppKey("bot_token", str)
@@ -54,8 +58,7 @@ def _render_index(payload_meta: str) -> str:
     ``<meta>`` tag carrying the JSON payload; the SPA reads it via
     ``document.querySelector('meta[name=ccgram-payload]').content``.
     """
-    template = _INDEX_FILE.read_text(encoding="utf-8")
-    return template.replace("<!-- CCGRAM_PAYLOAD -->", payload_meta)
+    return _INDEX_TEMPLATE.replace("<!-- CCGRAM_PAYLOAD -->", payload_meta)
 
 
 async def _handle_app(request: web.Request) -> web.Response:
@@ -67,11 +70,15 @@ async def _handle_app(request: web.Request) -> web.Response:
         logger.info("rejected miniapp token: %s", exc)
         return web.Response(status=403, text="invalid or expired token")
 
+    # Escape every interpolated value: today the payload fields are
+    # constrained shapes (``@\d+``, ints), but the meta tag is the only
+    # path through which trusted server data reaches HTML, so treating
+    # all values as untrusted keeps future field additions safe.
     meta = (
         f'<meta name="ccgram-payload" '
-        f'data-window-id="{payload.window_id}" '
-        f'data-user-id="{payload.user_id}" '
-        f'data-exp="{payload.exp}">'
+        f'data-window-id="{html.escape(str(payload.window_id), quote=True)}" '
+        f'data-user-id="{html.escape(str(payload.user_id), quote=True)}" '
+        f'data-exp="{html.escape(str(payload.exp), quote=True)}">'
     )
     body = _render_index(meta)
     return web.Response(text=body, content_type="text/html")

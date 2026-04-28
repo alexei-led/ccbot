@@ -19,6 +19,7 @@ list. Semantic constants below map intent → an allowed emoji approximation.
 from __future__ import annotations
 
 import contextlib
+from collections import OrderedDict
 from typing import Final
 
 import structlog
@@ -42,11 +43,11 @@ REACT_INBOX: Final[str] = "✍"
 REACT_RUNNING: Final[str] = "⚡"
 
 
-_last_reaction: dict[tuple[int, int], str] = {}
+# LRU cap on the dedupe cache. A long-lived bot reacts to many messages, so an
+# unbounded dict would grow without bound (one entry per ever-reacted message).
+_MAX_DEDUPE_ENTRIES: Final[int] = 2000
 
-
-def _dedupe_key(chat_id: int, message_id: int) -> tuple[int, int]:
-    return (chat_id, message_id)
+_last_reaction: OrderedDict[tuple[int, int], str] = OrderedDict()
 
 
 async def react(
@@ -71,8 +72,9 @@ async def react(
         await _maybe_toast(fallback_query, fallback_toast)
         return False
 
-    key = _dedupe_key(chat_id, message_id)
+    key = (chat_id, message_id)
     if _last_reaction.get(key) == emoji:
+        _last_reaction.move_to_end(key)
         return True
 
     try:
@@ -87,6 +89,9 @@ async def react(
         return False
 
     _last_reaction[key] = emoji
+    _last_reaction.move_to_end(key)
+    if len(_last_reaction) > _MAX_DEDUPE_ENTRIES:
+        _last_reaction.popitem(last=False)
     return True
 
 
@@ -101,7 +106,7 @@ async def clear_reaction(bot: Bot, chat_id: int, message_id: int) -> bool:
     except TelegramError as exc:
         logger.warning("clear_reaction failed: %s", exc)
         return False
-    _last_reaction.pop(_dedupe_key(chat_id, message_id), None)
+    _last_reaction.pop((chat_id, message_id), None)
     return True
 
 

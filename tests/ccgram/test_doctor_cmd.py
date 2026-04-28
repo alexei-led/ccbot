@@ -269,7 +269,7 @@ class TestCheckDraftStreaming:
         status, msg = _check_draft_streaming()
         assert status == "pass"
         assert "[draft-streaming]" in msg
-        assert "available" in msg
+        assert "untested" in msg
 
     def test_warns_when_flag_set(self) -> None:
         reset_draft_state()
