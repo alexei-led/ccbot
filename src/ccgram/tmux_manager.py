@@ -547,7 +547,11 @@ class TmuxManager:
                 text = text.rstrip()
                 return text if text else None
             except _TmuxError as e:
-                logger.warning("Failed to capture pane %s: %s", window_id, e)
+                if "can't find window" in str(e):
+                    # Window closed mid-capture — race, not an error.
+                    logger.debug("Pane capture skipped (window gone): %s", window_id)
+                else:
+                    logger.warning("Failed to capture pane %s: %s", window_id, e)
                 self._reset_server()
                 return None
 

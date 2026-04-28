@@ -18,13 +18,14 @@ def _make_context(error: BaseException) -> MagicMock:
 
 
 class TestErrorHandlerNetworkError:
-    async def test_network_error_logged_as_warning(self) -> None:
+    async def test_network_error_logged_as_info(self) -> None:
         ctx = _make_context(NetworkError("httpx.ConnectError:"))
 
         with patch("ccgram.bot.logger") as mock_logger:
             await _error_handler(None, ctx)
 
-        mock_logger.warning.assert_called_once()
+        mock_logger.info.assert_called_once()
+        mock_logger.warning.assert_not_called()
         mock_logger.error.assert_not_called()
 
 

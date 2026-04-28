@@ -546,7 +546,8 @@ async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) ->
     if isinstance(context.error, NetworkError) and not isinstance(
         context.error, BadRequest
     ):
-        logger.warning("Transient network error (PTB will retry): %s", context.error)
+        # PTB will retry automatically — not actionable; demoted from warning.
+        logger.info("Transient network error (PTB will retry): %s", context.error)
         return
     logger.error("Unhandled bot error", exc_info=context.error)
 
