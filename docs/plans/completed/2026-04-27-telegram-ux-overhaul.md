@@ -492,10 +492,10 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 
 ### Task N: Final — Update documentation
 
-- [ ] update `README.md` with new commands (`/live`), Mini App setup section
-- [ ] update `CLAUDE.md` Configuration section with new env vars (`CCGRAM_PANE_LIFECYCLE_NOTIFY`, `CCGRAM_MINIAPP_*`)
-- [ ] update `.claude/rules/architecture.md` with Mini App subsystem and pane-as-first-class
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update `README.md` with new commands (`/live`), Mini App setup section — `/live` mentioned alongside Live button (`README.md:81`); Mini App setup section already in place (`README.md:260-294`); env vars in Configuration Reference table (`README.md:251-254`)
+- [x] update `CLAUDE.md` Configuration section with new env vars (`CCGRAM_PANE_LIFECYCLE_NOTIFY`, `CCGRAM_MINIAPP_*`) — env vars already documented (`CLAUDE.md:87-88`); added `/live` to bot commands list (`CLAUDE.md:46`)
+- [x] update `.claude/rules/architecture.md` with Mini App subsystem and pane-as-first-class — skipped (sensitive-file permission denied; `.claude/rules/` blocked at the harness level, same blocker as Tasks 2.6/3.6/N-1). Mini App + pane subsystem already documented in `CLAUDE.md` Architecture/Mini App sections.
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

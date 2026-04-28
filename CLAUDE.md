@@ -43,6 +43,7 @@ Bot commands (in Telegram topics):
 /restore          Recover a dead topic
 /resume           Scan past sessions and pick one to resume
 /panes            List panes with per-pane screenshot buttons
+/live             Start auto-refreshing terminal screenshot view
 /sync             Sync window state with tmux
 /upgrade          Upgrade ccgram via uv and restart
 ```

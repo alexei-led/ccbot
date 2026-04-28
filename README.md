@@ -78,7 +78,7 @@ Each Telegram Forum topic binds to one tmux window. Messages you type are sent a
 - **Voice messages** — transcribed via Whisper API (OpenAI/Groq), shown with **Send / Discard** buttons before forwarding
 - **Multi-pane support** — auto-detects blocked panes in agent teams, surfaces prompts as alerts; `/panes` for overview
 - **Terminal screenshots** — capture the current pane (or any specific pane) as a PNG image
-- **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
+- **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button or `/live` command; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
 - **File delivery** (`/send`) — send workspace files to Telegram: exact path (`/send docs/arch.png`), glob (`/send *.png`), substring search (`/send arch`), or interactive browser (`/send`). Project-scoped with security filtering (hidden files, credentials, gitignored, >50 MB denied)
 - **Action toolbar** (`/toolbar`) — provider-specific inline buttons. Universal row: Screenshot, Ctrl-C, Live, Send. Provider row varies: Claude (Mode, Think, Esc), Codex (Esc, Enter, Tab), Gemini (Mode, YOLO, Esc), Pi (Esc, Enter, Tab), Shell (Enter, EOF, Suspend)
 - **Remote Control** — 📡 topic badge when RC is active; one-tap activation from status keyboard
