@@ -431,11 +431,11 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/miniapp/server.py` (mount websocket route)
 - Create: `tests/ccgram/miniapp/test_terminal_api.py`
 
-- [ ] websocket `/ws/terminal/<token>` streams pane content (delta-based) at 200ms cadence
-- [ ] xterm.js client renders ANSI colors, handles resize
-- [ ] read-only Phase 3 (input is Phase 3.5)
-- [ ] write tests: websocket auth, delta streaming, disconnect cleanup
-- [ ] run `make check`
+- [x] websocket `/ws/terminal/<token>` streams pane content (delta-based) at 200ms cadence
+- [x] xterm.js client renders ANSI colors, handles resize
+- [x] read-only Phase 3 (input is Phase 3.5)
+- [x] write tests: websocket auth, delta streaming, disconnect cleanup
+- [x] run `make check`
 
 ### Task 3.4: Transcript search surface
 

@@ -22,10 +22,13 @@ from typing import TYPE_CHECKING
 
 from aiohttp import web
 
+from .api import register_terminal_routes
 from .auth import InvalidTokenError, verify_token
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
+
+    PaneCapture = Callable[[str], Awaitable[str | None]]
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +73,23 @@ async def _handle_app(request: web.Request) -> web.Response:
     return web.Response(text=body, content_type="text/html")
 
 
-def build_app(*, bot_token: str) -> web.Application:
+def build_app(
+    *,
+    bot_token: str,
+    terminal_capture: PaneCapture | None = None,
+) -> web.Application:
     """Build the aiohttp application without starting it.
 
-    Exposed for tests; production callers use :func:`start_server`.
+    ``terminal_capture`` overrides the tmux pane reader used by the live
+    terminal websocket; tests inject a stub, production leaves it ``None``
+    to fall through to the global ``TmuxManager`` singleton.
     """
     app = web.Application()
     app[_BOT_TOKEN_KEY] = bot_token
     app.router.add_get("/healthz", _handle_health)
     app.router.add_get("/app/{token}", _handle_app)
     app.router.add_static("/static/", path=_STATIC_DIR, show_index=False)
+    register_terminal_routes(app, bot_token=bot_token, capture=terminal_capture)
     return app
 
 

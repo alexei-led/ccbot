@@ -42,16 +42,21 @@
             font-family: ui-monospace, "SF Mono", Menlo, monospace;
             font-size: 0.85rem;
         }
+        #ccgram-terminal {
+            margin-top: 1rem;
+            height: 70vh;
+            min-height: 320px;
+            border: 1px solid var(--hint);
+            border-radius: 6px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
     <main>
         <h1>ccgram</h1>
         <p id="ccgram-status">Loading…</p>
-        <div class="placeholder" id="ccgram-surface">
-            <strong>SPA shell ready.</strong>
-            <p>Phase 3 surfaces (terminal, transcript, panes) load here.</p>
-        </div>
+        <div id="ccgram-terminal" aria-label="live terminal"></div>
     </main>
     <script>
         (function () {
@@ -62,14 +67,12 @@
                 status.textContent = 'No window context — open from Telegram.';
                 return;
             }
-            const windowId = meta.dataset.windowId;
-            const userId = meta.dataset.userId;
-            status.textContent = `Window ${windowId} · user ${userId}`;
             if (tg) {
                 tg.ready();
                 tg.expand();
             }
         })();
     </script>
+    <script src="/static/terminal.js"></script>
 </body>
 </html>
