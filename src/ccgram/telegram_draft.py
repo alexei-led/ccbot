@@ -33,11 +33,33 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import warnings
 from typing import Any, Final, Literal
 
 import structlog
 from telegram import Bot, InlineKeyboardMarkup
-from telegram.error import BadRequest, RetryAfter, TelegramError
+from telegram.error import BadRequest, NetworkError, RetryAfter, TelegramError, TimedOut
+from telegram.warnings import PTBUserWarning
+
+# PTB v22.6+ exposes a typed `send_message_draft` whose signature requires a
+# `draft_id` and returns `bool` rather than a Message dict — incompatible with
+# our message_id-keyed edit flow. Keep using `do_api_request` and silence the
+# nag warning at the source.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*sendMessageDraft.*",
+    category=PTBUserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r".*editMessageDraft.*",
+    category=PTBUserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r".*finalizeMessageDraft.*",
+    category=PTBUserWarning,
+)
 
 # Sentinel for "leave reply_markup as-is" vs "explicitly clear it".
 _KEEP_MARKUP: Final[Any] = object()
@@ -50,7 +72,9 @@ __all__ = [
     "DRAFT_UNSET",
     "DraftStream",
     "is_draft_unavailable",
+    "is_peer_draft_unsupported",
     "mark_draft_unavailable",
+    "mark_peer_draft_unsupported",
     "probe_draft_availability",
     "reset_draft_state",
 ]
@@ -75,11 +99,24 @@ _UNSUPPORTED_MARKERS: Final[tuple[str, ...]] = (
     "endpoint not found",
 )
 
+# Strings in BadRequest.message that indicate the draft API rejects this
+# specific peer (chat type or topic config), even though the API is
+# generally available. Cached per-peer, not process-wide.
+_PEER_INVALID_MARKERS: Final[tuple[str, ...]] = (
+    "draft_peer_invalid",
+    "peer_invalid",
+    "chat not found",
+)
+
 
 # Process-wide flag — once any caller observes the draft API as unavailable,
 # all subsequent DraftStream instances open in legacy mode without re-probing.
 _DRAFT_UNAVAILABLE: bool = False
 _DRAFT_REASON: str = ""
+
+# Per-peer cache of peers that have rejected drafts. Avoids retrying the
+# draft probe on every stream once a peer is known unsupported.
+_UNSUPPORTED_PEERS: set[tuple[int, int | None]] = set()
 
 
 def is_draft_unavailable() -> bool:
@@ -105,15 +142,35 @@ def draft_unavailable_reason() -> str:
 
 
 def reset_draft_state() -> None:
-    """Clear the process-wide draft-availability flag (test helper)."""
+    """Clear the process-wide draft-availability flag and per-peer cache (test helper)."""
     global _DRAFT_UNAVAILABLE, _DRAFT_REASON
     _DRAFT_UNAVAILABLE = False
     _DRAFT_REASON = ""
+    _UNSUPPORTED_PEERS.clear()
+
+
+def is_peer_draft_unsupported(chat_id: int, thread_id: int | None) -> bool:
+    """Return True if `(chat_id, thread_id)` previously rejected drafts."""
+    return (chat_id, thread_id) in _UNSUPPORTED_PEERS
+
+
+def mark_peer_draft_unsupported(chat_id: int, thread_id: int | None) -> None:
+    """Mark `(chat_id, thread_id)` as draft-unsupported.
+
+    Subsequent DraftStream instances for this peer skip the draft probe
+    and open in legacy mode immediately.
+    """
+    _UNSUPPORTED_PEERS.add((chat_id, thread_id))
 
 
 def _is_unsupported_error(exc: BadRequest) -> bool:
     msg = exc.message.lower() if exc.message else ""
     return any(m in msg for m in _UNSUPPORTED_MARKERS)
+
+
+def _is_peer_invalid_error(exc: BadRequest) -> bool:
+    msg = exc.message.lower() if exc.message else ""
+    return any(m in msg for m in _PEER_INVALID_MARKERS)
 
 
 def _retry_after_seconds(exc: RetryAfter) -> float:
@@ -181,15 +238,26 @@ class DraftStream:
         return _truncate(self._buffer)
 
     async def start(self, initial_text: str) -> int | None:
-        """Open the stream with `initial_text`. Returns the message_id."""
+        """Open the stream with `initial_text`. Returns the message_id.
+
+        Returns None if the underlying transport fails transiently
+        (TimedOut/NetworkError) — neither streaming nor legacy could deliver.
+        Caller treats None as "stream not opened" and skips edits.
+        """
         if self._mode != DRAFT_UNSET:
             raise RuntimeError("DraftStream.start called twice")
         self._buffer = initial_text
 
-        if _DRAFT_UNAVAILABLE:
-            await self._start_legacy()
-        else:
-            await self._start_streaming()
+        try:
+            if _DRAFT_UNAVAILABLE or is_peer_draft_unsupported(
+                self._chat_id, self._thread_id
+            ):
+                await self._start_legacy()
+            else:
+                await self._start_streaming()
+        except (TimedOut, NetworkError) as exc:
+            logger.warning("DraftStream.start transient failure: %s", exc)
+            return None
         return self._message_id
 
     async def append(self, delta: str) -> None:
@@ -287,6 +355,15 @@ class DraftStream:
         except BadRequest as exc:
             if _is_unsupported_error(exc):
                 mark_draft_unavailable(f"sendMessageDraft: {exc.message}")
+                await self._start_legacy()
+                return
+            if _is_peer_invalid_error(exc):
+                mark_peer_draft_unsupported(self._chat_id, self._thread_id)
+                logger.info(
+                    "sendMessageDraft peer-invalid for chat=%s thread=%s — caching legacy",
+                    self._chat_id,
+                    self._thread_id,
+                )
                 await self._start_legacy()
                 return
             logger.warning("sendMessageDraft BadRequest: %s — degrading", exc)

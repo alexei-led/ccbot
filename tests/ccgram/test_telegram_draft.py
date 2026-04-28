@@ -10,7 +10,9 @@ from ccgram.telegram_draft import (
     DRAFT_STREAMING,
     DraftStream,
     is_draft_unavailable,
+    is_peer_draft_unsupported,
     mark_draft_unavailable,
+    mark_peer_draft_unsupported,
     probe_draft_availability,
     reset_draft_state,
 )
@@ -114,7 +116,7 @@ class TestDraftStreamFallback:
 
     async def test_other_badrequest_degrades_without_flag(self) -> None:
         bot = _make_bot()
-        bot.do_api_request.side_effect = BadRequest("chat not found")
+        bot.do_api_request.side_effect = BadRequest("internal server error")
 
         stream = DraftStream(bot, chat_id=100)
         await stream.start("hi")
@@ -160,6 +162,100 @@ class TestDraftStreamFallback:
         # Second failure degrades to legacy and re-pushes via edit_message_text
         assert stream.mode == DRAFT_LEGACY
         bot.edit_message_text.assert_awaited()
+
+
+class TestDraftStreamWarningSuppressed:
+    async def test_send_warning_filtered(self) -> None:
+        import warnings
+
+        from telegram.warnings import PTBUserWarning
+
+        bot = _make_bot(draft_result={"message_id": 7})
+        stream = DraftStream(bot, chat_id=100)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            await stream.start("hi")
+
+        nag = [
+            w
+            for w in caught
+            if issubclass(w.category, PTBUserWarning)
+            and "sendMessageDraft" in str(w.message)
+        ]
+        assert nag == []
+
+
+class TestDraftStreamTransientLegacyFailure:
+    async def test_streaming_badrequest_then_legacy_timeout_returns_none(self) -> None:
+        from telegram.error import TimedOut
+
+        bot = _make_bot()
+        bot.do_api_request.side_effect = BadRequest("Textdraft_peer_invalid")
+        bot.send_message.side_effect = TimedOut("Timed out")
+
+        stream = DraftStream(bot, chat_id=100, message_thread_id=5)
+        mid = await stream.start("hi")
+
+        assert mid is None
+        assert stream.message_id is None
+
+    async def test_legacy_only_path_timeout_returns_none(self) -> None:
+        from telegram.error import TimedOut
+
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+        bot.send_message.side_effect = TimedOut("Timed out")
+
+        stream = DraftStream(bot, chat_id=100)
+        mid = await stream.start("hi")
+
+        assert mid is None
+
+
+class TestDraftStreamPeerCache:
+    async def test_peer_invalid_caches_per_peer(self) -> None:
+        bot = _make_bot()
+        bot.do_api_request.side_effect = BadRequest("Textdraft_peer_invalid")
+
+        stream = DraftStream(bot, chat_id=100, message_thread_id=5)
+        await stream.start("hi")
+
+        assert stream.mode == DRAFT_LEGACY
+        assert is_draft_unavailable() is False  # only this peer
+        assert is_peer_draft_unsupported(100, 5) is True
+
+    async def test_subsequent_stream_to_same_peer_skips_probe(self) -> None:
+        mark_peer_draft_unsupported(100, 5)
+        bot = _make_bot()
+
+        stream = DraftStream(bot, chat_id=100, message_thread_id=5)
+        await stream.start("hi")
+
+        assert stream.mode == DRAFT_LEGACY
+        bot.do_api_request.assert_not_awaited()
+        bot.send_message.assert_awaited_once()
+
+    async def test_different_peer_still_probes(self) -> None:
+        mark_peer_draft_unsupported(100, 5)
+        bot = _make_bot(draft_result={"message_id": 7})
+
+        stream = DraftStream(bot, chat_id=200, message_thread_id=5)
+        await stream.start("hi")
+
+        assert stream.mode == DRAFT_STREAMING
+        bot.do_api_request.assert_awaited_once()
+
+    async def test_peer_invalid_marker_variants(self) -> None:
+        for marker in ("draft_peer_invalid", "PEER_INVALID", "Bad: Chat not found"):
+            reset_draft_state()
+            bot = _make_bot()
+            bot.do_api_request.side_effect = BadRequest(marker)
+
+            stream = DraftStream(bot, chat_id=100)
+            await stream.start("hi")
+
+            assert is_peer_draft_unsupported(100, None) is True, marker
 
 
 class TestDraftStreamRetryAfter:
