@@ -1553,8 +1553,8 @@ class TestDeadWindowNotification:
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.window_tick.build_recovery_keyboard",
-                return_value=None,
+                "ccgram.handlers.window_tick.render_banner",
+                return_value=("⚠ Session ended", None),
             ),
             patch(
                 "ccgram.handlers.window_tick.asyncio.to_thread",
@@ -1584,8 +1584,8 @@ class TestDeadWindowNotification:
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.window_tick.build_recovery_keyboard",
-                return_value=None,
+                "ccgram.handlers.window_tick.render_banner",
+                return_value=("⚠ Session ended", None),
             ),
             patch(
                 "ccgram.handlers.window_tick.asyncio.to_thread",
@@ -1667,7 +1667,7 @@ class TestScanWindowPanes:
     async def test_skips_single_pane_window(self) -> None:
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
                 "ccgram.handlers.window_tick.handle_interactive_ui",
                 new_callable=AsyncMock,
@@ -1690,9 +1690,9 @@ class TestScanWindowPanes:
         mock_provider = MagicMock()
         mock_provider.parse_terminal_status.return_value = interactive
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.window_tick.get_provider_for_window",
+                "ccgram.providers.get_provider_for_window",
                 return_value=mock_provider,
             ),
             patch(
@@ -1712,9 +1712,9 @@ class TestScanWindowPanes:
         mock_provider = MagicMock()
         mock_provider.parse_terminal_status.return_value = None
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.window_tick.get_provider_for_window",
+                "ccgram.providers.get_provider_for_window",
                 return_value=mock_provider,
             ),
             patch(
@@ -1743,9 +1743,9 @@ class TestScanWindowPanes:
         mock_provider = MagicMock()
         mock_provider.parse_terminal_status.return_value = interactive
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.window_tick.get_provider_for_window",
+                "ccgram.providers.get_provider_for_window",
                 return_value=mock_provider,
             ),
             patch(
@@ -1764,7 +1764,7 @@ class TestScanWindowPanes:
     async def test_clears_stale_alert_when_pane_disappears(self) -> None:
         _pane_alert_hashes["%2"] = ("old prompt", 100.0, "@0")
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm:
+        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
             mock_tm.list_panes = AsyncMock(return_value=[_make_pane()])
             await _scan_window_panes(bot, 1, "@0", 42)
         assert "%2" not in _pane_alert_hashes
@@ -1775,9 +1775,9 @@ class TestScanWindowPanes:
         mock_provider = MagicMock()
         mock_provider.parse_terminal_status.return_value = None
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.window_tick.get_provider_for_window",
+                "ccgram.providers.get_provider_for_window",
                 return_value=mock_provider,
             ),
             patch(
@@ -1795,7 +1795,7 @@ class TestScanWindowPanes:
 
     async def test_cached_pane_count_skips_subprocess(self) -> None:
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm:
+        with patch("ccgram.tmux_manager.tmux_manager") as mock_tm:
             mock_tm.list_panes = AsyncMock(return_value=[_make_pane()])
             await _scan_window_panes(bot, 1, "@0", 42)
             await _scan_window_panes(bot, 1, "@0", 42)

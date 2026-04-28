@@ -30,13 +30,14 @@ from .directory_browser import (
 )
 from .interactive_ui import get_interactive_window, handle_interactive_ui
 from .message_queue import enqueue_status_update
+from .pane_callbacks import apply_pane_rename
 from .message_sender import (
     ack_reaction,
     edit_with_fallback,
     rate_limit_send_message,
     safe_reply,
 )
-from .recovery_callbacks import build_recovery_keyboard
+from .recovery_callbacks import RecoveryBanner, render_banner
 from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
@@ -50,6 +51,8 @@ logger = structlog.get_logger()
 
 # Maximum characters for bash output before truncation (fits Telegram 4096-char limit)
 _BASH_OUTPUT_LIMIT = 3800
+
+PENDING_DELIVERY_NOTICE = "\U0001f4ac Will deliver once the agent starts."
 
 # Active bash capture tasks: (user_id, thread_id) -> asyncio.Task
 _bash_capture_tasks: dict[tuple[int, int], asyncio.Task[None]] = {}
@@ -217,6 +220,7 @@ async def _handle_unbound_topic(
             user_data[PENDING_THREAD_ID] = thread_id
             user_data[PENDING_THREAD_TEXT] = text
         await safe_reply(message, msg_text, reply_markup=keyboard)
+        await safe_reply(message, PENDING_DELIVERY_NOTICE)
         return True
 
     # No unbound windows — show directory browser to create a new session
@@ -235,6 +239,7 @@ async def _handle_unbound_topic(
         user_data[PENDING_THREAD_ID] = thread_id
         user_data[PENDING_THREAD_TEXT] = text
     await safe_reply(message, msg_text, reply_markup=keyboard)
+    await safe_reply(message, PENDING_DELIVERY_NOTICE)
     return True
 
 
@@ -295,14 +300,19 @@ async def _handle_dead_window(
         user_data[PENDING_THREAD_ID] = thread_id
         user_data[PENDING_THREAD_TEXT] = text
         user_data[RECOVERY_WINDOW_ID] = window_id
-    keyboard = build_recovery_keyboard(window_id)
-    await safe_reply(
-        message,
-        f"\u26a0 Window `{display}` is no longer running.\n"
-        f"\U0001f4c2 `{cwd}`\n\n"
-        "How would you like to recover?",
-        reply_markup=keyboard,
+    chat = getattr(message, "chat", None)
+    chat_id = chat.id if chat is not None else 0
+    banner = RecoveryBanner(
+        chat_id=chat_id,
+        thread_id=thread_id,
+        window_id=window_id,
+        mode="dead",
+        provider=window_query.get_window_provider(window_id),
+        display=display or window_id,
+        cwd=cwd,
     )
+    banner_text, keyboard = render_banner(banner)
+    await safe_reply(message, banner_text, reply_markup=keyboard)
     return True
 
 
@@ -374,6 +384,10 @@ async def handle_text_message(
 
     # UI guards (window picker / directory browser active)
     if await _check_ui_guards(context.user_data, thread_id, message):
+        return
+
+    # Pane rename capture (consumes the next text in the same thread)
+    if await apply_pane_rename(context.user_data, thread_id, text, message):
         return
 
     # Must be in a named topic

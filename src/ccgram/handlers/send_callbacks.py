@@ -32,6 +32,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .callback_registry import register
+from .message_sender import REACT_DONE, react
 from .send_command import upload_file, build_file_browser
 from .send_security import is_path_contained, validate_sendable
 from .user_state import (
@@ -41,6 +42,14 @@ from .user_state import (
     SEND_PATH_KEY,
     SEND_WINDOW_ID_KEY,
 )
+
+
+async def _react_uploaded(bot, sent: Message | None) -> None:
+    """Best-effort persistent ✅ on the just-uploaded file message."""
+    if sent is None:
+        return
+    await react(bot, sent.chat_id, sent.message_id, REACT_DONE)
+
 
 logger = structlog.get_logger()
 
@@ -87,7 +96,7 @@ async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     current_window_id = thread_router.resolve_window_for_thread(user.id, thread_id)
     if stored_window_id is None or stored_window_id != current_window_id:
         _clear_send_state(context)
-        await query.answer("Session expired", show_alert=True)
+        await query.answer("Browser expired — use /send to restart", show_alert=True)
         return
 
     data = query.data
@@ -146,13 +155,14 @@ async def _handle_file(
         return
 
     try:
-        await upload_file(context.bot, chat_id, thread_id, path)
+        sent = await upload_file(context.bot, chat_id, thread_id, path)
     except TelegramError as exc:
         await query.answer(f"Upload failed: {exc}", show_alert=True)
         return
 
     _clear_send_state(context)
-    await query.answer("Sent")
+    await _react_uploaded(context.bot, sent)
+    await query.answer()
     if msg is not None:
         with contextlib.suppress(TelegramError):
             await msg.delete()

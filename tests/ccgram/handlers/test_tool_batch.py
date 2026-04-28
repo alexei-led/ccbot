@@ -1,5 +1,6 @@
 import ast
 import inspect
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,13 +10,17 @@ from ccgram.handlers.tool_batch import (
     BATCH_MAX_LENGTH,
     ToolBatch,
     ToolBatchEntry,
+    _active_batches,
     _batch_result_prefix,
     _extract_task_create_title,
+    _send_or_edit_batch,
+    flush_batch,
     flush_if_active,
     format_batch_message,
     is_batch_eligible,
     process_tool_event,
 )
+from ccgram.telegram_draft import mark_draft_unavailable, reset_draft_state
 
 
 class TestFormatBatchMessage:
@@ -230,3 +235,112 @@ class TestNoImportFromMessageQueue:
             ):
                 violations.append(f"line {node.lineno}: from {node.module} import ...")
         assert violations == [], f"tool_batch imports from message_queue: {violations}"
+
+
+class TestDraftStreamIntegration:
+    """Verify tool_batch routes send/edit through DraftStream (legacy mode)."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_draft_state(self, monkeypatch: pytest.MonkeyPatch):
+        reset_draft_state()
+        # Force legacy DraftStream mode for deterministic bot.* assertions.
+        mark_draft_unavailable("test")
+        _active_batches.clear()
+        # Avoid real wall-clock rate-limiting in unit tests.
+        monkeypatch.setattr(
+            "ccgram.handlers.tool_batch._rate_limit_chat",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            "ccgram.handlers.tool_batch.thread_router",
+            MagicMock(resolve_chat_id=MagicMock(return_value=42)),
+        )
+        # No status bubble to clear.
+        monkeypatch.setattr(
+            "ccgram.handlers.tool_batch.get_batch_mode", lambda _wid: "batched"
+        )
+        yield
+        _active_batches.clear()
+        reset_draft_state()
+
+    @staticmethod
+    def _make_bot(send_id: int = 99):
+        bot = AsyncMock()
+        sent = MagicMock()
+        sent.message_id = send_id
+        bot.send_message.return_value = sent
+        return bot
+
+    async def test_first_tool_use_starts_draft_stream(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No status bubble to dismiss.
+        monkeypatch.setattr(
+            "ccgram.handlers.status_bubble.clear_status_message",
+            AsyncMock(return_value=None),
+        )
+        bot = self._make_bot(send_id=77)
+
+        batch = ToolBatch(window_id="@0", thread_id=10)
+        batch.entries.append(
+            ToolBatchEntry(tool_use_id="t1", tool_use_text="Read foo.py")
+        )
+
+        await _send_or_edit_batch(
+            bot, user_id=1, batch=batch, chat_id=42, raw_thread_id=10, thread_id_or_0=10
+        )
+
+        bot.send_message.assert_awaited_once()
+        assert batch.draft is not None
+        assert batch.telegram_msg_id == 77
+
+    async def test_second_call_replaces_text_via_draft(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "ccgram.handlers.status_bubble.clear_status_message",
+            AsyncMock(return_value=None),
+        )
+        bot = self._make_bot(send_id=77)
+
+        batch = ToolBatch(window_id="@0", thread_id=10)
+        batch.entries.append(
+            ToolBatchEntry(tool_use_id="t1", tool_use_text="Read foo.py")
+        )
+        await _send_or_edit_batch(bot, 1, batch, 42, 10, 10)
+
+        # Second call (e.g. tool_result arriving) edits the same message.
+        batch.entries[0].tool_result_text = "42 lines"
+        await _send_or_edit_batch(bot, 1, batch, 42, 10, 10)
+
+        bot.send_message.assert_awaited_once()
+        bot.edit_message_text.assert_awaited_once()
+
+    async def test_flush_batch_finalizes_active_draft(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "ccgram.handlers.status_bubble.clear_status_message",
+            AsyncMock(return_value=None),
+        )
+        bot = self._make_bot(send_id=77)
+        batch = ToolBatch(window_id="@0", thread_id=10)
+        batch.entries.append(
+            ToolBatchEntry(tool_use_id="t1", tool_use_text="Read foo.py")
+        )
+        _active_batches[(1, 10)] = batch
+
+        await _send_or_edit_batch(bot, 1, batch, 42, 10, 10)
+        assert batch.draft is not None and not batch.draft.closed
+
+        await flush_batch(bot, user_id=1, thread_id_or_0=10)
+
+        # Draft is closed, removed from active.
+        assert batch.draft.closed is True
+        assert (1, 10) not in _active_batches
+
+    async def test_flush_batch_no_op_when_no_entries(self) -> None:
+        bot = self._make_bot()
+        await flush_batch(bot, user_id=1, thread_id_or_0=10)
+        bot.send_message.assert_not_called()
+        bot.edit_message_text.assert_not_called()

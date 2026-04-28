@@ -117,6 +117,7 @@ def load_handlers() -> None:
         interactive_callbacks,
         msg_spawn,
         msg_telegram,
+        pane_callbacks,
         recovery_callbacks,
         resume_command,
         screenshot_callbacks,

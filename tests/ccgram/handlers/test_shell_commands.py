@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,9 +11,12 @@ from ccgram.handlers.callback_data import (
     CB_SHELL_RUN,
 )
 from ccgram.handlers.shell_commands import (
+    _BANG_HINT_TEXT,
     _build_approval_keyboard,
     _cancel_stuck_input,
+    _clear_shell_hint_seen,
     _generation_counter,
+    _shell_hint_seen,
     _shell_pending,
     clear_shell_pending,
     handle_shell_callback,
@@ -30,14 +34,16 @@ _CTX = "ccgram.handlers.shell_context"
 def _clean_shell_state():
     _shell_pending.clear()
     _generation_counter.clear()
+    _shell_hint_seen.clear()
     yield
     _shell_pending.clear()
     _generation_counter.clear()
+    _shell_hint_seen.clear()
 
 
 class TestPendingState:
     def test_clear_removes_entry(self) -> None:
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
         clear_shell_pending(-100, 42)
         assert _shell_pending.get((-100, 42)) is None
 
@@ -107,7 +113,9 @@ class TestHandleShellMessage:
             await handle_shell_message(bot, 1, 42, "@0", "!ls -la", message)
 
             mock_send.assert_called_once_with("@0", "ls -la", raw=True)
-            mock_mark.assert_called_once_with("@0", "ls -la", 1, 42)
+            mock_mark.assert_called_once()
+            args = mock_mark.call_args.args
+            assert args[:4] == ("@0", "ls -la", 1, 42)
 
     async def test_bang_with_space_strips_leading_space(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -299,7 +307,12 @@ class TestHandleShellMessage:
 
             await handle_shell_message(bot, 1, 42, "@0", "list files")
 
-            mock_send.assert_called_once()
+            approval_calls = [
+                call
+                for call in mock_send.call_args_list
+                if call.args[2] != _BANG_HINT_TEXT
+            ]
+            assert len(approval_calls) == 1
 
 
 class TestHandleShellCallback:
@@ -324,13 +337,13 @@ class TestHandleShellCallback:
             mock_tr.get_window_for_thread.return_value = "@0"
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
-            _shell_pending[(-100, 42)] = ("ls -la", 1)
+            _shell_pending[(-100, 42)] = ("ls -la", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
             query.answer.assert_called_once()
             mock_send.assert_called_once_with("@0", "ls -la", raw=True)
-            mock_mark.assert_called_once_with("@0", "ls -la", 1, 42)
+            mock_mark.assert_called_once_with("@0", "ls -la", 1, 42, 0)
             assert _shell_pending.get((-100, 42)) is None
 
     async def test_run_wrong_user_rejects(self) -> None:
@@ -343,7 +356,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("ls -la", 999)
+            _shell_pending[(-100, 42)] = ("ls -la", 999, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
@@ -359,7 +372,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("rm -rf /", 999)
+            _shell_pending[(-100, 42)] = ("rm -rf /", 999, 0)
 
             await handle_shell_callback(
                 query, 1, f"{CB_SHELL_CONFIRM_DANGER}@0", bot, 42
@@ -378,7 +391,7 @@ class TestHandleShellCallback:
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = None
-            _shell_pending[(-100, 42)] = ("ls -la", 1)
+            _shell_pending[(-100, 42)] = ("ls -la", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
 
@@ -411,7 +424,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("rm -rf /", 1)
+            _shell_pending[(-100, 42)] = ("rm -rf /", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_CANCEL}@0", bot, 42)
 
@@ -430,7 +443,7 @@ class TestHandleShellCallback:
             patch(f"{_MOD}.safe_edit", new_callable=AsyncMock) as mock_edit,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            _shell_pending[(-100, 42)] = ("grep -r pattern .", 1)
+            _shell_pending[(-100, 42)] = ("grep -r pattern .", 1, 0)
 
             await handle_shell_callback(query, 1, f"{CB_SHELL_EDIT}@0", bot, 42)
 
@@ -481,7 +494,7 @@ class TestHandleShellCallback:
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"
-            _shell_pending[(-100, 42)] = ("rm -rf /tmp/test", 1)
+            _shell_pending[(-100, 42)] = ("rm -rf /tmp/test", 1, 0)
 
             await handle_shell_callback(
                 query, 1, f"{CB_SHELL_CONFIRM_DANGER}@0", bot, 42
@@ -631,6 +644,7 @@ class TestShowCommandApprovalPaths:
     async def test_message_present_uses_safe_reply(self) -> None:
         bot = AsyncMock(spec=Bot)
         message = AsyncMock(spec=Message)
+        message.message_id = 7
         result = CommandResult(
             command="ls", explanation="List files", is_dangerous=False
         )
@@ -640,7 +654,7 @@ class TestShowCommandApprovalPaths:
 
         mock_reply.assert_called_once()
         assert "`ls`" in mock_reply.call_args[0][1]
-        assert _shell_pending[(-100, 42)] == ("ls", 1)
+        assert _shell_pending[(-100, 42)] == ("ls", 1, 7)
 
     async def test_message_none_uses_safe_send(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -651,7 +665,7 @@ class TestShowCommandApprovalPaths:
 
         mock_send.assert_called_once()
         assert "`pwd`" in mock_send.call_args[0][2]
-        assert _shell_pending[(-100, 42)] == ("pwd", 1)
+        assert _shell_pending[(-100, 42)] == ("pwd", 1, 0)
 
 
 class TestLazyMarkerRecovery:
@@ -699,11 +713,11 @@ class TestHasShellPending:
         assert has_shell_pending(-100, 42) is False
 
     def test_returns_true_when_entry_exists(self) -> None:
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
         assert has_shell_pending(-100, 42) is True
 
     def test_returns_false_for_different_key(self) -> None:
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
         assert has_shell_pending(-100, 99) is False
 
 
@@ -841,6 +855,122 @@ class TestGenerationCounter:
             assert _generation_counter[(-100, 42)] == 1
 
 
+class TestBangHint:
+    async def test_hint_sent_once_per_session(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = AsyncMock(
+            return_value=CommandResult(command="ls", explanation="", is_dangerous=False)
+        )
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_reply", new_callable=AsyncMock),
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(bot, 1, 42, "@0", "first command", message)
+            assert (-100, 42) in _shell_hint_seen
+            hint_calls = [
+                call
+                for call in mock_send.call_args_list
+                if call.args[2] == _BANG_HINT_TEXT
+            ]
+            assert len(hint_calls) == 1
+
+            mock_send.reset_mock()
+            _shell_pending.clear()
+
+            await handle_shell_message(bot, 1, 42, "@0", "second command", message)
+            hint_calls = [
+                call
+                for call in mock_send.call_args_list
+                if call.args[2] == _BANG_HINT_TEXT
+            ]
+            assert hint_calls == []
+
+    async def test_hint_not_sent_for_bang_prefix(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
+
+            assert (-100, 42) not in _shell_hint_seen
+            hint_calls = [
+                call
+                for call in mock_send.call_args_list
+                if call.args[2:3] == (_BANG_HINT_TEXT,)
+            ]
+            assert hint_calls == []
+
+    async def test_hint_not_sent_when_no_llm_configured(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=None),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+
+            await handle_shell_message(bot, 1, 42, "@0", "anything", message)
+
+            assert (-100, 42) not in _shell_hint_seen
+
+    def test_clear_hint_seen_cleanup(self) -> None:
+        _shell_hint_seen.add((-100, 42))
+        _clear_shell_hint_seen(-100, 42)
+        assert (-100, 42) not in _shell_hint_seen
+
+    def test_clear_hint_seen_idempotent(self) -> None:
+        _clear_shell_hint_seen(-999, 999)
+
+    def test_clear_shell_pending_does_not_reset_hint(self) -> None:
+        _shell_hint_seen.add((-100, 42))
+        clear_shell_pending(-100, 42)
+        assert (-100, 42) in _shell_hint_seen
+
+
 class TestCommandHistoryRecording:
     async def test_llm_path_records_command_history(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -880,7 +1010,7 @@ class TestShowCommandApprovalPreventsOverwrite:
         bot = AsyncMock(spec=Bot)
         result = CommandResult(command="pwd", explanation="", is_dangerous=False)
 
-        _shell_pending[(-100, 42)] = ("ls", 1)
+        _shell_pending[(-100, 42)] = ("ls", 1, 0)
 
         with patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send:
             returned = await show_command_approval(
@@ -889,7 +1019,7 @@ class TestShowCommandApprovalPreventsOverwrite:
 
         assert returned is False
         mock_send.assert_not_called()
-        assert _shell_pending[(-100, 42)] == ("ls", 1)
+        assert _shell_pending[(-100, 42)] == ("ls", 1, 0)
 
     async def test_returns_true_when_slot_empty(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -901,4 +1031,258 @@ class TestShowCommandApprovalPreventsOverwrite:
             )
 
         assert returned is True
-        assert _shell_pending[(-100, 42)] == ("pwd", 1)
+        assert _shell_pending[(-100, 42)] == ("pwd", 1, 0)
+
+
+class TestTypingAction:
+    async def test_immediate_typing_action_on_entry(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        bot.send_chat_action = AsyncMock()
+        message = AsyncMock(spec=Message)
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
+
+        assert bot.send_chat_action.await_count >= 1
+        call = bot.send_chat_action.await_args_list[0]
+        assert call.kwargs["chat_id"] == -100
+        assert call.kwargs["message_thread_id"] == 42
+
+    async def test_typing_pulse_refreshes_during_llm(self) -> None:
+        from ccgram.handlers import shell_commands as sc
+
+        bot = AsyncMock(spec=Bot)
+        bot.send_chat_action = AsyncMock()
+        message = AsyncMock(spec=Message)
+
+        async def slow_generate(*args, **kwargs):  # noqa: ARG001
+            # 0.25 s with refresh 0.05 s ⇒ at least 4 pulses + initial.
+            await asyncio.sleep(0.25)
+            return CommandResult(command="ls", explanation="", is_dangerous=False)
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = slow_generate
+
+        with (
+            patch.object(sc, "_TYPING_REFRESH_INTERVAL", 0.05),
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_reply", new_callable=AsyncMock),
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(bot, 1, 42, "@0", "list files", message)
+
+        # immediate fire + ≥3 pulses while LLM was sleeping (timing-tolerant).
+        assert bot.send_chat_action.await_count >= 3
+
+    async def test_typing_pulse_cancelled_after_completion(self) -> None:
+        from ccgram.handlers import shell_commands as sc
+
+        bot = AsyncMock(spec=Bot)
+        bot.send_chat_action = AsyncMock()
+        message = AsyncMock(spec=Message)
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = AsyncMock(
+            return_value=CommandResult(command="ls", explanation="", is_dangerous=False)
+        )
+
+        with (
+            patch.object(sc, "_TYPING_REFRESH_INTERVAL", 0.02),
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_reply", new_callable=AsyncMock),
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(bot, 1, 42, "@0", "list files", message)
+            count_after_complete = bot.send_chat_action.await_count
+            await asyncio.sleep(0.1)
+
+        # No further pulses — task was cancelled.
+        assert bot.send_chat_action.await_count == count_after_complete
+
+    async def test_typing_pulse_cancelled_on_llm_error(self) -> None:
+        from ccgram.handlers import shell_commands as sc
+
+        bot = AsyncMock(spec=Bot)
+        bot.send_chat_action = AsyncMock()
+        message = AsyncMock(spec=Message)
+
+        mock_completer = AsyncMock()
+        mock_completer.generate_command = AsyncMock(
+            side_effect=RuntimeError("API error")
+        )
+
+        with (
+            patch.object(sc, "_TYPING_REFRESH_INTERVAL", 0.02),
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_MOD}.get_completer", return_value=mock_completer),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_send", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.gather_llm_context",
+                new_callable=AsyncMock,
+                return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
+            ),
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.capture_pane = AsyncMock(return_value="$ ")
+
+            await handle_shell_message(bot, 1, 42, "@0", "do something", message)
+            count_after_abort = bot.send_chat_action.await_count
+            await asyncio.sleep(0.1)
+
+        assert bot.send_chat_action.await_count == count_after_abort
+
+    async def test_typing_action_swallows_telegram_error(self) -> None:
+        from telegram.error import TelegramError
+
+        bot = AsyncMock(spec=Bot)
+        bot.send_chat_action = AsyncMock(side_effect=TelegramError("bad thread"))
+        message = AsyncMock(spec=Message)
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+
+            # Must not raise.
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
+
+
+class TestRunningReaction:
+    async def test_handle_shell_message_reacts_running_on_user_message(self) -> None:
+        bot = AsyncMock(spec=Bot)
+        message = AsyncMock(spec=Message)
+        message.message_id = 4242
+        message.chat = MagicMock()
+        message.chat.id = -100
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message)
+
+        mock_react.assert_awaited_once()
+        args = mock_react.call_args.args
+        assert args[1] == -100
+        assert args[2] == 4242
+        from ccgram.handlers.reactions import REACT_RUNNING
+
+        assert args[3] == REACT_RUNNING
+        # mark_telegram_command receives the user-msg id for completion react
+        mock_mark.assert_called_once_with("@0", "ls", 1, 42, 4242)
+
+    async def test_handle_shell_message_no_message_skips_reaction(self) -> None:
+        bot = AsyncMock(spec=Bot)
+
+        with (
+            patch(f"{_MOD}.enqueue_status_update", new_callable=AsyncMock),
+            patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+            await handle_shell_message(bot, 1, 42, "@0", "!ls", message=None)
+
+        mock_react.assert_not_awaited()
+        mock_mark.assert_called_once_with("@0", "ls", 1, 42, 0)
+
+    async def test_run_callback_passes_stored_message_id(self) -> None:
+        query = AsyncMock(spec=CallbackQuery)
+        query.answer = AsyncMock()
+        bot = AsyncMock(spec=Bot)
+
+        with (
+            patch(f"{_CTX}.view_window"),
+            patch(f"{_MOD}.thread_router") as mock_tr,
+            patch(f"{_MOD}.tmux_manager") as mock_tm,
+            patch(f"{_MOD}.safe_edit", new_callable=AsyncMock),
+            patch(
+                f"{_MOD}.send_to_window",
+                new_callable=AsyncMock,
+                return_value=(True, ""),
+            ),
+            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+        ):
+            mock_tr.resolve_chat_id.return_value = -100
+            mock_tr.get_window_for_thread.return_value = "@0"
+            mock_tm.find_window_by_id = AsyncMock(return_value=None)
+            mock_tm.capture_pane = AsyncMock(return_value=None)
+            _shell_pending[(-100, 42)] = ("uname -a", 1, 9999)
+
+            await handle_shell_callback(query, 1, f"{CB_SHELL_RUN}@0", bot, 42)
+
+        mock_mark.assert_called_once_with("@0", "uname -a", 1, 42, 9999)

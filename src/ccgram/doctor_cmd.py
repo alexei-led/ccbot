@@ -18,6 +18,7 @@ from pathlib import Path
 from collections.abc import Callable
 
 from .providers import resolve_capabilities
+from .telegram_draft import draft_unavailable_reason, is_draft_unavailable
 from .utils import ccgram_dir, tmux_session_name
 
 _PASS = "pass"
@@ -156,6 +157,21 @@ def _check_allowed_users() -> tuple[str, str]:
         return _PASS, f"ALLOWED_USERS: {len(users)} user(s)"
     except ValueError:
         return _FAIL, "ALLOWED_USERS contains non-numeric values"
+
+
+def _check_draft_streaming() -> tuple[str, str]:
+    """Report cached state of the Bot API 9.5+ draft-streaming flag.
+
+    The flag flips on the first ``DraftStream.start`` failure (lazy probe);
+    until then ``DraftStream`` opens optimistically and the legacy fallback
+    kicks in transparently on any 400 response. doctor only reads the
+    process-wide flag, so outside a running bot process it always reports
+    "untested" rather than a hard pass.
+    """
+    if is_draft_unavailable():
+        reason = draft_unavailable_reason() or "Bot API <9.5"
+        return _WARN, f"[draft-streaming] degraded — {reason}"
+    return _PASS, "[draft-streaming] untested (probes lazily on first stream)"
 
 
 def _check_events_file() -> tuple[str, str]:
@@ -321,6 +337,9 @@ def doctor_main(fix: bool = False) -> None:
     # Events file check
     _, _, failed = _run_check(_check_events_file)
     has_failures = has_failures or failed
+
+    # Bot API draft-streaming availability (Bot API 9.5+)
+    _run_check(_check_draft_streaming)
 
     # Orphaned windows
     orphans = _find_orphaned_windows()

@@ -109,7 +109,7 @@ class TestHandleUnboundTopic:
 
         assert result is True
         mock_picker.assert_called_once()
-        mock_reply.assert_called_once()
+        assert mock_reply.call_count == 2
         assert user_data[STATE_KEY] == STATE_SELECTING_WINDOW
         assert user_data[PENDING_THREAD_TEXT] == "hello"
 
@@ -138,6 +138,7 @@ class TestHandleUnboundTopic:
         assert result is True
         mock_browser.assert_called_once()
         assert user_data[STATE_KEY] == STATE_BROWSING_DIRECTORY
+        assert mock_reply.call_count == 2
 
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
     @patch(f"{_TH}.build_window_picker")
@@ -165,6 +166,61 @@ class TestHandleUnboundTopic:
         assert user_data[PENDING_THREAD_ID] == 42
         assert user_data[PENDING_THREAD_TEXT] == "my text"
 
+    @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(f"{_TH}.build_window_picker")
+    @patch(f"{_TH}.tmux_manager")
+    @patch(f"{_TH}.thread_router")
+    async def test_window_picker_sends_pending_disclosure(
+        self,
+        mock_tr: MagicMock,
+        mock_tm: MagicMock,
+        mock_picker: MagicMock,
+        mock_reply: AsyncMock,
+    ) -> None:
+        mock_tr.get_window_for_thread.return_value = None
+        mock_tr.iter_thread_bindings.return_value = []
+        w = MagicMock(window_id="@5", window_name="proj", cwd="/tmp")
+        mock_tm.list_windows = AsyncMock(return_value=[w])
+        mock_tm.discover_external_sessions = AsyncMock(return_value=[])
+        mock_picker.return_value = ("Pick:", MagicMock(), ["@5"])
+
+        user_data: dict = {}
+        message = AsyncMock()
+
+        await _handle_unbound_topic(100, 42, "hello", user_data, message)
+
+        from ccgram.handlers.text_handler import PENDING_DELIVERY_NOTICE
+
+        assert mock_reply.call_count == 2
+        assert mock_reply.call_args_list[1].args[1] == PENDING_DELIVERY_NOTICE
+
+    @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(f"{_TH}.build_directory_browser")
+    @patch(f"{_TH}.tmux_manager")
+    @patch(f"{_TH}.thread_router")
+    async def test_directory_browser_sends_pending_disclosure(
+        self,
+        mock_tr: MagicMock,
+        mock_tm: MagicMock,
+        mock_browser: MagicMock,
+        mock_reply: AsyncMock,
+    ) -> None:
+        mock_tr.get_window_for_thread.return_value = None
+        mock_tr.iter_thread_bindings.return_value = []
+        mock_tm.list_windows = AsyncMock(return_value=[])
+        mock_tm.discover_external_sessions = AsyncMock(return_value=[])
+        mock_browser.return_value = ("Browse:", MagicMock(), [])
+
+        user_data: dict = {}
+        message = AsyncMock()
+
+        await _handle_unbound_topic(100, 42, "hello", user_data, message)
+
+        from ccgram.handlers.text_handler import PENDING_DELIVERY_NOTICE
+
+        assert mock_reply.call_count == 2
+        assert mock_reply.call_args_list[1].args[1] == PENDING_DELIVERY_NOTICE
+
 
 class TestHandleDeadWindow:
     @patch(f"{_TH}.tmux_manager")
@@ -177,7 +233,7 @@ class TestHandleDeadWindow:
         assert result is False
 
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
-    @patch(f"{_TH}.build_recovery_keyboard")
+    @patch(f"{_TH}.render_banner")
     @patch(f"{_TH}.tmux_manager")
     @patch(f"{_TH}.window_query")
     @patch(f"{_TH}.thread_router")
@@ -186,7 +242,7 @@ class TestHandleDeadWindow:
         mock_tr: MagicMock,
         mock_sm: MagicMock,
         mock_tm: MagicMock,
-        mock_kb: MagicMock,
+        mock_render: MagicMock,
         mock_reply: AsyncMock,
     ) -> None:
         mock_tm.find_window_by_id = AsyncMock(return_value=None)
@@ -194,7 +250,10 @@ class TestHandleDeadWindow:
         ws = MagicMock()
         ws.cwd = "/tmp/project"
         mock_sm.view_window.return_value = ws
-        mock_kb.return_value = MagicMock()
+        mock_render.return_value = (
+            "⚠ Session `project` ended.\n📂 `/tmp/project`",
+            MagicMock(),
+        )
 
         user_data: dict = {}
         message = AsyncMock()
@@ -207,8 +266,47 @@ class TestHandleDeadWindow:
 
         assert result is True
         mock_reply.assert_called_once()
-        assert "no longer running" in mock_reply.call_args.args[1]
+        banner = mock_render.call_args.args[0]
+        assert banner.window_id == "@0"
+        assert banner.mode == "dead"
+        assert banner.cwd == "/tmp/project"
+        assert banner.display == "project"
         assert user_data[RECOVERY_WINDOW_ID] == "@0"
+
+    @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
+    @patch(f"{_TH}.tmux_manager")
+    @patch(f"{_TH}.window_query")
+    @patch(f"{_TH}.thread_router")
+    async def test_recovery_banner_includes_help_text(
+        self,
+        mock_tr: MagicMock,
+        mock_sm: MagicMock,
+        mock_tm: MagicMock,
+        mock_reply: AsyncMock,
+    ) -> None:
+        mock_tm.find_window_by_id = AsyncMock(return_value=None)
+        mock_tr.get_display_name.return_value = "project"
+        ws = MagicMock()
+        ws.cwd = "/tmp/project"
+        mock_sm.view_window.return_value = ws
+
+        user_data: dict = {}
+        message = AsyncMock()
+
+        with patch(
+            "ccgram.handlers.recovery_callbacks.get_provider_for_window"
+        ) as mock_gpw:
+            caps = mock_gpw.return_value.capabilities
+            caps.supports_continue = True
+            caps.supports_resume = True
+            with patch(f"{_TH}.Path") as mock_path:
+                mock_path.return_value.is_dir.return_value = True
+                await _handle_dead_window("@0", 100, 42, "hello", user_data, message)
+
+        body = mock_reply.call_args.args[1]
+        assert "Start fresh" in body
+        assert "Continue last session" in body
+        assert "Resume from list" in body
 
     @pytest.mark.parametrize("cwd", ["", "/nonexistent"])
     @patch(f"{_TH}.safe_reply", new_callable=AsyncMock)
@@ -433,6 +531,22 @@ class TestForwardMessage:
         await _forward_message("@0", 100, 42, "hello", bot, message)
 
         mock_handle_ui.assert_called_once_with(bot, 100, "@0", 42)
+
+    @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
+    @patch(f"{_TH}.window_query")
+    async def test_sends_typing_chat_action(
+        self, _mock_sm: MagicMock, _mock_send: AsyncMock
+    ) -> None:
+        from telegram.constants import ChatAction
+
+        bot = AsyncMock()
+        message = AsyncMock()
+        message.chat.send_action = AsyncMock()
+
+        with patch(f"{_TH}.get_interactive_window", return_value=None):
+            await _forward_message("@0", 100, 42, "hello", bot, message)
+
+        message.chat.send_action.assert_awaited_once_with(ChatAction.TYPING)
 
 
 class TestBashCaptureCleanup:

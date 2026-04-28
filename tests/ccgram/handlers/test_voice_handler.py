@@ -49,6 +49,9 @@ def _make_callback_query(data: str, message_id: int = 42) -> MagicMock:
     query.message.chat = MagicMock()
     query.message.chat.id = 999
     query.message.delete = AsyncMock()
+    bot = MagicMock()
+    bot.set_message_reaction = AsyncMock()
+    query.message.get_bot = MagicMock(return_value=bot)
     query.answer = AsyncMock()
     return query
 
@@ -127,7 +130,9 @@ class TestHandleVoiceMessage:
         )
 
         mock_reply.assert_called_once()
-        assert "Bind this topic" in mock_reply.call_args.args[1]
+        body = mock_reply.call_args.args[1]
+        assert "not bound" in body
+        assert "Voice messages aren't queued" in body
 
     @patch(f"{_VH}.thread_router")
     @patch(f"{_VH}.config")
@@ -379,7 +384,15 @@ class TestHandleVoiceCallback:
 
         mock_send_to_window.assert_called_once_with("@0", "hello")
         update.callback_query.message.delete.assert_called_once()
-        update.callback_query.answer.assert_called_once_with("✓ Sent")
+        # Toast replaced with persistent reactions: 👀 on receive, 🔥 on delivery.
+        update.callback_query.answer.assert_called_once_with()
+        bot = update.callback_query.message.get_bot()
+        emojis = [
+            call.kwargs["reaction"][0].emoji
+            for call in bot.set_message_reaction.await_args_list
+        ]
+        assert "👀" in emojis
+        assert "🔥" in emojis
         assert (999, 42) not in context.user_data.get(VOICE_PENDING, {})
 
     @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)
@@ -412,7 +425,7 @@ class TestHandleVoiceCallback:
 
         await voice_callbacks.handle_voice_callback(update, context)
 
-        update.callback_query.answer.assert_called_once_with("✓ Sent")
+        update.callback_query.answer.assert_called_once_with()
 
     @patch(f"{_VC}.get_thread_id")
     async def test_drop(self, mock_get_thread_id: MagicMock) -> None:
@@ -619,7 +632,7 @@ class TestHandleVoiceCallback:
 
         mock_send_to_window.assert_not_called()
         update.callback_query.message.delete.assert_called_once()
-        update.callback_query.answer.assert_called_once_with("✓ Sent")
+        update.callback_query.answer.assert_called_once_with()
         mock_ack.assert_called_once()
 
     @patch(f"{_VC}.send_to_window", new_callable=AsyncMock)

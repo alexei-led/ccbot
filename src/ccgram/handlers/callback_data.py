@@ -66,6 +66,7 @@ CB_RECOVERY_CONTINUE = "rec:c:"  # rec:c:<window_id>
 CB_RECOVERY_RESUME = "rec:r:"  # rec:r:<window_id>
 CB_RECOVERY_PICK = "rec:p:"  # rec:p:<index> (resume picker selection)
 CB_RECOVERY_BACK = "rec:b:"  # rec:b:<window_id> (back to recovery menu)
+CB_RECOVERY_BROWSE = "rec:br:"  # rec:br:<window_id> (browse other projects)
 CB_RECOVERY_CANCEL = "rec:x"  # cancel recovery
 
 # Resume command (browse all sessions)
@@ -82,6 +83,14 @@ NOTIFY_MODE_ICONS: dict[str, str] = {
 NOTIFY_MODE_LABELS: dict[str, str] = {
     k: f"{v} {k.replace('_', ' ').title()}" for k, v in NOTIFY_MODE_ICONS.items()
 }
+# Reactions on the status bubble after a notify-mode toggle. Picked from
+# Telegram's allowed reaction set (the bell/warning/no-bell glyphs aren't
+# available as reactions for bots).
+NOTIFY_MODE_REACT: dict[str, str] = {
+    "all": "\U0001f440",  # \ud83d\udc40 REACT_SEEN \u2014 watching everything
+    "errors_only": "\U0001f914",  # \ud83e\udd14 REACT_THINKING \u2014 selective
+    "muted": "\U0001f494",  # \ud83d\udc94 REACT_FAIL \u2014 disabled
+}
 
 # Provider selection (directory browser flow)
 CB_PROV_SELECT = "prov:"  # prov:<provider_name>
@@ -89,6 +98,12 @@ CB_MODE_SELECT = "mode:"  # mode:<provider_name>:<normal|yolo>
 
 # Pane screenshot (from /panes command)
 CB_PANE_SCREENSHOT = "pn:ss:"  # pn:ss:<window_id>:<pane_id>
+
+# Pane subscription / rename / lifecycle (Theme 5)
+CB_PANE_SUBSCRIBE = "pn:sub:"  # pn:sub:<window_id>:<pane_id>
+CB_PANE_UNSUBSCRIBE = "pn:uns:"  # pn:uns:<window_id>:<pane_id>
+CB_PANE_RENAME = "pn:rn:"  # pn:rn:<window_id>:<pane_id>
+CB_PANE_LIFECYCLE_TOGGLE = "pn:lc:"  # pn:lc:<window_id> — per-window toggle
 
 # Screenshot control keys
 CB_KEYS_PREFIX = "kb:"  # kb:<key_id>:<window>

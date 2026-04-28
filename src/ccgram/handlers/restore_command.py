@@ -1,36 +1,40 @@
-"""/restore command — auto-recover dead topics.
+"""/restore command — re-show the recovery banner for a dead topic.
 
-When a tmux window dies, the topic becomes stale. This command auto-recovers
-the session: recreates the window in the same cwd/provider with --continue.
+When a tmux window dies, the topic becomes stale and ccgram normally
+surfaces a recovery banner once. /restore lets the user re-show that
+banner on demand so they can pick how to recover (Fresh / Continue /
+Resume) — the actual session creation is owned by the recovery
+callbacks. The command is a thin re-render — see
+``handlers.recovery_callbacks.render_banner``.
 
 Key function: restore_command().
 """
 
 from pathlib import Path
 
-import contextlib
-
 import structlog
 from telegram import Update
-from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from .. import window_query
 from ..config import config
-from ..providers import get_provider_for_window, resolve_launch_command
 from ..session import session_manager
-from ..session_map import session_map_sync
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
-from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .message_sender import safe_reply
-from .polling_strategies import lifecycle_strategy
-from .topic_emoji import format_topic_name_for_mode
+from .recovery_callbacks import RecoveryBanner, render_banner
+from .user_state import PENDING_THREAD_ID, RECOVERY_WINDOW_ID
 
 logger = structlog.get_logger()
 
 
 async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /restore — auto-recover a dead topic with --continue."""
+    """Handle /restore — re-show the recovery banner for a dead topic.
+
+    The previous behaviour auto-ran ``--continue``; Task 1.9 of the UX
+    overhaul moved that decision back to the user via the unified
+    recovery banner.
+    """
     user = update.effective_user
     if not user or not update.message:
         return
@@ -61,43 +65,21 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if view is None or not view.cwd or not Path(view.cwd).is_dir():
         await safe_reply(update.message, "Directory no longer exists.")
         return
-    cwd = view.cwd
 
-    # Auto-recover: unbind old, create new window with --continue, rebind
-    thread_router.unbind_thread(user_id, thread_id)
-    lifecycle_strategy.clear_dead_notification(user_id, thread_id)
+    display = thread_router.get_display_name(window_id) or window_id
+    user_data = getattr(context, "user_data", None) if context else None
+    if user_data is not None:
+        user_data[PENDING_THREAD_ID] = thread_id
+        user_data[RECOVERY_WINDOW_ID] = window_id
 
-    provider = get_provider_for_window(window_id, provider_name=view.provider_name)
-    approval_mode = view.approval_mode
-    launch_command = resolve_launch_command(
-        provider.capabilities.name, approval_mode=approval_mode
+    banner = RecoveryBanner(
+        chat_id=update.message.chat.id,
+        thread_id=thread_id,
+        window_id=window_id,
+        mode="restore",
+        provider=window_query.get_window_provider(window_id),
+        display=display,
+        cwd=view.cwd,
     )
-    launch_args = provider.make_launch_args(use_continue=True)
-
-    success, message, wname, wid = await tmux_manager.create_window(
-        cwd, agent_args=launch_args, launch_command=launch_command
-    )
-    if not success:
-        await safe_reply(update.message, f"\u274c {message}")
-        return
-
-    if provider.capabilities.supports_hook:
-        await session_map_sync.wait_for_session_map_entry(wid)
-
-    session_manager.set_window_origin(wid, CCGRAM_CREATED_WINDOW_ORIGIN)
-    session_manager.set_window_provider(wid, provider.capabilities.name)
-    session_manager.set_window_approval_mode(wid, approval_mode)
-    thread_router.bind_thread(user_id, thread_id, wid, window_name=wname)
-    if update.message.chat.type in ("group", "supergroup"):
-        thread_router.set_group_chat_id(user_id, thread_id, update.message.chat.id)
-
-    with contextlib.suppress(TelegramError):
-        await context.bot.edit_forum_topic(
-            chat_id=thread_router.resolve_chat_id(user_id, thread_id),
-            message_thread_id=thread_id,
-            name=format_topic_name_for_mode(wname, approval_mode),
-        )
-
-    await safe_reply(
-        update.message, f"\u2705 {message}\n\nContinuing previous session."
-    )
+    text, keyboard = render_banner(banner)
+    await safe_reply(update.message, text, reply_markup=keyboard)

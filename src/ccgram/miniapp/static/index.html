@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ccgram dashboard</title>
+    <!-- CCGRAM_PAYLOAD -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: var(--tg-theme-bg-color, #0e1116);
+            --fg: var(--tg-theme-text-color, #e6edf3);
+            --hint: var(--tg-theme-hint-color, #768390);
+            --accent: var(--tg-theme-button-color, #2f81f7);
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            -webkit-text-size-adjust: 100%;
+        }
+        main {
+            padding: 1.5rem;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0.5rem;
+        }
+        p { color: var(--hint); margin: 0.25rem 0; }
+        .placeholder {
+            margin-top: 2rem;
+            padding: 1rem;
+            border: 1px dashed var(--hint);
+            border-radius: 8px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 0.85rem;
+        }
+        #ccgram-terminal {
+            margin-top: 1rem;
+            height: 70vh;
+            min-height: 320px;
+            border: 1px solid var(--hint);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        #ccgram-panes-grid {
+            margin-top: 1rem;
+            display: grid;
+            grid-template-columns: repeat(var(--ccgram-grid-cols, 1), 1fr);
+            gap: 0.75rem;
+        }
+        .ccgram-pane-tile {
+            border: 1px solid var(--hint);
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+        .ccgram-pane-tile:focus { outline: 2px solid var(--accent); }
+        .ccgram-pane-tile.ccgram-pane-focused {
+            min-height: 60vh;
+            cursor: default;
+        }
+        .ccgram-pane-header {
+            padding: 0.4rem 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(127, 127, 127, 0.08);
+            font-size: 0.8rem;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        }
+        .ccgram-pane-state {
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .ccgram-pane-state-active { background: #2ea44f; color: #fff; }
+        .ccgram-pane-state-idle { background: rgba(127, 127, 127, 0.2); }
+        .ccgram-pane-state-blocked { background: #d73a49; color: #fff; }
+        .ccgram-pane-state-dead { background: #6e7781; color: #fff; }
+        .ccgram-pane-term { flex: 1; min-height: 160px; }
+        .ccgram-pane-back {
+            margin-bottom: 0.5rem;
+            background: transparent;
+            border: 1px solid var(--hint);
+            color: var(--fg);
+            border-radius: 4px;
+            padding: 0.25rem 0.6rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>ccgram</h1>
+        <p id="ccgram-status">Loading…</p>
+        <div id="ccgram-terminal" aria-label="live terminal"></div>
+        <section id="ccgram-panes-grid" aria-label="multi-pane grid"></section>
+        <section id="ccgram-transcript" aria-label="transcript history"></section>
+    </main>
+    <script>
+        (function () {
+            const tg = window.Telegram && window.Telegram.WebApp;
+            const meta = document.querySelector('meta[name="ccgram-payload"]');
+            const status = document.getElementById('ccgram-status');
+            // Surfaces (terminal/panes/transcript) check this flag at startup
+            // so they don't pound the server with 403s when auth is impossible
+            // (page opened outside Telegram, or initData missing/expired).
+            window.__ccgramAuthFailed = false;
+            window.__ccgramAuthMessage = '';
+            function failAuth(msg) {
+                window.__ccgramAuthFailed = true;
+                window.__ccgramAuthMessage = msg;
+                status.textContent = msg;
+            }
+            if (!meta) {
+                failAuth('No window context — open from Telegram.');
+                return;
+            }
+            if (!tg) {
+                failAuth('Telegram WebApp unavailable — open from Telegram.');
+                return;
+            }
+            tg.ready();
+            tg.expand();
+            if (!tg.initData) {
+                failAuth('Authentication required — open from Telegram.');
+            }
+        })();
+    </script>
+    <script src="/static/terminal.js"></script>
+    <script src="/static/panes.js"></script>
+    <script src="/static/transcript.js"></script>
+</body>
+</html>

@@ -11,14 +11,21 @@ import os
 import signal
 import sys
 from types import FrameType
+from typing import TYPE_CHECKING
 
 import structlog
+
+if TYPE_CHECKING:
+    from aiohttp import web
 
 # Set by the upgrade handler to trigger os.execv() after run_polling() returns
 _restart_requested = False
 
 # Tracks which signal triggered shutdown (0 = none/clean exit)
 _shutdown_signal = 0
+
+# Mini App server runner — populated when CCGRAM_MINIAPP_BASE_URL is set.
+_miniapp_runner: "web.AppRunner | None" = None
 
 
 def _install_signal_handlers() -> None:
@@ -186,6 +193,61 @@ def run_bot() -> None:
         os.execv(sys.argv[0], sys.argv)
 
     _reraise_shutdown_signal()
+
+
+async def start_miniapp_if_enabled() -> None:
+    """Start the Mini App HTTP server when ``CCGRAM_MINIAPP_BASE_URL`` is set.
+
+    Idempotent: a second call when already running is a no-op. Failures are
+    logged and swallowed — the bot must keep running even if the optional
+    server can't bind.
+    """
+    global _miniapp_runner
+
+    if _miniapp_runner is not None:
+        return
+
+    from .config import config
+
+    if not config.miniapp_base_url:
+        return
+
+    logger = structlog.get_logger()
+    try:
+        from .miniapp import start_server
+
+        _miniapp_runner = await start_server(
+            bot_token=config.telegram_bot_token,
+            host=config.miniapp_host,
+            port=config.miniapp_port,
+        )
+        logger.info(
+            "Mini App server started: base_url=%s host=%s port=%d",
+            config.miniapp_base_url,
+            config.miniapp_host,
+            config.miniapp_port,
+        )
+    except OSError as exc:
+        logger.error("Mini App server failed to bind: %s", exc)
+        _miniapp_runner = None
+
+
+async def stop_miniapp_if_enabled() -> None:
+    """Stop the Mini App server if it was started; otherwise no-op."""
+    global _miniapp_runner
+
+    if _miniapp_runner is None:
+        return
+
+    logger = structlog.get_logger()
+    try:
+        from .miniapp import stop_server
+
+        await stop_server(_miniapp_runner)
+    except OSError as exc:
+        logger.warning("Mini App server stop raised: %s", exc)
+    finally:
+        _miniapp_runner = None
 
 
 def main() -> None:

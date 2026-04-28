@@ -14,7 +14,7 @@ from __future__ import annotations
 import structlog
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from .state_persistence import unwired_save
 
@@ -37,6 +37,67 @@ CCGRAM_CREATED_WINDOW_ORIGIN = "ccgram_created"
 MANUAL_DISCOVERED_WINDOW_ORIGIN = "manual_discovered"
 EXTERNAL_WINDOW_ORIGIN = "external"
 
+PaneState = Literal["active", "idle", "blocked", "dead"]
+PANE_STATES: frozenset[str] = frozenset({"active", "idle", "blocked", "dead"})
+DEFAULT_PANE_STATE: PaneState = "idle"
+
+
+class _Sentinel:
+    """Marker for "argument not provided" — distinct from ``None``."""
+
+    __slots__ = ()
+
+
+_SENTINEL = _Sentinel()
+
+
+@dataclass
+class PaneInfo:
+    """Per-pane runtime state inside a tmux window.
+
+    Attributes:
+        pane_id: tmux pane id (e.g. ``%5``); unique within a tmux server.
+        name: User-supplied pane name (None if never renamed).
+        provider: Detected provider name for the pane (claude/codex/.../shell).
+        last_active_ts: Unix timestamp of last detected activity.
+        state: Current pane state — active/idle/blocked/dead.
+        subscribed: Forward output of this pane to the bound topic when True.
+    """
+
+    pane_id: str
+    name: str | None = None
+    provider: str = ""
+    last_active_ts: float = 0.0
+    state: PaneState = DEFAULT_PANE_STATE
+    subscribed: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"pane_id": self.pane_id}
+        if self.name is not None:
+            d["name"] = self.name
+        if self.provider:
+            d["provider"] = self.provider
+        if self.last_active_ts:
+            d["last_active_ts"] = self.last_active_ts
+        if self.state != DEFAULT_PANE_STATE:
+            d["state"] = self.state
+        if self.subscribed:
+            d["subscribed"] = True
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        raw_state = data.get("state", DEFAULT_PANE_STATE)
+        state: PaneState = raw_state if raw_state in PANE_STATES else DEFAULT_PANE_STATE
+        return cls(
+            pane_id=data.get("pane_id", ""),
+            name=data.get("name"),
+            provider=data.get("provider", ""),
+            last_active_ts=float(data.get("last_active_ts", 0.0) or 0.0),
+            state=state,
+            subscribed=bool(data.get("subscribed", False)),
+        )
+
 
 @dataclass
 class WindowState:
@@ -53,6 +114,9 @@ class WindowState:
         batch_mode: "batched" | "verbose"
         external: True for windows owned by external tools (emdash) — never killed by ccgram
         origin: Lifecycle origin. Manual/external windows are never auto-killed by ccgram.
+        panes: Per-pane runtime state, keyed by tmux pane id (e.g. ``%5``).
+        pane_lifecycle_notify: Per-window override for pane created/closed
+            notifications. ``None`` means "use the global config default".
     """
 
     session_id: str = ""
@@ -65,8 +129,10 @@ class WindowState:
     batch_mode: str = DEFAULT_BATCH_MODE
     external: bool = False
     origin: str = DEFAULT_WINDOW_ORIGIN
+    panes: dict[str, PaneInfo] = field(default_factory=dict)
+    pane_lifecycle_notify: bool | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:  # noqa: C901
         d: dict[str, Any] = {
             "session_id": self.session_id,
             "cwd": self.cwd,
@@ -87,10 +153,24 @@ class WindowState:
             d["external"] = True
         if self.origin != DEFAULT_WINDOW_ORIGIN:
             d["origin"] = self.origin
+        if self.panes:
+            d["panes"] = {pid: p.to_dict() for pid, p in self.panes.items()}
+        if self.pane_lifecycle_notify is not None:
+            d["pane_lifecycle_notify"] = self.pane_lifecycle_notify
         return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
+    def from_dict(cls, data: dict[str, Any]) -> Self:  # noqa: C901
+        raw_panes = data.get("panes") or {}
+        panes: dict[str, PaneInfo] = {}
+        if isinstance(raw_panes, dict):
+            for pid, pdata in raw_panes.items():
+                if not isinstance(pdata, dict):
+                    continue
+                pane = PaneInfo.from_dict(
+                    {**pdata, "pane_id": pdata.get("pane_id", pid)}
+                )
+                panes[pid] = pane
         return cls(
             session_id=data.get("session_id", ""),
             cwd=data.get("cwd", ""),
@@ -106,6 +186,8 @@ class WindowState:
                 if data.get("origin", DEFAULT_WINDOW_ORIGIN) in WINDOW_ORIGINS
                 else DEFAULT_WINDOW_ORIGIN
             ),
+            panes=panes,
+            pane_lifecycle_notify=data.get("pane_lifecycle_notify"),
         )
 
 
@@ -215,6 +297,86 @@ class WindowStateStore:
         del self.window_states[window_id]
         self._schedule_save()
         return True
+
+    # ------------------------------------------------------------------
+    # Pane management
+    # ------------------------------------------------------------------
+
+    def get_pane(self, window_id: str, pane_id: str) -> PaneInfo | None:
+        """Return the PaneInfo for a window/pane pair, or None if missing."""
+        state = self.window_states.get(window_id)
+        if state is None:
+            return None
+        return state.panes.get(pane_id)
+
+    def upsert_pane(
+        self,
+        window_id: str,
+        pane_id: str,
+        *,
+        name: str | None | _Sentinel = _SENTINEL,
+        provider: str | None = None,
+        last_active_ts: float | None = None,
+        state: PaneState | None = None,
+        subscribed: bool | None = None,
+    ) -> PaneInfo:
+        """Create or update a PaneInfo entry and schedule a save.
+
+        Only fields that are explicitly passed are mutated; this lets callers
+        update one attribute without clobbering the rest. ``name`` accepts
+        ``None`` as a real value (clearing the name), so a sentinel is used to
+        distinguish "not provided" from "set to None".
+        """
+        window_state = self.get_window_state(window_id)
+        pane = window_state.panes.get(pane_id)
+        if pane is None:
+            pane = PaneInfo(pane_id=pane_id)
+            window_state.panes[pane_id] = pane
+        if not isinstance(name, _Sentinel):
+            pane.name = name
+        if provider is not None:
+            pane.provider = provider
+        if last_active_ts is not None:
+            pane.last_active_ts = last_active_ts
+        if state is not None:
+            if state not in PANE_STATES:
+                raise ValueError(f"Invalid pane state: {state!r}")
+            pane.state = state
+        if subscribed is not None:
+            pane.subscribed = subscribed
+        self._schedule_save()
+        return pane
+
+    def remove_pane(self, window_id: str, pane_id: str) -> bool:
+        """Remove a pane entry. Returns True if the entry existed."""
+        state = self.window_states.get(window_id)
+        if state is None or pane_id not in state.panes:
+            return False
+        del state.panes[pane_id]
+        self._schedule_save()
+        return True
+
+    def get_pane_lifecycle_notify(self, window_id: str, default: bool) -> bool:
+        """Effective pane lifecycle notification setting for a window.
+
+        Returns the per-window override when set, otherwise ``default``
+        (typically the global config flag).
+        """
+        state = self.window_states.get(window_id)
+        if state is None or state.pane_lifecycle_notify is None:
+            return default
+        return state.pane_lifecycle_notify
+
+    def set_pane_lifecycle_notify(self, window_id: str, value: bool | None) -> None:
+        """Persist the per-window pane lifecycle notification override.
+
+        Pass ``None`` to clear the override and fall back to the global default.
+        """
+        state = self.get_window_state(window_id)
+        if state.pane_lifecycle_notify == value:
+            return
+        state.pane_lifecycle_notify = value
+        self._schedule_save()
 
     # ------------------------------------------------------------------
     # Provider management

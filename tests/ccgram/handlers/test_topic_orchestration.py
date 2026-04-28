@@ -4,7 +4,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram.error import BadRequest, RetryAfter, TelegramError
+from telegram.error import BadRequest, RetryAfter, TelegramError, TimedOut
 
 from ccgram.handlers.topic_orchestration import (
     collect_target_chats,
@@ -496,6 +496,57 @@ class TestHandleNewWindow:
         bot.create_forum_topic.assert_called_once_with(
             chat_id=-100200, name="reflex-gh"
         )
+
+
+class TestCreateForumTopicTransientRetry:
+    async def test_timed_out_retries_then_succeeds(self) -> None:
+        event = _make_event()
+        bot = AsyncMock()
+        bot.create_forum_topic = AsyncMock(
+            side_effect=[TimedOut("blip"), _make_topic(thread_id=42)]
+        )
+
+        with (
+            patch("ccgram.handlers.topic_orchestration.session_manager"),
+            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topic_orchestration.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_tr.has_window.return_value = False
+            mock_tr.iter_thread_bindings.return_value = iter([])
+            mock_config.group_id = -100500
+            mock_config.allowed_users = {12345}
+
+            await handle_new_window(event, bot)
+
+        assert bot.create_forum_topic.call_count == 2
+
+    async def test_timed_out_exhausts_retries_then_logs(self) -> None:
+        event = _make_event()
+        bot = AsyncMock()
+        bot.create_forum_topic = AsyncMock(side_effect=TimedOut("persistent"))
+
+        with (
+            patch("ccgram.handlers.topic_orchestration.session_manager"),
+            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
+            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topic_orchestration.asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_tr.has_window.return_value = False
+            mock_tr.iter_thread_bindings.return_value = iter([])
+            mock_config.group_id = -100500
+            mock_config.allowed_users = {12345}
+
+            await handle_new_window(event, bot)
+
+        # Original attempt + 1 retry = 2 calls
+        assert bot.create_forum_topic.call_count == 2
 
 
 class TestAdoptUnboundWindows:

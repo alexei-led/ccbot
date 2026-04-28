@@ -69,7 +69,11 @@ from .handlers.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
 from .handlers.command_history import recall_command
 from .handlers.message_routing import handle_new_message
-from .handlers.screenshot_callbacks import panes_command, screenshot_command
+from .handlers.screenshot_callbacks import (
+    live_command,
+    panes_command,
+    screenshot_command,
+)
 from .handlers.topic_lifecycle import topic_closed_handler, topic_edited_handler
 from .handlers.history import send_history
 from .handlers.sessions_dashboard import sessions_command
@@ -460,6 +464,11 @@ async def post_init(application: Application) -> None:
     _status_poll_task.add_done_callback(task_done_callback)
     logger.info("Status polling task started")
 
+    # Optional Mini App server — starts only when CCGRAM_MINIAPP_BASE_URL is set.
+    from .main import start_miniapp_if_enabled
+
+    await start_miniapp_if_enabled()
+
 
 async def _send_shutdown_notification(application: Application) -> None:
     """Send a shutdown notification to the General topic if a group is configured."""
@@ -513,6 +522,11 @@ async def post_shutdown(_application: Application) -> None:
 
     Mailbox(config.mailbox_dir).sweep()
 
+    # Tear down the Mini App server if it was started.
+    from .main import stop_miniapp_if_enabled
+
+    await stop_miniapp_if_enabled()
+
     # Flush debounced state to disk AFTER workers/monitor stop (captures final mutations)
     session_manager.flush_state()
 
@@ -532,7 +546,8 @@ async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) ->
     if isinstance(context.error, NetworkError) and not isinstance(
         context.error, BadRequest
     ):
-        logger.warning("Transient network error (PTB will retry): %s", context.error)
+        # PTB will retry automatically — not actionable; demoted from warning.
+        logger.info("Transient network error (PTB will retry): %s", context.error)
         return
     logger.error("Unhandled bot error", exc_info=context.error)
 
@@ -583,6 +598,7 @@ def create_bot() -> Application:
     application.add_handler(
         CommandHandler("screenshot", screenshot_command, filters=_group_filter)
     )
+    application.add_handler(CommandHandler("live", live_command, filters=_group_filter))
     application.add_handler(
         CommandHandler("panes", panes_command, filters=_group_filter)
     )

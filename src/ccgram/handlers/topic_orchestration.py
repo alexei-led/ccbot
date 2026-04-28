@@ -11,13 +11,14 @@ Core responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import time
 from pathlib import Path
 
 import structlog
 from telegram import Bot
-from telegram.error import RetryAfter, TelegramError
+from telegram.error import NetworkError, RetryAfter, TelegramError, TimedOut
 
 from ..config import config
 from ..providers import (
@@ -38,6 +39,29 @@ logger = structlog.get_logger()
 # chat_id -> monotonic timestamp when next attempt is allowed.
 _topic_create_retry_until: dict[int, float] = {}
 _TOPIC_CREATE_RETRY_BUFFER_SECONDS = 1
+
+# Transient retry on transport timeouts / network errors when creating a topic.
+# Two attempts (one retry) with a short backoff is enough for brief blips —
+# longer outages are caught by the existing flood-control backoff.
+_TOPIC_CREATE_TRANSIENT_RETRIES = 1
+_TOPIC_CREATE_TRANSIENT_BACKOFF_S = 1.0
+
+
+async def _create_forum_topic_with_retry(bot: Bot, chat_id: int, topic_name: str):
+    """Call ``bot.create_forum_topic`` with one retry on TimedOut/NetworkError."""
+    last_exc: TelegramError | None = None
+    for attempt in range(_TOPIC_CREATE_TRANSIENT_RETRIES + 1):
+        try:
+            return await bot.create_forum_topic(chat_id=chat_id, name=topic_name)
+        except (TimedOut, NetworkError) as exc:
+            last_exc = exc
+            if attempt < _TOPIC_CREATE_TRANSIENT_RETRIES:
+                logger.info("create_forum_topic transient error, retrying: %s", exc)
+                await asyncio.sleep(_TOPIC_CREATE_TRANSIENT_BACKOFF_S)
+                continue
+            raise
+    assert last_exc is not None
+    raise last_exc
 
 
 def clear_topic_create_retry(chat_id: int, _thread_id: int = 0) -> None:
@@ -161,7 +185,7 @@ async def create_topic_in_chat(
         return
 
     try:
-        topic = await bot.create_forum_topic(chat_id=chat_id, name=topic_name)
+        topic = await _create_forum_topic_with_retry(bot, chat_id, topic_name)
         _topic_create_retry_until.pop(chat_id, None)
         logger.info(
             "Auto-created topic '%s' (thread=%d) in chat %d for window %s",

@@ -17,7 +17,7 @@ import os
 import structlog
 from pathlib import Path
 
-from telegram import Bot, Update
+from telegram import Bot, Message, Update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
@@ -294,26 +294,31 @@ def build_search_results(
     return header, InlineKeyboardMarkup(buttons), shown
 
 
-async def upload_file(bot: Bot, chat_id: int, thread_id: int, path: Path) -> None:
-    """Send *path* to the given Telegram chat/thread as photo or document."""
+async def upload_file(
+    bot: Bot, chat_id: int, thread_id: int, path: Path
+) -> Message | None:
+    """Send *path* to the given Telegram chat/thread as photo or document.
+
+    Returns the resulting Telegram ``Message`` so callers can target it for
+    follow-up reactions or replies. Re-raises ``TelegramError`` on failure.
+    """
     try:
         with path.open("rb") as fh:
             if _is_image(path):
-                await bot.send_photo(
+                return await bot.send_photo(
                     chat_id=chat_id,
                     photo=fh,
                     filename=path.name,
                     message_thread_id=thread_id,
                     read_timeout=300,
                 )
-            else:
-                await bot.send_document(
-                    chat_id=chat_id,
-                    document=fh,
-                    filename=path.name,
-                    message_thread_id=thread_id,
-                    read_timeout=300,
-                )
+            return await bot.send_document(
+                chat_id=chat_id,
+                document=fh,
+                filename=path.name,
+                message_thread_id=thread_id,
+                read_timeout=300,
+            )
     except TelegramError:
         logger.exception("Failed to upload file", path=str(path))
         raise

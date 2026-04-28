@@ -40,15 +40,16 @@ from .message_queue import (
 from .message_sender import rate_limit_send_message
 from .polling_strategies import (
     STARTUP_TIMEOUT,
+    PaneTransition,
     TickContext,
     TickDecision,
-    interactive_strategy,
     is_shell_prompt,
     lifecycle_strategy,
+    pane_status_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
 )
-from .recovery_callbacks import build_recovery_keyboard
+from .recovery_callbacks import RecoveryBanner, render_banner
 from .topic_emoji import update_topic_emoji
 from .transcript_discovery import discover_and_register_transcript
 
@@ -126,57 +127,136 @@ async def _transition_to_idle(
 # ── Multi-pane scanning (agent teams) ─────────────────────────────────
 
 
+async def _surface_pane_alert(
+    bot: Bot, user_id: int, window_id: str, thread_id: int, pane_id: str
+) -> None:
+    await handle_interactive_ui(bot, user_id, window_id, thread_id, pane_id=pane_id)
+
+
+_PANE_OUTPUT_PREVIEW_LINES = 12
+
+
+async def _forward_pane_output(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int,
+    pane_id: str,
+    pane_text: str,
+) -> None:
+    """Forward a subscribed pane's freshly-captured text to its bound topic.
+
+    Uses the screen buffer to strip ANSI, keeps the tail of the capture so
+    the user sees the most-recent output, and labels the message with the
+    pane's friendly name when one is set.
+    """
+    from ..window_state_store import window_store
+    from .message_sender import safe_send
+
+    pane = window_store.get_pane(window_id, pane_id)
+    if pane is None or not pane.subscribed:
+        return
+    # capture_pane_by_id (in PaneStatusStrategy._classify_non_active) returns
+    # ANSI-stripped text already; using the window-level rendered cache here
+    # would surface another pane's output because that cache is keyed by
+    # window, not pane.
+    cleaned = pane_text.strip()
+    if not cleaned:
+        return
+    lines = cleaned.splitlines()
+    if len(lines) > _PANE_OUTPUT_PREVIEW_LINES:
+        lines = lines[-_PANE_OUTPUT_PREVIEW_LINES:]
+    label = f"{pane.name} ({pane_id})" if pane.name else pane_id
+    body = "\n".join(lines)
+    text = f"\U0001f4e1 {label}\n```\n{body}\n```"
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    try:
+        await safe_send(bot, chat_id, text, message_thread_id=thread_id)
+    except TelegramError as exc:
+        logger.warning(
+            "pane output forward failed",
+            window_id=window_id,
+            pane_id=pane_id,
+            error=str(exc),
+        )
+
+
 async def _scan_window_panes(
     bot: Bot,
     user_id: int,
     window_id: str,
     thread_id: int,
 ) -> None:
-    if terminal_screen_buffer.is_single_pane_cached(window_id):
+    """Delegate multi-pane scanning to ``PaneStatusStrategy``.
+
+    The strategy handles enumeration, classification, ``WindowState.panes``
+    upserts, and transition detection. ``_surface_pane_alert`` keeps blocked
+    panes surfacing as inline alerts (FLOW-4a behavior); ``_forward_pane_output``
+    forwards content from panes the user has subscribed to via ``/panes``.
+    Returned transitions feed ``_notify_pane_lifecycle`` for opt-in
+    created/closed announcements.
+    """
+    transitions = await pane_status_strategy.scan_window(
+        bot,
+        user_id,
+        window_id,
+        thread_id,
+        on_blocked=_surface_pane_alert,
+        on_pane_output=_forward_pane_output,
+    )
+    if transitions:
+        await _notify_pane_lifecycle(bot, user_id, window_id, thread_id, transitions)
+
+
+async def _notify_pane_lifecycle(
+    bot: Bot,
+    user_id: int,
+    window_id: str,
+    thread_id: int,
+    transitions: list[PaneTransition],
+) -> None:
+    """Emit one-line "pane created"/"pane closed" notifications when enabled.
+
+    The flag is per-window with a global config default. Only first-sight
+    (``prev_state is None``) transitions trigger output: a non-dead new state
+    means the pane was just discovered ("created"); a ``"dead"`` new state
+    means the pane vanished ("closed"). Intra-pane state changes (idle ↔
+    active ↔ blocked) are intentionally suppressed to keep the channel
+    quiet.
+    """
+    from ..config import config
+    from ..window_state_store import window_store
+    from .message_sender import safe_send
+
+    enabled = window_store.get_pane_lifecycle_notify(
+        window_id, config.pane_lifecycle_notify
+    )
+    if not enabled:
         return
 
-    panes = await tmux_manager.list_panes(window_id)
-    terminal_screen_buffer.update_pane_count_cache(window_id, len(panes))
-    live_pane_ids = {p.pane_id for p in panes}
-
-    interactive_strategy.prune_stale_pane_alerts(window_id, live_pane_ids)
-
-    if len(panes) <= 1:
-        return
-
-    now = time.monotonic()
-
-    for pane in panes:
-        if pane.active:
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    for t in transitions:
+        if t.prev_state is not None:
             continue
-
-        pane_text = await tmux_manager.capture_pane_by_id(
-            pane.pane_id, window_id=window_id
-        )
-        if not pane_text:
-            continue
-
-        provider = _get_provider(window_id)
-        status = provider.parse_terminal_status(pane_text, pane_title="")
-        if status is None or not status.is_interactive:
-            interactive_strategy.remove_pane_alert(pane.pane_id)
-            continue
-
-        prompt_text = status.raw_text or ""
-
-        existing = interactive_strategy.get_pane_alert(pane.pane_id)
-        if existing and existing[0] == prompt_text:
-            continue
-
-        interactive_strategy.set_pane_alert(pane.pane_id, prompt_text, now, window_id)
-        logger.info(
-            "Pane %s in window %s has interactive UI, surfacing alert",
-            pane.pane_id,
-            window_id,
-        )
-        await handle_interactive_ui(
-            bot, user_id, window_id, thread_id, pane_id=pane.pane_id
-        )
+        if t.new_state == "dead":
+            # PaneTransition captures the user-assigned name at reconcile
+            # time so the notification still reads correctly even though
+            # the PaneInfo has already been removed.
+            label = f"{t.name} ({t.pane_id})" if t.name else t.pane_id
+            text = f"➖ pane {label} closed"
+        else:
+            pane = window_store.get_pane(window_id, t.pane_id)
+            label = f"{pane.name} ({t.pane_id})" if pane and pane.name else t.pane_id
+            text = f"➕ pane {label} created"
+        try:
+            await safe_send(bot, chat_id, text, message_thread_id=thread_id)
+        except TelegramError as exc:
+            logger.warning(
+                "pane lifecycle notify failed",
+                window_id=window_id,
+                pane_id=t.pane_id,
+                error=str(exc),
+            )
 
 
 # ── Interactive-only check ───────────────────────────────────────────────
@@ -265,12 +345,16 @@ async def _handle_dead_window_notification(
     except OSError:
         dir_exists = False
     if dir_exists:
-        keyboard = build_recovery_keyboard(wid)
-        text = (
-            f"\u26a0 Session `{display}` ended.\n"
-            f"\U0001f4c2 `{cwd}`\n\n"
-            "Tap a button or send a message to recover."
+        banner = RecoveryBanner(
+            chat_id=chat_id,
+            thread_id=thread_id,
+            window_id=wid,
+            mode="dead",
+            provider=window_query.get_window_provider(wid),
+            display=display,
+            cwd=cwd,
         )
+        text, keyboard = render_banner(banner)
     else:
         text = f"\u26a0 Session `{display}` ended."
         keyboard = None

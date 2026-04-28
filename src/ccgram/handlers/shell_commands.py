@@ -11,6 +11,8 @@ Key components:
 
 import asyncio
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 
@@ -22,6 +24,7 @@ from telegram import (
     Message,
     Update,
 )
+from telegram.constants import ChatAction
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
@@ -37,15 +40,60 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import safe_edit, safe_reply, safe_send
+from .message_sender import REACT_RUNNING, react, safe_edit, safe_reply, safe_send
 from .message_queue import enqueue_status_update
 from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 
-_shell_pending: dict[tuple[int, int], tuple[str, int]] = {}
+# pending entry = (command, user_id, source_message_id) — the message id
+# powers ⚡/✅/❌ reaction feedback over the command lifecycle.
+_shell_pending: dict[tuple[int, int], tuple[str, int, int]] = {}
 _generation_counter: dict[tuple[int, int], int] = {}
+_shell_hint_seen: set[tuple[int, int]] = set()
+
+_BANG_HINT_TEXT = (
+    "\U0001f4a1 Tip: prefix `!` to skip the LLM and run the command directly."
+)
+
+# Telegram chat-action expires after ~5s; refresh slightly faster.
+_TYPING_REFRESH_INTERVAL = 4.0
+
+
+async def _send_typing(bot: Bot, chat_id: int, thread_id: int) -> None:
+    """Fire one ``typing`` chat action; swallow non-fatal transport errors."""
+    try:
+        await bot.send_chat_action(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            action=ChatAction.TYPING,
+        )
+    except TelegramError, OSError:
+        logger.debug("send_chat_action failed", exc_info=True)
+
+
+@asynccontextmanager
+async def _typing_pulse(bot: Bot, chat_id: int, thread_id: int) -> AsyncIterator[None]:
+    """Keep the ``typing`` indicator alive while a slow op runs.
+
+    The indicator self-expires after ~5s server-side, so refresh every
+    ``_TYPING_REFRESH_INTERVAL`` seconds. Cancellation on context exit is
+    sufficient to stop the loop — Telegram has no explicit cancel.
+    """
+
+    async def pulse() -> None:
+        while True:
+            await _send_typing(bot, chat_id, thread_id)
+            await asyncio.sleep(_TYPING_REFRESH_INTERVAL)
+
+    task = asyncio.create_task(pulse())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 # gather_llm_context, redact_for_llm, and _detect_shell_tools moved to
@@ -66,6 +114,12 @@ def clear_shell_pending(chat_id: int, thread_id: int) -> None:
     """Clear any pending shell command for this topic (used by cleanup)."""
     _shell_pending.pop((chat_id, thread_id), None)
     _generation_counter.pop((chat_id, thread_id), None)
+
+
+@topic_state.register("chat")
+def _clear_shell_hint_seen(chat_id: int, thread_id: int) -> None:
+    """Forget the once-per-session bang hint when the topic is torn down."""
+    _shell_hint_seen.discard((chat_id, thread_id))
 
 
 async def _ensure_prompt_marker(window_id: str) -> None:
@@ -141,11 +195,25 @@ async def handle_shell_message(
     clear_shell_pending(chat_id, thread_id)
     await _ensure_prompt_marker(window_id)
 
+    # Immediate ``typing`` action so the user sees the bot is processing
+    # before any reply lands. Self-expires after ~5s; pulse() refreshes it
+    # for the duration of the LLM call below.
+    await _send_typing(bot, chat_id, thread_id)
+
+    msg_id = message.message_id if message is not None else 0
+
+    # ⚡ Persistent ack so the user sees the bot is working before
+    # tmux/LLM round-trip completes; replaced by ✅/❌ once exit is known.
+    if message is not None:
+        await react(bot, message.chat.id, message.message_id, REACT_RUNNING)
+
     if text.startswith("!"):
         raw = text[1:].lstrip()
         if not raw:
             return
-        await _execute_raw_command(bot, user_id, thread_id, window_id, raw)
+        await _execute_raw_command(
+            bot, user_id, thread_id, window_id, raw, message_id=msg_id
+        )
         return
 
     try:
@@ -155,15 +223,16 @@ async def handle_shell_message(
         await safe_send(
             bot,
             chat_id,
-            "\u26a0 LLM misconfigured \u2014 command not sent.\n"
-            "Use `!` prefix for raw commands.",
+            "⚠ LLM misconfigured — command not sent.\nUse `!` prefix for raw commands.",
             message_thread_id=thread_id,
         )
         return
 
     if not completer:
         # No LLM configured — raw mode is intentional
-        await _execute_raw_command(bot, user_id, thread_id, window_id, text)
+        await _execute_raw_command(
+            bot, user_id, thread_id, window_id, text, message_id=msg_id
+        )
         return
 
     ctx = await gather_llm_context(window_id)
@@ -178,19 +247,20 @@ async def handle_shell_message(
     _generation_counter[gen_key] = gen_id
 
     try:
-        result = await completer.generate_command(
-            text,
-            cwd=ctx["cwd"],
-            shell=ctx["shell"],
-            shell_tools=ctx["shell_tools"],
-            recent_output=recent_output,
-        )
+        async with _typing_pulse(bot, chat_id, thread_id):
+            result = await completer.generate_command(
+                text,
+                cwd=ctx["cwd"],
+                shell=ctx["shell"],
+                shell_tools=ctx["shell_tools"],
+                recent_output=recent_output,
+            )
     except RuntimeError:
         logger.warning("LLM command generation failed")
         await safe_send(
             bot,
             chat_id,
-            "\u26a0 LLM request failed \u2014 command not sent.\n"
+            "⚠ LLM request failed — command not sent.\n"
             "Use `!` prefix for raw commands.",
             message_thread_id=thread_id,
         )
@@ -203,9 +273,20 @@ async def handle_shell_message(
 
     record_command(user_id, thread_id, text)
 
+    await _show_bang_hint_once(bot, chat_id, thread_id)
+
     await show_command_approval(
         bot, chat_id, thread_id, window_id, result, user_id, message
     )
+
+
+async def _show_bang_hint_once(bot: Bot, chat_id: int, thread_id: int) -> None:
+    """Send the once-per-session ``!`` prefix tip the first time it would help."""
+    key = (chat_id, thread_id)
+    if key in _shell_hint_seen:
+        return
+    _shell_hint_seen.add(key)
+    await safe_send(bot, chat_id, _BANG_HINT_TEXT, message_thread_id=thread_id)
 
 
 async def _execute_raw_command(
@@ -214,21 +295,25 @@ async def _execute_raw_command(
     thread_id: int,
     window_id: str,
     command: str,
+    message_id: int = 0,
 ) -> None:
-    """Send a raw command to the shell and start output capture."""
+    """Send a raw command to the shell and start output capture.
+
+    ``message_id`` (when non-zero) is the user's source Telegram message —
+    forwarded to ``mark_telegram_command`` so the passive monitor can react
+    on it once the exit code is known.
+    """
     await _cancel_stuck_input(window_id)
 
     success, err_message = await send_to_window(window_id, command, raw=True)
     if not success:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-        await safe_send(
-            bot, chat_id, f"\u274c {err_message}", message_thread_id=thread_id
-        )
+        await safe_send(bot, chat_id, f"❌ {err_message}", message_thread_id=thread_id)
         return
 
     from .shell_capture import mark_telegram_command
 
-    mark_telegram_command(window_id, command, user_id, thread_id)
+    mark_telegram_command(window_id, command, user_id, thread_id, message_id)
 
 
 async def show_command_approval(
@@ -249,15 +334,17 @@ async def show_command_approval(
     if key in _shell_pending:
         return False
 
+    msg_id = message.message_id if message is not None else 0
+
     # Reserve the slot before awaiting to prevent concurrent callers
     # from emitting duplicate approval keyboards for the same topic.
-    _shell_pending[key] = (result.command, user_id)
+    _shell_pending[key] = (result.command, user_id, msg_id)
 
     text = f"`{result.command}`"
     if result.explanation:
         text += f"\n{result.explanation}"
     if result.is_dangerous:
-        text = f"\u26a0\ufe0f *Potentially dangerous*\n{text}"
+        text = f"⚠️ *Potentially dangerous*\n{text}"
 
     keyboard = _build_approval_keyboard(window_id, result.is_dangerous)
     try:
@@ -283,11 +370,11 @@ def _build_approval_keyboard(
             [
                 [
                     InlineKeyboardButton(
-                        "\u26a0 Confirm Run",
+                        "⚠ Confirm Run",
                         callback_data=f"{CB_SHELL_CONFIRM_DANGER}{window_id}",
                     ),
                     InlineKeyboardButton(
-                        "\u2715 Cancel",
+                        "✕ Cancel",
                         callback_data=f"{CB_SHELL_CANCEL}{window_id}",
                     ),
                 ],
@@ -297,15 +384,15 @@ def _build_approval_keyboard(
         [
             [
                 InlineKeyboardButton(
-                    "\u25b6 Run",
+                    "▶ Run",
                     callback_data=f"{CB_SHELL_RUN}{window_id}",
                 ),
                 InlineKeyboardButton(
-                    "\u270f Edit",
+                    "✏ Edit",
                     callback_data=f"{CB_SHELL_EDIT}{window_id}",
                 ),
                 InlineKeyboardButton(
-                    "\u2715 Cancel",
+                    "✕ Cancel",
                     callback_data=f"{CB_SHELL_CANCEL}{window_id}",
                 ),
             ],
@@ -342,29 +429,31 @@ async def _cb_run(
     user_id: int,
     thread_id: int,
     chat_id: int,
-    pending: tuple[str, int] | None,
+    pending: tuple[str, int, int] | None,
 ) -> None:
     """Handle Run / Confirm Danger callbacks."""
     await query.answer()
     if not pending:
-        await safe_edit(query, "\u274c Command expired")
+        await safe_edit(query, "❌ Command expired")
         return
 
-    command, pending_user_id = pending
+    command, pending_user_id, msg_id = pending
     if pending_user_id != user_id:
-        await safe_edit(query, "\u274c Not your command")
+        await safe_edit(query, "❌ Not your command")
         return
 
     # Use window from thread binding (authoritative), not callback data
     window_id = thread_router.get_window_for_thread(user_id, thread_id)
     if not window_id:
         clear_shell_pending(chat_id, thread_id)
-        await safe_edit(query, "\u274c No session bound")
+        await safe_edit(query, "❌ No session bound")
         return
 
     clear_shell_pending(chat_id, thread_id)
-    await safe_edit(query, f"\u25b6 `{command}`")
-    await _execute_raw_command(bot, user_id, thread_id, window_id, command)
+    await safe_edit(query, f"▶ `{command}`")
+    await _execute_raw_command(
+        bot, user_id, thread_id, window_id, command, message_id=msg_id
+    )
 
 
 async def _cb_edit(
@@ -372,12 +461,12 @@ async def _cb_edit(
     user_id: int,
     chat_id: int,
     thread_id: int,
-    pending: tuple[str, int] | None,
+    pending: tuple[str, int, int] | None,
 ) -> None:
     """Handle Edit callback."""
     await query.answer()
     if pending and pending[1] != user_id:
-        await safe_edit(query, "\u274c Not your command")
+        await safe_edit(query, "❌ Not your command")
         return
     clear_shell_pending(chat_id, thread_id)
     if pending:
@@ -386,7 +475,7 @@ async def _cb_edit(
             f"\U0001f4cb Copy, edit, and send back:\n`{pending[0]}`",
         )
     else:
-        await safe_edit(query, "\u274c Command expired")
+        await safe_edit(query, "❌ Command expired")
 
 
 async def _cb_cancel(
@@ -394,7 +483,7 @@ async def _cb_cancel(
     user_id: int,
     chat_id: int,
     thread_id: int,
-    pending: tuple[str, int] | None,
+    pending: tuple[str, int, int] | None,
 ) -> None:
     """Handle Cancel callback."""
     if pending and pending[1] != user_id:

@@ -43,6 +43,7 @@ Bot commands (in Telegram topics):
 /restore          Recover a dead topic
 /resume           Scan past sessions and pick one to resume
 /panes            List panes with per-pane screenshot buttons
+/live             Start auto-refreshing terminal screenshot view
 /sync             Sync window state with tmux
 /upgrade          Upgrade ccgram via uv and restart
 ```
@@ -83,7 +84,9 @@ When ccgram starts inside an existing tmux session (i.e. `$TMUX` is set) and no 
 - Claude config: `--claude-config-dir` / `CLAUDE_CONFIG_DIR` overrides `~/.claude` (for Claude wrappers like `ce`, `cc-mirror`, `zai`). Used by hook install, command discovery, and session monitoring.
 - Directory browser: `--show-hidden-dirs` / `CCGRAM_SHOW_HIDDEN_DIRS` shows dot-directories in the browser.
 - State files: `state.json` (thread bindings), `session_map.json` (hook-generated), `events.jsonl` (hook events), `monitor_state.json` (byte offsets).
-- Project structure: handlers in `src/ccgram/handlers/`, core modules in `src/ccgram/`, tests mirror source under `tests/ccgram/`.
+- Project structure: handlers in `src/ccgram/handlers/`, core modules in `src/ccgram/`, optional Mini App backend in `src/ccgram/miniapp/`, tests mirror source under `tests/ccgram/`.
+- Pane lifecycle: `CCGRAM_PANE_LIFECYCLE_NOTIFY` (default `false`) sets the per-window default for pane create/close notifications; toggle per-window via the `/panes` keyboard.
+- Mini App (optional, v3.0+): `CCGRAM_MINIAPP_BASE_URL` (externally reachable HTTPS URL — Mini App is fully disabled until set), `CCGRAM_MINIAPP_HOST` (default `127.0.0.1`), `CCGRAM_MINIAPP_PORT` (default `8765`). Server binds locally; expects external TLS termination + reverse proxy.
 
 ## Provider Configuration
 
@@ -435,6 +438,31 @@ ccgram msg sweep                                  # Clean expired messages
 | Spawn timeout | `CCGRAM_MSG_SPAWN_TIMEOUT` | `300` (seconds)      |
 | Spawn rate    | `CCGRAM_MSG_SPAWN_RATE`    | `3` (per window/hr)  |
 | Message rate  | `CCGRAM_MSG_RATE_LIMIT`    | `10` (per window/5m) |
+
+## Mini App Dashboard (Optional)
+
+Optional aiohttp web surface that runs alongside the bot when `CCGRAM_MINIAPP_BASE_URL` is set. Opens from a "🪟 Dashboard" inline button on the status bubble inside Telegram's WebApp container. Three surfaces ship in v3.0: live xterm.js terminal (read-only), paginated transcript with full-text search, and a multi-pane grid view.
+
+**Subpackage layout** (`src/ccgram/miniapp/`):
+
+| Module                 | Description                                                                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `__init__.py`          | Public API: `start_server`, `stop_server`, `build_app`, `sign_token`, `verify_token`, `validate_init_data`                             |
+| `auth.py`              | HMAC-signed window tokens (window_id + user_id + expiry) and Telegram WebApp `initData` validation                                     |
+| `server.py`            | aiohttp app factory + lifecycle (`start_server`/`stop_server`); routes: `/healthz`, `/app/{token}`, `/static/`, sub-route registration |
+| `api/__init__.py`      | Router registration helpers (`register_terminal_routes`, `register_transcript_routes`)                                                 |
+| `api/terminal.py`      | Live-terminal websocket (`/ws/terminal/{token}`) and pane-list HTTP (`/api/panes/{token}`); per-pane multiplex via `?pane=`            |
+| `api/transcript.py`    | Transcript HTTP — paginated history (`/api/transcript/{token}`) + search (`/api/transcript/{token}/search?q=...`)                      |
+| `static/index.html`    | SPA shell — Telegram WebApp SDK, payload meta tag, mounts terminal/transcript/panes surfaces                                           |
+| `static/terminal.js`   | xterm.js client with delta streaming                                                                                                   |
+| `static/transcript.js` | Paginated transcript viewer + search UI                                                                                                |
+| `static/panes.js`      | Multi-pane grid view with focused-tile transitions                                                                                     |
+
+**Lifecycle**: `start_miniapp_if_enabled` / `stop_miniapp_if_enabled` (`src/ccgram/main.py`) are wired into `bot.py` `post_init` / `post_shutdown`. Server start failures are logged and swallowed — the bot keeps running even if the optional server can't bind. Server is gated entirely on `CCGRAM_MINIAPP_BASE_URL`; when unset, neither the HTTP listener nor the dashboard button are exposed.
+
+**Auth**: Tokens are HMAC-signed with the bot token, scoped to a single (window_id, user_id) pair, and short-lived. Every API surface validates the token on every request — there is no cross-window access.
+
+**Deployment**: Production requires TLS termination + reverse proxy (cloudflared, caddy, nginx). The aiohttp server binds to a local host/port and expects an external proxy to forward HTTPS. BotFather configuration: register the Mini App via `/setdomain` and `/newapp`.
 
 ## Architecture Details
 

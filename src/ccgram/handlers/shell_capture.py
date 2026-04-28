@@ -28,10 +28,24 @@ from telegram import Bot
 from ..providers.shell import match_prompt
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
-from .message_sender import edit_with_fallback, rate_limit_send_message
+from .message_sender import (
+    REACT_DONE,
+    REACT_FAIL,
+    edit_with_fallback,
+    rate_limit_send_message,
+    react,
+)
 from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()
+
+
+async def _react_exit(bot: Bot, chat_id: int, message_id: int, exit_code: int) -> None:
+    """Persistent ✅/❌ ack on the user's command message after completion."""
+    if not message_id:
+        return
+    emoji = REACT_DONE if exit_code == 0 else REACT_FAIL
+    await react(bot, chat_id, message_id, emoji)
 
 
 class CommandApprovalCallback(Protocol):
@@ -128,6 +142,7 @@ class _ShellMonitorState:
     telegram_command: str = ""  # command sent via Telegram (for error suggestions)
     telegram_user_id: int = 0
     telegram_thread_id: int = 0
+    telegram_message_id: int = 0  # original user msg id — target for ✅/❌ reaction
     telegram_generation: int = 0  # monotonic counter to discard stale fix suggestions
 
 
@@ -248,12 +263,18 @@ def _extract_passive_output(text: str) -> _PassiveOutput | None:
 
 
 def mark_telegram_command(
-    window_id: str, command: str, user_id: int, thread_id: int
+    window_id: str,
+    command: str,
+    user_id: int,
+    thread_id: int,
+    message_id: int = 0,
 ) -> None:
     """Annotate the monitor state with a Telegram-initiated command.
 
     When the passive monitor detects this command completed with a non-zero
-    exit code, it will trigger LLM-based error suggestions.
+    exit code, it will trigger LLM-based error suggestions. ``message_id``
+    is the user's source message — used as the target for ✅/❌ reaction
+    feedback once the command completes.
     """
     global _fix_generation  # noqa: PLW0603
     _fix_generation += 1
@@ -261,6 +282,7 @@ def mark_telegram_command(
     state.telegram_command = command
     state.telegram_user_id = user_id
     state.telegram_thread_id = thread_id
+    state.telegram_message_id = message_id
     state.telegram_generation = _fix_generation
 
 
@@ -508,6 +530,13 @@ async def _relay_passive_output(
             bot, chat_id, state.msg_id, passive.exit_code, passive.text
         )
 
+    # ✅/❌ reaction on the user's source message once exit is known.
+    # Skips when the message was already reacted (dedupe in react()).
+    if passive.exit_code is not None and state.telegram_message_id:
+        await _react_exit(bot, chat_id, state.telegram_message_id, passive.exit_code)
+        if passive.exit_code == 0:
+            state.telegram_message_id = 0
+
     # If this was a Telegram-initiated command, suggest a fix via LLM
     if (
         passive.exit_code is not None
@@ -521,6 +550,7 @@ async def _relay_passive_output(
         state.telegram_command = ""
         state.telegram_user_id = 0
         state.telegram_thread_id = 0
+        state.telegram_message_id = 0
         state.telegram_generation = 0
         await _maybe_suggest_fix(
             bot,

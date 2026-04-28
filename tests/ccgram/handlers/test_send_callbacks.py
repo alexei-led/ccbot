@@ -105,7 +105,9 @@ class TestStaleGuard:
             mock_router.resolve_window_for_thread.return_value = "@99"
             await _dispatch(update, ctx)
 
-        query.answer.assert_awaited_once_with("Session expired", show_alert=True)
+        query.answer.assert_awaited_once_with(
+            "Browser expired — use /send to restart", show_alert=True
+        )
         assert SEND_WINDOW_ID_KEY not in ctx.user_data
 
     async def test_matching_window_proceeds(self, tmp_path: Path) -> None:
@@ -148,9 +150,80 @@ class TestHandleFile:
             await _dispatch(update, ctx)
 
         mock_upload.assert_awaited_once()
-        query.answer.assert_awaited_once_with("Sent")
+        # Toast replaced with persistent ✅ reaction on the uploaded file.
+        query.answer.assert_awaited_once_with()
         assert SEND_WINDOW_ID_KEY not in ctx.user_data
         query.message.delete.assert_awaited_once()
+
+    async def test_upload_success_reacts_on_uploaded_message(
+        self, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "report.txt"
+        f.write_text("data")
+        query = _make_query(f"{CB_SEND_FILE}0")
+        update = _make_update(query)
+        ctx = _make_context(tmp_path)
+        ctx.user_data[SEND_ITEMS_KEY] = [f]
+
+        sent_msg = MagicMock()
+        sent_msg.chat_id = 123
+        sent_msg.message_id = 8800
+
+        with (
+            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
+            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch(
+                "ccgram.handlers.send_callbacks.validate_sendable", return_value=None
+            ),
+            patch(
+                "ccgram.handlers.send_callbacks.upload_file",
+                new_callable=AsyncMock,
+                return_value=sent_msg,
+            ),
+            patch(
+                "ccgram.handlers.send_callbacks.react", new_callable=AsyncMock
+            ) as mock_react,
+        ):
+            mock_router.resolve_window_for_thread.return_value = "@0"
+            mock_router.resolve_chat_id.return_value = 123
+            await _dispatch(update, ctx)
+
+        mock_react.assert_awaited_once()
+        args = mock_react.call_args.args
+        assert args[1] == 123
+        assert args[2] == 8800
+        from ccgram.handlers.reactions import REACT_DONE
+
+        assert args[3] == REACT_DONE
+
+    async def test_upload_returns_none_skips_reaction(self, tmp_path: Path) -> None:
+        f = tmp_path / "report.txt"
+        f.write_text("data")
+        query = _make_query(f"{CB_SEND_FILE}0")
+        update = _make_update(query)
+        ctx = _make_context(tmp_path)
+        ctx.user_data[SEND_ITEMS_KEY] = [f]
+
+        with (
+            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
+            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch(
+                "ccgram.handlers.send_callbacks.validate_sendable", return_value=None
+            ),
+            patch(
+                "ccgram.handlers.send_callbacks.upload_file",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.send_callbacks.react", new_callable=AsyncMock
+            ) as mock_react,
+        ):
+            mock_router.resolve_window_for_thread.return_value = "@0"
+            mock_router.resolve_chat_id.return_value = 123
+            await _dispatch(update, ctx)
+
+        mock_react.assert_not_awaited()
 
     async def test_denied_file_shows_error(self, tmp_path: Path) -> None:
         f = tmp_path / "secret.txt"

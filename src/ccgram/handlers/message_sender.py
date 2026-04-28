@@ -23,6 +23,39 @@ from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message, ReactionTy
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ..entity_formatting import convert_to_entities
+from ..telegram_sender import TELEGRAM_MAX_MESSAGE_LENGTH
+from .reactions import (
+    ALLOWED_REACTIONS,
+    REACT_DONE,
+    REACT_FAIL,
+    REACT_INBOX,
+    REACT_RUNNING,
+    REACT_SEEN,
+    REACT_THINKING,
+    clear_reaction,
+    react,
+)
+
+__all__ = [
+    "ALLOWED_REACTIONS",
+    "REACT_DONE",
+    "REACT_FAIL",
+    "REACT_INBOX",
+    "REACT_RUNNING",
+    "REACT_SEEN",
+    "REACT_THINKING",
+    "ack_reaction",
+    "clear_reaction",
+    "edit_with_fallback",
+    "is_thread_gone",
+    "rate_limit_send",
+    "rate_limit_send_message",
+    "react",
+    "safe_edit",
+    "safe_reply",
+    "safe_send",
+    "send_kwargs",
+]
 
 logger = structlog.get_logger()
 
@@ -73,6 +106,19 @@ async def rate_limit_send(chat_id: int) -> None:
         _last_send_time[chat_id] = time.monotonic()
 
 
+def _cap_to_telegram_limit(
+    plain_text: str, entities: list[Any]
+) -> tuple[str, list[Any]]:
+    """Truncate plain_text + drop overflow entities so a single send fits Telegram's limit."""
+    if len(plain_text) <= TELEGRAM_MAX_MESSAGE_LENGTH:
+        return plain_text, entities
+    ellipsis = "…"
+    cap = TELEGRAM_MAX_MESSAGE_LENGTH - len(ellipsis)
+    truncated = plain_text[:cap] + ellipsis
+    kept = [e for e in entities if e.offset + e.length <= cap]
+    return truncated, kept
+
+
 async def _with_entity_fallback(
     send_fn: Callable[..., Awaitable[Any]],
     text: str,
@@ -94,6 +140,11 @@ async def _with_entity_fallback(
     Returns the result Message on success, None on failure.
     """
     plain_text, entities = convert_to_entities(text)
+
+    if not plain_text.strip():
+        return None
+
+    plain_text, entities = _cap_to_telegram_limit(plain_text, entities)
 
     # Phase 1: with entities; Phase 2: plain text fallback.
     # Thread-gone errors (deleted topic) short-circuit both phases.

@@ -7,12 +7,14 @@ import pytest
 from ccgram.doctor_cmd import (
     _check_allowed_users,
     _check_config_dir,
+    _check_draft_streaming,
     _check_hooks,
     _check_tmux,
     _find_orphaned_windows,
     doctor_main,
 )
 from ccgram.hook import _HOOK_EVENT_TYPES
+from ccgram.telegram_draft import mark_draft_unavailable, reset_draft_state
 
 
 class TestCheckTmux:
@@ -259,3 +261,30 @@ class TestCheckProviderCommand:
         status, msg = _check_provider_command("codex")
         assert status == "pass"
         assert "my-codex-wrapper" in msg
+
+
+class TestCheckDraftStreaming:
+    def test_available_when_flag_unset(self) -> None:
+        reset_draft_state()
+        status, msg = _check_draft_streaming()
+        assert status == "pass"
+        assert "[draft-streaming]" in msg
+        assert "untested" in msg
+
+    def test_warns_when_flag_set(self) -> None:
+        reset_draft_state()
+        mark_draft_unavailable("Bot API <9.5")
+        status, msg = _check_draft_streaming()
+        assert status == "warn"
+        assert "[draft-streaming]" in msg
+        assert "degraded" in msg
+        assert "Bot API <9.5" in msg
+        reset_draft_state()
+
+    def test_warns_with_default_reason_when_empty(self) -> None:
+        reset_draft_state()
+        mark_draft_unavailable("")
+        status, msg = _check_draft_streaming()
+        assert status == "warn"
+        assert "Bot API <9.5" in msg
+        reset_draft_state()

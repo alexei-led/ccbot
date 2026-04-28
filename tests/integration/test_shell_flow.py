@@ -76,8 +76,13 @@ class TestRawCommandFlow:
             )
 
             mock_send.assert_called_once_with(TEST_WINDOW_ID, "ls -la", raw=True)
-            mock_mark.assert_called_once_with(
-                TEST_WINDOW_ID, "ls -la", TEST_USER_ID, TEST_THREAD_ID
+            mock_mark.assert_called_once()
+            args = mock_mark.call_args.args
+            assert args[:4] == (
+                TEST_WINDOW_ID,
+                "ls -la",
+                TEST_USER_ID,
+                TEST_THREAD_ID,
             )
 
     @pytest.mark.asyncio()
@@ -208,10 +213,9 @@ class TestLlmCommandFlow:
         assert "List files" in reply_text
 
         assert (TEST_CHAT_ID, TEST_THREAD_ID) in _shell_pending
-        assert _shell_pending[(TEST_CHAT_ID, TEST_THREAD_ID)] == (
-            "ls -la",
-            TEST_USER_ID,
-        )
+        pending = _shell_pending[(TEST_CHAT_ID, TEST_THREAD_ID)]
+        assert pending[0] == "ls -la"
+        assert pending[1] == TEST_USER_ID
 
     @pytest.mark.asyncio()
     async def test_no_llm_falls_back_to_raw(self) -> None:

@@ -8,12 +8,20 @@ Handles inline keyboard callbacks for dead window recovery:
   - CB_RECOVERY_BACK: Return to recovery options menu from session picker
   - CB_RECOVERY_CANCEL: Cancel recovery
 
+Also exposes ``RecoveryBanner`` + ``render_banner`` — the unified text+keyboard
+contract used by every entry point that surfaces the recovery UI (proactive
+dead-window notification, /restore, recovery from a typed message). Keeping
+the rendering in one place is what Task 1.9 of the Telegram UX overhaul plan
+calls for.
+
 Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
+import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import structlog
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -31,6 +39,7 @@ from ..utils import read_session_metadata_from_jsonl
 from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .callback_data import (
     CB_RECOVERY_BACK,
+    CB_RECOVERY_BROWSE,
     CB_RECOVERY_CANCEL,
     CB_RECOVERY_CONTINUE,
     CB_RECOVERY_FRESH,
@@ -59,6 +68,79 @@ class _SessionEntry:
 
     session_id: str
     summary: str
+    mtime: float = 0.0
+
+
+RecoveryMode = Literal["dead", "restore", "resume"]
+
+
+@dataclass(frozen=True)
+class RecoveryBanner:
+    """Inputs for the unified recovery banner.
+
+    The banner is the dead-window notification ccgram shows in three
+    situations: a window died proactively (``dead``), the user invoked
+    /restore (``restore``), or the user opened the resume picker
+    (``resume``). All three flow through ``render_banner`` so the keyboard,
+    subtitle, and copy stay consistent across entry points.
+    """
+
+    chat_id: int
+    thread_id: int
+    window_id: str
+    mode: RecoveryMode
+    provider: str | None = None
+    display: str = ""
+    cwd: str = ""
+
+
+def render_banner(banner: RecoveryBanner) -> tuple[str, InlineKeyboardMarkup]:
+    """Render the recovery banner text and inline keyboard.
+
+    Returns the message body and a :class:`InlineKeyboardMarkup` ready to
+    pass to ``safe_reply`` / ``rate_limit_send_message``. The keyboard is
+    the provider-aware action keyboard from :func:`build_recovery_keyboard`
+    in every mode — modes only differ in the surrounding copy so the user
+    knows whether the banner appeared on its own or in response to a
+    request.
+    """
+
+    keyboard = build_recovery_keyboard(banner.window_id)
+    help_text = _recovery_help_text(banner.window_id)
+    cwd_line = f"\n\U0001f4c2 `{banner.cwd}`" if banner.cwd else ""
+    label = banner.display or banner.window_id
+
+    if banner.mode == "restore":
+        title = f"\U0001f504 Restore `{label}`."
+        prompt = f"Choose how to continue.\n{help_text}"
+    elif banner.mode == "resume":
+        title = f"⏪ Resume `{label}`."
+        prompt = f"Pick a session below or use the menu.\n{help_text}"
+    else:
+        title = f"⚠ Session `{label}` ended."
+        prompt = f"Tap a button or send a message to recover.\n{help_text}"
+
+    text = f"{title}{cwd_line}\n\n{prompt}"
+    return text, keyboard
+
+
+def _recovery_help_text(window_id: str) -> str:
+    """Return a one-line subtitle explaining the available recovery actions.
+
+    Mirrors the keyboard layout in ``build_recovery_keyboard`` so users can
+    read what each button does without trial and error. Buttons hidden by
+    the active provider's capabilities are omitted from the subtitle too.
+    """
+
+    caps = get_provider_for_window(
+        window_id, provider_name=window_query.get_window_provider(window_id)
+    ).capabilities
+    parts = ["Start fresh"]
+    if caps.supports_continue:
+        parts.append("Continue last session")
+    if caps.supports_resume:
+        parts.append("Resume from list")
+    return " · ".join(parts)
 
 
 def build_recovery_keyboard(window_id: str) -> InlineKeyboardMarkup:
@@ -104,9 +186,15 @@ def _build_resume_picker_keyboard(
     window_id: str,
 ) -> InlineKeyboardMarkup:
     """Build inline keyboard listing recent sessions for resume."""
+    from .resume_command import format_session_entry
+
     rows: list[list[InlineKeyboardButton]] = []
     for idx, entry in enumerate(sessions[:_MAX_RESUME_SESSIONS]):
-        label = entry.summary[:40] or entry.session_id[:12]
+        label = format_session_entry(
+            summary=entry.summary,
+            session_id=entry.session_id,
+            mtime=entry.mtime,
+        )
         rows.append(
             [
                 InlineKeyboardButton(
@@ -125,6 +213,33 @@ def _build_resume_picker_keyboard(
         ]
     )
     return InlineKeyboardMarkup(rows)
+
+
+def _build_empty_resume_keyboard(window_id: str) -> InlineKeyboardMarkup:
+    """Build the inline keyboard shown when no sessions exist for the cwd.
+
+    Offers two paths so the user is never stuck on a dead toast:
+      - Browse other projects (cross-project picker via CB_RECOVERY_BROWSE)
+      - Start fresh (reuses the recovery fresh handler)
+    """
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "\U0001f5c2 Browse other projects",
+                    callback_data=f"{CB_RECOVERY_BROWSE}{window_id}"[:64],
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "\U0001f195 Start fresh",
+                    callback_data=f"{CB_RECOVERY_FRESH}{window_id}"[:64],
+                ),
+            ],
+            [InlineKeyboardButton("\u2716 Cancel", callback_data=CB_RECOVERY_CANCEL)],
+        ]
+    )
 
 
 def scan_sessions_for_cwd(cwd: str) -> list[_SessionEntry]:
@@ -203,7 +318,7 @@ def _scan_index_for_cwd(
             entry.get("summary", "") or entry.get("firstPrompt", "") or session_id[:12]
         )
         seen_ids.add(session_id)
-        candidates.append((mtime, _SessionEntry(session_id, summary)))
+        candidates.append((mtime, _SessionEntry(session_id, summary, mtime)))
 
 
 def _scan_bare_jsonl_for_cwd(
@@ -242,7 +357,7 @@ def _scan_bare_jsonl_for_cwd(
 
         seen_ids.add(session_id)
         candidates.append(
-            (mtime, _SessionEntry(session_id, summary or session_id[:12]))
+            (mtime, _SessionEntry(session_id, summary or session_id[:12], mtime))
         )
 
 
@@ -254,7 +369,11 @@ async def handle_recovery_callback(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle recovery UI callbacks."""
-    if data.startswith(CB_RECOVERY_BACK):
+    # Order matters: CB_RECOVERY_BROWSE ("rec:br:") shares its prefix with
+    # CB_RECOVERY_BACK ("rec:b:"), so BROWSE must be tested first.
+    if data.startswith(CB_RECOVERY_BROWSE):
+        await _handle_browse(query, user_id, data, update, context)
+    elif data.startswith(CB_RECOVERY_BACK):
         await _handle_back(query, data, update, context)
     elif data.startswith(CB_RECOVERY_FRESH):
         await _handle_fresh(query, user_id, data, update, context)
@@ -441,10 +560,20 @@ async def _handle_back(
     if validated is None:
         await query.answer("Stale recovery (topic mismatch)", show_alert=True)
         return
-    kb = build_recovery_keyboard(window_id)
-    await safe_edit(
-        query, "\u26a0\ufe0f Session ended. Choose an option:", reply_markup=kb
+    thread_id, _, cwd = validated
+    chat_id = query.message.chat.id if query.message and query.message.chat else 0
+    display = thread_router.get_display_name(window_id) or window_id
+    banner = RecoveryBanner(
+        chat_id=chat_id,
+        thread_id=thread_id,
+        window_id=window_id,
+        mode="restore",
+        provider=window_query.get_window_provider(window_id),
+        display=display,
+        cwd=cwd,
     )
+    text, kb = render_banner(banner)
+    await safe_edit(query, text, reply_markup=kb)
     await query.answer()
 
 
@@ -466,7 +595,7 @@ async def _handle_fresh(
     if not cwd or not Path(cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)
-        await query.answer("Failed")
+        await query.answer("Project gone")
         return
 
     await _create_and_bind_window(
@@ -487,7 +616,12 @@ async def _handle_continue(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    """Handle CB_RECOVERY_CONTINUE: resume most recent session via --continue."""
+    """Handle CB_RECOVERY_CONTINUE: resume most recent session via --continue.
+
+    If there are no sessions on disk for ``cwd``, ``--continue`` would fail
+    silently inside the agent. Surface the empty-state UI instead so the
+    user can pick another project or start fresh.
+    """
     old_wid = data[len(CB_RECOVERY_CONTINUE) :]
     validated = _validate_recovery_state(old_wid, update, context)
     if validated is None:
@@ -498,7 +632,11 @@ async def _handle_continue(
     if not cwd or not Path(cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)
-        await query.answer("Failed")
+        await query.answer("Project gone")
+        return
+
+    if not await asyncio.to_thread(scan_sessions_for_cwd, cwd):
+        await _send_empty_state(query, old_wid, cwd)
         return
 
     launch_args = get_provider_for_window(
@@ -534,18 +672,19 @@ async def _handle_resume(
     if not cwd or not Path(cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)
-        await query.answer("Failed")
+        await query.answer("Project gone")
         return
 
-    sessions = scan_sessions_for_cwd(cwd)
+    sessions = await asyncio.to_thread(scan_sessions_for_cwd, cwd)
     if not sessions:
-        await query.answer("No sessions found for this directory", show_alert=True)
+        await _send_empty_state(query, old_wid, cwd)
         return
 
     # Store session list for pick callback
     if context.user_data is not None:
         context.user_data[RECOVERY_SESSIONS] = [
-            {"session_id": s.session_id, "summary": s.summary} for s in sessions
+            {"session_id": s.session_id, "summary": s.summary, "mtime": s.mtime}
+            for s in sessions
         ]
 
     keyboard = _build_resume_picker_keyboard(sessions, old_wid)
@@ -554,6 +693,80 @@ async def _handle_resume(
         f"\u23ea Select a session to resume:\n(`{cwd}`)",
         reply_markup=keyboard,
     )
+    await query.answer()
+
+
+async def _send_empty_state(
+    query: CallbackQuery,
+    window_id: str,
+    cwd: str,
+) -> None:
+    """Edit the recovery message to the no-sessions empty-state UI.
+
+    Replaces the legacy ``query.answer("No sessions ...", show_alert=True)``
+    toast with an inline keyboard so the user has explicit next steps
+    instead of being trapped on a dismissable alert.
+    """
+
+    keyboard = _build_empty_resume_keyboard(window_id)
+    await safe_edit(
+        query,
+        f"\u26a0 No sessions in this folder yet.\n(`{cwd}`)",
+        reply_markup=keyboard,
+    )
+    await query.answer()
+
+
+async def _handle_browse(
+    query: CallbackQuery,
+    _user_id: int,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Handle CB_RECOVERY_BROWSE: switch to the cross-project resume picker.
+
+    The user explicitly chose to look outside the bound cwd, so the pending
+    text \u2014 which targeted the original project \u2014 is dropped before
+    delegating to the /resume cross-project flow.
+    """
+
+    from .resume_command import _build_resume_keyboard, scan_all_sessions
+    from .user_state import RESUME_SESSIONS
+
+    old_wid = data[len(CB_RECOVERY_BROWSE) :]
+    validated = _validate_recovery_state(old_wid, update, context)
+    if validated is None:
+        await query.answer("Stale recovery (topic mismatch)", show_alert=True)
+        return
+
+    sessions = await asyncio.to_thread(scan_all_sessions)
+    if not sessions:
+        await safe_edit(query, "\u26a0 No past sessions found in any project.")
+        _clear_recovery_state(context.user_data)
+        await query.answer("Nothing to resume")
+        return
+
+    if context.user_data is not None:
+        # Switching flows: drop the recovery-specific pending text since the
+        # target project may differ. Keep PENDING_THREAD_ID for /resume reuse.
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
+        context.user_data.pop(RECOVERY_SESSIONS, None)
+        context.user_data[RESUME_SESSIONS] = [
+            {
+                "session_id": s.session_id,
+                "summary": s.summary,
+                "cwd": s.cwd,
+                "mtime": s.mtime,
+                "msg_count": s.msg_count,
+            }
+            for s in sessions
+        ]
+
+    keyboard = _build_resume_keyboard(
+        context.user_data[RESUME_SESSIONS] if context.user_data else [], page=0
+    )
+    await safe_edit(query, "\u23ea Select a session to resume:", reply_markup=keyboard)
     await query.answer()
 
 
@@ -569,7 +782,7 @@ async def _handle_resume_pick(
     try:
         idx = int(idx_str)
     except ValueError:
-        await query.answer("Invalid selection", show_alert=True)
+        await query.answer("Couldn't read selection", show_alert=True)
         return
 
     thread_id = get_thread_id(update)
@@ -588,7 +801,7 @@ async def _handle_resume_pick(
         context.user_data.get(RECOVERY_SESSIONS) if context.user_data else None
     )
     if not stored_sessions or idx < 0 or idx >= len(stored_sessions):
-        await query.answer("Invalid session index", show_alert=True)
+        await query.answer("Session no longer in list", show_alert=True)
         return
 
     picked = stored_sessions[idx]
@@ -596,14 +809,14 @@ async def _handle_resume_pick(
 
     old_wid = context.user_data.get(RECOVERY_WINDOW_ID) if context.user_data else None
     if not old_wid:
-        await query.answer("Stale recovery state", show_alert=True)
+        await query.answer("Recovery menu expired", show_alert=True)
         return
 
     view = session_manager.view_window(old_wid)
     if view is None or not view.cwd or not Path(view.cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)
-        await query.answer("Failed")
+        await query.answer("Project gone")
         return
     cwd = view.cwd
 
@@ -650,6 +863,7 @@ async def _handle_cancel(
 
 @register(
     CB_RECOVERY_BACK,
+    CB_RECOVERY_BROWSE,
     CB_RECOVERY_FRESH,
     CB_RECOVERY_CONTINUE,
     CB_RECOVERY_RESUME,

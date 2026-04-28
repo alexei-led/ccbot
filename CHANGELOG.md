@@ -4,118 +4,194 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.0.0] - 2026-04-28
+
+Telegram UX overhaul (Phase 3 — Theme 6: Mini App dashboard). Optional web surface that opens from a Telegram inline button and runs inside Telegram's WebApp container. Three surfaces ship in v3.0: a live xterm.js terminal, a paginated transcript with full-text search, and a multi-pane grid view. Disabled by default — set `CCGRAM_MINIAPP_BASE_URL` to opt in. When unset, neither the HTTP server nor the dashboard button are exposed; behavior is identical to v2.13.
+
+### Added
+
+- New `src/ccgram/miniapp/` subpackage with a token-gated aiohttp server. Public API: `start_server`, `stop_server`, `build_app`, `sign_token`, `verify_token`, `validate_init_data`.
+- HMAC-signed window tokens (`window_id` + `user_id` + expiry) plus Telegram WebApp `initData` validation. Tokens scope every API surface to the user's own window — no cross-window access.
+- aiohttp server with three route families: `/healthz` (liveness), `/app/{token}` (SPA shell with payload injection), `/static/` (assets), and the per-surface API routes below.
+- Live terminal surface — websocket `/ws/terminal/{token}` streams tmux pane output (delta-based, ~200ms cadence). xterm.js client renders ANSI colors and handles resize. Read-only in v3.0; input is queued for v3.1.
+- Transcript surface — `GET /api/transcript/{token}` (cursor-paginated history) and `GET /api/transcript/{token}/search?q=...` (case-insensitive full-text search with ±1 entry context, capped at 50 hits). Reuses `session_query.get_recent_messages`.
+- Multi-pane grid surface — `GET /api/panes/{token}` enumerates panes in the bound window; the websocket multiplex (`?pane=...`) drives per-tile streams. Click a tile to focus a single pane; back navigation restores the grid.
+- New "🪟 Dashboard" button on the status bubble (only shown when Mini App is enabled) opens the WebApp scoped to the current window.
+- Three new env vars: `CCGRAM_MINIAPP_BASE_URL` (externally reachable URL — Mini App is fully disabled until this is set), `CCGRAM_MINIAPP_HOST` (local bind, default `127.0.0.1`), `CCGRAM_MINIAPP_PORT` (default `8765`).
+- Bot lifecycle integration: `start_miniapp_if_enabled` / `stop_miniapp_if_enabled` wired into `bot.py` `post_init` / `post_shutdown`. Server start failures are logged and swallowed — the bot keeps running even if the optional server can't bind.
+
+### Notes
+
+- Production deployment requires TLS termination + reverse proxy (cloudflared, caddy, nginx). The aiohttp server binds to a local host/port and expects an external proxy to forward HTTPS.
+- BotFather configuration: register the Mini App URL via `/setdomain` and `/newapp` after deploying.
+- AskUserQuestion HTML form (Phase 3.5) is deferred to v3.1.
+
+## [2.13.0] - 2026-04-27
+
+Telegram UX overhaul (Phase 2 — Theme 5: Multi-pane teams). Panes inside a tmux window become first-class citizens: tracked in `WindowState`, classified by their own polling strategy, surfaced in the status bubble, addressable by name in interactive UI alerts, individually subscribable, renameable, and (optionally) announced on lifecycle transitions.
+
+### Added
+
+- `PaneInfo` dataclass and `WindowState.panes: dict[str, PaneInfo]` map (`pane_id`, `name`, `provider`, `last_active_ts`, `state`, `subscribed`). Backward-compatible state-file load (missing `panes` → empty dict). New CRUD helpers: `get_pane`, `upsert_pane`, `remove_pane` with sentinel-pattern partial updates.
+- `PaneStatusStrategy` in `handlers/polling_strategies.py` — extracted multi-pane scanning out of `window_tick.py`. Owns enumeration, state classification (active/idle/blocked/dead), per-pane provider auto-detection, transition tracking, dead-pane reconciliation, and content-hash deduplication for subscribed-pane output forwarding.
+- Per-pane status block under the main agent line in the status bubble for windows with >1 pane (e.g. `└ %5 active · %6 idle 2m · %7 ⏸ blocked`); collapsed via expandable blockquote when ≥4 panes.
+- Interactive UI alerts now prepend the pane name when set: `🔀 api-gateway (%5):` instead of `🔀 Pane (%5):`.
+- New `handlers/pane_callbacks.py` with `CB_PANE_SUBSCRIBE`/`CB_PANE_UNSUBSCRIBE`/`CB_PANE_RENAME` handlers. `/panes` keyboard gains [Subscribe]/[Rename] buttons per pane. Subscribed-pane output is forwarded through `PaneOutputCallback` with content-hash dedup; subscriptions auto-clear when a pane dies.
+- Pane lifecycle notifications (per-window toggle, default off): one-line `➕ pane %6 created` / `➖ pane %6 closed` events in the bound topic. Toggle via `/panes` keyboard. Default driven by new `CCGRAM_PANE_LIFECYCLE_NOTIFY` env var.
+
+### Changed
+
+- `window_tick.py` delegates multi-pane scanning to `PaneStatusStrategy`; the legacy in-tick scan is gone. Module-level `_window_store` reference replaces lazy imports.
+
+## [2.12.0] - 2026-04-27
+
+Telegram UX overhaul (Phase 1 — Themes 1-4): information-design polish, native Bot API streaming and reactions, recovery/resume rework. Requires Bot API 9.5+ for full feature parity; older deployments degrade gracefully.
+
+### Added
+
+- Theme 1 — Recovery keyboard subtitles, interactive UI cheatsheet ("↑↓ select · Enter confirm · Esc cancel · type to enter text"), pending message disclosure, `/live` slash command, shell `!` raw-command hint, resume picker with relative timestamps + session-id last-4.
+- Theme 3 — `react()` helper with allowlisted Telegram reactions and toast fallback. Reactions replace toasts across voice, /send, peer messages, shell command runs, and notify-mode toggle.
+- Theme 4a — `sendChatAction("typing")` for shell LLM generation and agent text forwards (refreshed every 4s while generating).
+- Theme 4b — `DraftStream` helper using Bot API 9.5 `sendMessageDraft` for native streaming. Adopted in `tool_batch` and `status_bubble`. Falls back to `editMessageText` when API method unavailable. New `[draft-streaming]` check in `ccgram doctor`.
+- Theme 2 — Unified `RecoveryBanner` dataclass and `render_banner()` renderer used by dead-window detection, `/restore`, and `/resume`. Cross-project Browse fallback, empty-state UI, Continue→Resume fallback, message-count display in session picker.
+
+### Changed
+
+- `/restore` now re-shows the recovery banner instead of auto-running `--continue` — gives the user explicit choice.
+- Resume entries sorted newest-first by mtime; missing/zero timestamps render as "never".
+- "Session expired" toast in /send rephrased to "Browser expired — use /send to restart".
+- Status bubble updates stream via `DraftStream` when available; content-hash gating becomes a no-op in streaming mode.
+
+### Fixed
+
+- Recovery callback dispatcher prefix collision between `browse` and `back`.
+- Tool batch and status bubble keyboards now propagate `reply_markup` correctly through DraftStream.
+
 ## [2.11.3] - 2026-04-26
 
 ### Fixed
+
 - Preserve primary binding under nested SessionStart ([#63](https://github.com/alexei-led/ccgram/pull/63))
 
 ## [2.11.2] - 2026-04-26
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.11.2
 
-
 ### Fixed
+
 - Preserve manually created tmux windows
 
 ## [2.11.1] - 2026-04-24
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.11.1
 
 ## [2.11.0] - 2026-04-19
 
 ### Added
+
 - Add pi coding agent provider ([#59](https://github.com/alexei-led/ccgram/pull/59))
 
-
 ### Documentation
+
 - Clean up design and modularity review artifacts [skip ci]
 - Update CHANGELOG.md for v2.11.0
 
 ## [2.10.0] - 2026-04-16
 
 ### Changed
+
 - Architecture round 2 — modularity fixes + target design ([#57](https://github.com/alexei-led/ccgram/pull/57))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.10.0
 
 ## [2.9.0] - 2026-04-13
 
 ### Added
+
 - /send command + TOML-configurable toolbar + modularity refactor ([#56](https://github.com/alexei-led/ccgram/pull/56))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.9.0
 
 ## [2.8.2] - 2026-04-09
 
 ### Added
+
 - Enhance Telegram UX — reduce noise, delays, and flood ([#54](https://github.com/alexei-led/ccgram/pull/54))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.8.2
 
-
 ### Fixed
+
 - Handle missing autoclose topics and zsh shell markers ([#53](https://github.com/alexei-led/ccgram/pull/53))
 
 ## [2.8.1] - 2026-04-07
 
 ### Added
+
 - Enable PTB built-in rate limiter for Telegram API calls
 
-
 ### Documentation
+
 - Sync documentation with v2.8.0 codebase changes
 - Update CHANGELOG.md for v2.8.1
 
 ## [2.8.0] - 2026-04-07
 
 ### Added
+
 - Terminal live view with auto-refreshing screenshots ([#52](https://github.com/alexei-led/ccgram/pull/52))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.8.0
 
 ## [2.7.2] - 2026-04-06
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.7.2
 
-
 ### Fixed
+
 - Disable interactive editors in agent windows
 
 ## [2.7.1] - 2026-04-04
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.7.1
 
-
 ### Fixed
+
 - Use resilient HTTPX requests for all bot traffic ([#49](https://github.com/alexei-led/ccgram/pull/49))
 
 ## [2.7.0] - 2026-04-04
 
 ### Added
+
 - Make Telegram output more informative with two-tier approach
 - Add ccgram-messaging skill for inter-agent collaboration
 
-
 ### Documentation
+
 - Add inter-agent messaging guide and README feature section [skip ci]
 - Replace ASCII diagrams with styled Mermaid in messaging guide [skip ci]
 - Add informative output implementation plan
 - Update CHANGELOG.md for v2.7.0
 
-
 ### Fixed
+
 - Auto-accept YOLO bypass permissions prompt on Claude window creation
 - Tighten vim INSERT mode detection to avoid Claude status bar false positives
 - Raise chrome line length limit to 250 for wide Claude status bars
@@ -125,19 +201,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.6.1] - 2026-04-02
 
 ### Added
+
 - Auto-install messaging skill on Claude window creation
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.6.1
 
-
 ### Fixed
+
 - Broaden session monitor exception handling to log all errors
 
 ## [2.6.0] - 2026-04-01
 
 ### Added
+
 - Add file-based mailbox for inter-agent messaging
 - Add peer discovery with declared overlay and filtering
 - Add ccgram msg CLI subcommand group for inter-agent messaging
@@ -153,7 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix 4 per-topic state cleanup gaps in cleanup.py
 - Promote mailbox private helpers to public API
 - Promote 3 private functions to public API across module boundaries
-- Replace shared mutable _pending_requests dict with public accessor API
+- Replace shared mutable \_pending_requests dict with public accessor API
 - Extract msg_delivery.py to break msg_broker ↔ msg_telegram circular dependency
 - Add public methods to TerminalStatusStrategy; promote polling constants
 - Extract UserPreferences from SessionManager (starred/MRU/offsets)
@@ -169,16 +247,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve task tool batch rendering
 - Add inter-agent messaging system and modularity refactoring
 
-
 ### Changed
+
 - Move TopicStateRegistry to top-level ccgram package
 - Extract periodic tasks and transcript discovery from polling coordinator
 - Add strategy-level query methods to polling strategies
 - Encapsulate delivery path in Mailbox and clean up messaging API
 - Decompose SessionManager god object and fix modularity violations
 
-
 ### Documentation
+
 - Add inter-agent messaging implementation plan
 - Revise inter-agent messaging implementation plan
 - Revise inter-agent messaging implementation plan
@@ -186,8 +264,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update architecture docs and design specs for modularity refactoring
 - Update CHANGELOG.md for v2.6.0
 
-
 ### Fixed
+
 - Address code review findings
 - Address code review findings
 - Address code review findings
@@ -216,229 +294,253 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.5.0] - 2026-03-30
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.5.0
 
 ## [2.4.1] - 2026-03-28
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.4.1
 
-
 ### Fixed
+
 - Handle NetworkError as transient in bot error handler
 - Eliminate status message and topic rename noise on Stop events ([#46](https://github.com/alexei-led/ccgram/pull/46))
 
 ## [2.4.0] - 2026-03-28
 
 ### Added
+
 - Detect and recreate deleted Telegram topics via /sync ([#45](https://github.com/alexei-led/ccgram/pull/45))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.4.0
 
 ## [2.3.5] - 2026-03-28
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.3.5
 
-
 ### Fixed
+
 - Is_general_topic fails when message_thread_id is None in forum groups ([#43](https://github.com/alexei-led/ccgram/pull/43))
 
 ## [2.3.4] - 2026-03-27
 
 ### Added
+
 - Reduce General topic noise with pin-once + reaction fallback
 - Reduce General topic noise with pin-once + reaction fallback ([#41](https://github.com/alexei-led/ccgram/pull/41))
 - Add shutdown notification and signal diagnostics
 - Hide underscore-prefixed tmux windows from window list
 
-
 ### Changed
-- Remove unnecessary __future__ annotations import
 
+- Remove unnecessary **future** annotations import
 
 ### Documentation
+
 - Align provider emoji in README diagram with code [skip ci]
 - Update CHANGELOG.md for v2.3.4
 
-
 ### Fixed
+
 - Guard General topic handler with is_general_topic check
 - Harden service resilience against crashes and silent degradation ([#42](https://github.com/alexei-led/ccgram/pull/42))
 
 ## [2.3.3] - 2026-03-26
 
 ### Added
+
 - /release skill with LLM-crafted notes, portable project settings [skip ci]
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.3.3
 
-
 ### Fixed
+
 - Detect interactive UI during message queue backlog ([#33](https://github.com/alexei-led/ccgram/pull/33))
 
 ## [2.3.2] - 2026-03-26
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.3.2
 
-
 ### Fixed
+
 - Idempotent prompt markers, raw send_keys, POSIX fallback
 
 ## [2.3.1] - 2026-03-25
 
 ### Added
+
 - Wrap prompt mode — preserve user's prompt (Tide, Starship, P10k)
 
-
 ### Documentation
+
 - Update README and guides for shell provider [skip ci]
 - Update CHANGELOG.md for v2.3.1
 
 ## [2.3.0] - 2026-03-24
 
 ### Added
+
 - Shell provider — chat-first shell interface via Telegram ([#36](https://github.com/alexei-led/ccgram/pull/36))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.3.0
 
 ## [2.2.5] - 2026-03-23
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.2.5
 
-
 ### Fixed
+
 - Persist group routing on topic rebind ([#35](https://github.com/alexei-led/ccgram/pull/35))
 - Recover stale provider mappings from transcript path
 
 ## [2.2.4] - 2026-03-20
 
 ### Added
+
 - Switch to entity-based Telegram formatting ([#34](https://github.com/alexei-led/ccgram/pull/34))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.2.4
 
 ## [2.2.3] - 2026-03-20
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.2.3
 
-
 ### Fixed
+
 - Respect Telegram cooldown period and log version at startup
 
 ## [2.2.2] - 2026-03-20
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.2.2
 
-
 ### Fixed
+
 - Handle Telegram flood control during startup command registration
 
 ## [2.2.1] - 2026-03-20
 
 ### Added
+
 - Subagent context binding ([#32](https://github.com/alexei-led/ccgram/pull/32))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.2.1
 
 ## [2.2.0] - 2026-03-20
 
 ### Added
+
 - Smart notification batching for tool call chains ([#31](https://github.com/alexei-led/ccgram/pull/31))
 
-
 ### Documentation
+
 - Update release process in CLAUDE.md [skip ci]
 - Update CHANGELOG.md for v2.2.0
 
 ## [2.1.2] - 2026-03-20
 
 ### Documentation
+
 - Update CHANGELOG.md for v2.1.1 [skip ci]
 - Update CHANGELOG.md for v2.1.2 [skip ci]
 
-
 ### Fixed
+
 - Update actions/checkout to v6, drop changelog push to protected main
 
 ## [2.1.1] - 2026-03-20
 
 ### Added
+
 - Ack reactions on forwarded messages + assert_sendable guard ([#30](https://github.com/alexei-led/ccgram/pull/30))
 
-
 ### Documentation
+
 - Update CHANGELOG.md for v2.1.0 [skip ci]
 
-
 ### Fixed
+
 - Install Claude hooks via current interpreter ([#29](https://github.com/alexei-led/ccgram/pull/29))
 
 ## [2.1.0] - 2026-03-19
 
 ### Added
+
 - Generalize external session discovery beyond emdash ([#27](https://github.com/alexei-led/ccgram/pull/27))
 - Add voice message transcription via Whisper API ([#24](https://github.com/alexei-led/ccgram/pull/24))
 - Restart run command, ANSI capture, relay cleanup ([#28](https://github.com/alexei-led/ccgram/pull/28))
 
-
 ### Documentation
+
 - Improve BotFather setup instructions and add group ID
 
-
 ### Fixed
+
 - Reset polling client after transport errors ([#26](https://github.com/alexei-led/ccgram/pull/26))
 
 ## [2.0.1] - 2026-03-16
 
 ### Added
+
 - Auto-detect tmux session and prevent duplicate instances
 
 ## [2.0.0] - 2026-03-16
 
 ### Added
+
 - Rename ccbot to ccgram (v2.0.0)
 
 ## [1.6.12] - 2026-03-14
 
 ### Fixed
+
 - Break dead window notification infinite retry loop
 
 ## [1.6.11] - 2026-03-13
 
 ### Added
+
 - Add emdash integration — auto-discover foreign tmux sessions
 
 ## [1.6.10] - 2026-03-12
 
 ### Fixed
+
 - Upgrade to telegramify-markdown 1.0.0, add deptry for dep hygiene
 
 ## [1.6.9] - 2026-03-09
 
 ### Changed
+
 - Remove dead code and legacy artifacts
 - Consolidate module-level state in status_polling.py
 - Extract retry-with-fallback helper in message_sender.py
 - Add Protocol methods for Gemini pane-title detection
 - Optimize polling loop with O(1) window lookup
 
-
 ### Fixed
+
 - Ruff format status_polling.py
 - Prevent unbounded state growth in long-running process
 - Cache converted text in retry helper, hoist deferred import
@@ -447,187 +549,214 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.8] - 2026-03-08
 
 ### Added
+
 - Auto-enter INSERT mode when vim NORMAL mode detected
 
 ## [1.6.7] - 2026-03-08
 
 ### Fixed
+
 - Handle RetryAfter in safe_reply/safe_edit/safe_send with sleep+retry
 
 ## [1.6.6] - 2026-03-08
 
 ### Added
+
 - Auto-recover dead topics in /restore instead of showing recovery keyboard
 
 ## [1.6.5] - 2026-03-08
 
 ### Added
+
 - Add /restore command, startup stale topic cleanup, sync improvements
 
-
 ### Fixed
+
 - Register /restore in Telegram bot command menu
 
 ## [1.6.3] - 2026-03-05
 
 ### Added
+
 - Bidirectional topic↔window name sync
 
 ## [1.6.2] - 2026-03-03
 
 ### Added
+
 - Harden Gemini provider with launch settings, runtime detection, and hookless session resilience
 
 ## [1.6.1] - 2026-03-03
 
 ### Added
+
 - Add Gemini transcript discovery, tool parsing, and command detection
 - Detect Gemini from pane title when running under bun/node wrappers
 
-
 ### Documentation
+
 - Update Gemini provider docs with transcript discovery and detection details
 
 ## [1.6.0] - 2026-03-03
 
 ### Added
+
 - Add per-window approval mode with provider-specific YOLO flags
 
-
 ### Documentation
+
 - Update llm.txt and ai-agents docs with ~15 missing modules
 - Document YOLO session mode in README and guides
 
 ## [1.5.9] - 2026-03-03
 
 ### Added
+
 - Add command catalog with provider-agnostic discovery and caching
 - Add /commands handler with scoped provider menus and error probing
 
-
 ### Documentation
+
 - Update README with command menu and provider-scoped features
 
 ## [1.5.8] - 2026-03-02
 
 ### Added
+
 - Add Codex tool formatting parity and refactor tests
 
 ## [1.5.7] - 2026-03-02
 
 ### Added
+
 - Replace inline query with callback for status history recall
 
 ## [1.5.4] - 2026-03-02
 
 ### Added
+
 - Register Telegram menu commands from all providers, not just the default
 - Improve Codex interactive edit prompt formatting in Telegram
 
-
 ### Fixed
+
 - Strip leading slash from CC name mapping to prevent double-prefixed commands
 - Keep idle status visible for hookless providers at shell prompts
 
 ## [1.5.1] - 2026-03-02
 
 ### Added
+
 - Add /sync command for on-demand state audit and cleanup
 - Register missing bot commands in Telegram menu
 - Strict bidirectional topic-window enforcement in /sync
 - Improve transcript discovery for hookless providers with unknown process names
 - Recognize Codex selection UI cursor and action hints
 
-
 ### Fixed
+
 - Use tuple syntax for multi-exception except clauses
 - Improve Homebrew formula generation reliability
 
 ## [1.5.0] - 2026-03-02
 
 ### Added
+
 - Transcript discovery for hookless providers (Codex/Gemini) ([#20](https://github.com/alexei-led/ccgram/pull/20))
 
 ## [1.4.5] - 2026-03-02
 
 ### Fixed
+
 - Automatic cleanup of stale state entries in state.json
 
 ## [1.4.4] - 2026-03-02
 
 ### Fixed
+
 - Suspend topic probe after consecutive timeouts to reduce log noise
 
 ## [1.4.3] - 2026-03-01
 
 ### Fixed
+
 - Throttle repetitive polling debug logs to reduce noise
 - Clean up partial-jsonl throttle state on session removal
 
 ## [1.4.2] - 2026-03-01
 
 ### Added
+
 - Add integration tests for dispatch, monitor, state, and hook pipeline ([#18](https://github.com/alexei-led/ccgram/pull/18))
 
-
 ### Fixed
+
 - V1.4.2 bug fixes — Gemini I/O cache, glob fallback cwd, bash capture tests ([#19](https://github.com/alexei-led/ccgram/pull/19))
 
 ## [1.4.1] - 2026-03-01
 
 ### Fixed
+
 - Topic name preservation and session discovery without index ([#17](https://github.com/alexei-led/ccgram/pull/17))
 
 ## [1.4.0] - 2026-02-27
 
 ### Added
+
 - Multi-pane support, team hook events, and hook install UX
 
 ## [1.3.3] - 2026-02-27
 
 ### Added
+
 - Detect more permission prompts + add /screenshot command
 
 ## [1.3.2] - 2026-02-26
 
 ### Fixed
+
 - Case-insensitive TOPIC_NOT_MODIFIED check prevents emoji update spam
 
 ## [1.3.1] - 2026-02-25
 
 ### Added
+
 - Cherry-pick upstream improvements — 6 targeted fixes
 
-
 ### Documentation
+
 - Add CLAUDE_CONFIG_DIR and CCBOT_SHOW_HIDDEN_DIRS to .env.example
 
 ## [1.3.0] - 2026-02-25
 
 ### Added
+
 - Expand hook system to 5 Claude Code event types
 
 ## [1.2.1] - 2026-02-25
 
 ### Added
+
 - Improve Telegram message formatting with emoji and visual hierarchy
 
-
 ### Changed
+
 - Migrate to structlog, extract state persistence and window resolver
 
-
 ### Fixed
+
 - Remove incompatible add_logger_name from structlog config
 
 ## [1.1.1] - 2026-02-24
 
 ### Fixed
+
 - Simplify provider launch commands and clean up dead code
 
 ## [1.1.0] - 2026-02-24
 
 ### Added
+
 - Add ScreenBuffer abstraction wrapping pyte VT100 emulator
 - Add pyte dependency and ScreenBuffer abstraction
 - Version-resilient spinner detection via Unicode categories
@@ -638,8 +767,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Verify acceptance criteria for resilient terminal parsing
 - Update documentation for resilient terminal parsing
 
-
 ### Fixed
+
 - Harden spinner detection to reject ASCII punctuation
 - Gemini resume_id validation and whole-file transcript offset tracking
 - ScreenBuffer edge cases and cleanup on topic close
@@ -651,6 +780,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.1] - 2026-02-22
 
 ### Added
+
 - Add per-window provider_name to WindowState and get_provider_for_window()
 - Replace global get_provider() with per-window resolution across all handlers
 - Add provider selection to directory browser UI
@@ -666,15 +796,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete documentation for per-window provider support
 - Robust terminal status detection for non-Claude providers
 
-
 ### Documentation
+
 - Update documentation and changelog for multi-provider v1.0.0
 - Reposition as standalone project, keep attribution to original
 - Remove FORK.md — standalone project, attribution in README
 - Rename to Command & Control Bot across all docs and metadata
 
-
 ### Fixed
+
 - Address code review findings for per-window provider support
 - Address code review findings for per-window provider support
 - Address code review findings for per-window provider support
@@ -686,6 +816,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-02-20
 
 ### Added
+
 - Add AgentProvider protocol, event types, and contract tests (TASK-034)
 - Add provider registry, capability policy, and config integration (TASK-035)
 - Add ClaudeProvider wrapping existing modules behind AgentProvider protocol (TASK-036)
@@ -694,56 +825,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Capability-aware UX for recovery, resume, doctor, and status
 - Add command history recall buttons to idle status messages
 
-
 ### Changed
+
 - Make UUID_RE public and move expandable quote sentinels to providers.base
 - Route handler calls through provider abstraction
 - Consolidate provider code and deduplicate tests
 - Extract JsonlProvider base class and deduplicate utilities
 
-
 ### Documentation
+
 - Add TASK-036/037 progress and future provider task specs
 - Add provider configuration and architecture docs
 - Mark EPIC-008 multi-agent provider architecture done
 
-
 ### Fixed
+
 - Harden provider layer with type guards, ClassVar annotations, and test coverage
 - Handle stale message replies gracefully after restart
 
 ## [0.3.7] - 2026-02-19
 
 ### Fixed
+
 - Parse status line with Claude Code 4.6 two-separator layout
 
 ## [0.3.6] - 2026-02-19
 
 ### Added
+
 - Short status labels in Telegram (…reading, …thinking, …testing)
 
 ## [0.3.5] - 2026-02-19
 
 ### Added
+
 - Show typing indicator while Claude Code is active
 
 ## [0.3.4] - 2026-02-19
 
 ### Fixed
+
 - Detect /model selection UI in terminal for interactive control
 
 ## [0.3.2] - 2026-02-18
 
 ### Fixed
+
 - Safe_edit crash when editing a Message (upgrade command)
 
 ## [0.3.1] - 2026-02-18
 
 ### Added
+
 - Add /upgrade command for self-updating via uv
 
-
 ### Fixed
+
 - Settings UI pattern fails on narrow terminals, add /model to menu
 - Enforce 1 topic = 1 window to prevent double message delivery
 - Kill orphan process on timeout, parse version from upgrade output
@@ -753,114 +890,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.18] - 2026-02-18
 
 ### Fixed
+
 - Hook install deduplication, insertion point, and command portability
 
 ## [0.2.17] - 2026-02-18
 
 ### Changed
+
 - Migrate CLI from argparse to Click
 
 ## [0.2.16] - 2026-02-18
 
 ### Fixed
+
 - Reduce log noise with colored output, demoted levels, and silenced spam
 
 ## [0.2.15] - 2026-02-18
 
 ### Documentation
+
 - Move CLI reference and config to guides, recommend uv for install
 
-
 ### Fixed
+
 - /unbind ghost status, interactive UI robustness, status line parsing
 
 ## [0.2.14] - 2026-02-18
 
 ### Fixed
+
 - Simplify Homebrew formula generator and use uv run in CI
 - Prune stale session_map.json entries for dead tmux windows
 
 ## [0.2.13] - 2026-02-18
 
 ### Added
+
 - Add CLI argument parsing with flag-to-env precedence
 - Add `ccbot status` and `ccbot doctor` CLI subcommands
 - Add `ccbot hook --status` and `--uninstall` subcommands
 - Topic close grace period + unbound window TTL
 
-
 ### Documentation
+
 - Update CLAUDE.md with CLI flags and config precedence
 - Document new CLI subcommands in CLAUDE.md
 
-
 ### Fixed
+
 - Use hatch-vcs generated version instead of hardcoded string
 - Guard against double-click in directory confirm callback
 
 ## [0.2.11] - 2026-02-17
 
 ### Fixed
+
 - Back off topic auto-creation after flood control
 - Preserve display names when session map is stale
 
 ## [0.2.10] - 2026-02-17
 
 ### Added
+
 - Enhance directory browser workflow
 - Add file handler support
 - Add session favorites & notification controls
 
-
 ### Fixed
+
 - Improve status and screenshot callbacks
 
 ## [0.2.9] - 2026-02-15
 
 ### Fixed
+
 - Rename topic immediately on tmux window rename
 
 ## [0.2.8] - 2026-02-15
 
 ### Fixed
+
 - Prevent dual-instance conflict and interactive UI message flood
 
 ## [0.2.7] - 2026-02-13
 
 ### Added
+
 - Detect Claude exit, sync window renames, auto-close stale topics
 
 ## [0.2.6] - 2026-02-13
 
 ### Fixed
+
 - Unify logging and add proactive dead window recovery
 
 ## [0.2.5] - 2026-02-13
 
 ### Fixed
+
 - Improve screenshot reliability and debounce topic emoji updates
 
 ## [0.2.4] - 2026-02-12
 
 ### Fixed
+
 - Use transcript_path for direct JSONL reading + auto-topic for unbound windows
 
 ## [0.2.3] - 2026-02-12
 
 ### Fixed
+
 - Use <br> for newlines in Mermaid diagram node labels
 - Handle libtmux ObjectDoesNotExist and clean up startup noise
 
 ## [0.2.2] - 2026-02-12
 
 ### Documentation
+
 - Rewrite README for clarity and add configuration reference
 - Expand guides with session recovery and service setup
 - Add downloads and typed badges, fix license badge
 - Replace ASCII architecture diagram with Mermaid flowchart
 
-
 ### Fixed
+
 - Address code review findings
 - Address code review findings
 - Address code review findings
@@ -869,14 +1022,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1] - 2026-02-12
 
 ### Fixed
+
 - Scope id-token permission to publish job only
 - Correct homebrew bump action name
-- Exclude auto-generated _version.py from ruff checks
+- Exclude auto-generated \_version.py from ruff checks
 - Restore pypi-publish action ref to release/v1
 
 ## [0.2.0] - 2026-02-12
 
 ### Added
+
 - Configurable config directory via CCBOT_DIR env var
 - Friendly config error message and non-source install docs
 - Local .env takes priority over config dir .env
@@ -908,8 +1063,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wrap-up docs and archive plan
 - Add Homebrew tap support and install instructions
 
-
 ### Changed
+
 - Re-key internal routing from window_name to window_id
 - Move pane parsing functions into terminal_parser.py
 - Optimize hot-path I/O in session lookup and project scanning
@@ -918,8 +1073,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove dead empty-history early return in send_history
 - Normalize naming and centralize user-data keys (TASK-025)
 
-
 ### Documentation
+
 - Simplify .env setup instructions
 - Restructure CLAUDE.md following official best practices
 - Update READMEs to reflect window_id-keyed routing
@@ -929,14 +1084,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add multi-instance variables to .env.example
 - Remove redundant docs and unused workflows (TASK-015)
 
-
 ### Fixed
+
 - Support multiple supergroups per user via composite group_chat_ids key
 - Remove extraneous f-string prefixes in main.py
 - Replace time.time() with monotonic() and deprecated get_event_loop()
-- Narrow exception handling and clean up orphaned _pending_tools
+- Narrow exception handling and clean up orphaned \_pending_tools
 - Address code review findings
 - Address code review findings
 - Address code review findings
-
-

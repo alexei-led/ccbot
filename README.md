@@ -78,7 +78,7 @@ Each Telegram Forum topic binds to one tmux window. Messages you type are sent a
 - **Voice messages** — transcribed via Whisper API (OpenAI/Groq), shown with **Send / Discard** buttons before forwarding
 - **Multi-pane support** — auto-detects blocked panes in agent teams, surfaces prompts as alerts; `/panes` for overview
 - **Terminal screenshots** — capture the current pane (or any specific pane) as a PNG image
-- **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
+- **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button or `/live` command; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
 - **File delivery** (`/send`) — send workspace files to Telegram: exact path (`/send docs/arch.png`), glob (`/send *.png`), substring search (`/send arch`), or interactive browser (`/send`). Project-scoped with security filtering (hidden files, credentials, gitignored, >50 MB denied)
 - **Action toolbar** (`/toolbar`) — provider-specific inline buttons. Universal row: Screenshot, Ctrl-C, Live, Send. Provider row varies: Claude (Mode, Think, Esc), Codex (Esc, Enter, Tab), Gemini (Mode, YOLO, Esc), Pi (Esc, Enter, Tab), Shell (Enter, EOF, Suspend)
 - **Remote Control** — 📡 topic badge when RC is active; one-tap activation from status keyboard
@@ -231,25 +231,69 @@ Open your Telegram group, create a new topic, send a message — a directory bro
 
 ## Configuration Reference
 
-| Variable / Flag             | Default           | Description                                                   |
-| --------------------------- | ----------------- | ------------------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`        | _(required)_      | Bot token from @BotFather (env only)                          |
-| `ALLOWED_USERS`             | _(required)_      | Comma-separated Telegram user IDs                             |
-| `CCGRAM_DIR`                | `~/.ccgram`       | Config and state directory                                    |
-| `CCGRAM_PROVIDER`           | `claude`          | Default provider (`claude`, `codex`, `gemini`, `pi`, `shell`) |
-| `CCGRAM_<NAME>_COMMAND`     | _(from provider)_ | Override launch command per provider                          |
-| `CCGRAM_GROUP_ID`           | _(all groups)_    | Restrict to one Telegram group                                |
-| `CCGRAM_LLM_PROVIDER`       | _(disabled)_      | LLM for shell command generation + completion summaries       |
-| `CCGRAM_LLM_API_KEY`        | _(empty)_         | LLM API key (env only)                                        |
-| `CCGRAM_WHISPER_PROVIDER`   | _(disabled)_      | Whisper provider for voice transcription (`openai`, `groq`)   |
-| `CCGRAM_LIVE_VIEW_INTERVAL` | `5`               | Live view refresh interval in seconds                         |
-| `CCGRAM_LIVE_VIEW_TIMEOUT`  | `300`             | Live view auto-stop timeout in seconds                        |
-| `CCGRAM_SEND_SEARCH_DEPTH`  | `5`               | Max directory depth for `/send` file search                   |
-| `CCGRAM_SEND_MAX_RESULTS`   | `50`              | Max file results returned by `/send` search                   |
-| `AUTOCLOSE_DONE_MINUTES`    | `30`              | Auto-close completed topics after N minutes                   |
-| `AUTOCLOSE_DEAD_MINUTES`    | `10`              | Auto-close dead sessions after N minutes                      |
+| Variable / Flag                | Default           | Description                                                   |
+| ------------------------------ | ----------------- | ------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`           | _(required)_      | Bot token from @BotFather (env only)                          |
+| `ALLOWED_USERS`                | _(required)_      | Comma-separated Telegram user IDs                             |
+| `CCGRAM_DIR`                   | `~/.ccgram`       | Config and state directory                                    |
+| `CCGRAM_PROVIDER`              | `claude`          | Default provider (`claude`, `codex`, `gemini`, `pi`, `shell`) |
+| `CCGRAM_<NAME>_COMMAND`        | _(from provider)_ | Override launch command per provider                          |
+| `CCGRAM_GROUP_ID`              | _(all groups)_    | Restrict to one Telegram group                                |
+| `CCGRAM_LLM_PROVIDER`          | _(disabled)_      | LLM for shell command generation + completion summaries       |
+| `CCGRAM_LLM_API_KEY`           | _(empty)_         | LLM API key (env only)                                        |
+| `CCGRAM_WHISPER_PROVIDER`      | _(disabled)_      | Whisper provider for voice transcription (`openai`, `groq`)   |
+| `CCGRAM_LIVE_VIEW_INTERVAL`    | `5`               | Live view refresh interval in seconds                         |
+| `CCGRAM_LIVE_VIEW_TIMEOUT`     | `300`             | Live view auto-stop timeout in seconds                        |
+| `CCGRAM_SEND_SEARCH_DEPTH`     | `5`               | Max directory depth for `/send` file search                   |
+| `CCGRAM_SEND_MAX_RESULTS`      | `50`              | Max file results returned by `/send` search                   |
+| `AUTOCLOSE_DONE_MINUTES`       | `30`              | Auto-close completed topics after N minutes                   |
+| `AUTOCLOSE_DEAD_MINUTES`       | `10`              | Auto-close dead sessions after N minutes                      |
+| `CCGRAM_PANE_LIFECYCLE_NOTIFY` | `false`           | Default for per-window pane create/close notifications        |
+| `CCGRAM_MINIAPP_BASE_URL`      | _(disabled)_      | Externally reachable HTTPS URL for the Mini App dashboard     |
+| `CCGRAM_MINIAPP_HOST`          | `127.0.0.1`       | Local aiohttp bind host for the Mini App server               |
+| `CCGRAM_MINIAPP_PORT`          | `8765`            | Local aiohttp bind port for the Mini App server               |
 
 Full reference: **[docs/guides.md](docs/guides.md#configuration)**
+
+---
+
+## Mini App Dashboard (Optional)
+
+CCGram ships an optional web dashboard that opens from a Telegram inline button and runs inside Telegram's WebApp container. Three surfaces are available in v3.0:
+
+- **Live terminal** — xterm.js stream of the bound tmux pane (read-only)
+- **Transcript** — paginated session history with full-text search
+- **Multi-pane grid** — every pane in the window in one view; click to focus
+
+The Mini App is **disabled by default**. When `CCGRAM_MINIAPP_BASE_URL` is unset, neither the HTTP server nor the dashboard button are exposed.
+
+### Enable
+
+1. Set the three Mini App env vars:
+   ```ini
+   CCGRAM_MINIAPP_BASE_URL=https://ccgram.example.com
+   CCGRAM_MINIAPP_HOST=127.0.0.1
+   CCGRAM_MINIAPP_PORT=8765
+   ```
+2. Terminate TLS in front of the local aiohttp server (cloudflared, caddy, or nginx). The server listens on plain HTTP at `MINIAPP_HOST:MINIAPP_PORT`; the public domain in `MINIAPP_BASE_URL` must serve it over HTTPS — Telegram WebApps refuse plain HTTP.
+3. In [@BotFather](https://t.me/BotFather):
+   - `/setdomain` — register your domain
+   - `/newapp` — create a Mini App entry pointing to the same URL
+4. Restart `ccgram`. A new "🪟 Dashboard" button appears on the status bubble.
+
+Tokens are HMAC-signed with the bot token, scoped to a single window + user, and expire on a short clock. There is no cross-window access — every API route validates the token on every call.
+
+### Reverse-proxy snippet (caddy)
+
+```
+ccgram.example.com {
+  reverse_proxy 127.0.0.1:8765
+}
+```
+
+For nginx, ensure `proxy_http_version 1.1` and the standard `Upgrade`/`Connection` headers are forwarded so the live terminal websocket works.
+
+---
 
 ---
 

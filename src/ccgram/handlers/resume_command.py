@@ -10,9 +10,11 @@ Key functions:
   - resume_command: /resume handler
   - handle_resume_command_callback: callback dispatcher for resume UI
   - scan_all_sessions: discover all resumable sessions across all projects
+  - format_session_entry: shared label renderer for session pickers
 """
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +58,70 @@ class ResumeEntry:
     session_id: str
     summary: str
     cwd: str
+    mtime: float = 0.0
+    msg_count: int | None = None
+
+
+_SECONDS_PER_DAY = 86400
+
+
+def _relative_time(mtime: float, *, now: float | None = None) -> str:
+    """Return a short relative-time label like ``today``, ``yesterday``,
+    ``3d ago``, or ``never`` when no mtime is known.
+
+    ``now`` is injectable so tests can pin the reference time.
+    """
+    if mtime <= 0:
+        return "never"
+    current = now if now is not None else time.time()
+    diff = max(0.0, current - mtime)
+    if diff < _SECONDS_PER_DAY:
+        return "today"
+    if diff < _SECONDS_PER_DAY * 2:
+        return "yesterday"
+    days = int(diff // _SECONDS_PER_DAY)
+    return f"{days}d ago"
+
+
+def _index_msg_count(entry: dict) -> int | None:
+    """Pull a message-count hint from a sessions-index entry, if present.
+
+    Several Claude Code index versions emit a count under different keys; we
+    accept any of them. Returns None when no usable hint exists, so callers
+    can omit the count from the rendered label.
+    """
+    for key in ("messageCount", "msgCount", "msg_count", "messages"):
+        value = entry.get(key)
+        if isinstance(value, int) and value > 0:
+            return value
+    return None
+
+
+def format_session_entry(
+    *,
+    summary: str,
+    session_id: str,
+    mtime: float,
+    msg_count: int | None = None,
+    now: float | None = None,
+) -> str:
+    """Render a session-picker row.
+
+    Output: ``"{relative_time} · {summary[:40]} · {sid_last4}"`` plus
+    ``" · {msg_count} msgs"`` when ``msg_count`` is supplied. Summary is
+    stripped of newlines and truncated; falls back to the first 12 chars of
+    ``session_id`` when empty. ``last4`` is the trailing 4 chars of the
+    session id (``????`` if missing).
+    """
+    rel = _relative_time(mtime, now=now)
+    text = (summary or "").strip().split("\n", 1)[0][:40]
+    if not text:
+        text = (session_id[:12] if session_id else "") or "(unknown)"
+    last4 = session_id[-4:] if session_id else "????"
+    base = f"{rel} · {text} · {last4}"
+    if msg_count is not None and msg_count > 0:
+        return f"{base} · {msg_count} msgs"
+    return base
 
 
 def scan_all_sessions() -> list[ResumeEntry]:
@@ -120,8 +186,11 @@ def _scan_index_file(
         summary = (
             entry.get("summary", "") or entry.get("firstPrompt", "") or session_id[:12]
         )
+        msg_count = _index_msg_count(entry)
         seen_ids.add(session_id)
-        candidates.append((mtime, ResumeEntry(session_id, summary, cwd)))
+        candidates.append(
+            (mtime, ResumeEntry(session_id, summary, cwd, mtime, msg_count))
+        )
 
 
 def _scan_bare_jsonl(
@@ -151,7 +220,7 @@ def _scan_bare_jsonl(
 
         seen_ids.add(session_id)
         candidates.append(
-            (mtime, ResumeEntry(session_id, summary or session_id[:12], cwd))
+            (mtime, ResumeEntry(session_id, summary or session_id[:12], cwd, mtime))
         )
 
 
@@ -182,7 +251,18 @@ def _build_resume_keyboard(
                     )
                 ]
             )
-        label = entry.get("summary", "")[:40] or entry["session_id"][:12]
+        try:
+            entry_mtime = float(entry.get("mtime", 0.0) or 0.0)
+        except TypeError, ValueError:
+            entry_mtime = 0.0
+        raw_count = entry.get("msg_count")
+        msg_count = raw_count if isinstance(raw_count, int) and raw_count > 0 else None
+        label = format_session_entry(
+            summary=entry.get("summary", ""),
+            session_id=entry.get("session_id", ""),
+            mtime=entry_mtime,
+            msg_count=msg_count,
+        )
         rows.append(
             [
                 InlineKeyboardButton(
@@ -257,7 +337,13 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     session_dicts = [
-        {"session_id": s.session_id, "summary": s.summary, "cwd": s.cwd}
+        {
+            "session_id": s.session_id,
+            "summary": s.summary,
+            "cwd": s.cwd,
+            "mtime": s.mtime,
+            "msg_count": s.msg_count,
+        }
         for s in sessions
     ]
     if context.user_data is not None:
@@ -342,7 +428,7 @@ async def _handle_pick(
     try:
         idx = int(idx_str)
     except ValueError:
-        await query.answer("Invalid selection", show_alert=True)
+        await query.answer("Couldn't read selection", show_alert=True)
         return
 
     thread_id = get_thread_id(update)
@@ -352,7 +438,7 @@ async def _handle_pick(
 
     stored = context.user_data.get(RESUME_SESSIONS) if context.user_data else None
     if not stored or idx < 0 or idx >= len(stored):
-        await query.answer("Invalid session index", show_alert=True)
+        await query.answer("Session no longer in list", show_alert=True)
         return
 
     picked = stored[idx]
@@ -362,7 +448,7 @@ async def _handle_pick(
     if not cwd or not Path(cwd).is_dir():
         await safe_edit(query, "\u274c Project directory no longer exists.")
         _clear_resume_state(context.user_data)
-        await query.answer("Failed")
+        await query.answer("Project gone")
         return
 
     success, message, created_wname, created_wid = await _create_resume_window(
@@ -371,7 +457,7 @@ async def _handle_pick(
     if not success:
         await safe_edit(query, f"\u274c {message}")
         _clear_resume_state(context.user_data)
-        await query.answer("Failed")
+        await query.answer("Couldn't create window")
         return
 
     thread_router.bind_thread(

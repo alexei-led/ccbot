@@ -17,12 +17,17 @@ import structlog
 
 from telegram import (
     CallbackQuery,
+    InlineKeyboardButton,
     InputMediaDocument,
+    Message,
     Update,
+    WebAppInfo,
 )
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from ..config import config
+from ..miniapp.auth import sign_token
 from ..screenshot import text_to_image
 from .. import window_query
 from ..session import session_manager
@@ -36,9 +41,11 @@ from .callback_data import (
     CB_STATUS_RECALL,
     CB_STATUS_REMOTE,
     NOTIFY_MODE_LABELS,
+    NOTIFY_MODE_REACT,
 )
 from .callback_helpers import get_thread_id, parse_target, user_owns_window
 from .callback_registry import register
+from .message_sender import react
 from .screenshot_callbacks import (
     KEY_LABELS,
     KEYS_SEND_MAP,
@@ -49,6 +56,26 @@ logger = structlog.get_logger()
 
 _KEY_REFRESH_DELAY = 0.3  # seconds — debounce window for rapid key taps
 _pending_key_refreshes: dict[tuple[int, str], asyncio.Task[None]] = {}
+
+
+def build_dashboard_button(window_id: str, user_id: int) -> InlineKeyboardButton | None:
+    """Return the 🪟 Dashboard WebApp button, or None when Mini App is disabled.
+
+    Mints a short-lived signed token scoped to ``(window_id, user_id)`` and
+    embeds it in the URL so the Mini App can verify the request without an
+    extra round-trip. Returns ``None`` (button hidden) when
+    ``CCGRAM_MINIAPP_BASE_URL`` is unset.
+    """
+    base_url = config.miniapp_base_url
+    if not base_url:
+        return None
+    token = sign_token(
+        bot_token=config.telegram_bot_token,
+        window_id=window_id,
+        user_id=user_id,
+    )
+    url = f"{base_url.rstrip('/')}/app/{token}"
+    return InlineKeyboardButton("\U0001fa9f Dashboard", web_app=WebAppInfo(url=url))
 
 
 @topic_state.register("window")
@@ -77,10 +104,18 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
     from .status_bubble import build_status_keyboard
 
     keyboard = build_status_keyboard(
-        window_id, rc_active=terminal_screen_buffer.is_rc_active(window_id)
+        window_id,
+        rc_active=terminal_screen_buffer.is_rc_active(window_id),
+        user_id=user_id,
     )
     with contextlib.suppress(TelegramError):
         await query.edit_message_reply_markup(reply_markup=keyboard)
+    # Persistent reaction so the new mode stays visible after the toast fades.
+
+    bubble = query.message
+    react_emoji = NOTIFY_MODE_REACT.get(new_mode)
+    if isinstance(bubble, Message) and react_emoji is not None:
+        await react(query.get_bot(), bubble.chat_id, bubble.message_id, react_emoji)
     await query.answer(label)
 
 

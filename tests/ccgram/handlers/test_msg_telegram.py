@@ -214,6 +214,60 @@ class TestNotificationGrouping:
         assert "2" in text
 
 
+class TestPeerMessageReaction:
+    @pytest.mark.asyncio
+    async def test_delivered_notification_gets_inbox_reaction(self):
+        from ccgram.handlers import msg_telegram
+        from ccgram.handlers.msg_telegram import notify_messages_delivered
+
+        bot = AsyncMock(spec=Bot)
+        msgs = [_make_message()]
+        router = _mock_router()
+
+        sent = MagicMock()
+        sent.message_id = 555
+
+        with (
+            patch.object(msg_telegram, "thread_router", router),
+            patch.object(
+                msg_telegram, "rate_limit_send_message", new_callable=AsyncMock
+            ) as mock_send,
+            patch.object(msg_telegram, "react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_send.return_value = sent
+            await notify_messages_delivered(bot, "ccgram:@5", msgs)
+
+        mock_react.assert_awaited_once()
+        args = mock_react.call_args.args
+        assert args[0] is bot
+        assert args[2] == 555
+        # 📬 inbox semantics — fixed allowed-set fallback.
+        from ccgram.handlers.reactions import REACT_INBOX
+
+        assert args[3] == REACT_INBOX
+
+    @pytest.mark.asyncio
+    async def test_no_reaction_when_send_fails(self):
+        from ccgram.handlers import msg_telegram
+        from ccgram.handlers.msg_telegram import notify_messages_delivered
+
+        bot = AsyncMock(spec=Bot)
+        msgs = [_make_message()]
+        router = _mock_router()
+
+        with (
+            patch.object(msg_telegram, "thread_router", router),
+            patch.object(
+                msg_telegram, "rate_limit_send_message", new_callable=AsyncMock
+            ) as mock_send,
+            patch.object(msg_telegram, "react", new_callable=AsyncMock) as mock_react,
+        ):
+            mock_send.return_value = None
+            await notify_messages_delivered(bot, "ccgram:@5", msgs)
+
+        mock_react.assert_not_awaited()
+
+
 class TestSilentDelivery:
     @pytest.mark.asyncio
     async def test_all_notifications_are_silent(self):

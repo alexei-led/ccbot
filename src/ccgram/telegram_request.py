@@ -1,6 +1,7 @@
 """Telegram request helpers for resilient long polling."""
 
 import asyncio
+import time
 
 import httpx
 import structlog
@@ -8,6 +9,10 @@ from telegram.error import NetworkError, TimedOut
 from telegram.request import HTTPXRequest
 
 logger = structlog.get_logger()
+
+# Minimum interval between reset warnings during a sustained outage.
+# Without this, every failed poll (~5s apart) emits a warning, flooding logs.
+_RESET_WARN_INTERVAL_S: float = 30.0
 
 
 class ResilientPollingHTTPXRequest(HTTPXRequest):
@@ -18,7 +23,16 @@ class ResilientPollingHTTPXRequest(HTTPXRequest):
     subsequent polls can queue behind it forever. Rebuilding the client after a
     timeout/network failure gives the polling loop a fresh pool on the next
     retry.
+
+    The first reset after a successful request logs at warning; subsequent
+    resets within `_RESET_WARN_INTERVAL_S` log at debug to avoid floods during
+    sustained outages.
     """
+
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(*args, **kwargs)
+        # 0.0 means "no warn yet" — first reset will warn.
+        self._last_reset_warn_ts: float = 0.0
 
     async def _reset_client(self, *, reason: str) -> None:
         old_client = self._client
@@ -34,14 +48,30 @@ class ResilientPollingHTTPXRequest(HTTPXRequest):
                 exc,
             )
 
+    def _should_warn_for_reset(self, now: float) -> bool:
+        """Throttle: warn once per interval, then debug. Reset by success."""
+        if now - self._last_reset_warn_ts >= _RESET_WARN_INTERVAL_S:
+            self._last_reset_warn_ts = now
+            return True
+        return False
+
     async def do_request(self, *args, **kwargs):  # type: ignore[override]
         try:
-            return await super().do_request(*args, **kwargs)
+            result = await super().do_request(*args, **kwargs)
         except (TimedOut, NetworkError) as exc:
             await self._reset_client(reason=exc.__class__.__name__)
-            logger.warning(
+            log = (
+                logger.warning
+                if self._should_warn_for_reset(time.monotonic())
+                else logger.debug
+            )
+            log(
                 "Reset Telegram polling HTTP client after %s: %s",
                 exc.__class__.__name__,
                 exc,
             )
             raise
+        else:
+            # Successful request — next reset gets to warn again.
+            self._last_reset_warn_ts = 0.0
+            return result

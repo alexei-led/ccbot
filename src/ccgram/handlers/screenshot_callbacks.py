@@ -424,14 +424,96 @@ async def screenshot_command(
         await safe_reply(update.message, "\u274c Failed to send screenshot.")
 
 
+async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Open auto-refreshing live terminal view directly, skipping the screenshot step."""
+    from ..config import config
+    from ..utils import handle_general_topic_message, is_general_topic
+    from .live_view import (
+        LiveViewState,
+        build_live_keyboard,
+        content_hash,
+        is_live,
+        start_live_view,
+    )
+    from .message_sender import safe_reply
+
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        if (
+            update.message
+            and update.effective_chat
+            and is_general_topic(update.message)
+        ):
+            await handle_general_topic_message(
+                update.get_bot(), update.message, update.effective_chat.id
+            )
+        else:
+            await safe_reply(update.message, "❌ Use this command inside a topic.")
+        return
+
+    if is_live(user.id, thread_id):
+        await safe_reply(update.message, "\U0001f4fa Live view already running.")
+        return
+
+    window_id = thread_router.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(update.message, "❌ This topic is not bound to any session.")
+        return
+
+    w = await tmux_manager.find_window_by_id(window_id)
+    if not w:
+        await safe_reply(update.message, "❌ Window no longer exists.")
+        return
+
+    text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+    if not text:
+        await safe_reply(update.message, "❌ Failed to capture terminal.")
+        return
+
+    chat_id = thread_router.resolve_chat_id(user.id, thread_id)
+    png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
+    keyboard = build_live_keyboard(window_id)
+    try:
+        sent = await update.message.get_bot().send_photo(
+            chat_id=chat_id,
+            photo=io.BytesIO(png_bytes),
+            caption=f"Live · {time.strftime('%H:%M:%S')}",
+            reply_markup=keyboard,
+            message_thread_id=thread_id,
+        )
+    except TelegramError as e:
+        logger.error("Failed to start live view: %s", e)
+        await safe_reply(update.message, "❌ Failed to start live view.")
+        return
+
+    start_live_view(
+        LiveViewState(
+            chat_id=chat_id,
+            message_id=sent.message_id,
+            thread_id=thread_id,
+            user_id=user.id,
+            window_id=window_id,
+            pane_id=None,
+            last_hash=content_hash(text),
+        )
+    )
+
+
 async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: C901
     """List all panes in the current topic's window."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import InlineKeyboardMarkup
 
     from ..config import config
     from ..utils import handle_general_topic_message, is_general_topic
-    from .callback_data import CB_PANE_SCREENSHOT
+    from ..window_state_store import window_store
     from .message_sender import safe_reply
+    from .pane_callbacks import build_pane_buttons, build_pane_lifecycle_button
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -471,7 +553,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     from .polling_strategies import interactive_strategy
 
     lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]
-    buttons: list[InlineKeyboardButton] = []
+    rows: list[list] = []
     for pane in panes:
         prefix = "\U0001f4cd" if pane.active else "  "
         label = f"Pane {pane.index} ({pane.command})"
@@ -483,16 +565,26 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
             suffix_parts.append("blocked")
         elif not pane.active:
             suffix_parts.append("running")
+        stored = window_store.get_pane(window_id, pane.pane_id)
+        if stored and stored.name:
+            suffix_parts.insert(0, stored.name)
+        if stored and stored.subscribed:
+            suffix_parts.append("subscribed")
         suffix = f" \u2014 {', '.join(suffix_parts)}" if suffix_parts else ""
         lines.append(f"{prefix} {label}{suffix}")
-        buttons.append(
-            InlineKeyboardButton(
-                f"\U0001f4f7 {pane.index}",
-                callback_data=f"{CB_PANE_SCREENSHOT}{window_id}:{pane.pane_id}"[:64],
+        rows.append(
+            build_pane_buttons(
+                window_id,
+                pane.pane_id,
+                subscribed=bool(stored and stored.subscribed),
             )
         )
 
-    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+    lifecycle_on = window_store.get_pane_lifecycle_notify(
+        window_id, config.pane_lifecycle_notify
+    )
+    rows.append([build_pane_lifecycle_button(window_id, enabled=lifecycle_on)])
+    keyboard = InlineKeyboardMarkup(rows) if rows else None
     await safe_reply(update.message, "\n".join(lines), reply_markup=keyboard)
 
 
