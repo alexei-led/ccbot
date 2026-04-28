@@ -446,12 +446,12 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/miniapp/server.py`
 - Create: `tests/ccgram/miniapp/test_transcript_api.py`
 
-- [ ] HTTP `/api/transcript/<window_id>` returns paginated JSON (cursor-based)
-- [ ] HTTP `/api/transcript/<window_id>/search?q=...` returns matches with line context
-- [ ] re-uses existing transcript reader infrastructure
-- [ ] frontend renders threaded view with date markers
-- [ ] write tests: pagination cursor, search relevance ordering, auth scoping (token sees only its window)
-- [ ] run `make check`
+- [x] HTTP `/api/transcript/<token>` returns paginated JSON (cursor-based) — token-scoped to mirror terminal route; window_id derived from token payload, not path
+- [x] HTTP `/api/transcript/<token>/search?q=...` returns matches with ±1 entry context, capped at 50, case-insensitive
+- [x] re-uses existing transcript reader infrastructure (`session_query.get_recent_messages`)
+- [x] frontend renders threaded view with date markers (`miniapp/static/transcript.js`, mounted below terminal in `index.html`)
+- [x] write tests: pagination cursor, search relevance ordering, auth scoping (token sees only its window) — 16 tests in `tests/ccgram/miniapp/test_transcript_api.py`
+- [x] run `make check` (4068 passed + 97 integration, lint+typecheck clean)
 
 ### Task 3.5: Multi-pane grid surface
 

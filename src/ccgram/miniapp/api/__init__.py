@@ -5,5 +5,6 @@ Submodules attach routes onto the aiohttp ``Application`` built in
 """
 
 from .terminal import register_terminal_routes
+from .transcript import register_transcript_routes
 
-__all__ = ["register_terminal_routes"]
+__all__ = ["register_terminal_routes", "register_transcript_routes"]

@@ -22,13 +22,15 @@ from typing import TYPE_CHECKING
 
 from aiohttp import web
 
-from .api import register_terminal_routes
+from .api import register_terminal_routes, register_transcript_routes
 from .auth import InvalidTokenError, verify_token
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import Any
 
     PaneCapture = Callable[[str], Awaitable[str | None]]
+    TranscriptReader = Callable[[str], Awaitable[list[dict[str, Any]]]]
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +79,17 @@ def build_app(
     *,
     bot_token: str,
     terminal_capture: PaneCapture | None = None,
+    transcript_reader: TranscriptReader | None = None,
 ) -> web.Application:
     """Build the aiohttp application without starting it.
 
     ``terminal_capture`` overrides the tmux pane reader used by the live
     terminal websocket; tests inject a stub, production leaves it ``None``
     to fall through to the global ``TmuxManager`` singleton.
+
+    ``transcript_reader`` overrides the per-window message loader used by
+    the transcript HTTP routes; tests inject a stub, production leaves it
+    ``None`` to fall through to ``session_resolver``.
     """
     app = web.Application()
     app[_BOT_TOKEN_KEY] = bot_token
@@ -90,6 +97,7 @@ def build_app(
     app.router.add_get("/app/{token}", _handle_app)
     app.router.add_static("/static/", path=_STATIC_DIR, show_index=False)
     register_terminal_routes(app, bot_token=bot_token, capture=terminal_capture)
+    register_transcript_routes(app, bot_token=bot_token, reader=transcript_reader)
     return app
 
 
