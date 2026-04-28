@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from typing import Any
 
     PaneCapture = Callable[[str], Awaitable[str | None]]
+    PaneByIdCapture = Callable[[str, str], Awaitable[str | None]]
+    PaneList = Callable[[str], Awaitable[list[dict[str, Any]]]]
     TranscriptReader = Callable[[str], Awaitable[list[dict[str, Any]]]]
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,8 @@ def build_app(
     *,
     bot_token: str,
     terminal_capture: PaneCapture | None = None,
+    pane_capture: PaneByIdCapture | None = None,
+    pane_list: PaneList | None = None,
     transcript_reader: TranscriptReader | None = None,
 ) -> web.Application:
     """Build the aiohttp application without starting it.
@@ -86,6 +90,10 @@ def build_app(
     ``terminal_capture`` overrides the tmux pane reader used by the live
     terminal websocket; tests inject a stub, production leaves it ``None``
     to fall through to the global ``TmuxManager`` singleton.
+
+    ``pane_capture`` overrides the per-pane capture used by the multi-pane
+    grid; ``pane_list`` overrides the pane enumerator. Both fall through to
+    ``tmux_manager`` defaults when ``None``.
 
     ``transcript_reader`` overrides the per-window message loader used by
     the transcript HTTP routes; tests inject a stub, production leaves it
@@ -96,7 +104,13 @@ def build_app(
     app.router.add_get("/healthz", _handle_health)
     app.router.add_get("/app/{token}", _handle_app)
     app.router.add_static("/static/", path=_STATIC_DIR, show_index=False)
-    register_terminal_routes(app, bot_token=bot_token, capture=terminal_capture)
+    register_terminal_routes(
+        app,
+        bot_token=bot_token,
+        capture=terminal_capture,
+        pane_capture=pane_capture,
+        pane_list=pane_list,
+    )
     register_transcript_routes(app, bot_token=bot_token, reader=transcript_reader)
     return app
 

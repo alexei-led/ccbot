@@ -461,11 +461,11 @@ New `src/ccgram/miniapp/` package serves a single-page web app via aiohttp on a 
 - Modify: `src/ccgram/miniapp/api/terminal.py` (multi-pane multiplex)
 - Create: `tests/ccgram/miniapp/test_panes_grid.py`
 
-- [ ] grid view subscribes to all panes in window
-- [ ] click pane → expand to focused terminal view
-- [ ] re-uses subscription model from Theme 5
-- [ ] write tests: grid layout for 1/2/4 panes, focus transition, subscription lifecycle
-- [ ] run `make check`
+- [x] grid view subscribes to all panes in window (one websocket per tile via `?pane=` query; `/api/panes/<token>` lists panes)
+- [x] click pane → expand to focused terminal view (single-tile focused view with back button; tiles teardown subscriptions on switch)
+- [x] re-uses subscription model from Theme 5 (`/api/panes/<token>` merges tmux state with `WindowState.panes` so name/state/subscribed flags carry through)
+- [x] write tests: grid layout for 1/2/4 panes, focus transition, subscription lifecycle (13 tests in `tests/ccgram/miniapp/test_panes_grid.py`)
+- [x] run `make check` (4081 passed + 97 integration, lint+typecheck clean)
 
 ### Task 3.6: Phase 3 — Verify + ship v3.0
 

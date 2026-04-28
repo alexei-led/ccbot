@@ -50,6 +50,57 @@
             border-radius: 6px;
             overflow: hidden;
         }
+        #ccgram-panes-grid {
+            margin-top: 1rem;
+            display: grid;
+            grid-template-columns: repeat(var(--ccgram-grid-cols, 1), 1fr);
+            gap: 0.75rem;
+        }
+        .ccgram-pane-tile {
+            border: 1px solid var(--hint);
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+        .ccgram-pane-tile:focus { outline: 2px solid var(--accent); }
+        .ccgram-pane-tile.ccgram-pane-focused {
+            min-height: 60vh;
+            cursor: default;
+        }
+        .ccgram-pane-header {
+            padding: 0.4rem 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(127, 127, 127, 0.08);
+            font-size: 0.8rem;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        }
+        .ccgram-pane-state {
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .ccgram-pane-state-active { background: #2ea44f; color: #fff; }
+        .ccgram-pane-state-idle { background: rgba(127, 127, 127, 0.2); }
+        .ccgram-pane-state-blocked { background: #d73a49; color: #fff; }
+        .ccgram-pane-state-dead { background: #6e7781; color: #fff; }
+        .ccgram-pane-term { flex: 1; min-height: 160px; }
+        .ccgram-pane-back {
+            margin-bottom: 0.5rem;
+            background: transparent;
+            border: 1px solid var(--hint);
+            color: var(--fg);
+            border-radius: 4px;
+            padding: 0.25rem 0.6rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -57,6 +108,7 @@
         <h1>ccgram</h1>
         <p id="ccgram-status">Loading…</p>
         <div id="ccgram-terminal" aria-label="live terminal"></div>
+        <section id="ccgram-panes-grid" aria-label="multi-pane grid"></section>
         <section id="ccgram-transcript" aria-label="transcript history"></section>
     </main>
     <script>
@@ -75,6 +127,7 @@
         })();
     </script>
     <script src="/static/terminal.js"></script>
+    <script src="/static/panes.js"></script>
     <script src="/static/transcript.js"></script>
 </body>
 </html>

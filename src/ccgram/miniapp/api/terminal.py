@@ -1,13 +1,19 @@
 """Live terminal surface — websocket that streams pane content delta-by-delta.
 
-Endpoint: ``GET /ws/terminal/{token}`` upgrades to a websocket. The token is
-verified via :func:`ccgram.miniapp.auth.verify_token`; the resolved
-``window_id`` is the only pane the websocket may stream from.
+Endpoints:
 
-Each tick the handler captures the active pane with ANSI colours via
-``TmuxManager.capture_pane(window_id, with_ansi=True)``. The result is hashed
-and only forwarded when it differs from the last frame, keeping bandwidth
-proportional to actual change instead of poll cadence.
+- ``GET /ws/terminal/{token}`` upgrades to a websocket. Optional query string
+  ``?pane=%5`` streams the named pane (validated against the window). Without
+  it, the active pane is captured. Tokens are verified via
+  :func:`ccgram.miniapp.auth.verify_token`; the resolved ``window_id`` is the
+  only window the websocket may stream from.
+- ``GET /api/panes/{token}`` returns a JSON list of panes for the window —
+  used by the multi-pane grid surface to lay out terminal previews.
+
+Each tick the handler captures the target pane with ANSI colours via
+``TmuxManager.capture_pane`` (active) or ``capture_pane_by_id`` (specific).
+The result is hashed and only forwarded when it differs from the last frame,
+keeping bandwidth proportional to actual change instead of poll cadence.
 
 The endpoint is read-only in v3.0; client-side typing is deferred to v3.1.
 """
@@ -40,14 +46,60 @@ _BOT_TOKEN_KEY = web.AppKey("bot_token", str)
 _CAPTURE_KEY: web.AppKey[Callable[[str], Awaitable[str | None]]] = web.AppKey(
     "terminal_capture"
 )
+# Per-pane capture: (window_id, pane_id) -> captured text. Used by the
+# multi-pane grid for non-active panes; ``None`` falls back to the active
+# pane capture above.
+_PANE_CAPTURE_KEY: web.AppKey[Callable[[str, str], Awaitable[str | None]]] = web.AppKey(
+    "terminal_pane_capture"
+)
+# Pane lister: window_id -> list of pane dicts (pane_id, active, name, state).
+_PANE_LIST_KEY: web.AppKey[Callable[[str], Awaitable[list[dict[str, Any]]]]] = (
+    web.AppKey("terminal_pane_list")
+)
 _POLL_INTERVAL_KEY = web.AppKey("terminal_poll_interval", float)
 
 
 async def _default_capture(window_id: str) -> str | None:
-    """Capture pane via the global ``TmuxManager`` singleton."""
+    """Capture the active pane via the global ``TmuxManager`` singleton."""
     from ...tmux_manager import tmux_manager
 
     return await tmux_manager.capture_pane(window_id, with_ansi=True)
+
+
+async def _default_pane_capture(window_id: str, pane_id: str) -> str | None:
+    """Capture a specific pane by ID, scoped to ``window_id``."""
+    from ...tmux_manager import tmux_manager
+
+    return await tmux_manager.capture_pane_by_id(
+        pane_id, with_ansi=True, window_id=window_id
+    )
+
+
+async def _default_pane_list(window_id: str) -> list[dict[str, Any]]:
+    """Enumerate panes for a window, merging tmux state + ``WindowState.panes``."""
+    from ...tmux_manager import tmux_manager
+    from ...window_state_store import window_store
+
+    panes = await tmux_manager.list_panes(window_id)
+    state = window_store.window_states.get(window_id)
+    persisted = state.panes if state else {}
+    out: list[dict[str, Any]] = []
+    for pane in panes:
+        info = persisted.get(pane.pane_id)
+        out.append(
+            {
+                "pane_id": pane.pane_id,
+                "index": pane.index,
+                "active": pane.active,
+                "command": pane.command,
+                "width": pane.width,
+                "height": pane.height,
+                "name": info.name if info else None,
+                "state": info.state if info else ("active" if pane.active else "idle"),
+                "subscribed": bool(info.subscribed) if info else False,
+            }
+        )
+    return out
 
 
 def _hash_frame(text: str) -> str:
@@ -76,6 +128,7 @@ async def _terminal_handler(request: web.Request) -> web.StreamResponse:
     token = request.match_info["token"]
     bot_token = request.app[_BOT_TOKEN_KEY]
     capture = request.app[_CAPTURE_KEY]
+    pane_capture = request.app[_PANE_CAPTURE_KEY]
     interval = request.app[_POLL_INTERVAL_KEY]
 
     try:
@@ -83,6 +136,8 @@ async def _terminal_handler(request: web.Request) -> web.StreamResponse:
     except InvalidTokenError as exc:
         logger.info("rejected terminal websocket token: %s", exc)
         return web.Response(status=403, text="invalid or expired token")
+
+    pane_id = (request.query.get("pane") or "").strip() or None
 
     ws = web.WebSocketResponse(heartbeat=30.0)
     await ws.prepare(request)
@@ -93,11 +148,12 @@ async def _terminal_handler(request: web.Request) -> web.StreamResponse:
             "type": "hello",
             "window_id": payload.window_id,
             "interval": interval,
+            "pane_id": pane_id,
         },
     )
 
     streamer = asyncio.create_task(
-        _stream_loop(ws, payload.window_id, capture, interval)
+        _stream_loop(ws, payload.window_id, capture, pane_capture, pane_id, interval)
     )
     try:
         # Drain inbound frames so a client close terminates the stream promptly.
@@ -113,19 +169,46 @@ async def _terminal_handler(request: web.Request) -> web.StreamResponse:
     return ws
 
 
+async def _panes_handler(request: web.Request) -> web.Response:
+    token = request.match_info["token"]
+    bot_token = request.app[_BOT_TOKEN_KEY]
+    pane_list = request.app[_PANE_LIST_KEY]
+
+    try:
+        payload = verify_token(token, bot_token=bot_token)
+    except InvalidTokenError as exc:
+        logger.info("rejected panes list token: %s", exc)
+        return web.Response(status=403, text="invalid or expired token")
+
+    try:
+        panes = await pane_list(payload.window_id)
+    except Exception:  # noqa: BLE001 — surface as 500, never crash the server
+        logger.exception("pane list failed for %s", payload.window_id)
+        return web.json_response({"error": "list failed"}, status=500)
+
+    return web.json_response({"window_id": payload.window_id, "panes": list(panes)})
+
+
 async def _stream_loop(
     ws: web.WebSocketResponse,
     window_id: str,
     capture: Callable[[str], Awaitable[str | None]],
+    pane_capture: Callable[[str, str], Awaitable[str | None]],
+    pane_id: str | None,
     interval: float,
 ) -> None:
     """Background task: capture pane, emit deltas, sleep, repeat."""
     last_hash: str | None = None
     while not ws.closed:
         try:
-            text = await capture(window_id)
+            if pane_id is None:
+                text = await capture(window_id)
+            else:
+                text = await pane_capture(window_id, pane_id)
         except Exception:  # noqa: BLE001 — capture failure must not kill stream
-            logger.exception("terminal capture failed for %s", window_id)
+            logger.exception(
+                "terminal capture failed for %s pane=%s", window_id, pane_id
+            )
             await _send_json(ws, {"type": "error", "message": "capture failed"})
             await asyncio.sleep(interval)
             continue
@@ -154,19 +237,26 @@ def register_terminal_routes(
     *,
     bot_token: str,
     capture: Callable[[str], Awaitable[str | None]] | None = None,
+    pane_capture: Callable[[str, str], Awaitable[str | None]] | None = None,
+    pane_list: Callable[[str], Awaitable[list[dict[str, Any]]]] | None = None,
     poll_interval: float = DEFAULT_POLL_INTERVAL,
 ) -> None:
-    """Attach the websocket route to ``app`` and stash dependencies.
+    """Attach the terminal routes to ``app`` and stash dependencies.
 
     ``capture`` is injected for tests; production leaves it ``None`` to use
-    the global ``TmuxManager`` singleton. ``poll_interval`` is clamped to a
-    minimum of 50 ms to prevent runaway loops if a caller misconfigures it.
+    the global ``TmuxManager`` singleton. ``pane_capture`` and ``pane_list``
+    are likewise stub-injectable to bypass tmux during tests.
+    ``poll_interval`` is clamped to a minimum of 50 ms to prevent runaway
+    loops if a caller misconfigures it.
     """
     interval = max(0.05, float(poll_interval))
     app[_BOT_TOKEN_KEY] = bot_token
     app[_CAPTURE_KEY] = capture or _default_capture
+    app[_PANE_CAPTURE_KEY] = pane_capture or _default_pane_capture
+    app[_PANE_LIST_KEY] = pane_list or _default_pane_list
     app[_POLL_INTERVAL_KEY] = interval
     app.router.add_get("/ws/terminal/{token}", _terminal_handler)
+    app.router.add_get("/api/panes/{token}", _panes_handler)
 
 
 __all__ = [
