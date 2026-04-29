@@ -233,7 +233,7 @@ def validate_sendable(path: Path, cwd: Path) -> str | None:
     if size_error is not None:
         return size_error
 
-    from ..utils import assert_sendable  # noqa: PLC0415
+    from ...utils import assert_sendable  # noqa: PLC0415
 
     try:
         assert_sendable(path)

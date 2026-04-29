@@ -1,4 +1,4 @@
-"""Tests for src/ccgram/handlers/send_security.py."""
+"""Tests for src/ccgram/handlers/send/send_security.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ccgram.handlers.send_security import (
+from ccgram.handlers.send.send_security import (
     check_gitleaks_rules,
     is_excluded_dir,
     is_gitignored,

@@ -463,12 +463,12 @@ This keeps each task's diff small.
 
 - Move: `send_command.py`, `send_callbacks.py`, `send_security.py`
 
-- [ ] create subpackage; re-export `send_command`, callback handlers, security validators
-- [ ] git mv three modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group send subpackage"
+- [x] create subpackage; re-export `send_command`, callback handlers, security validators
+- [x] git mv three modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group send subpackage"
 
 #### Task F1.11: Create `handlers/toolbar/` subpackage
 

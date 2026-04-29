@@ -63,7 +63,7 @@ from .handlers.callback_helpers import get_thread_id as _get_thread_id
 from .handlers.callback_registry import dispatch as _dispatch_callback
 from .handlers.callback_registry import load_handlers as _load_callback_handlers
 from .handlers.recovery import restore_command, resume_command, send_history
-from .handlers.send_command import send_command
+from .handlers.send import send_command
 from .handlers.topics.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
 from .handlers.command_history import recall_command

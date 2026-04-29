@@ -1,4 +1,4 @@
-"""Tests for src/ccgram/handlers/send_callbacks.py."""
+"""Tests for src/ccgram/handlers/send/send_callbacks.py."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ccgram.handlers.callback_data import (
     CB_SEND_PAGE,
     CB_SEND_UP,
 )
-from ccgram.handlers.send_callbacks import _dispatch
+from ccgram.handlers.send.send_callbacks import _dispatch
 from ccgram.handlers.user_state import (
     SEND_CWD_KEY,
     SEND_ITEMS_KEY,
@@ -86,7 +86,9 @@ class TestStaleGuard:
         update.effective_message.message_thread_id = None
         ctx = _make_context(tmp_path)
 
-        with patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=None):
+        with patch(
+            "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=None
+        ):
             await _dispatch(update, ctx)
 
         query.answer.assert_awaited_once_with("Not in a topic", show_alert=True)
@@ -99,8 +101,10 @@ class TestStaleGuard:
         ctx = _make_context(tmp_path, window_id="@0")
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@99"
             await _dispatch(update, ctx)
@@ -117,8 +121,10 @@ class TestStaleGuard:
         ctx = _make_context(tmp_path)
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -136,13 +142,17 @@ class TestHandleFile:
         ctx.user_data[SEND_ITEMS_KEY] = [f]
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.validate_sendable", return_value=None
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
             ),
             patch(
-                "ccgram.handlers.send_callbacks.upload_file", new_callable=AsyncMock
+                "ccgram.handlers.send.send_callbacks.validate_sendable",
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.upload_file",
+                new_callable=AsyncMock,
             ) as mock_upload,
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
@@ -170,18 +180,21 @@ class TestHandleFile:
         sent_msg.message_id = 8800
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.validate_sendable", return_value=None
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
             ),
             patch(
-                "ccgram.handlers.send_callbacks.upload_file",
+                "ccgram.handlers.send.send_callbacks.validate_sendable",
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.upload_file",
                 new_callable=AsyncMock,
                 return_value=sent_msg,
             ),
             patch(
-                "ccgram.handlers.send_callbacks.react", new_callable=AsyncMock
+                "ccgram.handlers.send.send_callbacks.react", new_callable=AsyncMock
             ) as mock_react,
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
@@ -205,18 +218,21 @@ class TestHandleFile:
         ctx.user_data[SEND_ITEMS_KEY] = [f]
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.validate_sendable", return_value=None
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
             ),
             patch(
-                "ccgram.handlers.send_callbacks.upload_file",
+                "ccgram.handlers.send.send_callbacks.validate_sendable",
+                return_value=None,
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.upload_file",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
             patch(
-                "ccgram.handlers.send_callbacks.react", new_callable=AsyncMock
+                "ccgram.handlers.send.send_callbacks.react", new_callable=AsyncMock
             ) as mock_react,
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
@@ -234,14 +250,17 @@ class TestHandleFile:
         ctx.user_data[SEND_ITEMS_KEY] = [f]
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.validate_sendable",
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.validate_sendable",
                 return_value="access denied",
             ),
             patch(
-                "ccgram.handlers.send_callbacks.upload_file", new_callable=AsyncMock
+                "ccgram.handlers.send.send_callbacks.upload_file",
+                new_callable=AsyncMock,
             ) as mock_upload,
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
@@ -259,8 +278,10 @@ class TestHandleFile:
         ctx.user_data[SEND_ITEMS_KEY] = [tmp_path / "file.txt"]
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -273,8 +294,10 @@ class TestHandleFile:
         ctx = _make_context(tmp_path)
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -294,13 +317,16 @@ class TestHandleDir:
         ctx.user_data[SEND_ITEMS_KEY] = [subdir]
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.is_path_contained", return_value=True
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
             ),
             patch(
-                "ccgram.handlers.send_callbacks.build_file_browser",
+                "ccgram.handlers.send.send_callbacks.is_path_contained",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.build_file_browser",
                 return_value=_BROWSER_RESULT,
             ) as mock_browser,
         ):
@@ -320,10 +346,13 @@ class TestHandleDir:
         ctx.user_data[SEND_ITEMS_KEY] = [evil_dir]
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.is_path_contained", return_value=False
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.is_path_contained",
+                return_value=False,
             ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
@@ -340,8 +369,10 @@ class TestHandleDir:
         ctx.user_data[SEND_ITEMS_KEY] = []
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -356,10 +387,12 @@ class TestHandlePage:
         ctx = _make_context(tmp_path)
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.build_file_browser",
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.build_file_browser",
                 return_value=_BROWSER_RESULT,
             ) as mock_browser,
         ):
@@ -379,8 +412,10 @@ class TestHandlePage:
         ctx.user_data[SEND_PATH_KEY] = ""
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -395,8 +430,10 @@ class TestHandleUp:
         ctx = _make_context(tmp_path)
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -412,13 +449,16 @@ class TestHandleUp:
         ctx.user_data[SEND_PATH_KEY] = str(subdir)
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
             patch(
-                "ccgram.handlers.send_callbacks.is_path_contained", return_value=True
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
             ),
             patch(
-                "ccgram.handlers.send_callbacks.build_file_browser",
+                "ccgram.handlers.send.send_callbacks.is_path_contained",
+                return_value=True,
+            ),
+            patch(
+                "ccgram.handlers.send.send_callbacks.build_file_browser",
                 return_value=_BROWSER_RESULT,
             ) as mock_browser,
         ):
@@ -435,8 +475,10 @@ class TestHandleUp:
         ctx.user_data[SEND_PATH_KEY] = ""
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -453,8 +495,10 @@ class TestHandleCancel:
         ctx = _make_context(tmp_path)
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)
@@ -473,8 +517,10 @@ class TestHandleCancel:
         query.message.delete.side_effect = TelegramError("gone")
 
         with (
-            patch("ccgram.handlers.send_callbacks.thread_router") as mock_router,
-            patch("ccgram.handlers.send_callbacks.get_thread_id", return_value=456),
+            patch("ccgram.handlers.send.send_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.send.send_callbacks.get_thread_id", return_value=456
+            ),
         ):
             mock_router.resolve_window_for_thread.return_value = "@0"
             await _dispatch(update, ctx)

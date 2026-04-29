@@ -22,20 +22,20 @@ from telegram import Message, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..thread_router import thread_router
-from .callback_data import (
+from ...thread_router import thread_router
+from ..callback_data import (
     CB_SEND_CANCEL,
     CB_SEND_DIR,
     CB_SEND_FILE,
     CB_SEND_PAGE,
     CB_SEND_UP,
 )
-from .callback_helpers import get_thread_id
-from .callback_registry import register
-from .messaging_pipeline.message_sender import REACT_DONE, react
+from ..callback_helpers import get_thread_id
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import REACT_DONE, react
 from .send_command import upload_file, build_file_browser
 from .send_security import is_path_contained, validate_sendable
-from .user_state import (
+from ..user_state import (
     SEND_CWD_KEY,
     SEND_ITEMS_KEY,
     SEND_PAGE_KEY,
@@ -73,7 +73,7 @@ def _clear_send_state(context: ContextTypes.DEFAULT_TYPE) -> None:
 @register(CB_SEND_FILE, CB_SEND_DIR, CB_SEND_PAGE, CB_SEND_UP, CB_SEND_CANCEL)
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route CB_SEND_* callbacks to the appropriate handler."""
-    from ..config import config
+    from ...config import config
 
     query = update.callback_query
     user = update.effective_user
