@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot
 
-from ccgram.handlers.msg_delivery import reset_delivery_state
+from ccgram.handlers.messaging.msg_delivery import reset_delivery_state
 from ccgram.mailbox import Message
 
 
@@ -60,16 +60,16 @@ def _mock_router():
 class TestNotifyMessageSent:
     @pytest.mark.asyncio
     async def test_sends_compact_line_to_sender_topic(self):
-        from ccgram.handlers.msg_telegram import notify_message_sent
+        from ccgram.handlers.messaging.msg_telegram import notify_message_sent
 
         bot = AsyncMock(spec=Bot)
         msg = _make_message()
         router = _mock_router()
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -86,7 +86,7 @@ class TestNotifyMessageSent:
 
     @pytest.mark.asyncio
     async def test_skips_when_no_sender_binding(self):
-        from ccgram.handlers.msg_telegram import notify_message_sent
+        from ccgram.handlers.messaging.msg_telegram import notify_message_sent
 
         bot = AsyncMock(spec=Bot)
         msg = _make_message()
@@ -94,9 +94,9 @@ class TestNotifyMessageSent:
         router.iter_thread_bindings.return_value = []
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -108,7 +108,7 @@ class TestNotifyMessageSent:
 class TestNotifyReplyReceived:
     @pytest.mark.asyncio
     async def test_sends_reply_notification_to_original_sender_topic(self):
-        from ccgram.handlers.msg_telegram import notify_reply_received
+        from ccgram.handlers.messaging.msg_telegram import notify_reply_received
 
         bot = AsyncMock(spec=Bot)
         original = _make_message(from_id="ccgram:@0", to_id="ccgram:@5")
@@ -123,9 +123,9 @@ class TestNotifyReplyReceived:
         router = _mock_router()
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -141,7 +141,7 @@ class TestNotifyReplyReceived:
 class TestNotifyPendingShell:
     @pytest.mark.asyncio
     async def test_sends_pending_message_to_shell_topic(self):
-        from ccgram.handlers.msg_telegram import notify_pending_shell
+        from ccgram.handlers.messaging.msg_telegram import notify_pending_shell
 
         bot = AsyncMock(spec=Bot)
         msg = _make_message(to_id="ccgram:@8")
@@ -150,9 +150,9 @@ class TestNotifyPendingShell:
         router.get_display_name.return_value = "infra-shell"
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -167,7 +167,7 @@ class TestNotifyPendingShell:
 
     @pytest.mark.asyncio
     async def test_skips_when_no_binding(self):
-        from ccgram.handlers.msg_telegram import notify_pending_shell
+        from ccgram.handlers.messaging.msg_telegram import notify_pending_shell
 
         bot = AsyncMock(spec=Bot)
         msg = _make_message()
@@ -175,9 +175,9 @@ class TestNotifyPendingShell:
         router.iter_thread_bindings.return_value = []
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -189,7 +189,7 @@ class TestNotifyPendingShell:
 class TestNotificationGrouping:
     @pytest.mark.asyncio
     async def test_multiple_messages_merged_in_delivered_notification(self):
-        from ccgram.handlers.msg_telegram import notify_messages_delivered
+        from ccgram.handlers.messaging.msg_telegram import notify_messages_delivered
 
         bot = AsyncMock(spec=Bot)
         msgs = [
@@ -199,9 +199,9 @@ class TestNotificationGrouping:
         router = _mock_router()
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -217,8 +217,8 @@ class TestNotificationGrouping:
 class TestPeerMessageReaction:
     @pytest.mark.asyncio
     async def test_delivered_notification_gets_inbox_reaction(self):
-        from ccgram.handlers import msg_telegram
-        from ccgram.handlers.msg_telegram import notify_messages_delivered
+        from ccgram.handlers.messaging import msg_telegram
+        from ccgram.handlers.messaging.msg_telegram import notify_messages_delivered
 
         bot = AsyncMock(spec=Bot)
         msgs = [_make_message()]
@@ -248,8 +248,8 @@ class TestPeerMessageReaction:
 
     @pytest.mark.asyncio
     async def test_no_reaction_when_send_fails(self):
-        from ccgram.handlers import msg_telegram
-        from ccgram.handlers.msg_telegram import notify_messages_delivered
+        from ccgram.handlers.messaging import msg_telegram
+        from ccgram.handlers.messaging.msg_telegram import notify_messages_delivered
 
         bot = AsyncMock(spec=Bot)
         msgs = [_make_message()]
@@ -271,7 +271,7 @@ class TestPeerMessageReaction:
 class TestSilentDelivery:
     @pytest.mark.asyncio
     async def test_all_notifications_are_silent(self):
-        from ccgram.handlers.msg_telegram import (
+        from ccgram.handlers.messaging.msg_telegram import (
             notify_message_sent,
             notify_pending_shell,
         )
@@ -287,9 +287,9 @@ class TestSilentDelivery:
 
         for func, call_args in funcs_and_args:
             with (
-                patch("ccgram.handlers.msg_telegram.thread_router", router),
+                patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
                 patch(
-                    "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                    "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                     new_callable=AsyncMock,
                 ) as mock_send,
             ):
@@ -306,15 +306,15 @@ class TestSilentDelivery:
 class TestNotifyLoopDetected:
     @pytest.mark.asyncio
     async def test_sends_alert_with_keyboard(self):
-        from ccgram.handlers.msg_telegram import notify_loop_detected
+        from ccgram.handlers.messaging.msg_telegram import notify_loop_detected
 
         bot = AsyncMock(spec=Bot)
         router = _mock_router()
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -334,7 +334,7 @@ class TestNotifyLoopDetected:
 
     @pytest.mark.asyncio
     async def test_keyboard_has_correct_callback_data(self):
-        from ccgram.handlers.msg_telegram import (
+        from ccgram.handlers.messaging.msg_telegram import (
             CB_MSG_LOOP_ALLOW,
             CB_MSG_LOOP_PAUSE,
             notify_loop_detected,
@@ -344,9 +344,9 @@ class TestNotifyLoopDetected:
         router = _mock_router()
 
         with (
-            patch("ccgram.handlers.msg_telegram.thread_router", router),
+            patch("ccgram.handlers.messaging.msg_telegram.thread_router", router),
             patch(
-                "ccgram.handlers.msg_telegram.rate_limit_send_message",
+                "ccgram.handlers.messaging.msg_telegram.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):

@@ -13,7 +13,7 @@ Key components:
 import time
 from dataclasses import dataclass, field
 
-from ..topic_state_registry import topic_state
+from ...topic_state_registry import topic_state
 
 
 # ── Constants ──────────────────────────────────────────────────────────

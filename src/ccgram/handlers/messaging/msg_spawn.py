@@ -22,19 +22,19 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..providers import resolve_launch_command
-from .. import window_query
-from ..session import session_manager
-from ..spawn_request import (
+from ...providers import resolve_launch_command
+from ... import window_query
+from ...session import session_manager
+from ...spawn_request import (
     SpawnRequest,
     SpawnResult,
     pop_pending,
     spawns_dir,
 )
-from ..tmux_manager import tmux_manager
-from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
-from .callback_registry import register
-from .messaging_pipeline.message_sender import rate_limit_send_message
+from ...tmux_manager import tmux_manager
+from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import rate_limit_send_message
 
 if TYPE_CHECKING:
     from telegram import Bot
@@ -63,7 +63,7 @@ async def handle_spawn_approval(
         logger.info("Spawn request %s expired before approval", request_id)
         return None
 
-    from ..config import config
+    from ...config import config
 
     if window_query.window_count() >= config.msg_max_windows:
         spawn_file = spawns_dir() / f"{request_id}.json"
@@ -100,7 +100,7 @@ async def handle_spawn_approval(
         )
 
     if req.provider == "claude":
-        from ..msg_skill import ensure_skill_installed
+        from ...msg_skill import ensure_skill_installed
 
         ensure_skill_installed(req.cwd)
 
@@ -184,7 +184,7 @@ async def _create_topic_for_spawn(
     req: SpawnRequest,
 ) -> None:
     from .msg_telegram import resolve_topic
-    from .topics.topic_orchestration import collect_target_chats, create_topic_in_chat
+    from ..topics.topic_orchestration import collect_target_chats, create_topic_in_chat
 
     target_chats = collect_target_chats(window_id)
     for chat_id in target_chats:
@@ -224,7 +224,7 @@ async def _handle_spawn_callback(
         request_id = data[len(CB_SPAWN_APPROVE) :]
         bot = update.get_bot()
         try:
-            from ..config import config as _cfg
+            from ...config import config as _cfg
 
             result = await handle_spawn_approval(
                 request_id, bot, spawn_timeout=_cfg.msg_spawn_timeout

@@ -1,4 +1,4 @@
-from ccgram.handlers.msg_delivery import (
+from ccgram.handlers.messaging.msg_delivery import (
     DeliveryState,
     clear_delivery_state,
     delivery_strategy,

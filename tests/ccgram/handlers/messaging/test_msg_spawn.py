@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.msg_spawn import (
+from ccgram.handlers.messaging.msg_spawn import (
     CB_SPAWN_APPROVE,
     CB_SPAWN_DENY,
     handle_spawn_approval,
@@ -155,15 +155,15 @@ class TestApprovalFlow:
         mock_tmux.create_window = AsyncMock(return_value=(True, "ok", "project", "@7"))
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
             patch(
-                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                "ccgram.handlers.messaging.msg_spawn._create_topic_for_spawn",
                 new_callable=AsyncMock,
             ) as mock_topic,
         ):
@@ -186,15 +186,15 @@ class TestApprovalFlow:
         mock_tmux.create_window = AsyncMock(return_value=(True, "ok", "project", "@7"))
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
             patch(
-                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                "ccgram.handlers.messaging.msg_spawn._create_topic_for_spawn",
                 new_callable=AsyncMock,
             ),
         ):
@@ -212,11 +212,11 @@ class TestApprovalFlow:
         mock_tmux.create_window = AsyncMock(return_value=(False, "tmux error", "", ""))
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
         ):
@@ -252,15 +252,15 @@ class TestAutoMode:
         )
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
             patch(
-                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                "ccgram.handlers.messaging.msg_spawn._create_topic_for_spawn",
                 new_callable=AsyncMock,
             ),
         ):
@@ -311,15 +311,15 @@ class TestContextBootstrap:
         )
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
             patch(
-                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                "ccgram.handlers.messaging.msg_spawn._create_topic_for_spawn",
                 new_callable=AsyncMock,
             ),
         ):
@@ -388,15 +388,15 @@ class TestSkillInstallOnSpawn:
         )
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="claude",
             ),
             patch(
-                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                "ccgram.handlers.messaging.msg_spawn._create_topic_for_spawn",
                 new_callable=AsyncMock,
             ),
         ):
@@ -421,15 +421,15 @@ class TestSkillInstallOnSpawn:
         )
 
         with (
-            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
-            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
-            patch("ccgram.handlers.msg_spawn.window_query") as mock_wq,
+            patch("ccgram.handlers.messaging.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.messaging.msg_spawn.session_manager") as mock_sm,
+            patch("ccgram.handlers.messaging.msg_spawn.window_query") as mock_wq,
             patch(
-                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                "ccgram.handlers.messaging.msg_spawn.resolve_launch_command",
                 return_value="codex",
             ),
             patch(
-                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                "ccgram.handlers.messaging.msg_spawn._create_topic_for_spawn",
                 new_callable=AsyncMock,
             ),
         ):

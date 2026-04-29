@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.msg_broker import (
+from ccgram.handlers.messaging.msg_broker import (
     BROKER_CYCLE_INTERVAL,
     SWEEP_INTERVAL,
     _INJECTION_CHAR_LIMIT,
@@ -16,8 +16,11 @@ from ccgram.handlers.msg_broker import (
     merge_injection_texts,
     write_delivery_file,
 )
-from ccgram.handlers.msg_delivery import delivery_strategy, reset_delivery_state
-from ccgram.handlers.msg_delivery import (
+from ccgram.handlers.messaging.msg_delivery import (
+    delivery_strategy,
+    reset_delivery_state,
+)
+from ccgram.handlers.messaging.msg_delivery import (
     DeliveryState,
     MessageDeliveryStrategy,
     _LOOP_THRESHOLD,

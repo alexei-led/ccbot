@@ -19,8 +19,8 @@ from .msg_delivery import delivery_strategy
 if TYPE_CHECKING:
     from telegram import Bot
 
-    from ..mailbox import Mailbox, Message
-    from ..tmux_manager import TmuxManager
+    from ...mailbox import Mailbox, Message
+    from ...tmux_manager import TmuxManager
 
 logger = structlog.get_logger()
 
@@ -202,9 +202,9 @@ async def broker_delivery_cycle(
     When *bot* is provided, Telegram notifications are sent for
     delivered messages, shell-pending messages, and loop detection.
     """
-    from ..providers import get_provider_for_window
-    from ..window_query import get_window_provider
-    from ..window_resolver import is_foreign_window
+    from ...providers import get_provider_for_window
+    from ...window_query import get_window_provider
+    from ...window_resolver import is_foreign_window
 
     _recover_stale_pending(mailbox)
 

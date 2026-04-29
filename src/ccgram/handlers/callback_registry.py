@@ -113,8 +113,6 @@ def load_handlers() -> None:
         command_history,
         hook_events,
         interactive_callbacks,
-        msg_spawn,
-        msg_telegram,
         pane_callbacks,
         screenshot_callbacks,
         send_callbacks,
@@ -127,6 +125,7 @@ def load_handlers() -> None:
         sync_command,
         voice_callbacks,
     )
+    from .messaging import msg_spawn, msg_telegram  # noqa: F401
     from .recovery import history_callbacks, recovery_callbacks, resume_command  # noqa: F401
     from .topics import directory_callbacks, window_callbacks  # noqa: F401
 

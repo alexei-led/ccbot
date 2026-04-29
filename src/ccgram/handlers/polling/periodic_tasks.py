@@ -21,7 +21,7 @@ from ...config import config
 from ...session import session_manager
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttle_sweep
-from ..msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
+from ..messaging.msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
 from ..live_view import tick_live_views
 from ..topics.topic_lifecycle import (
     check_autoclose_timers,
@@ -50,7 +50,7 @@ async def run_broker_cycle(
     """Run one broker delivery cycle (called from poll loop and hook_events)."""
     from ...mailbox import Mailbox
 
-    from ..msg_broker import broker_delivery_cycle
+    from ..messaging.msg_broker import broker_delivery_cycle
 
     mailbox = Mailbox(config.mailbox_dir)
     await broker_delivery_cycle(
@@ -69,7 +69,7 @@ async def run_broker_cycle(
 async def _run_spawn_cycle(bot: Bot) -> None:
     """Scan for file-based spawn requests and post approval keyboards or auto-approve."""
     from ...spawn_request import pop_pending, scan_spawn_requests
-    from ..msg_spawn import (
+    from ..messaging.msg_spawn import (
         handle_spawn_approval,
         post_spawn_approval_keyboard,
     )

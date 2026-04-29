@@ -398,12 +398,12 @@ This keeps each task's diff small.
 
 - Move: `msg_broker.py`, `msg_delivery.py`, `msg_telegram.py`, `msg_spawn.py`
 
-- [ ] create subpackage; re-export `broker_delivery_cycle`, `delivery_strategy`, `notify_message_to_telegram`, spawn types
-- [ ] git mv four modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group inter-agent messaging subpackage"
+- [x] create subpackage; re-export `broker_delivery_cycle`, `delivery_strategy`, `notify_message_to_telegram`, spawn types
+- [x] git mv four modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group inter-agent messaging subpackage"
 
 #### Task F1.6: Create `handlers/shell/` subpackage
 
