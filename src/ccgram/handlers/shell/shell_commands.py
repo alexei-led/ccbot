@@ -28,28 +28,28 @@ from telegram.constants import ChatAction
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..llm import get_completer
-from ..llm import CommandResult
-from ..thread_router import thread_router
-from ..tmux_manager import send_to_window, tmux_manager
-from .callback_data import (
+from ...llm import get_completer
+from ...llm import CommandResult
+from ...thread_router import thread_router
+from ...tmux_manager import send_to_window, tmux_manager
+from ..callback_data import (
     CB_SHELL_CANCEL,
     CB_SHELL_CONFIRM_DANGER,
     CB_SHELL_EDIT,
     CB_SHELL_RUN,
 )
-from .callback_helpers import get_thread_id
-from .callback_registry import register
-from .messaging_pipeline.message_sender import (
+from ..callback_helpers import get_thread_id
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import (
     REACT_RUNNING,
     react,
     safe_edit,
     safe_reply,
     safe_send,
 )
-from .messaging_pipeline.message_queue import enqueue_status_update
-from .polling.polling_strategies import lifecycle_strategy
-from ..topic_state_registry import topic_state
+from ..messaging_pipeline.message_queue import enqueue_status_update
+from ..polling.polling_strategies import lifecycle_strategy
+from ...topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 
@@ -152,7 +152,7 @@ async def _cancel_stuck_input(window_id: str) -> None:
     LLM-generated malformed commands that leave the shell in multi-line
     input mode (e.g. unclosed ``begin`` block in fish).
     """
-    from ..providers.shell import KNOWN_SHELLS, match_prompt
+    from ...providers.shell import KNOWN_SHELLS, match_prompt
 
     # Step 1: check if the shell itself is the foreground process.
     # If a command is running (python, grep, etc.), don't interrupt it.
@@ -275,7 +275,7 @@ async def handle_shell_message(
     if _generation_counter.get(gen_key) != gen_id:
         return
 
-    from .command_history import record_command
+    from ..command_history import record_command
 
     record_command(user_id, thread_id, text)
 

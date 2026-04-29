@@ -97,7 +97,7 @@ async def _handle_send(
         window_id, provider_name=get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery and thread_id is not None:
-        from .shell_commands import handle_shell_message
+        from .shell.shell_commands import handle_shell_message
 
         try:
             await handle_shell_message(bot, user_id, thread_id, window_id, pending_text)

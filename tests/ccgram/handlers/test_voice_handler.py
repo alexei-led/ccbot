@@ -617,7 +617,7 @@ class TestHandleVoiceCallback:
         context.user_data = {VOICE_PENDING: {(999, 42): "list files"}}
 
         with patch(
-            "ccgram.handlers.shell_commands.handle_shell_message",
+            "ccgram.handlers.shell.shell_commands.handle_shell_message",
             new_callable=AsyncMock,
         ) as mock_shell:
             await voice_callbacks.handle_voice_callback(update, context)
@@ -665,7 +665,7 @@ class TestHandleVoiceCallback:
         context.user_data = {VOICE_PENDING: {(999, 42): "list files"}}
 
         with patch(
-            "ccgram.handlers.shell_commands.handle_shell_message",
+            "ccgram.handlers.shell.shell_commands.handle_shell_message",
             new_callable=AsyncMock,
             side_effect=OSError("tmux died"),
         ):

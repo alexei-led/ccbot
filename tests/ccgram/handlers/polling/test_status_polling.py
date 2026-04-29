@@ -774,7 +774,7 @@ class TestProviderSwitchPromptSetup:
                 return_value="shell",
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
@@ -823,7 +823,7 @@ class TestProviderSwitchPromptSetup:
                 return_value=mock_provider,
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
@@ -866,7 +866,7 @@ class TestProviderSwitchPromptSetup:
                 return_value="",
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
@@ -912,7 +912,7 @@ class TestProviderSwitchPromptSetup:
                 return_value="",
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
             patch(
@@ -998,14 +998,14 @@ class TestProviderSwitchChain:
                 side_effect=_provider_for,
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
             patch(
-                "ccgram.handlers.shell_capture.clear_shell_monitor_state"
+                "ccgram.handlers.shell.shell_capture.clear_shell_monitor_state"
             ) as mock_clear_capture,
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.clear_state"
+                "ccgram.handlers.shell.shell_prompt_orchestrator.clear_state"
             ) as mock_clear_orch,
         ):
             mock_sm.window_states = {"@7": state}

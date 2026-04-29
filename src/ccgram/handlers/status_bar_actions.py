@@ -162,7 +162,7 @@ async def _handle_status_recall(
         window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
-        from .shell_commands import handle_shell_message
+        from .shell.shell_commands import handle_shell_message
 
         await handle_shell_message(
             query.get_bot(), user_id, thread_id, window_id, command

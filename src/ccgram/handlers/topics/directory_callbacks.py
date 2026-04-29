@@ -576,7 +576,7 @@ async def _create_window_and_bind(
 
     provider_caps = provider_registry.get(provider_name).capabilities
     if provider_caps.chat_first_command_path:
-        from ..shell_prompt_orchestrator import ensure_setup
+        from ..shell.shell_prompt_orchestrator import ensure_setup
 
         await _wait_for_shell_ready(created_wid)
         await ensure_setup(created_wid, "auto")
@@ -632,7 +632,7 @@ async def _create_window_and_bind(
 
         # Chat-first providers (shell): route through NL→command approval flow
         if provider_caps.chat_first_command_path:
-            from ..shell_commands import handle_shell_message
+            from ..shell.shell_commands import handle_shell_message
 
             await handle_shell_message(
                 context.bot,

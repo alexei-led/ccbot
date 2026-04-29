@@ -72,7 +72,7 @@ async def _detect_and_apply_provider(
         )
         if new_caps and new_caps.capabilities.chat_first_command_path:
             state.transcript_path = ""
-            from ..shell_prompt_orchestrator import ensure_setup
+            from ..shell.shell_prompt_orchestrator import ensure_setup
 
             await ensure_setup(
                 window_id,
@@ -82,8 +82,10 @@ async def _detect_and_apply_provider(
                 thread_id=thread_id,
             )
         elif old_caps and old_caps.capabilities.chat_first_command_path:
-            from ..shell_capture import clear_shell_monitor_state
-            from ..shell_prompt_orchestrator import clear_state as clear_orchestrator
+            from ..shell.shell_capture import clear_shell_monitor_state
+            from ..shell.shell_prompt_orchestrator import (
+                clear_state as clear_orchestrator,
+            )
 
             clear_shell_monitor_state(window_id)
             clear_orchestrator(window_id)
@@ -212,7 +214,7 @@ async def discover_and_register_transcript(
     if providers_to_try is None:
         session_manager.set_window_provider(window_id, "shell")
         state.transcript_path = ""
-        from ..shell_prompt_orchestrator import ensure_setup
+        from ..shell.shell_prompt_orchestrator import ensure_setup
 
         await ensure_setup(
             window_id, "provider_switch", bot=bot, chat_id=chat_id, thread_id=thread_id

@@ -10,7 +10,7 @@ from ccgram.handlers.callback_data import (
     CB_SHELL_EDIT,
     CB_SHELL_RUN,
 )
-from ccgram.handlers.shell_commands import (
+from ccgram.handlers.shell.shell_commands import (
     _BANG_HINT_TEXT,
     _build_approval_keyboard,
     _cancel_stuck_input,
@@ -26,8 +26,8 @@ from ccgram.handlers.shell_commands import (
 )
 from ccgram.llm.base import CommandResult
 
-_MOD = "ccgram.handlers.shell_commands"
-_CTX = "ccgram.handlers.shell_context"
+_MOD = "ccgram.handlers.shell.shell_commands"
+_CTX = "ccgram.handlers.shell.shell_context"
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +106,9 @@ class TestHandleShellMessage:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ) as mock_send,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command"
+            ) as mock_mark,
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             mock_tm.capture_pane = AsyncMock(return_value=None)
@@ -130,7 +132,7 @@ class TestHandleShellMessage:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ) as mock_send,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
         ):
             await handle_shell_message(bot, 1, 42, "@0", "! ls", message)
 
@@ -164,7 +166,7 @@ class TestHandleShellMessage:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ) as mock_send,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
         ):
             await handle_shell_message(bot, 1, 42, "@0", "find . -name foo", message)
 
@@ -331,7 +333,9 @@ class TestHandleShellCallback:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ) as mock_send,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command"
+            ) as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"
@@ -490,7 +494,7 @@ class TestHandleShellCallback:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ) as mock_send,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"
@@ -506,7 +510,7 @@ class TestHandleShellCallback:
 
 class TestGatherLlmContext:
     async def test_assembles_cwd_shell_and_tools(self) -> None:
-        from ccgram.handlers.shell_commands import gather_llm_context
+        from ccgram.handlers.shell.shell_commands import gather_llm_context
 
         with (
             patch(
@@ -528,7 +532,7 @@ class TestGatherLlmContext:
         assert ctx["shell_tools"] == "rg (grep replacement)"
 
     async def test_empty_cwd_when_none(self) -> None:
-        from ccgram.handlers.shell_commands import gather_llm_context
+        from ccgram.handlers.shell.shell_commands import gather_llm_context
 
         with (
             patch(
@@ -678,9 +682,9 @@ class TestLazyMarkerRecovery:
             patch(f"{_MOD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_CTX}.view_window") as mock_sm,
             patch(f"{_MOD}.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
@@ -753,12 +757,12 @@ class TestDangerousCommandPrefix:
 
 class TestDetectShellTools:
     def setup_method(self) -> None:
-        from ccgram.handlers.shell_context import _detect_shell_tools
+        from ccgram.handlers.shell.shell_context import _detect_shell_tools
 
         _detect_shell_tools.cache_clear()
 
     def teardown_method(self) -> None:
-        from ccgram.handlers.shell_context import _detect_shell_tools
+        from ccgram.handlers.shell.shell_context import _detect_shell_tools
 
         _detect_shell_tools.cache_clear()
 
@@ -767,7 +771,7 @@ class TestDetectShellTools:
             return f"/usr/bin/{name}" if name in ("fd", "rg") else None
 
         with patch("shutil.which", side_effect=fake_which):
-            from ccgram.handlers.shell_context import _detect_shell_tools
+            from ccgram.handlers.shell.shell_context import _detect_shell_tools
 
             result = _detect_shell_tools()
 
@@ -777,7 +781,7 @@ class TestDetectShellTools:
 
     def test_cache_populated_and_reused(self) -> None:
         with patch("shutil.which", return_value=None):
-            from ccgram.handlers.shell_context import _detect_shell_tools
+            from ccgram.handlers.shell.shell_context import _detect_shell_tools
 
             first = _detect_shell_tools()
             second = _detect_shell_tools()
@@ -917,7 +921,7 @@ class TestBangHint:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
             patch(f"{_MOD}.safe_send", new_callable=AsyncMock) as mock_send,
         ):
             mock_tr.resolve_chat_id.return_value = -100
@@ -949,7 +953,7 @@ class TestBangHint:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
         ):
             mock_tr.resolve_chat_id.return_value = -100
 
@@ -1050,7 +1054,7 @@ class TestTypingAction:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
             patch(f"{_MOD}.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
@@ -1065,7 +1069,7 @@ class TestTypingAction:
         assert call.kwargs["message_thread_id"] == 42
 
     async def test_typing_pulse_refreshes_during_llm(self) -> None:
-        from ccgram.handlers import shell_commands as sc
+        from ccgram.handlers.shell import shell_commands as sc
 
         bot = AsyncMock(spec=Bot)
         bot.send_chat_action = AsyncMock()
@@ -1103,7 +1107,7 @@ class TestTypingAction:
         assert bot.send_chat_action.await_count >= 3
 
     async def test_typing_pulse_cancelled_after_completion(self) -> None:
-        from ccgram.handlers import shell_commands as sc
+        from ccgram.handlers.shell import shell_commands as sc
 
         bot = AsyncMock(spec=Bot)
         bot.send_chat_action = AsyncMock()
@@ -1140,7 +1144,7 @@ class TestTypingAction:
         assert bot.send_chat_action.await_count == count_after_complete
 
     async def test_typing_pulse_cancelled_on_llm_error(self) -> None:
-        from ccgram.handlers import shell_commands as sc
+        from ccgram.handlers.shell import shell_commands as sc
 
         bot = AsyncMock(spec=Bot)
         bot.send_chat_action = AsyncMock()
@@ -1191,7 +1195,7 @@ class TestTypingAction:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command"),
+            patch("ccgram.handlers.shell.shell_capture.mark_telegram_command"),
             patch(f"{_MOD}.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
@@ -1220,7 +1224,9 @@ class TestRunningReaction:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command"
+            ) as mock_mark,
             patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
@@ -1250,7 +1256,9 @@ class TestRunningReaction:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command"
+            ) as mock_mark,
             patch(f"{_MOD}.react", new_callable=AsyncMock) as mock_react,
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
@@ -1275,7 +1283,9 @@ class TestRunningReaction:
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ),
-            patch("ccgram.handlers.shell_capture.mark_telegram_command") as mock_mark,
+            patch(
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command"
+            ) as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_window_for_thread.return_value = "@0"

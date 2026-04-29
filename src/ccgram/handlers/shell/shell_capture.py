@@ -25,17 +25,17 @@ from typing import Any, Protocol
 
 from telegram import Bot
 
-from ..providers.shell import match_prompt
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from .messaging_pipeline.message_sender import (
+from ...providers.shell import match_prompt
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ..messaging_pipeline.message_sender import (
     REACT_DONE,
     REACT_FAIL,
     edit_with_fallback,
     rate_limit_send_message,
     react,
 )
-from ..topic_state_registry import topic_state
+from ...topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 
@@ -360,7 +360,7 @@ async def _maybe_suggest_fix(
         await _update_error_message(bot, chat_id, msg_id, exit_code, output)
 
     try:
-        from ..llm import get_completer
+        from ...llm import get_completer
 
         completer = get_completer()
     except (ValueError, ImportError):  # fmt: skip

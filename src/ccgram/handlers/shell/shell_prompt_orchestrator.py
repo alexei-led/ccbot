@@ -21,8 +21,8 @@ import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-from .callback_registry import register
-from .messaging_pipeline.message_sender import safe_send
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import safe_send
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -58,7 +58,7 @@ async def ensure_setup(
     thread_id: int = 0,
 ) -> None:
     """Apply prompt-marker setup policy for the given trigger type."""
-    from ..providers.shell_infra import has_prompt_marker, setup_shell_prompt
+    from ...providers.shell_infra import has_prompt_marker, setup_shell_prompt
 
     st = _get_state(window_id)
 
@@ -86,7 +86,7 @@ async def ensure_setup(
 
 async def accept_offer(window_id: str) -> None:
     """User chose 'Set up' -- run setup and record the offer."""
-    from ..providers.shell_infra import setup_shell_prompt
+    from ...providers.shell_infra import setup_shell_prompt
 
     st = _get_state(window_id)
     st.was_offered = True
@@ -120,7 +120,7 @@ async def _show_offer_keyboard(
     st = _get_state(window_id)
 
     if not bot or not chat_id:
-        from ..providers.shell_infra import setup_shell_prompt
+        from ...providers.shell_infra import setup_shell_prompt
 
         st.was_offered = True
         await setup_shell_prompt(window_id, clear=False)
@@ -152,7 +152,7 @@ async def _show_offer_keyboard(
 @register(CB_SHELL_SETUP, CB_SHELL_SKIP)
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: ARG001
     """Handle Set up / Skip button presses."""
-    from .callback_helpers import user_owns_window
+    from ..callback_helpers import user_owns_window
 
     query = update.callback_query
     if not query or not query.data:

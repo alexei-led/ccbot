@@ -85,7 +85,7 @@ async def clear_topic_state(
         chat_id=chat_id,
     )
     if window_id and window_dead:
-        from .shell_prompt_orchestrator import clear_state as _clear_shell_prompt
+        from .shell.shell_prompt_orchestrator import clear_state as _clear_shell_prompt
 
         _clear_shell_prompt(window_id)
 

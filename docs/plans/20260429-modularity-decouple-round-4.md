@@ -411,12 +411,12 @@ This keeps each task's diff small.
 
 - Move: `shell_commands.py`, `shell_capture.py`, `shell_context.py`, `shell_prompt_orchestrator.py`
 
-- [ ] create subpackage; re-export `show_command_approval`, `register_approval_callback`, `gather_llm_context`, `redact_for_llm`, prompt orchestrator entry points
-- [ ] git mv four modules
-- [ ] rewrite import sites (notable: bot.py post_init wires shell approval callback — F3 will simplify this further)
-- [ ] move tests
-- [ ] `make check` passes (manual: send a message in a shell topic in dev — already covered by integration tests)
-- [ ] commit "refactor(handlers): group shell subpackage"
+- [x] create subpackage; re-export `show_command_approval`, `register_approval_callback`, `gather_llm_context`, `redact_for_llm`, prompt orchestrator entry points
+- [x] git mv four modules
+- [x] rewrite import sites (notable: bot.py post_init wires shell approval callback — F3 will simplify this further)
+- [x] move tests
+- [x] `make check` passes (manual: send a message in a shell topic in dev — already covered by integration tests)
+- [x] commit "refactor(handlers): group shell subpackage"
 
 #### Task F1.7: Create `handlers/status/` subpackage
 

@@ -216,7 +216,7 @@ class TestBindProviderDetection:
                 return_value="shell",
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
@@ -253,7 +253,7 @@ class TestBindProviderDetection:
                 return_value="claude",
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
@@ -291,7 +291,7 @@ class TestBindProviderDetection:
                 return_value="shell",
             ),
             patch(
-                "ccgram.handlers.shell_prompt_orchestrator.ensure_setup",
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -322,7 +322,7 @@ class TestForwardPendingText:
         with (
             patch("ccgram.handlers.topics.window_callbacks.session_manager"),
             patch(
-                "ccgram.handlers.shell_commands.handle_shell_message",
+                "ccgram.handlers.shell.shell_commands.handle_shell_message",
                 new_callable=AsyncMock,
             ) as mock_shell,
             patch(
@@ -343,7 +343,7 @@ class TestForwardPendingText:
 
         bot = AsyncMock(spec=Bot)
         with patch(
-            "ccgram.handlers.shell_commands.handle_shell_message",
+            "ccgram.handlers.shell.shell_commands.handle_shell_message",
             new_callable=AsyncMock,
         ) as mock_shell:
             await _forward_pending_text(

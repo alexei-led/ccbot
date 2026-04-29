@@ -15,7 +15,7 @@ import functools
 import re
 import shutil
 
-from ..window_query import view_window
+from ...window_query import view_window
 
 # Modern CLI tools we hint to the LLM as preferred replacements when present.
 _MODERN_TOOLS: dict[str, str] = {
@@ -56,7 +56,7 @@ def redact_for_llm(text: str) -> str:
 
 async def gather_llm_context(window_id: str) -> dict[str, str]:
     """Gather cwd, shell type, and available tools for LLM calls."""
-    from ..providers.shell import detect_pane_shell
+    from ...providers.shell import detect_pane_shell
 
     shell = await detect_pane_shell(window_id)
     tools = _detect_shell_tools()

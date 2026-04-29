@@ -315,7 +315,7 @@ async def _maybe_check_passive_shell(
         if not raw:
             return
         rendered = raw
-    from ..shell_capture import check_passive_shell_output
+    from ..shell.shell_capture import check_passive_shell_output
 
     await check_passive_shell_output(bot, user_id, thread_id, window_id, rendered)
 

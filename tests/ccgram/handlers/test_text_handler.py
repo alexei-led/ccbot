@@ -365,7 +365,7 @@ class TestShellProviderRouting:
         mock_get_provider.return_value = provider
 
         with patch(
-            "ccgram.handlers.shell_commands.handle_shell_message",
+            "ccgram.handlers.shell.shell_commands.handle_shell_message",
             new_callable=AsyncMock,
         ) as mock_shell:
             from ccgram.handlers.text_handler import handle_text_message
@@ -412,7 +412,7 @@ class TestShellProviderRouting:
 
         with (
             patch(
-                "ccgram.handlers.shell_commands.handle_shell_message",
+                "ccgram.handlers.shell.shell_commands.handle_shell_message",
                 new_callable=AsyncMock,
             ) as mock_shell,
             patch(f"{_TH}.get_interactive_window", return_value=None),

@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot, Message
 
-from ccgram.handlers.shell_capture import reset_shell_monitor_state
-from ccgram.handlers.shell_commands import (
+from ccgram.handlers.shell.shell_capture import reset_shell_monitor_state
+from ccgram.handlers.shell.shell_commands import (
     _generation_counter,
     _shell_pending,
     handle_shell_message,
@@ -21,8 +21,8 @@ from ccgram.llm.base import CommandResult
 
 pytestmark = pytest.mark.integration
 
-_MOD_CMD = "ccgram.handlers.shell_commands"
-_MOD_CAP = "ccgram.handlers.shell_capture"
+_MOD_CMD = "ccgram.handlers.shell.shell_commands"
+_MOD_CAP = "ccgram.handlers.shell.shell_capture"
 
 TEST_USER_ID = 1
 TEST_THREAD_ID = 42
@@ -50,7 +50,7 @@ class TestRawCommandFlow:
         with (
             patch(f"{_MOD_CMD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD_CMD}.lifecycle_strategy.clear_probe_failures"),
-            patch("ccgram.handlers.shell_context.view_window"),
+            patch("ccgram.handlers.shell.shell_context.view_window"),
             patch(f"{_MOD_CMD}.thread_router") as mock_tr,
             patch(f"{_MOD_CMD}.tmux_manager") as mock_tm,
             patch(
@@ -64,7 +64,7 @@ class TestRawCommandFlow:
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.shell_capture.mark_telegram_command",
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command",
             ) as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = TEST_CHAT_ID
@@ -87,7 +87,7 @@ class TestRawCommandFlow:
 
     @pytest.mark.asyncio()
     async def test_raw_command_output_relayed_via_passive_monitor(self) -> None:
-        from ccgram.handlers.shell_capture import (
+        from ccgram.handlers.shell.shell_capture import (
             _shell_monitor_state,
             check_passive_shell_output,
         )
@@ -129,7 +129,7 @@ class TestRawCommandFlow:
 
     @pytest.mark.asyncio()
     async def test_raw_command_error_shows_exit_indicator(self) -> None:
-        from ccgram.handlers.shell_capture import (
+        from ccgram.handlers.shell.shell_capture import (
             _shell_monitor_state,
             check_passive_shell_output,
         )
@@ -226,7 +226,7 @@ class TestLlmCommandFlow:
             patch(f"{_MOD_CMD}.enqueue_status_update", new_callable=AsyncMock),
             patch(f"{_MOD_CMD}.lifecycle_strategy.clear_probe_failures"),
             patch(f"{_MOD_CMD}.get_completer", return_value=None),
-            patch("ccgram.handlers.shell_context.view_window"),
+            patch("ccgram.handlers.shell.shell_context.view_window"),
             patch(f"{_MOD_CMD}.thread_router") as mock_tr,
             patch(
                 f"{_MOD_CMD}.send_to_window",
@@ -234,7 +234,7 @@ class TestLlmCommandFlow:
                 return_value=(True, ""),
             ) as mock_send,
             patch(
-                "ccgram.handlers.shell_capture.mark_telegram_command",
+                "ccgram.handlers.shell.shell_capture.mark_telegram_command",
             ) as mock_mark,
         ):
             mock_tr.resolve_chat_id.return_value = TEST_CHAT_ID
@@ -257,7 +257,7 @@ class TestLlmCommandFlow:
 class TestErrorRecovery:
     @pytest.mark.asyncio()
     async def test_telegram_command_error_triggers_fix_suggestion(self) -> None:
-        from ccgram.handlers.shell_capture import (
+        from ccgram.handlers.shell.shell_capture import (
             _shell_monitor_state,
             check_passive_shell_output,
             mark_telegram_command,
@@ -293,12 +293,12 @@ class TestErrorRecovery:
             ),
             patch("ccgram.llm.get_completer", return_value=mock_completer),
             patch(
-                "ccgram.handlers.shell_context.gather_llm_context",
+                "ccgram.handlers.shell.shell_context.gather_llm_context",
                 new_callable=AsyncMock,
                 return_value={"cwd": "/tmp", "shell": "bash", "shell_tools": ""},
             ),
             patch(
-                "ccgram.handlers.shell_commands.safe_send",
+                "ccgram.handlers.shell.shell_commands.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
             patch(f"{_MOD_CAP}._approval_callback", new=show_command_approval),
@@ -319,7 +319,7 @@ class TestErrorRecovery:
 
     @pytest.mark.asyncio()
     async def test_fix_suggestion_skipped_when_no_llm(self) -> None:
-        from ccgram.handlers.shell_capture import (
+        from ccgram.handlers.shell.shell_capture import (
             check_passive_shell_output,
             mark_telegram_command,
         )
@@ -347,7 +347,7 @@ class TestErrorRecovery:
             ),
             patch("ccgram.llm.get_completer", return_value=None),
             patch(
-                "ccgram.handlers.shell_commands.safe_send",
+                "ccgram.handlers.shell.shell_commands.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -363,7 +363,7 @@ class TestErrorRecovery:
 class TestPassiveMonitoringRoundTrip:
     @pytest.mark.asyncio()
     async def test_in_progress_then_completed_edits_message(self) -> None:
-        from ccgram.handlers.shell_capture import (
+        from ccgram.handlers.shell.shell_capture import (
             _shell_monitor_state,
             check_passive_shell_output,
         )

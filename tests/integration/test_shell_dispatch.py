@@ -150,7 +150,7 @@ async def test_shell_callback_dispatches_to_shell_handler(app) -> None:
 
     with (
         patch(
-            "ccgram.handlers.shell_commands.handle_shell_callback",
+            "ccgram.handlers.shell.shell_commands.handle_shell_callback",
             new_callable=AsyncMock,
         ) as mock_shell_cb,
         patch("ccgram.bot.is_user_allowed", return_value=True),

@@ -104,7 +104,7 @@ def e2e_tmux(monkeypatch):
         "ccgram.handlers.sync_command",
         "ccgram.handlers.command_orchestration",
         "ccgram.handlers.topics.topic_orchestration",
-        "ccgram.handlers.shell_commands",
+        "ccgram.handlers.shell.shell_commands",
         "ccgram.handlers.cleanup",
     ]
     import importlib
@@ -246,7 +246,7 @@ async def e2e_app(e2e_state_dir, e2e_tmux, intercepted_calls, monkeypatch):
         "ccgram.handlers.sync_command",
         "ccgram.handlers.command_orchestration",
         "ccgram.handlers.topics.topic_orchestration",
-        "ccgram.handlers.shell_commands",
+        "ccgram.handlers.shell.shell_commands",
     ]
     import importlib
 

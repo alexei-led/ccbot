@@ -259,7 +259,7 @@ class TestLoadHandlers:
             "ccgram.handlers.recovery.recovery_callbacks",
             "ccgram.handlers.recovery.resume_command",
             "ccgram.handlers.voice_callbacks",
-            "ccgram.handlers.shell_commands",
+            "ccgram.handlers.shell.shell_commands",
             "ccgram.handlers.sessions_dashboard",
             "ccgram.handlers.sync_command",
         ]

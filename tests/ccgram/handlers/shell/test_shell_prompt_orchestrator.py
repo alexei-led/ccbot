@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ccgram.handlers.shell_prompt_orchestrator import (
+from ccgram.handlers.shell.shell_prompt_orchestrator import (
     _state,
     accept_offer,
     clear_state,
@@ -117,7 +117,10 @@ async def test_clear_state_no_op_for_unknown_window():
 
 
 async def test_dispatch_setup_button(mock_setup, mock_has_marker):
-    from ccgram.handlers.shell_prompt_orchestrator import CB_SHELL_SETUP, _dispatch
+    from ccgram.handlers.shell.shell_prompt_orchestrator import (
+        CB_SHELL_SETUP,
+        _dispatch,
+    )
 
     query = AsyncMock()
     query.data = f"{CB_SHELL_SETUP}@5"
@@ -136,7 +139,7 @@ async def test_dispatch_setup_button(mock_setup, mock_has_marker):
 
 
 async def test_dispatch_skip_button():
-    from ccgram.handlers.shell_prompt_orchestrator import CB_SHELL_SKIP, _dispatch
+    from ccgram.handlers.shell.shell_prompt_orchestrator import CB_SHELL_SKIP, _dispatch
 
     query = AsyncMock()
     query.data = f"{CB_SHELL_SKIP}@5"
@@ -154,11 +157,11 @@ async def test_dispatch_skip_button():
 
 
 async def test_show_offer_keyboard_sends_message(mock_setup, mock_has_marker):
-    from ccgram.handlers.shell_prompt_orchestrator import _show_offer_keyboard
+    from ccgram.handlers.shell.shell_prompt_orchestrator import _show_offer_keyboard
 
     bot = AsyncMock()
     with patch(
-        "ccgram.handlers.shell_prompt_orchestrator.safe_send",
+        "ccgram.handlers.shell.shell_prompt_orchestrator.safe_send",
         new_callable=AsyncMock,
     ) as mock_send:
         await _show_offer_keyboard("@3", bot=bot, chat_id=-100, thread_id=42)
@@ -171,7 +174,7 @@ async def test_show_offer_keyboard_sends_message(mock_setup, mock_has_marker):
 
 
 async def test_show_offer_keyboard_falls_back_without_bot(mock_setup, mock_has_marker):
-    from ccgram.handlers.shell_prompt_orchestrator import _show_offer_keyboard
+    from ccgram.handlers.shell.shell_prompt_orchestrator import _show_offer_keyboard
 
     await _show_offer_keyboard("@3")
 
@@ -186,7 +189,7 @@ async def test_external_bind_sends_offer_keyboard_when_bot_present(
 
     bot = AsyncMock()
     with patch(
-        "ccgram.handlers.shell_prompt_orchestrator.safe_send",
+        "ccgram.handlers.shell.shell_prompt_orchestrator.safe_send",
         new_callable=AsyncMock,
         return_value=AsyncMock(),
     ) as mock_send:
@@ -201,13 +204,13 @@ async def test_external_bind_suppresses_reoffer_after_was_offered(
     mock_setup, mock_has_marker
 ):
     mock_has_marker.return_value = False
-    from ccgram.handlers.shell_prompt_orchestrator import _OrchestratorState
+    from ccgram.handlers.shell.shell_prompt_orchestrator import _OrchestratorState
 
     _state[WINDOW] = _OrchestratorState(was_offered=True)
 
     bot = AsyncMock()
     with patch(
-        "ccgram.handlers.shell_prompt_orchestrator.safe_send",
+        "ccgram.handlers.shell.shell_prompt_orchestrator.safe_send",
         new_callable=AsyncMock,
     ) as mock_send:
         await ensure_setup(WINDOW, "external_bind", bot=bot, chat_id=-100, thread_id=5)

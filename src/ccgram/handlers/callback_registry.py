@@ -119,14 +119,12 @@ def load_handlers() -> None:
         status_bar_actions,
         toolbar_callbacks,
         sessions_dashboard,
-        shell_capture,
-        shell_commands,
-        shell_prompt_orchestrator,
         sync_command,
         voice_callbacks,
     )
     from .messaging import msg_spawn, msg_telegram  # noqa: F401
     from .recovery import history_callbacks, recovery_callbacks, resume_command  # noqa: F401
+    from .shell import shell_capture, shell_commands, shell_prompt_orchestrator  # noqa: F401
     from .topics import directory_callbacks, window_callbacks  # noqa: F401
 
     from .. import msg_discovery  # noqa: F401

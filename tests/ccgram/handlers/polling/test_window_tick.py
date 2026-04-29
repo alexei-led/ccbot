@@ -453,7 +453,7 @@ class TestMaybeCheckPassiveShell:
             ) as mock_prov,
             patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.shell_capture.check_passive_shell_output",
+                "ccgram.handlers.shell.shell_capture.check_passive_shell_output",
                 new_callable=AsyncMock,
             ) as mock_check,
         ):

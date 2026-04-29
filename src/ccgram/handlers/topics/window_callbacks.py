@@ -104,7 +104,7 @@ async def _detect_and_setup_provider(
 
         provider = get_provider_for_window(window_id, detected)
         if provider and provider.capabilities.chat_first_command_path:
-            from ..shell_prompt_orchestrator import ensure_setup
+            from ..shell.shell_prompt_orchestrator import ensure_setup
 
             await ensure_setup(
                 window_id,
@@ -138,7 +138,7 @@ async def _forward_pending_text(
     provider = get_provider_for_window(window_id, provider_name)
     is_chat_first = bool(provider and provider.capabilities.chat_first_command_path)
     if is_chat_first and not is_existing_window:
-        from ..shell_commands import handle_shell_message
+        from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(bot, user_id, thread_id, window_id, text)
     else:
