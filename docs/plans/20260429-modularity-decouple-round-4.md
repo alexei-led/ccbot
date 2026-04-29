@@ -450,12 +450,12 @@ This keeps each task's diff small.
 
 - Move: `live_view.py`, `screenshot_callbacks.py`, `pane_callbacks.py`
 
-- [ ] create subpackage; re-export `live_command`, `panes_command`, `screenshot_command`, `apply_pane_rename`, live-view tick functions
-- [ ] git mv three modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group live/screenshot subpackage"
+- [x] create subpackage; re-export `live_command`, `panes_command`, `screenshot_command`, `apply_pane_rename`, live-view tick functions
+- [x] git mv three modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group live/screenshot subpackage"
 
 #### Task F1.10: Create `handlers/send/` subpackage
 

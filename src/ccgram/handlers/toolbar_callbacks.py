@@ -90,7 +90,7 @@ async def _builtin_screenshot(
 ) -> None:
     """Builtin: trigger the screenshot handler."""
     from .callback_data import CB_STATUS_SCREENSHOT
-    from .screenshot_callbacks import handle_screenshot_callback
+    from .live.screenshot_callbacks import handle_screenshot_callback
 
     user = update.effective_user
     if user is None:
@@ -125,7 +125,7 @@ async def _builtin_live(
 ) -> None:
     """Builtin: start the live view via the existing screenshot dispatcher."""
     from .callback_data import CB_LIVE_START
-    from .screenshot_callbacks import handle_screenshot_callback
+    from .live.screenshot_callbacks import handle_screenshot_callback
 
     user = update.effective_user
     if user is None:

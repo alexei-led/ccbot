@@ -68,7 +68,7 @@ from .handlers.topics.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
 from .handlers.command_history import recall_command
 from .handlers.messaging_pipeline.message_routing import handle_new_message
-from .handlers.screenshot_callbacks import (
+from .handlers.live import (
     live_command,
     panes_command,
     screenshot_command,

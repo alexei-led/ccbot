@@ -30,7 +30,7 @@ from .topics.directory_browser import (
 )
 from .interactive import get_interactive_window, handle_interactive_ui
 from .messaging_pipeline.message_queue import enqueue_status_update
-from .pane_callbacks import apply_pane_rename
+from .live.pane_callbacks import apply_pane_rename
 from .messaging_pipeline.message_sender import (
     ack_reaction,
     edit_with_fallback,

@@ -24,21 +24,21 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from ..config import config
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from ..window_state_store import window_store
-from .callback_data import (
+from ...config import config
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ...window_state_store import window_store
+from ..callback_data import (
     CB_PANE_LIFECYCLE_TOGGLE,
     CB_PANE_RENAME,
     CB_PANE_SCREENSHOT,
     CB_PANE_SUBSCRIBE,
     CB_PANE_UNSUBSCRIBE,
 )
-from .callback_helpers import get_thread_id, user_owns_window
-from .callback_registry import register
-from .messaging_pipeline.message_sender import safe_reply
-from .user_state import (
+from ..callback_helpers import get_thread_id, user_owns_window
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import safe_reply
+from ..user_state import (
     PANE_RENAME_PANE_ID,
     PANE_RENAME_THREAD_ID,
     PANE_RENAME_WINDOW_ID,

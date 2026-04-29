@@ -46,7 +46,7 @@ from ..callback_data import (
 from ..callback_helpers import get_thread_id, parse_target, user_owns_window
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import react
-from ..screenshot_callbacks import (
+from ..live.screenshot_callbacks import (
     KEY_LABELS,
     KEYS_SEND_MAP,
     build_screenshot_keyboard,
@@ -247,7 +247,7 @@ async def _handle_keys(
         )
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
-    from ..live_view import get_live_view
+    from ..live.live_view import get_live_view
 
     thread_id = get_thread_id(update)
     if thread_id is not None and get_live_view(user_id, thread_id) is not None:

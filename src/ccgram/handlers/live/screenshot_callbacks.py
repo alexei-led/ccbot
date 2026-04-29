@@ -29,10 +29,10 @@ from telegram import (
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..screenshot import text_to_image
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from .callback_data import (
+from ...screenshot import text_to_image
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ..callback_data import (
     CB_KEYS_PREFIX,
     CB_LIVE_START,
     CB_LIVE_STOP,
@@ -40,8 +40,8 @@ from .callback_data import (
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_SCREENSHOT,
 )
-from .callback_helpers import get_thread_id, parse_target, user_owns_window
-from .callback_registry import register
+from ..callback_helpers import get_thread_id, parse_target, user_owns_window
+from ..callback_registry import register
 
 logger = structlog.get_logger()
 
@@ -365,9 +365,9 @@ async def screenshot_command(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Capture and send a terminal screenshot for the current topic."""
-    from ..config import config
-    from ..utils import handle_general_topic_message, is_general_topic
-    from .messaging_pipeline.message_sender import safe_reply
+    from ...config import config
+    from ...utils import handle_general_topic_message, is_general_topic
+    from ..messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -426,8 +426,9 @@ async def screenshot_command(
 
 async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open auto-refreshing live terminal view directly, skipping the screenshot step."""
-    from ..config import config
-    from ..utils import handle_general_topic_message, is_general_topic
+    from ...config import config
+    from ...utils import handle_general_topic_message, is_general_topic
+    from ..messaging_pipeline.message_sender import safe_reply
     from .live_view import (
         LiveViewState,
         build_live_keyboard,
@@ -435,7 +436,6 @@ async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
         is_live,
         start_live_view,
     )
-    from .messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -509,10 +509,10 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     """List all panes in the current topic's window."""
     from telegram import InlineKeyboardMarkup
 
-    from ..config import config
-    from ..utils import handle_general_topic_message, is_general_topic
-    from ..window_state_store import window_store
-    from .messaging_pipeline.message_sender import safe_reply
+    from ...config import config
+    from ...utils import handle_general_topic_message, is_general_topic
+    from ...window_state_store import window_store
+    from ..messaging_pipeline.message_sender import safe_reply
     from .pane_callbacks import build_pane_buttons, build_pane_lifecycle_button
 
     user = update.effective_user
@@ -550,7 +550,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    from .polling.polling_strategies import interactive_strategy
+    from ..polling.polling_strategies import interactive_strategy
 
     lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]
     rows: list[list] = []

@@ -12,7 +12,7 @@ from ccgram.handlers.callback_data import (
     CB_LIVE_STOP,
     CB_SCREENSHOT_REFRESH,
 )
-from ccgram.handlers.live_view import (
+from ccgram.handlers.live.live_view import (
     LiveViewState,
     _active_views,
     _edit_caption,
@@ -24,7 +24,7 @@ from ccgram.handlers.live_view import (
     stop_live_view,
     tick_live_views,
 )
-from ccgram.handlers.screenshot_callbacks import (
+from ccgram.handlers.live.screenshot_callbacks import (
     _handle_live_start,
     _handle_live_stop,
     build_screenshot_keyboard,
@@ -125,7 +125,7 @@ class TestContentHash:
 
 class TestCleanup:
     def test_topic_cleanup_removes_view(self):
-        from ccgram.handlers.live_view import _clear_live_view
+        from ccgram.handlers.live.live_view import _clear_live_view
 
         start_live_view(_make_view())
         assert is_live(1, 42)
@@ -133,7 +133,7 @@ class TestCleanup:
         assert not is_live(1, 42)
 
     def test_topic_cleanup_noop_when_not_active(self):
-        from ccgram.handlers.live_view import _clear_live_view
+        from ccgram.handlers.live.live_view import _clear_live_view
 
         _clear_live_view(1, 42)
 
@@ -264,7 +264,9 @@ class TestBuildToolbarKeyboard:
 class TestTickLiveViews:
     @pytest.fixture(autouse=True)
     def _patch_rate_limit(self):
-        with patch("ccgram.handlers.live_view.rate_limit_send", new_callable=AsyncMock):
+        with patch(
+            "ccgram.handlers.live.live_view.rate_limit_send", new_callable=AsyncMock
+        ):
             yield
 
     async def test_skip_when_hash_unchanged(self):
@@ -272,9 +274,9 @@ class TestTickLiveViews:
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
             ),
         ):
@@ -290,9 +292,9 @@ class TestTickLiveViews:
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
@@ -317,7 +319,7 @@ class TestTickLiveViews:
         view = _make_view()
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux:
+        with patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux:
             mock_tmux.find_window_by_id = AsyncMock(return_value=None)
             await tick_live_views(bot)
         assert not is_live(1, 42)
@@ -328,9 +330,9 @@ class TestTickLiveViews:
         bot = AsyncMock(spec=Bot)
         bot.edit_message_media = AsyncMock(side_effect=TelegramError("gone"))
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
@@ -347,9 +349,9 @@ class TestTickLiveViews:
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
             ) as mock_img,
         ):
@@ -366,9 +368,9 @@ class TestTickLiveViews:
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
@@ -390,9 +392,9 @@ class TestTickLiveViews:
         start_live_view(v2)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
@@ -425,9 +427,9 @@ class TestTickLiveViews:
         bot = AsyncMock(spec=Bot)
         bot.edit_message_media = AsyncMock(side_effect=RetryAfter(30))
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
@@ -446,7 +448,7 @@ class TestTickLiveViews:
         view.next_edit_after = time.monotonic() + 999
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux:
+        with patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux:
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
             )
@@ -458,7 +460,7 @@ class TestTickLiveViews:
         view = _make_view()
         start_live_view(view)
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux:
+        with patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux:
             mock_tmux.find_window_by_id = AsyncMock(return_value=None)
             await tick_live_views(bot)
         bot.edit_message_caption.assert_awaited_once()
@@ -505,7 +507,7 @@ class TestHandleLiveStart:
     async def test_rejects_non_owner(self):
         query, update = _make_query()
         with patch(
-            "ccgram.handlers.screenshot_callbacks.user_owns_window",
+            "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
             return_value=False,
         ):
             await _handle_live_start(query, 1, f"{CB_LIVE_START}@0", update)
@@ -520,11 +522,11 @@ class TestHandleLiveStart:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
         ):
@@ -536,11 +538,11 @@ class TestHandleLiveStart:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=None,
             ),
         ):
@@ -552,14 +554,16 @@ class TestHandleLiveStart:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
-            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.live.screenshot_callbacks.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tmux.find_window_by_id = AsyncMock(return_value=None)
             await _handle_live_start(query, 1, f"{CB_LIVE_START}@0", update)
@@ -570,14 +574,16 @@ class TestHandleLiveStart:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
-            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.live.screenshot_callbacks.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
@@ -592,20 +598,24 @@ class TestHandleLiveStart:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
-            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.screenshot_callbacks.text_to_image",
+                "ccgram.handlers.live.screenshot_callbacks.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.live.screenshot_callbacks.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
-            patch("ccgram.handlers.screenshot_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.live.screenshot_callbacks.thread_router"
+            ) as mock_router,
         ):
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
@@ -624,20 +634,24 @@ class TestHandleLiveStart:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
-            patch("ccgram.handlers.screenshot_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.screenshot_callbacks.text_to_image",
+                "ccgram.handlers.live.screenshot_callbacks.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.live.screenshot_callbacks.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),
-            patch("ccgram.handlers.screenshot_callbacks.thread_router") as mock_router,
+            patch(
+                "ccgram.handlers.live.screenshot_callbacks.thread_router"
+            ) as mock_router,
         ):
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
@@ -659,7 +673,7 @@ class TestHandleLiveStop:
     async def test_rejects_non_owner(self):
         query, update = _make_query()
         with patch(
-            "ccgram.handlers.screenshot_callbacks.user_owns_window",
+            "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
             return_value=False,
         ):
             await _handle_live_stop(query, 1, f"{CB_LIVE_STOP}@0", update)
@@ -672,11 +686,11 @@ class TestHandleLiveStop:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=None,
             ),
         ):
@@ -689,11 +703,11 @@ class TestHandleLiveStop:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
         ):
@@ -707,11 +721,11 @@ class TestHandleLiveStop:
         query, update = _make_query()
         with (
             patch(
-                "ccgram.handlers.screenshot_callbacks.user_owns_window",
+                "ccgram.handlers.live.screenshot_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch(
-                "ccgram.handlers.screenshot_callbacks.get_thread_id",
+                "ccgram.handlers.live.screenshot_callbacks.get_thread_id",
                 return_value=42,
             ),
         ):
@@ -808,7 +822,9 @@ class TestHandleKeysLiveGuard:
 class TestRetryAfterTimedelta:
     @pytest.fixture(autouse=True)
     def _patch_rate_limit(self):
-        with patch("ccgram.handlers.live_view.rate_limit_send", new_callable=AsyncMock):
+        with patch(
+            "ccgram.handlers.live.live_view.rate_limit_send", new_callable=AsyncMock
+        ):
             yield
 
     async def test_retry_after_timedelta_pauses_view(self):
@@ -819,9 +835,9 @@ class TestRetryAfterTimedelta:
             side_effect=RetryAfter(timedelta(seconds=30))
         )
         with (
-            patch("ccgram.handlers.live_view.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.live.live_view.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.live_view.text_to_image",
+                "ccgram.handlers.live.live_view.text_to_image",
                 new_callable=AsyncMock,
                 return_value=b"PNG",
             ),

@@ -15,14 +15,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot
 
-from ccgram.handlers import pane_callbacks
+from ccgram.handlers.live import pane_callbacks
 from ccgram.handlers.callback_data import (
     CB_PANE_LIFECYCLE_TOGGLE,
     CB_PANE_RENAME,
     CB_PANE_SUBSCRIBE,
     CB_PANE_UNSUBSCRIBE,
 )
-from ccgram.handlers.pane_callbacks import (
+from ccgram.handlers.live.pane_callbacks import (
     apply_pane_rename,
     build_pane_buttons,
     build_pane_lifecycle_button,

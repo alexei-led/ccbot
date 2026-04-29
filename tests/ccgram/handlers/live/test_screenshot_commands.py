@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram.error import TelegramError
 
-from ccgram.handlers.screenshot_callbacks import live_command
+from ccgram.handlers.live.screenshot_callbacks import live_command
 
-_SC = "ccgram.handlers.screenshot_callbacks"
-_LV = "ccgram.handlers.live_view"
+_SC = "ccgram.handlers.live.screenshot_callbacks"
+_LV = "ccgram.handlers.live.live_view"
 
 
 def _make_update(
@@ -115,7 +115,7 @@ class TestLiveCommand:
     ) -> None:
         mock_config.is_user_allowed.return_value = True
 
-        from ccgram.handlers.live_view import LiveViewState
+        from ccgram.handlers.live.live_view import LiveViewState
 
         active_views[(100, 42)] = LiveViewState(
             chat_id=-100,
