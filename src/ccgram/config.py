@@ -185,6 +185,15 @@ class Config:
             "CCGRAM_HIDE_TOOL_CALLS", ""
         ).lower() in ("1", "true", "yes")
 
+        # Color mapping for the topic state emoji prefix.
+        # "system" (default): green=active, yellow=idle (system POV: green=working).
+        # "user": green=idle, yellow=active (user POV: green=ready for me).
+        # Invalid values fall back to "system".
+        raw_status_mode = os.getenv("CCGRAM_STATUS_MODE", "").strip().lower()
+        self.status_mode: str = (
+            raw_status_mode if raw_status_mode in ("system", "user") else "system"
+        )
+
         logger.debug(
             "Config initialized: dir=%s, token=%s..., allowed_users=%d, "
             "tmux_session=%s",

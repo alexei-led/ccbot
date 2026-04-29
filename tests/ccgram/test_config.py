@@ -142,6 +142,28 @@ class TestHideToolCalls:
 
 
 @pytest.mark.usefixtures("_base_env")
+class TestStatusMode:
+    def test_default_is_system(self, monkeypatch):
+        monkeypatch.delenv("CCGRAM_STATUS_MODE", raising=False)
+        assert Config().status_mode == "system"
+
+    @pytest.mark.parametrize("value", ["user", "USER", "User", " user "])
+    def test_user_mode_normalized(self, monkeypatch, value):
+        monkeypatch.setenv("CCGRAM_STATUS_MODE", value)
+        assert Config().status_mode == "user"
+
+    @pytest.mark.parametrize("value", ["system", "SYSTEM", " System "])
+    def test_system_mode_normalized(self, monkeypatch, value):
+        monkeypatch.setenv("CCGRAM_STATUS_MODE", value)
+        assert Config().status_mode == "system"
+
+    @pytest.mark.parametrize("value", ["", "garbage", "1", "off", "default"])
+    def test_invalid_falls_back_to_system(self, monkeypatch, value):
+        monkeypatch.setenv("CCGRAM_STATUS_MODE", value)
+        assert Config().status_mode == "system"
+
+
+@pytest.mark.usefixtures("_base_env")
 class TestMessagingConfig:
     def test_msg_auto_spawn_default_false(self):
         cfg = Config()

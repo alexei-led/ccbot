@@ -71,6 +71,7 @@ _FLAG_TO_ENV: list[tuple[str, str]] = [
     ("whisper_provider", "CCGRAM_WHISPER_PROVIDER"),
     ("ack_reaction", "CCGRAM_ACK_REACTION"),
     ("hide_tool_calls", "CCGRAM_HIDE_TOOL_CALLS"),
+    ("status_mode", "CCGRAM_STATUS_MODE"),
 ]
 
 
@@ -200,6 +201,13 @@ def apply_args_to_env(**kwargs: object) -> None:
     default=None,
     envvar="CCGRAM_HIDE_TOOL_CALLS",
     help="Hide tool_use/tool_result messages globally (per-window override via /toolcalls).",
+)
+@click.option(
+    "--status-mode",
+    type=click.Choice(["system", "user"], case_sensitive=False),
+    default=None,
+    envvar="CCGRAM_STATUS_MODE",
+    help="Topic emoji color scheme: 'system' (green=active) or 'user' (green=ready for me).",
 )
 def run_cmd(**kwargs: object) -> None:
     """Start the bot with optional overrides."""

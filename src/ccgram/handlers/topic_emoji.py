@@ -25,10 +25,13 @@ from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 
-# Emoji prefixes for session states
-EMOJI_ACTIVE = "\U0001f7e2"  # Green circle
-EMOJI_IDLE = "\U0001f7e1"  # Yellow circle (your turn / attention needed)
-EMOJI_DONE = "\u2705"  # Check mark (Claude exited normally)
+# Color circles used for the active/idle state prefix.
+# Which color maps to which state depends on ``config.status_mode`` (see
+# ``_state_emoji_map``). The constants are color-named (not state-named) so
+# that ``strip_emoji_prefix`` and tests work regardless of mode.
+EMOJI_GREEN_CIRCLE = "\U0001f7e2"
+EMOJI_YELLOW_CIRCLE = "\U0001f7e1"
+EMOJI_DONE = "\u2705"  # Check mark (agent exited normally)
 EMOJI_DEAD = "\U0001f4a5"  # Collision / crash
 EMOJI_YOLO = "\U0001f3b2"  # Dice (risk/gamble — auto-approve mode)
 EMOJI_RC = "\U0001f4e1"  # Satellite dish (Remote Control active)
@@ -36,6 +39,34 @@ _EMOJI_DEAD_OLD = (
     "\u26ab",
     "\u274c",
 )  # Legacy dead emoji (black circle pre-2026-02, cross mark pre-2026-03)
+
+# Backward-compatible aliases — original (system-mode) defaults.
+EMOJI_ACTIVE = EMOJI_GREEN_CIRCLE
+EMOJI_IDLE = EMOJI_YELLOW_CIRCLE
+
+# State → emoji mapping.
+#   system mode (default): green=active (working), yellow=idle (paused).
+#   user mode:             green=idle (waiting for me), yellow=active (busy).
+_STATE_EMOJI_SYSTEM: dict[str, str] = {
+    "active": EMOJI_GREEN_CIRCLE,
+    "idle": EMOJI_YELLOW_CIRCLE,
+    "done": EMOJI_DONE,
+    "dead": EMOJI_DEAD,
+}
+_STATE_EMOJI_USER: dict[str, str] = {
+    "active": EMOJI_YELLOW_CIRCLE,
+    "idle": EMOJI_GREEN_CIRCLE,
+    "done": EMOJI_DONE,
+    "dead": EMOJI_DEAD,
+}
+
+
+def _state_emoji_map() -> dict[str, str]:
+    """Return the active state→emoji table for the configured status mode."""
+    from ..config import config
+
+    return _STATE_EMOJI_USER if config.status_mode == "user" else _STATE_EMOJI_SYSTEM
+
 
 # Debounce: state must be stable for this many seconds before updating topic name.
 # Prevents rapid active↔idle toggling from flooding chat with rename messages.
@@ -123,12 +154,7 @@ def _compose_topic_name(
 ) -> str:
     """Build the full Telegram topic title from state badges and clean name."""
     parts: list[str] = []
-    emoji = {
-        "active": EMOJI_ACTIVE,
-        "idle": EMOJI_IDLE,
-        "done": EMOJI_DONE,
-        "dead": EMOJI_DEAD,
-    }.get(state, "")
+    emoji = _state_emoji_map().get(state, "")
     if emoji:
         parts.append(emoji)
     if rc_active:
@@ -280,13 +306,7 @@ async def update_topic_emoji(
     rc_active = _resolve_rc_mode(chat_id, thread_id)
     state_token = (state, approval_mode, rc_active)
 
-    emoji = {
-        "active": EMOJI_ACTIVE,
-        "idle": EMOJI_IDLE,
-        "done": EMOJI_DONE,
-        "dead": EMOJI_DEAD,
-    }.get(state, "")
-
+    emoji = _state_emoji_map().get(state, "")
     if not emoji:
         return
 

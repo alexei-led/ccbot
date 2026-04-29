@@ -12,7 +12,9 @@ from ccgram.handlers.topic_emoji import (
     EMOJI_ACTIVE,
     EMOJI_DEAD,
     EMOJI_DONE,
+    EMOJI_GREEN_CIRCLE,
     EMOJI_IDLE,
+    EMOJI_YELLOW_CIRCLE,
     EMOJI_YOLO,
     clear_topic_emoji_state,
     format_topic_name_for_mode,
@@ -615,3 +617,53 @@ class TestRemoteControlBadge:
             message_thread_id=42,
             name=f"{EMOJI_ACTIVE} {EMOJI_RC} {EMOJI_YOLO} myproject",
         )
+
+
+class TestStatusMode:
+    @pytest.fixture
+    def _user_mode(self, monkeypatch):
+        from ccgram.config import config
+
+        monkeypatch.setattr(config, "status_mode", "user")
+        yield
+
+    def test_default_uses_system_mode(self) -> None:
+        from ccgram.handlers.topic_emoji import _state_emoji_map
+
+        # Without any monkeypatch, default config.status_mode is "system".
+        table = _state_emoji_map()
+        assert table["active"] == EMOJI_GREEN_CIRCLE
+        assert table["idle"] == EMOJI_YELLOW_CIRCLE
+
+    def test_user_mode_swaps_active_idle_colors(self, _user_mode) -> None:
+        from ccgram.handlers.topic_emoji import _state_emoji_map
+
+        table = _state_emoji_map()
+        assert table["active"] == EMOJI_YELLOW_CIRCLE
+        assert table["idle"] == EMOJI_GREEN_CIRCLE
+        # done/dead are unchanged across modes.
+        assert table["done"] == EMOJI_DONE
+        assert table["dead"] == EMOJI_DEAD
+
+    async def test_user_mode_emits_yellow_for_active(self, _user_mode) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "active", "myproject")
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_YELLOW_CIRCLE} myproject",
+        )
+
+    async def test_user_mode_emits_green_for_idle(self, _user_mode) -> None:
+        bot = AsyncMock()
+        await _debounced_update(bot, -100, 42, "idle", "myproject")
+        bot.edit_forum_topic.assert_called_once_with(
+            chat_id=-100,
+            message_thread_id=42,
+            name=f"{EMOJI_GREEN_CIRCLE} myproject",
+        )
+
+    def test_strip_handles_both_modes(self) -> None:
+        # Whichever mode wrote the prefix, both colors are always strippable.
+        assert strip_emoji_prefix(f"{EMOJI_GREEN_CIRCLE} x") == "x"
+        assert strip_emoji_prefix(f"{EMOJI_YELLOW_CIRCLE} x") == "x"
