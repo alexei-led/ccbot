@@ -4,7 +4,7 @@ import pytest
 from telegram import ReactionTypeEmoji
 from telegram.error import BadRequest, TelegramError
 
-from ccgram.handlers import message_sender
+from ccgram.handlers.messaging_pipeline import message_sender
 from ccgram.handlers.reactions import (
     ALLOWED_REACTIONS,
     REACT_DONE,

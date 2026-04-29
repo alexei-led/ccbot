@@ -19,7 +19,7 @@ from ..user_preferences import user_preferences
 from ..thread_router import thread_router
 from ..telegram_sender import split_message
 from .callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
-from .message_sender import safe_edit, safe_reply, safe_send
+from .messaging_pipeline.message_sender import safe_edit, safe_reply, safe_send
 
 logger = structlog.get_logger()
 

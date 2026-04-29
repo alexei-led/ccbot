@@ -33,7 +33,7 @@ from .callback_data import (
     CB_SEND_UP,
 )
 from .callback_helpers import get_thread_id
-from .message_sender import safe_reply, safe_send
+from .messaging_pipeline.message_sender import safe_reply, safe_send
 from .send_security import is_excluded_dir, validate_sendable
 from .user_state import (
     SEND_CWD_KEY,

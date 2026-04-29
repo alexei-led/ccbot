@@ -38,7 +38,7 @@ from .callback_data import (
 from .callback_helpers import user_owns_window
 from .callback_registry import register
 from .cleanup import clear_topic_state
-from .message_sender import safe_edit, safe_reply
+from .messaging_pipeline.message_sender import safe_edit, safe_reply
 
 logger = structlog.get_logger()
 

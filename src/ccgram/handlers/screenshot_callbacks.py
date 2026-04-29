@@ -367,7 +367,7 @@ async def screenshot_command(
     """Capture and send a terminal screenshot for the current topic."""
     from ..config import config
     from ..utils import handle_general_topic_message, is_general_topic
-    from .message_sender import safe_reply
+    from .messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -435,7 +435,7 @@ async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
         is_live,
         start_live_view,
     )
-    from .message_sender import safe_reply
+    from .messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
@@ -512,7 +512,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     from ..config import config
     from ..utils import handle_general_topic_message, is_general_topic
     from ..window_state_store import window_store
-    from .message_sender import safe_reply
+    from .messaging_pipeline.message_sender import safe_reply
     from .pane_callbacks import build_pane_buttons, build_pane_lifecycle_button
 
     user = update.effective_user

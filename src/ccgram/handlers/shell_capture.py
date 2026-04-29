@@ -28,7 +28,7 @@ from telegram import Bot
 from ..providers.shell import match_prompt
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
-from .message_sender import (
+from .messaging_pipeline.message_sender import (
     REACT_DONE,
     REACT_FAIL,
     edit_with_fallback,

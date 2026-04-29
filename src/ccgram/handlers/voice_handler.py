@@ -19,7 +19,7 @@ from ..thread_router import thread_router
 from ..whisper import get_transcriber
 from ..whisper.base import TranscriptionResult, WhisperTranscriber
 from .callback_helpers import get_thread_id
-from .message_sender import safe_reply
+from .messaging_pipeline.message_sender import safe_reply
 from .user_state import VOICE_PENDING
 
 logger = structlog.get_logger()

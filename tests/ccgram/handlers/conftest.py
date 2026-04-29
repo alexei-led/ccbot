@@ -23,7 +23,9 @@ def _disable_send_rate_limit(monkeypatch):
     Tests in TestRateLimitSend re-patch the interval inline when they
     need to assert on the wait calculation.
     """
-    monkeypatch.setattr("ccgram.handlers.message_sender.MESSAGE_SEND_INTERVAL", 0)
+    monkeypatch.setattr(
+        "ccgram.handlers.messaging_pipeline.message_sender.MESSAGE_SEND_INTERVAL", 0
+    )
 
 
 @pytest.fixture(autouse=True)

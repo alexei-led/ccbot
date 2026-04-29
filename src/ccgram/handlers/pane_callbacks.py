@@ -37,7 +37,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id, user_owns_window
 from .callback_registry import register
-from .message_sender import safe_reply
+from .messaging_pipeline.message_sender import safe_reply
 from .user_state import (
     PANE_RENAME_PANE_ID,
     PANE_RENAME_THREAD_ID,

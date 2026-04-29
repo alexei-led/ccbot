@@ -40,8 +40,14 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import REACT_RUNNING, react, safe_edit, safe_reply, safe_send
-from .message_queue import enqueue_status_update
+from .messaging_pipeline.message_sender import (
+    REACT_RUNNING,
+    react,
+    safe_edit,
+    safe_reply,
+    safe_send,
+)
+from .messaging_pipeline.message_queue import enqueue_status_update
 from .polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 

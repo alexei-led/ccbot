@@ -1,6 +1,6 @@
 import pytest
 
-from ccgram.handlers.message_routing import _MIN_THINKING_LENGTH
+from ccgram.handlers.messaging_pipeline.message_routing import _MIN_THINKING_LENGTH
 
 
 def _should_skip_thinking(text: str | None) -> bool:

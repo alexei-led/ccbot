@@ -30,7 +30,7 @@ from ..session import session_manager
 from ..session_monitor import NewWindowEvent
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
-from .message_sender import is_thread_gone
+from .messaging_pipeline.message_sender import is_thread_gone
 from .topic_emoji import strip_emoji_prefix
 
 logger = structlog.get_logger()

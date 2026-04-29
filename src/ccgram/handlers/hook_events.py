@@ -25,7 +25,7 @@ from .interactive_ui import (
     handle_interactive_ui,
     set_interactive_mode,
 )
-from .message_queue import enqueue_status_update
+from .messaging_pipeline.message_queue import enqueue_status_update
 from .polling_strategies import reset_window_polling_state
 from .topic_emoji import update_topic_emoji
 
@@ -257,7 +257,7 @@ async def _handle_teammate_idle(event: HookEvent, bot: Bot) -> None:
 
 async def _handle_stop_failure(event: HookEvent, bot: Bot) -> None:
     """Handle a StopFailure event — alert on API error termination."""
-    from .message_sender import rate_limit_send_message
+    from .messaging_pipeline.message_sender import rate_limit_send_message
 
     users = _resolve_users_for_window_key(event.window_key)
     if not users:

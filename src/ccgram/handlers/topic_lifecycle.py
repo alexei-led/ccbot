@@ -25,7 +25,7 @@ from ..utils import log_throttled
 from ..window_resolver import is_foreign_window
 from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .cleanup import clear_topic_state
-from .message_sender import is_thread_gone
+from .messaging_pipeline.message_sender import is_thread_gone
 from .polling_strategies import (
     lifecycle_strategy,
     terminal_poll_state,

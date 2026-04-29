@@ -84,7 +84,7 @@ async def recall_command(
     from ..config import config
     from ..utils import handle_general_topic_message, is_general_topic
     from .callback_helpers import get_thread_id
-    from .message_sender import safe_reply
+    from .messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):

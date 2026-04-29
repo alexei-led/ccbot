@@ -34,7 +34,7 @@ from ..spawn_request import (
 from ..tmux_manager import tmux_manager
 from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from .callback_registry import register
-from .message_sender import rate_limit_send_message
+from .messaging_pipeline.message_sender import rate_limit_send_message
 
 if TYPE_CHECKING:
     from telegram import Bot

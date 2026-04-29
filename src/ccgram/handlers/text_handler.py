@@ -29,9 +29,9 @@ from .directory_browser import (
     clear_window_picker_state,
 )
 from .interactive_ui import get_interactive_window, handle_interactive_ui
-from .message_queue import enqueue_status_update
+from .messaging_pipeline.message_queue import enqueue_status_update
 from .pane_callbacks import apply_pane_rename
-from .message_sender import (
+from .messaging_pipeline.message_sender import (
     ack_reaction,
     edit_with_fallback,
     rate_limit_send_message,

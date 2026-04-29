@@ -135,7 +135,7 @@ class TestSessionMapCorruptionGuard:
 
 class TestDeadWorkerRespawn:
     async def test_dead_worker_is_respawned(self):
-        from ccgram.handlers.message_queue import (
+        from ccgram.handlers.messaging_pipeline.message_queue import (
             _message_queues,
             _queue_locks,
             _queue_workers,
@@ -176,7 +176,7 @@ class TestRateLimitSendLocking:
     async def test_concurrent_sends_serialized(self):
         import time
 
-        from ccgram.handlers.message_sender import (
+        from ccgram.handlers.messaging_pipeline.message_sender import (
             MESSAGE_SEND_INTERVAL,
             _last_send_time,
             _rate_limit_locks,

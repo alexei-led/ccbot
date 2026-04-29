@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.message_routing import handle_new_message
+from ccgram.handlers.messaging_pipeline.message_routing import handle_new_message
 from ccgram.session_monitor import NewMessage
 
 
@@ -37,31 +37,40 @@ def bot() -> MagicMock:
 @pytest.fixture
 def mock_deps():
     with (
-        patch("ccgram.handlers.message_routing.session_query") as sq,
-        patch("ccgram.handlers.message_routing.window_query") as wq,
+        patch("ccgram.handlers.messaging_pipeline.message_routing.session_query") as sq,
+        patch("ccgram.handlers.messaging_pipeline.message_routing.window_query") as wq,
         patch(
-            "ccgram.handlers.message_routing.enqueue_content_message",
+            "ccgram.handlers.messaging_pipeline.message_routing.enqueue_content_message",
             new_callable=AsyncMock,
         ) as eq,
-        patch("ccgram.handlers.message_routing.get_message_queue") as gmq,
         patch(
-            "ccgram.handlers.message_routing.handle_interactive_ui",
+            "ccgram.handlers.messaging_pipeline.message_routing.get_message_queue"
+        ) as gmq,
+        patch(
+            "ccgram.handlers.messaging_pipeline.message_routing.handle_interactive_ui",
             new=AsyncMock(return_value=False),
         ) as hui,
-        patch("ccgram.handlers.message_routing.set_interactive_mode") as sim,
-        patch("ccgram.handlers.message_routing.clear_interactive_mode") as cim,
         patch(
-            "ccgram.handlers.message_routing.clear_interactive_msg",
+            "ccgram.handlers.messaging_pipeline.message_routing.set_interactive_mode"
+        ) as sim,
+        patch(
+            "ccgram.handlers.messaging_pipeline.message_routing.clear_interactive_mode"
+        ) as cim,
+        patch(
+            "ccgram.handlers.messaging_pipeline.message_routing.clear_interactive_msg",
             new_callable=AsyncMock,
         ) as cmsg,
         patch(
-            "ccgram.handlers.message_routing.get_interactive_msg_id", return_value=None
+            "ccgram.handlers.messaging_pipeline.message_routing.get_interactive_msg_id",
+            return_value=None,
         ) as gimid,
         patch(
-            "ccgram.handlers.message_routing.build_response_parts",
+            "ccgram.handlers.messaging_pipeline.message_routing.build_response_parts",
             return_value=["parts"],
         ) as brp,
-        patch("ccgram.handlers.message_routing.user_preferences") as up,
+        patch(
+            "ccgram.handlers.messaging_pipeline.message_routing.user_preferences"
+        ) as up,
     ):
         sq.find_users_for_session.return_value = [(100, "@5", 42)]
         sq.resolve_session_for_window = AsyncMock(return_value=None)

@@ -24,7 +24,7 @@ from ..window_query import view_window
 from ..tmux_manager import send_to_window
 from ..thread_router import thread_router
 from .callback_helpers import get_thread_id
-from .message_sender import ack_reaction, safe_reply
+from .messaging_pipeline.message_sender import ack_reaction, safe_reply
 
 logger = structlog.get_logger()
 

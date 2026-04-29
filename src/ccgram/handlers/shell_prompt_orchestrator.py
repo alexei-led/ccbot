@@ -22,7 +22,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
 from .callback_registry import register
-from .message_sender import safe_send
+from .messaging_pipeline.message_sender import safe_send
 
 if TYPE_CHECKING:
     from telegram import Update

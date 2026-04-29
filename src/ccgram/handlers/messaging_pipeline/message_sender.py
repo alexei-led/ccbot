@@ -22,9 +22,9 @@ from typing import Any
 from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message, ReactionTypeEmoji
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
-from ..entity_formatting import convert_to_entities
-from ..telegram_sender import TELEGRAM_MAX_MESSAGE_LENGTH
-from .reactions import (
+from ...entity_formatting import convert_to_entities
+from ...telegram_sender import TELEGRAM_MAX_MESSAGE_LENGTH
+from ..reactions import (
     ALLOWED_REACTIONS,
     REACT_DONE,
     REACT_FAIL,
@@ -307,7 +307,7 @@ async def edit_with_fallback(
 
 async def ack_reaction(bot: Bot, chat_id: int, message_id: int) -> None:
     """React to a message with the configured ack emoji, if enabled."""
-    from ..config import config
+    from ...config import config
 
     if not config.ack_reaction:
         return

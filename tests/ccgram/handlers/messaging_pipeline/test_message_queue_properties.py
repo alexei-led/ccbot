@@ -5,13 +5,13 @@ import asyncio
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from ccgram.handlers.message_queue import (
+from ccgram.handlers.messaging_pipeline.message_queue import (
     MERGE_MAX_LENGTH,
     _can_merge_tasks,
     _coalesce_status_updates,
     _merge_content_tasks,
 )
-from ccgram.handlers.message_task import (
+from ccgram.handlers.messaging_pipeline.message_task import (
     ContentTask,
     ContentType,
     MessageTask,

@@ -16,7 +16,7 @@ from ..tmux_manager import tmux_manager
 from .callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
 from .callback_registry import register
 from .history import send_history
-from .message_sender import safe_edit
+from .messaging_pipeline.message_sender import safe_edit
 
 logger = structlog.get_logger()
 

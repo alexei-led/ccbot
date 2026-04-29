@@ -12,10 +12,10 @@ from pathlib import Path
 import structlog
 from telegram import Bot
 
-from .. import session_query, window_query
-from ..user_preferences import user_preferences
-from ..session_monitor import NewMessage
-from .interactive_ui import (
+from ... import session_query, window_query
+from ...session_monitor import NewMessage
+from ...user_preferences import user_preferences
+from ..interactive_ui import (
     INTERACTIVE_TOOL_NAMES,
     clear_interactive_mode,
     clear_interactive_msg,
@@ -23,8 +23,8 @@ from .interactive_ui import (
     handle_interactive_ui,
     set_interactive_mode,
 )
+from ..response_builder import build_response_parts
 from .message_queue import enqueue_content_message, get_message_queue
-from .response_builder import build_response_parts
 
 logger = structlog.get_logger()
 

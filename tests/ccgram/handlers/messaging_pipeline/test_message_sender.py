@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 from telegram import Message
 from telegram.error import RetryAfter, TelegramError
 
-from ccgram.handlers.message_sender import (
+from ccgram.handlers.messaging_pipeline.message_sender import (
     MESSAGE_SEND_INTERVAL,
     _last_send_time,
     _send_with_fallback,
@@ -29,11 +29,14 @@ class TestRateLimitSend:
     def _real_send_interval(self, monkeypatch):
         # Conftest zeroes MESSAGE_SEND_INTERVAL for speed; restore the real
         # value here so wait-time assertions hold.
-        monkeypatch.setattr("ccgram.handlers.message_sender.MESSAGE_SEND_INTERVAL", 0.5)
+        monkeypatch.setattr(
+            "ccgram.handlers.messaging_pipeline.message_sender.MESSAGE_SEND_INTERVAL",
+            0.5,
+        )
 
     async def test_first_call_no_wait(self) -> None:
         with patch(
-            "ccgram.handlers.message_sender.asyncio.sleep",
+            "ccgram.handlers.messaging_pipeline.message_sender.asyncio.sleep",
             new_callable=AsyncMock,
             spec=asyncio.sleep,
         ) as mock_sleep:
@@ -44,7 +47,7 @@ class TestRateLimitSend:
         await rate_limit_send(123)
 
         with patch(
-            "ccgram.handlers.message_sender.asyncio.sleep",
+            "ccgram.handlers.messaging_pipeline.message_sender.asyncio.sleep",
             new_callable=AsyncMock,
             spec=asyncio.sleep,
         ) as mock_sleep:
@@ -57,7 +60,7 @@ class TestRateLimitSend:
         await rate_limit_send(1)
 
         with patch(
-            "ccgram.handlers.message_sender.asyncio.sleep",
+            "ccgram.handlers.messaging_pipeline.message_sender.asyncio.sleep",
             new_callable=AsyncMock,
             spec=asyncio.sleep,
         ) as mock_sleep:
@@ -79,7 +82,7 @@ class TestSendWithFallback:
     @pytest.fixture(autouse=True)
     def _instant_retry_sleep(self, monkeypatch):
         monkeypatch.setattr(
-            "ccgram.handlers.message_sender.asyncio.sleep",
+            "ccgram.handlers.messaging_pipeline.message_sender.asyncio.sleep",
             AsyncMock(),
         )
 

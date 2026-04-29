@@ -31,8 +31,12 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from .message_sender import edit_with_fallback, rate_limit_send
-from .message_task import StatusClearTask, StatusUpdateTask, thread_key
+from .messaging_pipeline.message_sender import edit_with_fallback, rate_limit_send
+from .messaging_pipeline.message_task import (
+    StatusClearTask,
+    StatusUpdateTask,
+    thread_key,
+)
 
 logger = structlog.get_logger()
 

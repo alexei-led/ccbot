@@ -30,7 +30,10 @@ class TestLiveCommand:
     @patch(f"{_SC}.tmux_manager")
     @patch(f"{_SC}.thread_router")
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_starts_live_view(
         self,
         mock_reply: AsyncMock,
@@ -65,7 +68,10 @@ class TestLiveCommand:
         mock_reply.assert_not_awaited()
 
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_unauthorized_silent(
         self,
         mock_reply: AsyncMock,
@@ -76,7 +82,10 @@ class TestLiveCommand:
         mock_reply.assert_not_awaited()
 
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_no_thread_replies_error(
         self,
         mock_reply: AsyncMock,
@@ -93,7 +102,10 @@ class TestLiveCommand:
     @patch(f"{_LV}._active_views", new_callable=dict)
     @patch(f"{_SC}.thread_router")
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_already_live_returns_message(
         self,
         mock_reply: AsyncMock,
@@ -121,7 +133,10 @@ class TestLiveCommand:
 
     @patch(f"{_SC}.thread_router")
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_unbound_topic_replies(
         self,
         mock_reply: AsyncMock,
@@ -140,7 +155,10 @@ class TestLiveCommand:
     @patch(f"{_SC}.tmux_manager")
     @patch(f"{_SC}.thread_router")
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_dead_window_replies(
         self,
         mock_reply: AsyncMock,
@@ -163,7 +181,10 @@ class TestLiveCommand:
     @patch(f"{_SC}.tmux_manager")
     @patch(f"{_SC}.thread_router")
     @patch("ccgram.config.config")
-    @patch("ccgram.handlers.message_sender.safe_reply", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_sender.safe_reply",
+        new_callable=AsyncMock,
+    )
     async def test_send_photo_failure_replies(
         self,
         mock_reply: AsyncMock,

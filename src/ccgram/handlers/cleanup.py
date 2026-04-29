@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 from ..utils import log_throttle_reset
 from .interactive_ui import clear_interactive_msg
-from .message_queue import enqueue_status_update
+from .messaging_pipeline.message_queue import enqueue_status_update
 from .status_bubble import clear_status_msg_info
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, VOICE_PENDING
 
@@ -119,8 +119,8 @@ async def unbind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     from ..thread_router import thread_router
     from ..utils import handle_general_topic_message, is_general_topic
     from .callback_helpers import get_thread_id
-    from .message_queue import enqueue_status_update
-    from .message_sender import safe_reply
+    from .messaging_pipeline.message_queue import enqueue_status_update
+    from .messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):

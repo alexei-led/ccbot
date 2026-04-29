@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ccgram.expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
-from ccgram.handlers.message_task import StatusClearTask, StatusUpdateTask
+from ccgram.handlers.messaging_pipeline.message_task import (
+    StatusClearTask,
+    StatusUpdateTask,
+)
 from ccgram.handlers.status_bubble import (
     _status_drafts,
     _status_msg_info,
@@ -307,7 +310,7 @@ class TestProcessStatusUpdate:
 
     async def test_uses_thread_key_for_none_thread(self):
         task = StatusUpdateTask(window_id=WINDOW_ID, text="running", thread_id=None)
-        from ccgram.handlers.message_task import thread_key
+        from ccgram.handlers.messaging_pipeline.message_task import thread_key
 
         assert thread_key(task.thread_id) == 0
 

@@ -68,7 +68,7 @@ from .handlers.send_command import send_command
 from .handlers.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
 from .handlers.command_history import recall_command
-from .handlers.message_routing import handle_new_message
+from .handlers.messaging_pipeline.message_routing import handle_new_message
 from .handlers.screenshot_callbacks import (
     live_command,
     panes_command,
@@ -79,10 +79,10 @@ from .handlers.history import send_history
 from .handlers.sessions_dashboard import sessions_command
 from .handlers.sync_command import sync_command
 from .handlers.upgrade import upgrade_command
-from .handlers.message_queue import (
+from .handlers.messaging_pipeline.message_queue import (
     shutdown_workers,
 )
-from .handlers.message_sender import safe_reply
+from .handlers.messaging_pipeline.message_sender import safe_reply
 from .handlers.polling_coordinator import status_poll_loop
 from .handlers.file_handler import handle_document_message, handle_photo_message
 from .handlers.voice_handler import handle_voice_message

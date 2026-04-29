@@ -21,7 +21,7 @@ from ..config import config
 from ..session import session_manager
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
-from .message_sender import safe_reply
+from .messaging_pipeline.message_sender import safe_reply
 from .recovery_callbacks import RecoveryBanner, render_banner
 from .user_state import PENDING_THREAD_ID, RECOVERY_WINDOW_ID
 

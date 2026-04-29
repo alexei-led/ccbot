@@ -341,13 +341,13 @@ This keeps each task's diff small.
 - Modify: every importer of those modules (grep + rewrite).
 - Create: `tests/ccgram/handlers/messaging_pipeline/` (mirror layout).
 
-- [ ] create subpackage skeleton with `__init__.py` re-exporting current public API
-- [ ] move five modules into the subpackage (git mv for history preservation)
-- [ ] rewrite all import sites: `from .message_queue` → `from .messaging_pipeline.message_queue` (and equivalents from outside `handlers/`)
-- [ ] move corresponding tests from `tests/ccgram/handlers/` into mirror layout
-- [ ] verify `make typecheck` passes (0 errors)
-- [ ] verify `make test` passes (no behavior change expected)
-- [ ] commit "refactor(handlers): group messaging_pipeline subpackage"
+- [x] create subpackage skeleton with `__init__.py` re-exporting current public API
+- [x] move five modules into the subpackage (git mv for history preservation)
+- [x] rewrite all import sites: `from .message_queue` → `from .messaging_pipeline.message_queue` (and equivalents from outside `handlers/`)
+- [x] move corresponding tests from `tests/ccgram/handlers/` into mirror layout
+- [x] verify `make typecheck` passes (0 errors)
+- [x] verify `make test` passes (no behavior change expected)
+- [x] commit "refactor(handlers): group messaging_pipeline subpackage"
 
 #### Task F1.2: Create `handlers/polling/` subpackage
 

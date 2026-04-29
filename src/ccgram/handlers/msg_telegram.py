@@ -30,7 +30,11 @@ from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import tmux_session_name
 from .callback_registry import register
-from .message_sender import REACT_INBOX, rate_limit_send_message, react
+from .messaging_pipeline.message_sender import (
+    REACT_INBOX,
+    rate_limit_send_message,
+    react,
+)
 
 if TYPE_CHECKING:
     from ..mailbox import Message

@@ -42,7 +42,7 @@ from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import task_done_callback
 from .callback_helpers import get_thread_id as _get_thread_id
-from .message_sender import safe_reply
+from .messaging_pipeline.message_sender import safe_reply
 
 logger = structlog.get_logger()
 
@@ -537,7 +537,7 @@ async def _handle_clear_command(
         return
     logger.info("Clearing session for window %s after /clear", display)
     window_store.clear_window_session(window_id)
-    from .message_queue import enqueue_status_update
+    from .messaging_pipeline.message_queue import enqueue_status_update
     from .polling_strategies import reset_window_polling_state
 
     await enqueue_status_update(

@@ -32,12 +32,12 @@ from .interactive_ui import (
     handle_interactive_ui,
     set_interactive_mode,
 )
-from .message_queue import (
+from .messaging_pipeline.message_queue import (
     clear_tool_msg_ids_for_topic,
     enqueue_status_update,
     get_message_queue,
 )
-from .message_sender import rate_limit_send_message
+from .messaging_pipeline.message_sender import rate_limit_send_message
 from .polling_strategies import (
     STARTUP_TIMEOUT,
     PaneTransition,
@@ -151,7 +151,7 @@ async def _forward_pane_output(
     pane's friendly name when one is set.
     """
     from ..window_state_store import window_store
-    from .message_sender import safe_send
+    from .messaging_pipeline.message_sender import safe_send
 
     pane = window_store.get_pane(window_id, pane_id)
     if pane is None or not pane.subscribed:
@@ -226,7 +226,7 @@ async def _notify_pane_lifecycle(
     """
     from ..config import config
     from ..window_state_store import window_store
-    from .message_sender import safe_send
+    from .messaging_pipeline.message_sender import safe_send
 
     enabled = window_store.get_pane_lifecycle_notify(
         window_id, config.pane_lifecycle_notify

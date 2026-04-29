@@ -637,7 +637,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -658,7 +658,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -684,7 +684,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=True),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -703,7 +703,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=True),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -729,7 +729,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -758,7 +758,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
                 side_effect=TelegramError("boom"),
             ),
@@ -780,7 +780,7 @@ class TestPaneLifecycleNotify:
                 MagicMock(pane_lifecycle_notify=True),
             ),
             patch(
-                "ccgram.handlers.message_sender.safe_send",
+                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):

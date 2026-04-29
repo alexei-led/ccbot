@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ccgram.handlers.message_task import ContentTask
-from ccgram.handlers.tool_batch import (
+from ccgram.handlers.messaging_pipeline.message_task import ContentTask
+from ccgram.handlers.messaging_pipeline.tool_batch import (
     BATCH_MAX_ENTRIES,
     BATCH_MAX_LENGTH,
     ToolBatch,
@@ -130,7 +130,7 @@ class TestIsBatchEligible:
     def test_tool_types_eligible_with_batched_window(
         self, content_type: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from ccgram.handlers import tool_batch
+        from ccgram.handlers.messaging_pipeline import tool_batch
 
         monkeypatch.setattr(tool_batch, "get_batch_mode", lambda _wid: "batched")
         task = self._make_task(content_type=content_type)
@@ -140,7 +140,7 @@ class TestIsBatchEligible:
     def test_non_tool_types_not_eligible(
         self, content_type: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from ccgram.handlers import tool_batch
+        from ccgram.handlers.messaging_pipeline import tool_batch
 
         monkeypatch.setattr(tool_batch, "get_batch_mode", lambda _wid: "batched")
         task = self._make_task(content_type=content_type)
@@ -149,14 +149,14 @@ class TestIsBatchEligible:
     def test_not_eligible_when_batch_mode_disabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from ccgram.handlers import tool_batch
+        from ccgram.handlers.messaging_pipeline import tool_batch
 
         monkeypatch.setattr(tool_batch, "get_batch_mode", lambda _wid: "individual")
         task = self._make_task(content_type="tool_use")
         assert is_batch_eligible(task) is False
 
     def test_window_id_derived_from_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from ccgram.handlers import tool_batch
+        from ccgram.handlers.messaging_pipeline import tool_batch
 
         captured: list[str] = []
 
@@ -222,7 +222,7 @@ class TestProcessToolEventSignature:
 
 class TestNoImportFromMessageQueue:
     def test_no_import_from_message_queue(self) -> None:
-        import ccgram.handlers.tool_batch as mod
+        import ccgram.handlers.messaging_pipeline.tool_batch as mod
 
         source = inspect.getsource(mod)
         tree = ast.parse(source)
@@ -248,16 +248,17 @@ class TestDraftStreamIntegration:
         _active_batches.clear()
         # Avoid real wall-clock rate-limiting in unit tests.
         monkeypatch.setattr(
-            "ccgram.handlers.tool_batch._rate_limit_chat",
+            "ccgram.handlers.messaging_pipeline.tool_batch._rate_limit_chat",
             AsyncMock(return_value=None),
         )
         monkeypatch.setattr(
-            "ccgram.handlers.tool_batch.thread_router",
+            "ccgram.handlers.messaging_pipeline.tool_batch.thread_router",
             MagicMock(resolve_chat_id=MagicMock(return_value=42)),
         )
         # No status bubble to clear.
         monkeypatch.setattr(
-            "ccgram.handlers.tool_batch.get_batch_mode", lambda _wid: "batched"
+            "ccgram.handlers.messaging_pipeline.tool_batch.get_batch_mode",
+            lambda _wid: "batched",
         )
         yield
         _active_batches.clear()

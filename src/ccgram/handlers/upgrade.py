@@ -15,7 +15,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..config import config
-from .message_sender import safe_edit, safe_reply
+from .messaging_pipeline.message_sender import safe_edit, safe_reply
 
 logger = structlog.get_logger()
 

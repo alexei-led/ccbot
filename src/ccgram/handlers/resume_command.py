@@ -40,7 +40,7 @@ from ..utils import read_session_metadata_from_jsonl
 from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import safe_edit, safe_reply
+from .messaging_pipeline.message_sender import safe_edit, safe_reply
 from .topic_emoji import format_topic_name_for_mode
 from .user_state import RESUME_SESSIONS
 

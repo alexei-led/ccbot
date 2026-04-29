@@ -682,7 +682,7 @@ class TestHandleStopFailure:
                 return_value=-100,
             ),
             patch(
-                "ccgram.handlers.message_sender.rate_limit_send_message"
+                "ccgram.handlers.messaging_pipeline.message_sender.rate_limit_send_message"
             ) as mock_send,
         ):
             event = _make_event(
@@ -701,7 +701,7 @@ class TestHandleStopFailure:
         )
         bot = AsyncMock(spec=Bot)
         with patch(
-            "ccgram.handlers.message_sender.rate_limit_send_message"
+            "ccgram.handlers.messaging_pipeline.message_sender.rate_limit_send_message"
         ) as mock_send:
             event = _make_event(event_type="StopFailure", data={"error": "unknown"})
             await dispatch_hook_event(event, bot)

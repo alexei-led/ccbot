@@ -28,7 +28,7 @@ from ..screenshot import text_to_image
 from ..tmux_manager import tmux_manager
 from ..topic_state_registry import topic_state
 from .callback_data import CB_KEYS_PREFIX, CB_LIVE_STOP
-from .message_sender import rate_limit_send
+from .messaging_pipeline.message_sender import rate_limit_send
 
 logger = structlog.get_logger()
 

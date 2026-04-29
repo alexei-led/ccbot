@@ -45,7 +45,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id, parse_target, user_owns_window
 from .callback_registry import register
-from .message_sender import react
+from .messaging_pipeline.message_sender import react
 from .screenshot_callbacks import (
     KEY_LABELS,
     KEYS_SEND_MAP,

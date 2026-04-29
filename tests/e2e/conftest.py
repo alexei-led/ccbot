@@ -232,7 +232,7 @@ async def e2e_app(e2e_state_dir, e2e_tmux, intercepted_calls, monkeypatch):
         "ccgram.handlers.directory_callbacks",
         "ccgram.handlers.directory_browser",
         "ccgram.handlers.polling_coordinator",
-        "ccgram.handlers.message_queue",
+        "ccgram.handlers.messaging_pipeline.message_queue",
         "ccgram.handlers.recovery_callbacks",
         "ccgram.handlers.sessions_dashboard",
         "ccgram.handlers.screenshot_callbacks",

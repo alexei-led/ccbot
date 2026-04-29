@@ -19,7 +19,12 @@ from ..thread_router import thread_router
 from .callback_data import CB_VOICE
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import REACT_DONE, REACT_SEEN, ack_reaction, react
+from .messaging_pipeline.message_sender import (
+    REACT_DONE,
+    REACT_SEEN,
+    ack_reaction,
+    react,
+)
 from .user_state import VOICE_PENDING
 
 logger = structlog.get_logger()

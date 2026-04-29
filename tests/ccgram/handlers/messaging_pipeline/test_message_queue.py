@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.message_queue import (
+from ccgram.handlers.messaging_pipeline.message_queue import (
     MERGE_MAX_LENGTH,
     _can_merge_tasks,
     _coalesce_status_updates,
@@ -16,7 +16,7 @@ from ccgram.handlers.message_queue import (
     get_or_create_queue,
     shutdown_workers,
 )
-from ccgram.handlers.message_task import (
+from ccgram.handlers.messaging_pipeline.message_task import (
     ContentTask,
     ContentType,
     StatusClearTask,
@@ -80,7 +80,10 @@ def _clear_task(
 class TestGetOrCreateQueue:
     async def test_creates_queue_and_worker(self, bot):
         user_id = 99990
-        from ccgram.handlers.message_queue import _message_queues, _queue_workers
+        from ccgram.handlers.messaging_pipeline.message_queue import (
+            _message_queues,
+            _queue_workers,
+        )
 
         _message_queues.pop(user_id, None)
         _queue_workers.pop(user_id, None)
@@ -94,7 +97,10 @@ class TestGetOrCreateQueue:
 
     async def test_reuses_existing_queue(self, bot):
         user_id = 99991
-        from ccgram.handlers.message_queue import _message_queues, _queue_workers
+        from ccgram.handlers.messaging_pipeline.message_queue import (
+            _message_queues,
+            _queue_workers,
+        )
 
         _message_queues.pop(user_id, None)
         _queue_workers.pop(user_id, None)
@@ -202,10 +208,17 @@ class TestCoalesceStatusUpdates:
 
 class TestDispatch:
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=False)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.flush_if_active",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=False,
+    )
     async def test_content_task_dispatch(
         self, mock_eligible, mock_flush, mock_process, bot, queue, lock
     ):
@@ -216,10 +229,17 @@ class TestDispatch:
         mock_process.assert_awaited_once()
 
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.process_tool_event",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=True,
+    )
     async def test_content_task_batch_eligible(
         self, mock_eligible, mock_tool_event, mock_process, bot, queue, lock
     ):
@@ -231,10 +251,17 @@ class TestDispatch:
         mock_process.assert_not_awaited()
 
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.process_tool_event",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=True,
+    )
     async def test_content_task_batch_with_followup(
         self, mock_eligible, mock_tool_event, mock_process, bot, queue, lock
     ):
@@ -245,10 +272,12 @@ class TestDispatch:
         mock_process.assert_awaited_once_with(bot, 1, followup)
 
     @patch(
-        "ccgram.handlers.message_queue.process_status_update", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue.process_status_update",
+        new_callable=AsyncMock,
     )
     @patch(
-        "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._flush_batch_for_task",
+        new_callable=AsyncMock,
     )
     async def test_status_update_dispatch(
         self, mock_flush, mock_status, bot, queue, lock
@@ -259,9 +288,13 @@ class TestDispatch:
         mock_flush.assert_awaited_once_with(1, st, bot)
         mock_status.assert_awaited_once()
 
-    @patch("ccgram.handlers.message_queue.process_status_clear", new_callable=AsyncMock)
     @patch(
-        "ccgram.handlers.message_queue._flush_batch_for_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue.process_status_clear",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue._flush_batch_for_task",
+        new_callable=AsyncMock,
     )
     async def test_status_clear_dispatch(
         self, mock_flush, mock_clear, bot, queue, lock
@@ -283,7 +316,7 @@ class TestNoBackEdgeImports:
         return modules
 
     def test_tool_batch_does_not_import_message_queue(self):
-        src = Path("src/ccgram/handlers/tool_batch.py")
+        src = Path("src/ccgram/handlers/messaging_pipeline/tool_batch.py")
         imports = self._get_imports(src)
         assert not any("message_queue" in m for m in imports), (
             f"tool_batch.py must not import from message_queue: {imports}"
@@ -299,7 +332,7 @@ class TestNoBackEdgeImports:
 
 class TestMessageQueueWorker:
     async def test_telegram_error_calls_task_done(self, bot):
-        from ccgram.handlers.message_queue import (
+        from ccgram.handlers.messaging_pipeline.message_queue import (
             _message_queue_worker,
             _message_queues,
             _queue_locks,
@@ -314,7 +347,7 @@ class TestMessageQueueWorker:
         worker = asyncio.create_task(_message_queue_worker(bot, user_id))
         try:
             with patch(
-                "ccgram.handlers.message_queue._dispatch",
+                "ccgram.handlers.messaging_pipeline.message_queue._dispatch",
                 new_callable=AsyncMock,
                 side_effect=TelegramError("fail"),
             ):
@@ -327,7 +360,7 @@ class TestMessageQueueWorker:
             _queue_locks.pop(user_id, None)
 
     async def test_oserror_calls_task_done(self, bot):
-        from ccgram.handlers.message_queue import (
+        from ccgram.handlers.messaging_pipeline.message_queue import (
             _message_queue_worker,
             _message_queues,
             _queue_locks,
@@ -341,7 +374,7 @@ class TestMessageQueueWorker:
         worker = asyncio.create_task(_message_queue_worker(bot, user_id))
         try:
             with patch(
-                "ccgram.handlers.message_queue._dispatch",
+                "ccgram.handlers.messaging_pipeline.message_queue._dispatch",
                 new_callable=AsyncMock,
                 side_effect=OSError("disk error"),
             ):
@@ -354,7 +387,7 @@ class TestMessageQueueWorker:
             _queue_locks.pop(user_id, None)
 
     async def test_cancelled_error_exits_cleanly(self, bot):
-        from ccgram.handlers.message_queue import (
+        from ccgram.handlers.messaging_pipeline.message_queue import (
             _message_queue_worker,
             _message_queues,
             _queue_locks,
@@ -380,12 +413,25 @@ class TestMessageQueueWorker:
 
 class TestToolCallsGate:
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.process_tool_event",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.flush_if_active",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=True,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+        return_value=True,
+    )
     async def test_hidden_suppresses_tool_use(
         self,
         mock_hidden,
@@ -405,12 +451,25 @@ class TestToolCallsGate:
         mock_flush.assert_not_awaited()
 
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.process_tool_event",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.flush_if_active",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=True,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+        return_value=True,
+    )
     async def test_hidden_suppresses_tool_result(
         self,
         mock_hidden,
@@ -429,11 +488,21 @@ class TestToolCallsGate:
         mock_process.assert_not_awaited()
 
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=False)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.process_tool_event",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=True,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+        return_value=False,
+    )
     async def test_shown_allows_tool_use(
         self,
         mock_hidden,
@@ -451,11 +520,21 @@ class TestToolCallsGate:
         mock_tool_event.assert_awaited_once_with(bot, 1, ct)
 
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=False)
-    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.flush_if_active",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=False,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+        return_value=True,
+    )
     async def test_text_unaffected_when_hidden(
         self,
         mock_hidden,
@@ -472,13 +551,23 @@ class TestToolCallsGate:
         mock_flush.assert_awaited_once_with(bot, 1, ct)
         mock_process.assert_awaited_once()
 
-    @patch("ccgram.handlers.message_queue._tool_msg_ids", {})
+    @patch("ccgram.handlers.messaging_pipeline.message_queue._tool_msg_ids", {})
     @patch(
-        "ccgram.handlers.message_queue._process_content_task", new_callable=AsyncMock
+        "ccgram.handlers.messaging_pipeline.message_queue._process_content_task",
+        new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
-    @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.process_tool_event",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_batch_eligible",
+        return_value=True,
+    )
+    @patch(
+        "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+        return_value=True,
+    )
     async def test_hidden_does_not_register_tool_msg_ids(
         self,
         mock_hidden,
@@ -489,7 +578,7 @@ class TestToolCallsGate:
         queue,
         lock,
     ):
-        from ccgram.handlers import message_queue as mq
+        from ccgram.handlers.messaging_pipeline import message_queue as mq
 
         mq._tool_msg_ids.clear()
         ct = _content_task("tool", content_type="tool_use", tool_use_id="t-xyz")

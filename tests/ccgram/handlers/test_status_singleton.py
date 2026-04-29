@@ -15,7 +15,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ccgram.claude_task_state import claude_task_state
-from ccgram.handlers.message_task import StatusClearTask, StatusUpdateTask
+from ccgram.handlers.messaging_pipeline.message_task import (
+    StatusClearTask,
+    StatusUpdateTask,
+)
 from ccgram.handlers.status_bubble import (
     _status_drafts,
     _status_msg_info,

@@ -32,7 +32,7 @@ from .callback_data import (
 )
 from .callback_helpers import get_thread_id
 from .callback_registry import register
-from .message_sender import REACT_DONE, react
+from .messaging_pipeline.message_sender import REACT_DONE, react
 from .send_command import upload_file, build_file_browser
 from .send_security import is_path_contained, validate_sendable
 from .user_state import (

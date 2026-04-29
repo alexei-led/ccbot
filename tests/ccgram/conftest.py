@@ -20,7 +20,10 @@ async def _shutdown_queue_workers():
     waits for these pending tasks, causing 30 s hangs on Linux CI.
     """
     yield
-    from ccgram.handlers.message_queue import _queue_workers, shutdown_workers
+    from ccgram.handlers.messaging_pipeline.message_queue import (
+        _queue_workers,
+        shutdown_workers,
+    )
 
     if _queue_workers:
         await shutdown_workers()

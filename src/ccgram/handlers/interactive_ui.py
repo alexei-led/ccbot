@@ -39,7 +39,11 @@ from .callback_data import (
     CB_ASK_TAB,
     CB_ASK_UP,
 )
-from .message_sender import NO_LINK_PREVIEW, is_thread_gone, rate_limit_send
+from .messaging_pipeline.message_sender import (
+    NO_LINK_PREVIEW,
+    is_thread_gone,
+    rate_limit_send,
+)
 
 logger = structlog.get_logger()
 

@@ -230,7 +230,7 @@ class TestForwardCommandResolution:
         try:
             with (
                 patch(
-                    "ccgram.handlers.message_queue.enqueue_status_update"
+                    "ccgram.handlers.messaging_pipeline.message_queue.enqueue_status_update"
                 ) as mock_enqueue,
             ):
                 update = _make_update(text="/clear")

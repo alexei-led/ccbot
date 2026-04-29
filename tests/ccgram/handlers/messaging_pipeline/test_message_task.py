@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ccgram.handlers.message_task import (
+from ccgram.handlers.messaging_pipeline.message_task import (
     ContentTask,
     MessageTask,
     StatusClearTask,
@@ -126,7 +126,7 @@ class TestThreadKey:
 
 class TestModuleImports:
     def test_imports_nothing_from_handlers(self):
-        src = Path("src/ccgram/handlers/message_task.py").read_text()
+        src = Path("src/ccgram/handlers/messaging_pipeline/message_task.py").read_text()
         tree = ast.parse(src)
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):

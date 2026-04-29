@@ -31,7 +31,7 @@ from .directory_browser import (
     clear_window_picker_state,
 )
 from .callback_registry import register
-from .message_sender import safe_edit, safe_send
+from .messaging_pipeline.message_sender import safe_edit, safe_send
 from .topic_emoji import format_topic_name_for_mode
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 

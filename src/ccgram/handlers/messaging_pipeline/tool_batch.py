@@ -21,10 +21,10 @@ from dataclasses import dataclass, field
 import structlog
 from telegram import Bot
 
-from ..telegram_draft import DraftStream
-from ..thread_router import thread_router
-from ..topic_state_registry import topic_state
-from ..window_query import get_batch_mode
+from ...telegram_draft import DraftStream
+from ...thread_router import thread_router
+from ...topic_state_registry import topic_state
+from ...window_query import get_batch_mode
 from .message_task import ContentTask, thread_key
 
 logger = structlog.get_logger()
@@ -310,8 +310,8 @@ async def _send_or_edit_batch(
     thread_id_or_0: int,
 ) -> None:
     """Send a new batch message or replace the existing draft text."""
-    from ..claude_task_state import build_subagent_label, get_subagent_names
-    from .status_bubble import clear_status_message
+    from ...claude_task_state import build_subagent_label, get_subagent_names
+    from ..status_bubble import clear_status_message
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
@@ -479,7 +479,7 @@ async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
     thread_id: int | None = thread_id_or_0 if thread_id_or_0 != 0 else None
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
 
-    from ..claude_task_state import build_subagent_label, get_subagent_names
+    from ...claude_task_state import build_subagent_label, get_subagent_names
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
