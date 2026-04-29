@@ -16,7 +16,6 @@ from .message_queue import (
     get_or_create_queue,
     shutdown_workers,
 )
-from .message_routing import handle_new_message
 from .message_sender import (
     ALLOWED_REACTIONS,
     REACT_DONE,
@@ -86,7 +85,6 @@ __all__ = [
     "format_batch_message",
     "get_message_queue",
     "get_or_create_queue",
-    "handle_new_message",
     "has_active_batch",
     "is_batch_eligible",
     "is_thread_gone",

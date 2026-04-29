@@ -25,7 +25,7 @@ from ...session_monitor import get_active_monitor
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ..cleanup import clear_topic_state
-from ..interactive_ui import (
+from ..interactive import (
     clear_interactive_mode,
     clear_interactive_msg,
     get_interactive_window,

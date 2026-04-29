@@ -1,6 +1,6 @@
 import asyncio
 
-from ccgram.handlers.interactive_ui import (
+from ccgram.handlers.interactive.interactive_ui import (
     _send_cooldowns,
     clear_send_cooldowns,
 )

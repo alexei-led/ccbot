@@ -23,12 +23,12 @@ import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, NetworkError, RetryAfter, TelegramError, TimedOut
 
-from ..providers import get_provider_for_window
-from ..window_query import get_window_provider
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from ..topic_state_registry import topic_state
-from .callback_data import (
+from ...providers import get_provider_for_window
+from ...window_query import get_window_provider
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ...topic_state_registry import topic_state
+from ..callback_data import (
     CB_ASK_DOWN,
     CB_ASK_ENTER,
     CB_ASK_ESC,
@@ -39,7 +39,7 @@ from .callback_data import (
     CB_ASK_TAB,
     CB_ASK_UP,
 )
-from .messaging_pipeline.message_sender import (
+from ..messaging_pipeline.message_sender import (
     NO_LINK_PREVIEW,
     is_thread_gone,
     rate_limit_send,
@@ -286,7 +286,7 @@ async def _capture_interactive_content(
 
 def _lookup_pane_name(window_id: str, pane_id: str) -> str | None:
     """Return the user-supplied pane name if recorded, else None."""
-    from ..window_state_store import window_store
+    from ...window_state_store import window_store
 
     pane_info = window_store.get_pane(window_id, pane_id)
     return pane_info.name if pane_info else None

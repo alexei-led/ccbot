@@ -15,7 +15,7 @@ from telegram import Bot
 from ... import session_query, window_query
 from ...session_monitor import NewMessage
 from ...user_preferences import user_preferences
-from ..interactive_ui import (
+from ..interactive import (
     INTERACTIVE_TOOL_NAMES,
     clear_interactive_mode,
     clear_interactive_msg,

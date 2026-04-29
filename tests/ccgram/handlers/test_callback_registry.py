@@ -255,7 +255,7 @@ class TestLoadHandlers:
             "ccgram.handlers.topics.window_callbacks",
             "ccgram.handlers.recovery.history_callbacks",
             "ccgram.handlers.screenshot_callbacks",
-            "ccgram.handlers.interactive_callbacks",
+            "ccgram.handlers.interactive.interactive_callbacks",
             "ccgram.handlers.recovery.recovery_callbacks",
             "ccgram.handlers.recovery.resume_command",
             "ccgram.handlers.voice_callbacks",

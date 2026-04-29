@@ -14,7 +14,7 @@ from ccgram.handlers.callback_data import (
     CB_ASK_TAB,
     CB_ASK_UP,
 )
-from ccgram.handlers.interactive_ui import (
+from ccgram.handlers.interactive.interactive_ui import (
     INTERACTIVE_INSTRUCTION_LINE,
     _build_interactive_keyboard,
     format_interactive_message,
@@ -142,12 +142,12 @@ class TestFormatInteractiveMessage:
 class TestInteractiveModeTracking:
     @pytest.fixture(autouse=True)
     def _clear_interactive_mode(self) -> None:
-        from ccgram.handlers.interactive_ui import _interactive_mode
+        from ccgram.handlers.interactive.interactive_ui import _interactive_mode
 
         _interactive_mode.clear()
 
     def test_set_and_get(self) -> None:
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             get_interactive_window,
             set_interactive_mode,
         )
@@ -156,7 +156,7 @@ class TestInteractiveModeTracking:
         assert get_interactive_window(100, 42) == "@0"
 
     def test_clear(self) -> None:
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             clear_interactive_mode,
             get_interactive_window,
             set_interactive_mode,
@@ -167,7 +167,7 @@ class TestInteractiveModeTracking:
         assert get_interactive_window(100, 42) is None
 
     def test_none_thread_uses_zero(self) -> None:
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             get_interactive_window,
             set_interactive_mode,
         )
@@ -181,7 +181,7 @@ class TestDeadTopicCooldown:
 
     @pytest.fixture(autouse=True)
     def _clear_state(self) -> None:
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             _interactive_mode,
             _interactive_msgs,
             _send_cooldowns,
@@ -196,7 +196,7 @@ class TestDeadTopicCooldown:
 
         from telegram.error import BadRequest
 
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             _DEAD_TOPIC_RETRY_INTERVAL,
             _send_cooldowns,
             handle_interactive_ui,
@@ -207,13 +207,15 @@ class TestDeadTopicCooldown:
 
         with (
             patch(
-                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                "ccgram.handlers.interactive.interactive_ui._capture_interactive_content",
                 new_callable=AsyncMock,
                 return_value=("AskUserQuestion", "Pick one:"),
             ),
-            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
             patch(
-                "ccgram.handlers.interactive_ui.rate_limit_send",
+                "ccgram.handlers.interactive.interactive_ui.thread_router"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.interactive.interactive_ui.rate_limit_send",
                 new_callable=AsyncMock,
             ),
         ):
@@ -236,7 +238,7 @@ class TestDeadTopicCooldown:
 
         from telegram.error import BadRequest
 
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             _SEND_RETRY_INTERVAL,
             _send_cooldowns,
             handle_interactive_ui,
@@ -247,13 +249,15 @@ class TestDeadTopicCooldown:
 
         with (
             patch(
-                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                "ccgram.handlers.interactive.interactive_ui._capture_interactive_content",
                 new_callable=AsyncMock,
                 return_value=("AskUserQuestion", "Pick one:"),
             ),
-            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
             patch(
-                "ccgram.handlers.interactive_ui.rate_limit_send",
+                "ccgram.handlers.interactive.interactive_ui.thread_router"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.interactive.interactive_ui.rate_limit_send",
                 new_callable=AsyncMock,
             ),
         ):
@@ -285,7 +289,7 @@ class TestLookupPaneName:
             window_store.window_states.update(saved)
 
     def test_returns_name_when_pane_recorded(self) -> None:
-        from ccgram.handlers.interactive_ui import _lookup_pane_name
+        from ccgram.handlers.interactive.interactive_ui import _lookup_pane_name
         from ccgram.window_state_store import PaneInfo, WindowState, window_store
 
         state = WindowState()
@@ -295,12 +299,12 @@ class TestLookupPaneName:
         assert _lookup_pane_name("@0", "%5") == "api-gateway"
 
     def test_returns_none_when_pane_missing(self) -> None:
-        from ccgram.handlers.interactive_ui import _lookup_pane_name
+        from ccgram.handlers.interactive.interactive_ui import _lookup_pane_name
 
         assert _lookup_pane_name("@0", "%99") is None
 
     def test_returns_none_when_pane_has_no_name(self) -> None:
-        from ccgram.handlers.interactive_ui import _lookup_pane_name
+        from ccgram.handlers.interactive.interactive_ui import _lookup_pane_name
         from ccgram.window_state_store import PaneInfo, WindowState, window_store
 
         state = WindowState()
@@ -313,7 +317,7 @@ class TestLookupPaneName:
 class TestHandleInteractiveUIPaneName:
     @pytest.fixture(autouse=True)
     def _clear_state(self):  # type: ignore[no-untyped-def]
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             _interactive_mode,
             _interactive_msgs,
             _send_cooldowns,
@@ -332,7 +336,7 @@ class TestHandleInteractiveUIPaneName:
     async def test_named_pane_label_in_sent_message(self) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from ccgram.handlers.interactive_ui import handle_interactive_ui
+        from ccgram.handlers.interactive.interactive_ui import handle_interactive_ui
         from ccgram.window_state_store import PaneInfo, WindowState, window_store
 
         state = WindowState()
@@ -346,13 +350,15 @@ class TestHandleInteractiveUIPaneName:
 
         with (
             patch(
-                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                "ccgram.handlers.interactive.interactive_ui._capture_interactive_content",
                 new_callable=AsyncMock,
                 return_value=("AskUserQuestion", "Pick one:"),
             ),
-            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
             patch(
-                "ccgram.handlers.interactive_ui.rate_limit_send",
+                "ccgram.handlers.interactive.interactive_ui.thread_router"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.interactive.interactive_ui.rate_limit_send",
                 new_callable=AsyncMock,
             ),
         ):
@@ -369,7 +375,7 @@ class TestHandleInteractiveUIPaneName:
     async def test_unnamed_pane_falls_back_to_generic_label(self) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        from ccgram.handlers.interactive_ui import handle_interactive_ui
+        from ccgram.handlers.interactive.interactive_ui import handle_interactive_ui
 
         mock_bot = AsyncMock()
         sent = MagicMock()
@@ -378,13 +384,15 @@ class TestHandleInteractiveUIPaneName:
 
         with (
             patch(
-                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                "ccgram.handlers.interactive.interactive_ui._capture_interactive_content",
                 new_callable=AsyncMock,
                 return_value=("AskUserQuestion", "Pick one:"),
             ),
-            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
             patch(
-                "ccgram.handlers.interactive_ui.rate_limit_send",
+                "ccgram.handlers.interactive.interactive_ui.thread_router"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.interactive.interactive_ui.rate_limit_send",
                 new_callable=AsyncMock,
             ),
         ):
@@ -401,7 +409,7 @@ class TestHandleInteractiveUIPaneName:
 class TestHandleInteractiveUITransientRetry:
     @pytest.fixture(autouse=True)
     def _clear_state(self):
-        from ccgram.handlers.interactive_ui import (
+        from ccgram.handlers.interactive.interactive_ui import (
             _interactive_mode,
             _interactive_msgs,
             _send_cooldowns,
@@ -420,7 +428,7 @@ class TestHandleInteractiveUITransientRetry:
 
         from telegram.error import TimedOut
 
-        from ccgram.handlers.interactive_ui import handle_interactive_ui
+        from ccgram.handlers.interactive.interactive_ui import handle_interactive_ui
 
         mock_bot = AsyncMock()
         sent = MagicMock()
@@ -429,17 +437,19 @@ class TestHandleInteractiveUITransientRetry:
 
         with (
             patch(
-                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                "ccgram.handlers.interactive.interactive_ui._capture_interactive_content",
                 new_callable=AsyncMock,
                 return_value=("AskUserQuestion", "Pick one:"),
             ),
-            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
             patch(
-                "ccgram.handlers.interactive_ui.rate_limit_send",
+                "ccgram.handlers.interactive.interactive_ui.thread_router"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.interactive.interactive_ui.rate_limit_send",
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.interactive_ui.asyncio.sleep",
+                "ccgram.handlers.interactive.interactive_ui.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
         ):
@@ -454,24 +464,26 @@ class TestHandleInteractiveUITransientRetry:
 
         from telegram.error import TimedOut
 
-        from ccgram.handlers.interactive_ui import handle_interactive_ui
+        from ccgram.handlers.interactive.interactive_ui import handle_interactive_ui
 
         mock_bot = AsyncMock()
         mock_bot.send_message.side_effect = TimedOut("persistent")
 
         with (
             patch(
-                "ccgram.handlers.interactive_ui._capture_interactive_content",
+                "ccgram.handlers.interactive.interactive_ui._capture_interactive_content",
                 new_callable=AsyncMock,
                 return_value=("AskUserQuestion", "Pick one:"),
             ),
-            patch("ccgram.handlers.interactive_ui.thread_router") as mock_sm,
             patch(
-                "ccgram.handlers.interactive_ui.rate_limit_send",
+                "ccgram.handlers.interactive.interactive_ui.thread_router"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.interactive.interactive_ui.rate_limit_send",
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.interactive_ui.asyncio.sleep",
+                "ccgram.handlers.interactive.interactive_ui.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
         ):

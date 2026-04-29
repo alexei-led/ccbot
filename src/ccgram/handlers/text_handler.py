@@ -28,7 +28,7 @@ from .topics.directory_browser import (
     clear_browse_state,
     clear_window_picker_state,
 )
-from .interactive_ui import get_interactive_window, handle_interactive_ui
+from .interactive import get_interactive_window, handle_interactive_ui
 from .messaging_pipeline.message_queue import enqueue_status_update
 from .pane_callbacks import apply_pane_rename
 from .messaging_pipeline.message_sender import (

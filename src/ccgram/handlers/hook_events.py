@@ -19,7 +19,7 @@ from ..providers.base import HookEvent
 from ..window_query import view_window
 from ..session_lifecycle import session_lifecycle
 from ..thread_router import thread_router
-from .interactive_ui import (
+from .interactive import (
     clear_interactive_mode,
     get_interactive_window,
     handle_interactive_ui,

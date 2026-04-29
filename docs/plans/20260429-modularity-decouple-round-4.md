@@ -437,12 +437,12 @@ This keeps each task's diff small.
 
 - Move: `interactive_ui.py`, `interactive_callbacks.py`
 
-- [ ] create subpackage; re-export `handle_interactive_ui`, `clear_interactive_msg`, `get_interactive_window`, `set_interactive_mode`, `clear_interactive_mode`, callback handlers
-- [ ] git mv two modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group interactive subpackage"
+- [x] create subpackage; re-export `handle_interactive_ui`, `clear_interactive_msg`, `get_interactive_window`, `set_interactive_mode`, `clear_interactive_mode`, callback handlers
+- [x] git mv two modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group interactive subpackage"
 
 #### Task F1.9: Create `handlers/live/` subpackage
 

@@ -1,6 +1,6 @@
 import pytest
 
-from ccgram.handlers.interactive_callbacks import (
+from ccgram.handlers.interactive.interactive_callbacks import (
     INTERACTIVE_KEY_MAP,
     INTERACTIVE_PREFIXES,
 )

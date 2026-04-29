@@ -13,8 +13,8 @@ import structlog
 from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes
 
-from ..tmux_manager import tmux_manager
-from .callback_data import (
+from ...tmux_manager import tmux_manager
+from ..callback_data import (
     CB_ASK_DOWN,
     CB_ASK_ENTER,
     CB_ASK_ESC,
@@ -25,7 +25,7 @@ from .callback_data import (
     CB_ASK_TAB,
     CB_ASK_UP,
 )
-from .callback_registry import register
+from ..callback_registry import register
 from .interactive_ui import clear_interactive_msg, handle_interactive_ui
 
 logger = structlog.get_logger()
@@ -90,7 +90,7 @@ async def handle_interactive_callback(
         return
 
     cb_prefix, window_id, pane_id = matched
-    from .callback_helpers import get_thread_id, user_owns_window
+    from ..callback_helpers import get_thread_id, user_owns_window
 
     if not user_owns_window(user_id, window_id):
         await query.answer("Not your session", show_alert=True)
