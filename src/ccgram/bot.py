@@ -62,8 +62,7 @@ from .handlers.command_orchestration import (
 from .handlers.callback_helpers import get_thread_id as _get_thread_id
 from .handlers.callback_registry import dispatch as _dispatch_callback
 from .handlers.callback_registry import load_handlers as _load_callback_handlers
-from .handlers.restore_command import restore_command
-from .handlers.resume_command import resume_command
+from .handlers.recovery import restore_command, resume_command, send_history
 from .handlers.send_command import send_command
 from .handlers.topics.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
@@ -75,7 +74,6 @@ from .handlers.screenshot_callbacks import (
     screenshot_command,
 )
 from .handlers.topics.topic_lifecycle import topic_closed_handler, topic_edited_handler
-from .handlers.history import send_history
 from .handlers.sessions_dashboard import sessions_command
 from .handlers.sync_command import sync_command
 from .handlers.upgrade import upgrade_command

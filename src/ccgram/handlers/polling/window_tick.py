@@ -49,9 +49,9 @@ from .polling_strategies import (
     terminal_poll_state,
     terminal_screen_buffer,
 )
-from ..recovery_callbacks import RecoveryBanner, render_banner
+from ..recovery.recovery_callbacks import RecoveryBanner, render_banner
+from ..recovery.transcript_discovery import discover_and_register_transcript
 from ..topic_emoji import update_topic_emoji
-from ..transcript_discovery import discover_and_register_transcript
 
 if TYPE_CHECKING:
     from telegram import Bot

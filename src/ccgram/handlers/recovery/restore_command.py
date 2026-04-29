@@ -16,14 +16,14 @@ import structlog
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from .. import window_query
-from ..config import config
-from ..session import session_manager
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from .messaging_pipeline.message_sender import safe_reply
+from ... import window_query
+from ...config import config
+from ...session import session_manager
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ..messaging_pipeline.message_sender import safe_reply
+from ..user_state import PENDING_THREAD_ID, RECOVERY_WINDOW_ID
 from .recovery_callbacks import RecoveryBanner, render_banner
-from .user_state import PENDING_THREAD_ID, RECOVERY_WINDOW_ID
 
 logger = structlog.get_logger()
 

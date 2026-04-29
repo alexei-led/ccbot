@@ -15,26 +15,26 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from ..config import config
-from ..providers import (
+from ...config import config
+from ...providers import (
     detect_provider_from_pane,
     detect_provider_from_runtime,
     detect_provider_from_transcript_path,
     get_provider_for_window,
     should_probe_pane_title_for_provider_detection,
 )
-from ..session import session_manager
-from ..session_map import session_map_sync
-from ..tmux_manager import tmux_manager
-from ..window_resolver import is_foreign_window
-from .polling.polling_strategies import is_shell_prompt
+from ...session import session_manager
+from ...session_map import session_map_sync
+from ...tmux_manager import tmux_manager
+from ...window_resolver import is_foreign_window
+from ..polling.polling_strategies import is_shell_prompt
 
 if TYPE_CHECKING:
     from telegram import Bot
 
-    from ..providers.base import AgentProvider
-    from ..session import WindowState
-    from ..tmux_manager import TmuxWindow
+    from ...providers.base import AgentProvider
+    from ...session import WindowState
+    from ...tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()
 
@@ -64,7 +64,7 @@ async def _detect_and_apply_provider(
     if detected and detected != state.provider_name:
         old_provider = state.provider_name
         session_manager.set_window_provider(window_id, detected, cwd=w.cwd or None)
-        from ..providers import get_provider_for_window
+        from ...providers import get_provider_for_window
 
         new_caps = get_provider_for_window(window_id, detected)
         old_caps = (
@@ -72,7 +72,7 @@ async def _detect_and_apply_provider(
         )
         if new_caps and new_caps.capabilities.chat_first_command_path:
             state.transcript_path = ""
-            from .shell_prompt_orchestrator import ensure_setup
+            from ..shell_prompt_orchestrator import ensure_setup
 
             await ensure_setup(
                 window_id,
@@ -82,8 +82,8 @@ async def _detect_and_apply_provider(
                 thread_id=thread_id,
             )
         elif old_caps and old_caps.capabilities.chat_first_command_path:
-            from .shell_capture import clear_shell_monitor_state
-            from .shell_prompt_orchestrator import clear_state as clear_orchestrator
+            from ..shell_capture import clear_shell_monitor_state
+            from ..shell_prompt_orchestrator import clear_state as clear_orchestrator
 
             clear_shell_monitor_state(window_id)
             clear_orchestrator(window_id)
@@ -101,7 +101,7 @@ def _resolve_providers_to_try(
     Returns a list of (name, provider) pairs, or ``None`` to signal the
     caller should set up a shell provider.
     """
-    from ..providers import registry
+    from ...providers import registry
 
     if state.provider_name:
         provider = get_provider_for_window(window_id, state.provider_name)
@@ -181,7 +181,7 @@ async def discover_and_register_transcript(
     Also handles provider auto-detection from pane process name
     and shell ↔ agent transitions with prompt marker setup.
     """
-    from ..thread_router import thread_router
+    from ...thread_router import thread_router
 
     state = session_manager.window_states.get(window_id)
     if not state:
@@ -212,7 +212,7 @@ async def discover_and_register_transcript(
     if providers_to_try is None:
         session_manager.set_window_provider(window_id, "shell")
         state.transcript_path = ""
-        from .shell_prompt_orchestrator import ensure_setup
+        from ..shell_prompt_orchestrator import ensure_setup
 
         await ensure_setup(
             window_id, "provider_switch", bot=bot, chat_id=chat_id, thread_id=thread_id

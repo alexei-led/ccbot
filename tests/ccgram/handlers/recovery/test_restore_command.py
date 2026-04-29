@@ -2,18 +2,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.restore_command import restore_command
+from ccgram.handlers.recovery.restore_command import restore_command
 
 
 @pytest.fixture(autouse=True)
 def _patch_deps():
     with (
-        patch("ccgram.handlers.restore_command.session_manager") as mock_sm,
-        patch("ccgram.handlers.restore_command.thread_router") as mock_tr,
-        patch("ccgram.handlers.restore_command.tmux_manager") as mock_tm,
-        patch("ccgram.handlers.restore_command.config") as mock_cfg,
-        patch("ccgram.handlers.restore_command.window_query") as mock_wq,
-        patch("ccgram.handlers.restore_command.render_banner") as mock_render,
+        patch("ccgram.handlers.recovery.restore_command.session_manager") as mock_sm,
+        patch("ccgram.handlers.recovery.restore_command.thread_router") as mock_tr,
+        patch("ccgram.handlers.recovery.restore_command.tmux_manager") as mock_tm,
+        patch("ccgram.handlers.recovery.restore_command.config") as mock_cfg,
+        patch("ccgram.handlers.recovery.restore_command.window_query") as mock_wq,
+        patch("ccgram.handlers.recovery.restore_command.render_banner") as mock_render,
     ):
         mock_cfg.is_user_allowed.return_value = True
         mock_tr.resolve_window_for_thread.return_value = None
@@ -48,7 +48,7 @@ class TestRestoreCommand:
         update.effective_user = None
         update.message = AsyncMock()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, MagicMock())
             mock_reply.assert_not_called()
 
@@ -57,7 +57,7 @@ class TestRestoreCommand:
         update.effective_user = MagicMock(id=100)
         update.message = None
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, MagicMock())
             mock_reply.assert_not_called()
 
@@ -66,7 +66,7 @@ class TestRestoreCommand:
         mock_cfg.is_user_allowed.return_value = False
         update = _make_update()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, _make_context())
             mock_reply.assert_called_once()
             assert "not authorized" in mock_reply.call_args[0][1]
@@ -74,7 +74,7 @@ class TestRestoreCommand:
     async def test_no_thread_id(self, _patch_deps) -> None:
         update = _make_update(thread_id=None)
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, _make_context())
             assert "inside a topic" in mock_reply.call_args[0][1]
 
@@ -83,7 +83,7 @@ class TestRestoreCommand:
         mock_tr.resolve_window_for_thread.return_value = None
         update = _make_update()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, _make_context())
             assert "No session bound" in mock_reply.call_args[0][1]
 
@@ -93,7 +93,7 @@ class TestRestoreCommand:
         mock_tm.find_window_by_id = AsyncMock(return_value=MagicMock())
         update = _make_update()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, _make_context())
             assert "still running" in mock_reply.call_args[0][1]
 
@@ -103,7 +103,7 @@ class TestRestoreCommand:
         mock_sm.view_window.return_value = MagicMock(cwd="")
         update = _make_update()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, _make_context())
             assert "Directory no longer exists" in mock_reply.call_args[0][1]
 
@@ -113,7 +113,7 @@ class TestRestoreCommand:
         mock_sm.view_window.return_value = MagicMock(cwd="/nonexistent/path")
         update = _make_update()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, _make_context())
             assert "Directory no longer exists" in mock_reply.call_args[0][1]
 
@@ -124,7 +124,7 @@ class TestRestoreCommand:
         update = _make_update()
         ctx = _make_context()
 
-        with patch("ccgram.handlers.restore_command.safe_reply") as mock_reply:
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
             await restore_command(update, ctx)
 
             mock_render.assert_called_once()
@@ -153,7 +153,7 @@ class TestRestoreCommand:
         update = _make_update()
         ctx = _make_context()
 
-        with patch("ccgram.handlers.restore_command.safe_reply"):
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply"):
             await restore_command(update, ctx)
 
         assert ctx.user_data[PENDING_THREAD_ID] == 42
@@ -168,7 +168,7 @@ class TestRestoreCommand:
         update = _make_update()
         ctx = _make_context()
 
-        with patch("ccgram.handlers.restore_command.safe_reply"):
+        with patch("ccgram.handlers.recovery.restore_command.safe_reply"):
             await restore_command(update, ctx)
 
         mock_tm.create_window.assert_not_called()

@@ -28,21 +28,21 @@ from telegram import (
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..config import config
-from ..providers import get_provider, get_provider_for_window, resolve_launch_command
-from .. import window_query
-from ..session import session_manager
-from ..session_map import session_map_sync
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
-from ..utils import read_session_metadata_from_jsonl
-from .callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
-from .callback_helpers import get_thread_id
-from .callback_registry import register
-from .messaging_pipeline.message_sender import safe_edit, safe_reply
-from .topic_emoji import format_topic_name_for_mode
-from .user_state import RESUME_SESSIONS
+from ...config import config
+from ...providers import get_provider, get_provider_for_window, resolve_launch_command
+from ... import window_query
+from ...session import session_manager
+from ...session_map import session_map_sync
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
+from ...utils import read_session_metadata_from_jsonl
+from ..callback_data import CB_RESUME_CANCEL, CB_RESUME_PAGE, CB_RESUME_PICK
+from ..callback_helpers import get_thread_id
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import safe_edit, safe_reply
+from ..topic_emoji import format_topic_name_for_mode
+from ..user_state import RESUME_SESSIONS
 
 logger = structlog.get_logger()
 
@@ -386,7 +386,7 @@ async def _create_resume_window(
     old_window_id = thread_router.get_window_for_thread(user_id, thread_id)
     if old_window_id:
         thread_router.unbind_thread(user_id, thread_id)
-        from .polling.polling_strategies import lifecycle_strategy
+        from ..polling.polling_strategies import lifecycle_strategy
 
         lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 

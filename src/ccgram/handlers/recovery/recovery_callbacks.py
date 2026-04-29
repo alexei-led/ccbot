@@ -28,16 +28,16 @@ from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, 
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..config import config
-from ..providers import get_provider, get_provider_for_window, resolve_launch_command
-from .. import window_query
-from ..session import session_manager
-from ..session_map import session_map_sync
-from ..thread_router import thread_router
-from ..tmux_manager import send_to_window, tmux_manager
-from ..utils import read_session_metadata_from_jsonl
-from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
-from .callback_data import (
+from ...config import config
+from ...providers import get_provider, get_provider_for_window, resolve_launch_command
+from ... import window_query
+from ...session import session_manager
+from ...session_map import session_map_sync
+from ...thread_router import thread_router
+from ...tmux_manager import send_to_window, tmux_manager
+from ...utils import read_session_metadata_from_jsonl
+from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
+from ..callback_data import (
     CB_RECOVERY_BACK,
     CB_RECOVERY_BROWSE,
     CB_RECOVERY_CANCEL,
@@ -46,11 +46,11 @@ from .callback_data import (
     CB_RECOVERY_PICK,
     CB_RECOVERY_RESUME,
 )
-from .callback_helpers import get_thread_id
-from .callback_registry import register
-from .messaging_pipeline.message_sender import safe_edit, safe_send
-from .topic_emoji import format_topic_name_for_mode
-from .user_state import (
+from ..callback_helpers import get_thread_id
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import safe_edit, safe_send
+from ..topic_emoji import format_topic_name_for_mode
+from ..user_state import (
     PENDING_THREAD_ID,
     PENDING_THREAD_TEXT,
     RECOVERY_SESSIONS,
@@ -470,7 +470,7 @@ async def _create_and_bind_window(
     """
     # Unbind old dead window and clear dead-notification tracking
     thread_router.unbind_thread(user_id, thread_id)
-    from .polling.polling_strategies import lifecycle_strategy
+    from ..polling.polling_strategies import lifecycle_strategy
 
     lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
@@ -735,7 +735,7 @@ async def _handle_browse(
     """
 
     from .resume_command import _build_resume_keyboard, scan_all_sessions
-    from .user_state import RESUME_SESSIONS
+    from ..user_state import RESUME_SESSIONS
 
     old_wid = data[len(CB_RECOVERY_BROWSE) :]
     validated = _validate_recovery_state(old_wid, update, context)

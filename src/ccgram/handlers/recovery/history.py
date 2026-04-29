@@ -13,13 +13,13 @@ from typing import Any
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
-from ..expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
-from .. import session_query
-from ..user_preferences import user_preferences
-from ..thread_router import thread_router
-from ..telegram_sender import split_message
-from .callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
-from .messaging_pipeline.message_sender import safe_edit, safe_reply, safe_send
+from ...expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
+from ... import session_query
+from ...user_preferences import user_preferences
+from ...thread_router import thread_router
+from ...telegram_sender import split_message
+from ..callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
+from ..messaging_pipeline.message_sender import safe_edit, safe_reply, safe_send
 
 logger = structlog.get_logger()
 

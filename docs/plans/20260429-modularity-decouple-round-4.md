@@ -385,12 +385,12 @@ This keeps each task's diff small.
 
 - Move: `recovery_callbacks.py`, `restore_command.py`, `resume_command.py`, `transcript_discovery.py`, `history.py`, `history_callbacks.py`
 
-- [ ] create subpackage with `__init__.py` re-exporting `RecoveryBanner`, `render_banner`, `build_recovery_keyboard`, `restore_command`, `resume_command`, `discover_and_register_transcript`, `send_history`
-- [ ] git mv six modules (history goes here because it's the "browse past sessions" surface — same conceptual cluster as resume)
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group recovery subpackage"
+- [x] create subpackage with `__init__.py` re-exporting `RecoveryBanner`, `render_banner`, `build_recovery_keyboard`, `restore_command`, `resume_command`, `discover_and_register_transcript`, `send_history`
+- [x] git mv six modules (history goes here because it's the "browse past sessions" surface — same conceptual cluster as resume)
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group recovery subpackage"
 
 #### Task F1.5: Create `handlers/messaging/` subpackage
 

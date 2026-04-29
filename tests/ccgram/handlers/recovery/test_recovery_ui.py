@@ -6,7 +6,7 @@ import pytest
 
 import ccgram.handlers.command_orchestration as cmd_orch_mod
 from ccgram.bot import text_handler
-from ccgram.handlers.recovery_callbacks import (
+from ccgram.handlers.recovery.recovery_callbacks import (
     _SessionEntry,
     _recovery_help_text,
     build_recovery_keyboard,
@@ -29,7 +29,7 @@ from ccgram.handlers.user_state import (
     RECOVERY_WINDOW_ID,
 )
 
-_RC = "ccgram.handlers.recovery_callbacks"
+_RC = "ccgram.handlers.recovery.recovery_callbacks"
 
 
 def _make_update(
@@ -1623,7 +1623,7 @@ class TestRecoveryEmptyStateAndBrowseFallback:
         assert any(d.startswith(CB_RECOVERY_FRESH) for d in datas)
         assert CB_RECOVERY_CANCEL in datas
 
-    @patch("ccgram.handlers.resume_command.scan_all_sessions")
+    @patch("ccgram.handlers.recovery.resume_command.scan_all_sessions")
     @patch(f"{_RC}.session_manager")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_browse_loads_cross_project_picker(
@@ -1632,7 +1632,7 @@ class TestRecoveryEmptyStateAndBrowseFallback:
         mock_sm: MagicMock,
         mock_scan_all: MagicMock,
     ) -> None:
-        from ccgram.handlers.resume_command import ResumeEntry
+        from ccgram.handlers.recovery.resume_command import ResumeEntry
 
         mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
         mock_scan_all.return_value = [
@@ -1654,7 +1654,7 @@ class TestRecoveryEmptyStateAndBrowseFallback:
         body = mock_safe_edit.call_args.args[1]
         assert "Select a session" in body
 
-    @patch("ccgram.handlers.resume_command.scan_all_sessions", return_value=[])
+    @patch("ccgram.handlers.recovery.resume_command.scan_all_sessions", return_value=[])
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_browse_with_no_sessions_anywhere(
         self,
@@ -1686,7 +1686,9 @@ class TestRecoveryEmptyStateAndBrowseFallback:
 
 class TestEmptyStateKeyboardBuilder:
     def test_empty_keyboard_has_browse_fresh_and_cancel(self) -> None:
-        from ccgram.handlers.recovery_callbacks import _build_empty_resume_keyboard
+        from ccgram.handlers.recovery.recovery_callbacks import (
+            _build_empty_resume_keyboard,
+        )
 
         kb = _build_empty_resume_keyboard("@0")
         datas = [
@@ -1700,7 +1702,9 @@ class TestEmptyStateKeyboardBuilder:
         assert CB_RECOVERY_CANCEL in datas
 
     def test_empty_keyboard_callback_data_within_64_bytes(self) -> None:
-        from ccgram.handlers.recovery_callbacks import _build_empty_resume_keyboard
+        from ccgram.handlers.recovery.recovery_callbacks import (
+            _build_empty_resume_keyboard,
+        )
 
         long_id = "@" + "x" * 60
         kb = _build_empty_resume_keyboard(long_id)

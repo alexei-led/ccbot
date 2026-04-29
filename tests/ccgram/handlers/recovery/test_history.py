@@ -2,7 +2,7 @@
 
 import pytest
 
-from ccgram.handlers.history import _format_timestamp
+from ccgram.handlers.recovery.history import _format_timestamp
 
 
 class TestFormatTimestamp:

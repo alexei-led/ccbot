@@ -6,7 +6,7 @@ from ccgram.handlers.callback_data import (
     CB_RESUME_PAGE,
     CB_RESUME_PICK,
 )
-from ccgram.handlers.resume_command import (
+from ccgram.handlers.recovery.resume_command import (
     ResumeEntry,
     _build_resume_keyboard,
     _relative_time,
@@ -17,7 +17,7 @@ from ccgram.handlers.resume_command import (
 )
 from ccgram.handlers.user_state import RESUME_SESSIONS
 
-_RC = "ccgram.handlers.resume_command"
+_RC = "ccgram.handlers.recovery.resume_command"
 
 
 def _make_update(
@@ -556,27 +556,27 @@ class TestFormatSessionEntry:
 
 class TestIndexMsgCount:
     def test_pulls_message_count_field(self) -> None:
-        from ccgram.handlers.resume_command import _index_msg_count
+        from ccgram.handlers.recovery.resume_command import _index_msg_count
 
         assert _index_msg_count({"messageCount": 7}) == 7
 
     def test_pulls_msg_count_alias(self) -> None:
-        from ccgram.handlers.resume_command import _index_msg_count
+        from ccgram.handlers.recovery.resume_command import _index_msg_count
 
         assert _index_msg_count({"msgCount": 9}) == 9
 
     def test_returns_none_for_missing_field(self) -> None:
-        from ccgram.handlers.resume_command import _index_msg_count
+        from ccgram.handlers.recovery.resume_command import _index_msg_count
 
         assert _index_msg_count({"otherField": 5}) is None
 
     def test_returns_none_for_zero(self) -> None:
-        from ccgram.handlers.resume_command import _index_msg_count
+        from ccgram.handlers.recovery.resume_command import _index_msg_count
 
         assert _index_msg_count({"messageCount": 0}) is None
 
     def test_returns_none_for_non_int(self) -> None:
-        from ccgram.handlers.resume_command import _index_msg_count
+        from ccgram.handlers.recovery.resume_command import _index_msg_count
 
         assert _index_msg_count({"messageCount": "many"}) is None
 
