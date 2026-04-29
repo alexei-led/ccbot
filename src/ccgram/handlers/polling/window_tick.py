@@ -51,7 +51,7 @@ from .polling_strategies import (
 )
 from ..recovery.recovery_callbacks import RecoveryBanner, render_banner
 from ..recovery.transcript_discovery import discover_and_register_transcript
-from ..topic_emoji import update_topic_emoji
+from ..status.topic_emoji import update_topic_emoji
 
 if TYPE_CHECKING:
     from telegram import Bot

@@ -277,7 +277,7 @@ class TestDraftStreamIntegration:
     ) -> None:
         # No status bubble to dismiss.
         monkeypatch.setattr(
-            "ccgram.handlers.status_bubble.clear_status_message",
+            "ccgram.handlers.status.status_bubble.clear_status_message",
             AsyncMock(return_value=None),
         )
         bot = self._make_bot(send_id=77)
@@ -299,7 +299,7 @@ class TestDraftStreamIntegration:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "ccgram.handlers.status_bubble.clear_status_message",
+            "ccgram.handlers.status.status_bubble.clear_status_message",
             AsyncMock(return_value=None),
         )
         bot = self._make_bot(send_id=77)
@@ -321,7 +321,7 @@ class TestDraftStreamIntegration:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "ccgram.handlers.status_bubble.clear_status_message",
+            "ccgram.handlers.status.status_bubble.clear_status_message",
             AsyncMock(return_value=None),
         )
         bot = self._make_bot(send_id=77)

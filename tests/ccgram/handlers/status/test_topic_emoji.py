@@ -5,7 +5,7 @@ from telegram.error import BadRequest, TelegramError
 
 from _helpers import make_mock_provider
 
-from ccgram.handlers.topic_emoji import (
+from ccgram.handlers.status.topic_emoji import (
     DEBOUNCE_TERMINAL_SECONDS,
     DEBOUNCE_TO_ACTIVE_SECONDS,
     DEBOUNCE_TO_IDLE_SECONDS,
@@ -70,7 +70,7 @@ class TestStripEmojiPrefix:
         )
 
 
-_PATCH_MONOTONIC = "ccgram.handlers.topic_emoji.time.monotonic"
+_PATCH_MONOTONIC = "ccgram.handlers.status.topic_emoji.time.monotonic"
 
 
 async def _debounced_update(
@@ -275,7 +275,8 @@ class TestUpdateTopicEmoji:
     async def test_yolo_mode_adds_rocket_badge(self) -> None:
         bot = AsyncMock()
         with patch(
-            "ccgram.handlers.topic_emoji._resolve_approval_mode", return_value="yolo"
+            "ccgram.handlers.status.topic_emoji._resolve_approval_mode",
+            return_value="yolo",
         ):
             await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
@@ -352,16 +353,19 @@ class TestClearTopicEmojiState:
 
 class TestSyncTopicName:
     async def test_preserves_cached_state_while_refreshing_clean_name(self) -> None:
-        from ccgram.handlers.topic_emoji import _topic_states
+        from ccgram.handlers.status.topic_emoji import _topic_states
 
         bot = AsyncMock()
         _topic_states[(-100, 42)] = ("idle", "normal", False)
         with (
             patch(
-                "ccgram.handlers.topic_emoji._resolve_approval_mode",
+                "ccgram.handlers.status.topic_emoji._resolve_approval_mode",
                 return_value="normal",
             ),
-            patch("ccgram.handlers.topic_emoji._resolve_rc_mode", return_value=False),
+            patch(
+                "ccgram.handlers.status.topic_emoji._resolve_rc_mode",
+                return_value=False,
+            ),
         ):
             await sync_topic_name(bot, -100, 42, "ccgram-codex")
 
@@ -560,14 +564,20 @@ class TestStatusPollingIntegration:
 
 class TestUpdateStoredTopicName:
     def test_overwrites_cached_name(self) -> None:
-        from ccgram.handlers.topic_emoji import _topic_names, update_stored_topic_name
+        from ccgram.handlers.status.topic_emoji import (
+            _topic_names,
+            update_stored_topic_name,
+        )
 
         _topic_names[(-100, 42)] = "old-name"
         update_stored_topic_name(-100, 42, "new-name")
         assert _topic_names[(-100, 42)] == "new-name"
 
     def test_sets_name_when_not_cached(self) -> None:
-        from ccgram.handlers.topic_emoji import _topic_names, update_stored_topic_name
+        from ccgram.handlers.status.topic_emoji import (
+            _topic_names,
+            update_stored_topic_name,
+        )
 
         update_stored_topic_name(-100, 99, "fresh-name")
         assert _topic_names[(-100, 99)] == "fresh-name"
@@ -575,17 +585,17 @@ class TestUpdateStoredTopicName:
 
 class TestRemoteControlBadge:
     def test_strip_rc_prefix(self) -> None:
-        from ccgram.handlers.topic_emoji import EMOJI_RC
+        from ccgram.handlers.status.topic_emoji import EMOJI_RC
 
         assert strip_emoji_prefix(f"{EMOJI_RC} myproject") == "myproject"
 
     def test_strip_state_and_rc_prefix(self) -> None:
-        from ccgram.handlers.topic_emoji import EMOJI_RC
+        from ccgram.handlers.status.topic_emoji import EMOJI_RC
 
         assert strip_emoji_prefix(f"{EMOJI_ACTIVE} {EMOJI_RC} myproject") == "myproject"
 
     def test_strip_state_rc_yolo_prefix(self) -> None:
-        from ccgram.handlers.topic_emoji import EMOJI_RC
+        from ccgram.handlers.status.topic_emoji import EMOJI_RC
 
         assert (
             strip_emoji_prefix(f"{EMOJI_ACTIVE} {EMOJI_RC} {EMOJI_YOLO} myproject")
@@ -593,15 +603,17 @@ class TestRemoteControlBadge:
         )
 
     async def test_rc_active_adds_badge(self) -> None:
-        from ccgram.handlers.topic_emoji import EMOJI_RC
+        from ccgram.handlers.status.topic_emoji import EMOJI_RC
 
         bot = AsyncMock()
         with (
             patch(
-                "ccgram.handlers.topic_emoji._resolve_approval_mode",
+                "ccgram.handlers.status.topic_emoji._resolve_approval_mode",
                 return_value="normal",
             ),
-            patch("ccgram.handlers.topic_emoji._resolve_rc_mode", return_value=True),
+            patch(
+                "ccgram.handlers.status.topic_emoji._resolve_rc_mode", return_value=True
+            ),
         ):
             await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
@@ -611,15 +623,17 @@ class TestRemoteControlBadge:
         )
 
     async def test_rc_and_yolo_badges(self) -> None:
-        from ccgram.handlers.topic_emoji import EMOJI_RC
+        from ccgram.handlers.status.topic_emoji import EMOJI_RC
 
         bot = AsyncMock()
         with (
             patch(
-                "ccgram.handlers.topic_emoji._resolve_approval_mode",
+                "ccgram.handlers.status.topic_emoji._resolve_approval_mode",
                 return_value="yolo",
             ),
-            patch("ccgram.handlers.topic_emoji._resolve_rc_mode", return_value=True),
+            patch(
+                "ccgram.handlers.status.topic_emoji._resolve_rc_mode", return_value=True
+            ),
         ):
             await _debounced_update(bot, -100, 42, "active", "myproject")
         bot.edit_forum_topic.assert_called_once_with(
@@ -638,7 +652,7 @@ class TestStatusMode:
         yield
 
     def test_default_uses_system_mode(self) -> None:
-        from ccgram.handlers.topic_emoji import _state_emoji_map
+        from ccgram.handlers.status.topic_emoji import _state_emoji_map
 
         # Without any monkeypatch, default config.status_mode is "system".
         table = _state_emoji_map()
@@ -646,7 +660,7 @@ class TestStatusMode:
         assert table["idle"] == EMOJI_YELLOW_CIRCLE
 
     def test_user_mode_swaps_active_idle_colors(self, _user_mode) -> None:
-        from ccgram.handlers.topic_emoji import _state_emoji_map
+        from ccgram.handlers.status.topic_emoji import _state_emoji_map
 
         table = _state_emoji_map()
         assert table["active"] == EMOJI_YELLOW_CIRCLE

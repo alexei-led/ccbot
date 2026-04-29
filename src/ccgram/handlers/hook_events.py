@@ -27,7 +27,7 @@ from .interactive_ui import (
 )
 from .messaging_pipeline.message_queue import enqueue_status_update
 from .polling.polling_strategies import reset_window_polling_state
-from .topic_emoji import update_topic_emoji
+from .status.topic_emoji import update_topic_emoji
 
 # Wired at startup by bot.py to trigger broker delivery on Stop events.
 # Avoids a direct hook_events → periodic_tasks import.

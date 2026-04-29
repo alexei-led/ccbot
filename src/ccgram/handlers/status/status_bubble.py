@@ -17,13 +17,13 @@ import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
-from ..claude_task_state import get_claude_task_snapshot, get_claude_wait_header
-from ..expandable_quote import format_expandable_quote
-from ..telegram_draft import DraftStream
-from ..thread_router import thread_router
-from ..window_query import get_notification_mode
-from ..window_state_store import PaneInfo, window_store
-from .callback_data import (
+from ...claude_task_state import get_claude_task_snapshot, get_claude_wait_header
+from ...expandable_quote import format_expandable_quote
+from ...telegram_draft import DraftStream
+from ...thread_router import thread_router
+from ...window_query import get_notification_mode
+from ...window_state_store import PaneInfo, window_store
+from ..callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
     CB_STATUS_RECALL,
@@ -31,8 +31,8 @@ from .callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from .messaging_pipeline.message_sender import edit_with_fallback, rate_limit_send
-from .messaging_pipeline.message_task import (
+from ..messaging_pipeline.message_sender import edit_with_fallback, rate_limit_send
+from ..messaging_pipeline.message_task import (
     StatusClearTask,
     StatusUpdateTask,
     thread_key,
@@ -93,7 +93,7 @@ def build_status_keyboard(
       Row 2: [Esc] [Screenshot] [Bell] [RC]
       Row 3 (optional): [🪟 Dashboard] when Mini App is enabled and user_id is set
     """
-    from .command_history import truncate_for_display
+    from ..command_history import truncate_for_display
     from .status_bar_actions import build_dashboard_button
 
     rows: list[list[InlineKeyboardButton]] = []
@@ -149,8 +149,8 @@ def _get_idle_history(
     user_id: int, thread_id_or_0: int, status_text: str
 ) -> list[str] | None:
     """Return history list if the status is idle, else None."""
-    from .callback_data import IDLE_STATUS_TEXT
-    from .command_history import get_history
+    from ..callback_data import IDLE_STATUS_TEXT
+    from ..command_history import get_history
 
     first_line = status_text.split("\n", 1)[0]
     if first_line != IDLE_STATUS_TEXT:

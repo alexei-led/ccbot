@@ -323,7 +323,7 @@ class TestNoBackEdgeImports:
         )
 
     def test_status_bubble_does_not_import_message_queue(self):
-        src = Path("src/ccgram/handlers/status_bubble.py")
+        src = Path("src/ccgram/handlers/status/status_bubble.py")
         imports = self._get_imports(src)
         assert not any("message_queue" in m for m in imports), (
             f"status_bubble.py must not import from message_queue: {imports}"

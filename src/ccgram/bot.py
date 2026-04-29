@@ -491,7 +491,7 @@ async def post_init(application: Application) -> None:
     from .handlers.polling.periodic_tasks import run_broker_cycle
     from .handlers.polling.polling_strategies import terminal_screen_buffer
     from .handlers.shell import register_approval_callback, show_command_approval
-    from .handlers.status_bubble import register_rc_active_provider
+    from .handlers.status import register_rc_active_provider
 
     # hook_events triggers broker delivery on Stop via callback (not a direct import).
     async def _on_stop(bot_, window_key: str) -> None:  # type: ignore[no-untyped-def]

@@ -36,7 +36,7 @@ from .callback_data import CB_SYNC_DISMISS, CB_SYNC_FIX
 from .callback_registry import register
 from .cleanup import clear_topic_state
 from .messaging_pipeline.message_sender import is_thread_gone, safe_edit, safe_reply
-from .topic_emoji import sync_topic_name
+from .status.topic_emoji import sync_topic_name
 
 logger = structlog.get_logger()
 

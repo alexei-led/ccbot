@@ -311,7 +311,7 @@ async def _send_or_edit_batch(
 ) -> None:
     """Send a new batch message or replace the existing draft text."""
     from ...claude_task_state import build_subagent_label, get_subagent_names
-    from ..status_bubble import clear_status_message
+    from ..status.status_bubble import clear_status_message
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.topic_emoji import reset_all_state
+from ccgram.handlers.status.topic_emoji import reset_all_state
 
 
 @pytest.fixture(autouse=True)
@@ -110,7 +110,7 @@ class TestTopicEditedHandler:
         self, mock_tr: MagicMock, mock_tm: MagicMock, _allowed: MagicMock
     ) -> None:
         from ccgram.handlers.topics.topic_lifecycle import topic_edited_handler
-        from ccgram.handlers.topic_emoji import _topic_names
+        from ccgram.handlers.status.topic_emoji import _topic_names
 
         _topic_names[(-100, 42)] = "old-name"
         mock_tr.get_window_for_chat_thread.return_value = "@0"
@@ -129,7 +129,7 @@ class TestTopicEditedHandler:
         self, mock_tr: MagicMock, mock_tm: MagicMock, _allowed: MagicMock
     ) -> None:
         from ccgram.handlers.topics.topic_lifecycle import topic_edited_handler
-        from ccgram.handlers.topic_emoji import _topic_names
+        from ccgram.handlers.status.topic_emoji import _topic_names
 
         _topic_names[(-100, 42)] = "old-name"
         mock_tr.get_window_for_chat_thread.return_value = "@0"

@@ -6,9 +6,9 @@ from ccgram.handlers.callback_data import (
     CB_STATUS_NOTIFY,
     CB_STATUS_REMOTE,
 )
-from ccgram.handlers.status_bar_actions import _handle_status_bar_action
+from ccgram.handlers.status.status_bar_actions import _handle_status_bar_action
 
-MOD = "ccgram.handlers.status_bar_actions"
+MOD = "ccgram.handlers.status.status_bar_actions"
 
 
 def _q() -> AsyncMock:
@@ -26,7 +26,7 @@ class TestNotifyToggle:
             patch(f"{MOD}.user_owns_window", return_value=True),
             patch(f"{MOD}.session_manager") as sm,
             patch(
-                "ccgram.handlers.status_bubble.build_status_keyboard",
+                "ccgram.handlers.status.status_bubble.build_status_keyboard",
                 return_value=MagicMock(),
             ) as bsk,
         ):
@@ -61,7 +61,7 @@ class TestNotifyToggle:
             patch(f"{MOD}.user_owns_window", return_value=True),
             patch(f"{MOD}.session_manager") as sm,
             patch(
-                "ccgram.handlers.status_bubble.build_status_keyboard",
+                "ccgram.handlers.status.status_bubble.build_status_keyboard",
                 return_value=MagicMock(),
             ),
             patch(f"{MOD}.react", new_callable=AsyncMock) as mock_react,
@@ -85,7 +85,7 @@ class TestNotifyToggle:
             patch(f"{MOD}.user_owns_window", return_value=True),
             patch(f"{MOD}.session_manager") as sm,
             patch(
-                "ccgram.handlers.status_bubble.build_status_keyboard",
+                "ccgram.handlers.status.status_bubble.build_status_keyboard",
                 return_value=MagicMock(),
             ),
             patch(f"{MOD}.react", new_callable=AsyncMock) as mock_react,
@@ -194,7 +194,7 @@ class TestKeys:
 
 class TestClearKeyRefreshes:
     def test_cancels_matching_tasks(self):
-        from ccgram.handlers.status_bar_actions import (
+        from ccgram.handlers.status.status_bar_actions import (
             _clear_key_refreshes,
             _pending_key_refreshes,
         )
@@ -213,14 +213,14 @@ class TestClearKeyRefreshes:
 
 class TestBuildDashboardButton:
     def test_returns_none_when_miniapp_disabled(self):
-        from ccgram.handlers.status_bar_actions import build_dashboard_button
+        from ccgram.handlers.status.status_bar_actions import build_dashboard_button
 
         with patch(f"{MOD}.config") as cfg:
             cfg.miniapp_base_url = ""
             assert build_dashboard_button("@0", 42) is None
 
     def test_returns_none_for_whitespace_url(self):
-        from ccgram.handlers.status_bar_actions import build_dashboard_button
+        from ccgram.handlers.status.status_bar_actions import build_dashboard_button
 
         # Config strips at load, but defensively guard against runtime mutation.
         with patch(f"{MOD}.config") as cfg:
@@ -230,7 +230,7 @@ class TestBuildDashboardButton:
     def test_builds_webapp_button_when_enabled(self):
         from telegram import WebAppInfo
 
-        from ccgram.handlers.status_bar_actions import build_dashboard_button
+        from ccgram.handlers.status.status_bar_actions import build_dashboard_button
 
         with (
             patch(f"{MOD}.config") as cfg,
@@ -251,7 +251,7 @@ class TestBuildDashboardButton:
         )
 
     def test_token_signed_per_window(self):
-        from ccgram.handlers.status_bar_actions import build_dashboard_button
+        from ccgram.handlers.status.status_bar_actions import build_dashboard_button
 
         captured: list[tuple[str, int]] = []
 

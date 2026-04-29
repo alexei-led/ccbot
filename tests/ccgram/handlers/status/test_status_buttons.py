@@ -12,7 +12,7 @@ from ccgram.handlers.callback_data import (
     CB_STATUS_SCREENSHOT,
     NOTIFY_MODE_ICONS,
 )
-from ccgram.handlers.status_bubble import build_status_keyboard
+from ccgram.handlers.status.status_bubble import build_status_keyboard
 
 
 def _all_callback_data(window_id: str) -> list[str]:
@@ -61,7 +61,8 @@ class TestBuildStatusKeyboard:
         self, mode: str, expected_icon: str
     ) -> None:
         with patch(
-            "ccgram.handlers.status_bubble.get_notification_mode", return_value=mode
+            "ccgram.handlers.status.status_bubble.get_notification_mode",
+            return_value=mode,
         ):
             kb = build_status_keyboard("@0")
             notify_btn = kb.inline_keyboard[0][2]
@@ -134,7 +135,7 @@ class TestDashboardButtonRow:
 
     def test_no_dashboard_when_user_id_omitted(self) -> None:
         # No user_id \u2192 no dashboard button even if base_url is set.
-        with patch("ccgram.handlers.status_bar_actions.config") as cfg:
+        with patch("ccgram.handlers.status.status_bar_actions.config") as cfg:
             cfg.miniapp_base_url = "https://example.com"
             cfg.telegram_bot_token = "bot:abc"
             kb = build_status_keyboard("@0")
@@ -143,7 +144,7 @@ class TestDashboardButtonRow:
                 assert btn.web_app is None
 
     def test_no_dashboard_when_miniapp_disabled(self) -> None:
-        with patch("ccgram.handlers.status_bar_actions.config") as cfg:
+        with patch("ccgram.handlers.status.status_bar_actions.config") as cfg:
             cfg.miniapp_base_url = ""
             cfg.telegram_bot_token = "bot:abc"
             kb = build_status_keyboard("@0", user_id=42)
@@ -153,9 +154,9 @@ class TestDashboardButtonRow:
 
     def test_dashboard_appended_when_enabled(self) -> None:
         with (
-            patch("ccgram.handlers.status_bar_actions.config") as cfg,
+            patch("ccgram.handlers.status.status_bar_actions.config") as cfg,
             patch(
-                "ccgram.handlers.status_bar_actions.sign_token",
+                "ccgram.handlers.status.status_bar_actions.sign_token",
                 return_value="abc.def",
             ),
         ):
@@ -179,9 +180,9 @@ class TestDashboardButtonRow:
             return "tok"
 
         with (
-            patch("ccgram.handlers.status_bar_actions.config") as cfg,
+            patch("ccgram.handlers.status.status_bar_actions.config") as cfg,
             patch(
-                "ccgram.handlers.status_bar_actions.sign_token",
+                "ccgram.handlers.status.status_bar_actions.sign_token",
                 side_effect=fake_sign,
             ),
         ):
@@ -192,9 +193,9 @@ class TestDashboardButtonRow:
 
     def test_history_row_does_not_replace_dashboard(self) -> None:
         with (
-            patch("ccgram.handlers.status_bar_actions.config") as cfg,
+            patch("ccgram.handlers.status.status_bar_actions.config") as cfg,
             patch(
-                "ccgram.handlers.status_bar_actions.sign_token",
+                "ccgram.handlers.status.status_bar_actions.sign_token",
                 return_value="tok",
             ),
         ):

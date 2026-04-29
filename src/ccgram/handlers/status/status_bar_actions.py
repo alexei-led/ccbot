@@ -26,15 +26,15 @@ from telegram import (
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..config import config
-from ..miniapp.auth import sign_token
-from ..screenshot import text_to_image
-from .. import window_query
-from ..session import session_manager
-from ..thread_router import thread_router
-from ..tmux_manager import send_to_window, tmux_manager
-from ..topic_state_registry import topic_state
-from .callback_data import (
+from ...config import config
+from ...miniapp.auth import sign_token
+from ...screenshot import text_to_image
+from ... import window_query
+from ...session import session_manager
+from ...thread_router import thread_router
+from ...tmux_manager import send_to_window, tmux_manager
+from ...topic_state_registry import topic_state
+from ..callback_data import (
     CB_KEYS_PREFIX,
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -43,10 +43,10 @@ from .callback_data import (
     NOTIFY_MODE_LABELS,
     NOTIFY_MODE_REACT,
 )
-from .callback_helpers import get_thread_id, parse_target, user_owns_window
-from .callback_registry import register
-from .messaging_pipeline.message_sender import react
-from .screenshot_callbacks import (
+from ..callback_helpers import get_thread_id, parse_target, user_owns_window
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import react
+from ..screenshot_callbacks import (
     KEY_LABELS,
     KEYS_SEND_MAP,
     build_screenshot_keyboard,
@@ -100,7 +100,7 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
         return
     new_mode = session_manager.cycle_notification_mode(window_id)
     label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
-    from .polling.polling_strategies import terminal_screen_buffer
+    from ..polling.polling_strategies import terminal_screen_buffer
     from .status_bubble import build_status_keyboard
 
     keyboard = build_status_keyboard(
@@ -147,7 +147,7 @@ async def _handle_status_recall(
         await query.answer("Stale status button", show_alert=True)
         return
 
-    from .command_history import get_history, record_command
+    from ..command_history import get_history, record_command
 
     history = get_history(user_id, thread_id, limit=idx + 1)
     if idx >= len(history):
@@ -156,13 +156,13 @@ async def _handle_status_recall(
 
     command = history[idx]
 
-    from ..providers import get_provider_for_window
+    from ...providers import get_provider_for_window
 
     provider = get_provider_for_window(
         window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
-        from .shell.shell_commands import handle_shell_message
+        from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(
             query.get_bot(), user_id, thread_id, window_id, command
@@ -181,7 +181,7 @@ async def _handle_status_recall(
 
 async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_STATUS_REMOTE: activate Remote Control or show status."""
-    from .polling.polling_strategies import terminal_screen_buffer
+    from ..polling.polling_strategies import terminal_screen_buffer
 
     window_id = data[len(CB_STATUS_REMOTE) :]
     if not user_owns_window(user_id, window_id):
@@ -247,7 +247,7 @@ async def _handle_keys(
         )
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
-    from .live_view import get_live_view
+    from ..live_view import get_live_view
 
     thread_id = get_thread_id(update)
     if thread_id is not None and get_live_view(user_id, thread_id) is not None:

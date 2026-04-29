@@ -9,7 +9,7 @@ from ccgram.handlers.messaging_pipeline.message_task import (
     StatusClearTask,
     StatusUpdateTask,
 )
-from ccgram.handlers.status_bubble import (
+from ccgram.handlers.status.status_bubble import (
     _status_drafts,
     _status_msg_info,
     clear_status_message,
@@ -55,7 +55,7 @@ def _make_bot(send_id: int = 99) -> AsyncMock:
 
 
 class TestSendStatusText:
-    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
     async def test_sends_new_message(self, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
 
@@ -73,8 +73,11 @@ class TestSendStatusText:
         # A DraftStream is recorded for the bubble lifetime
         assert (USER_ID, THREAD_ID) in _status_drafts
 
-    @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
+    @patch(
+        "ccgram.handlers.status.status_bubble.edit_with_fallback",
+        new_callable=AsyncMock,
+    )
     async def test_edits_existing_same_window(self, mock_edit, mock_router):
         # No active DraftStream for this skey — falls back to edit_with_fallback.
         mock_router.resolve_chat_id.return_value = CHAT_ID
@@ -88,7 +91,7 @@ class TestSendStatusText:
         bot.send_message.assert_not_called()
         assert _status_msg_info[(USER_ID, THREAD_ID)][2] == "new text"
 
-    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
     async def test_edit_via_draft_stream_replace(self, mock_router):
         # When a DraftStream is tracked for this skey, replace() drives the edit.
         mock_router.resolve_chat_id.return_value = CHAT_ID
@@ -101,8 +104,11 @@ class TestSendStatusText:
         bot.edit_message_text.assert_awaited_once()
         assert _status_msg_info[(USER_ID, THREAD_ID)][2] == "second"
 
-    @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
+    @patch(
+        "ccgram.handlers.status.status_bubble.edit_with_fallback",
+        new_callable=AsyncMock,
+    )
     async def test_replace_failure_deletes_old_bubble_before_resending(
         self, mock_edit, mock_router
     ):
@@ -125,8 +131,11 @@ class TestSendStatusText:
             CHAT_ID,
         )
 
-    @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
+    @patch(
+        "ccgram.handlers.status.status_bubble.edit_with_fallback",
+        new_callable=AsyncMock,
+    )
     async def test_dedup_identical_content(self, mock_edit, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "same", CHAT_ID)
@@ -174,7 +183,10 @@ class TestClearStatusMessage:
 
 
 class TestConvertStatusToContent:
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.status.status_bubble.edit_with_fallback",
+        new_callable=AsyncMock,
+    )
     async def test_converts_status_to_content(self, mock_edit):
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
         mock_edit.return_value = True
@@ -213,7 +225,10 @@ class TestConvertStatusToContent:
 
         assert result is None
 
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.status.status_bubble.edit_with_fallback",
+        new_callable=AsyncMock,
+    )
     async def test_deletes_status_from_different_window(self, mock_edit):
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, "@1", "old", CHAT_ID)
 
@@ -227,23 +242,33 @@ class TestConvertStatusToContent:
 
 
 class TestFormatClaudeTaskStatus:
-    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot", return_value=None)
-    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_task_snapshot",
+        return_value=None,
+    )
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_wait_header", return_value=None
+    )
     def test_no_tasks_returns_base_text(self, mock_wait, mock_snap):
         result = format_claude_task_status(WINDOW_ID, "Running")
         assert result == "Running"
 
-    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot", return_value=None)
     @patch(
-        "ccgram.handlers.status_bubble.get_claude_wait_header",
+        "ccgram.handlers.status.status_bubble.get_claude_task_snapshot",
+        return_value=None,
+    )
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_wait_header",
         return_value="Waiting for input...",
     )
     def test_with_wait_header(self, mock_wait, mock_snap):
         result = format_claude_task_status(WINDOW_ID, "Running")
         assert result == "Waiting for input..."
 
-    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot")
-    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    @patch("ccgram.handlers.status.status_bubble.get_claude_task_snapshot")
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_wait_header", return_value=None
+    )
     def test_with_task_list(self, mock_wait, mock_snap):
         item = MagicMock()
         item.status = "in_progress"
@@ -280,7 +305,7 @@ class TestClearStatusMsgInfo:
 
 
 class TestProcessStatusUpdate:
-    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
     async def test_returns_none_when_absorbed(self, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
 
@@ -294,14 +319,15 @@ class TestProcessStatusUpdate:
         # Legacy DraftStream uses bot.send_message for the initial bubble.
         bot.send_message.assert_awaited_once()
 
-    @patch("ccgram.handlers.status_bubble.thread_router")
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
     async def test_clears_when_no_status_text(self, mock_router):
         _status_msg_info[(USER_ID, THREAD_ID)] = (50, WINDOW_ID, "old", CHAT_ID)
 
         bot = _make_bot()
         task = StatusUpdateTask(window_id=WINDOW_ID, text=None, thread_id=THREAD_ID)
         with patch(
-            "ccgram.handlers.status_bubble.format_claude_task_status", return_value=None
+            "ccgram.handlers.status.status_bubble.format_claude_task_status",
+            return_value=None,
         ):
             result = await process_status_update(bot, USER_ID, task)
 
@@ -316,8 +342,11 @@ class TestProcessStatusUpdate:
 
 
 class TestProcessStatusClear:
-    @patch("ccgram.handlers.status_bubble.thread_router")
-    @patch("ccgram.handlers.status_bubble.edit_with_fallback", new_callable=AsyncMock)
+    @patch("ccgram.handlers.status.status_bubble.thread_router")
+    @patch(
+        "ccgram.handlers.status.status_bubble.edit_with_fallback",
+        new_callable=AsyncMock,
+    )
     async def test_re_renders_with_task_snapshot(self, mock_edit, mock_router):
         mock_router.resolve_chat_id.return_value = CHAT_ID
         mock_edit.return_value = True
@@ -326,7 +355,7 @@ class TestProcessStatusClear:
         bot = AsyncMock()
         task = StatusClearTask(window_id=WINDOW_ID, thread_id=THREAD_ID)
         with patch(
-            "ccgram.handlers.status_bubble.format_claude_task_status",
+            "ccgram.handlers.status.status_bubble.format_claude_task_status",
             return_value="1 tasks (1 done, 0 open)",
         ):
             await process_status_clear(bot, USER_ID, task)
@@ -339,7 +368,7 @@ class TestProcessStatusClear:
         bot = AsyncMock()
         task = StatusClearTask(window_id=WINDOW_ID, thread_id=THREAD_ID)
         with patch(
-            "ccgram.handlers.status_bubble.format_claude_task_status",
+            "ccgram.handlers.status.status_bubble.format_claude_task_status",
             return_value=None,
         ):
             await process_status_clear(bot, USER_ID, task)
@@ -350,7 +379,7 @@ class TestProcessStatusClear:
 
 class TestNoImportFromMessageQueue:
     def test_no_import_from_message_queue(self) -> None:
-        import ccgram.handlers.status_bubble as mod
+        import ccgram.handlers.status.status_bubble as mod
 
         source = inspect.getsource(mod)
         tree = ast.parse(source)
@@ -436,7 +465,7 @@ class TestFormatPaneBlock:
         assert " · " in result
 
     def test_idle_age_renders_minutes(self, _isolated_window_store):
-        with patch("ccgram.handlers.status_bubble.time") as mock_time:
+        with patch("ccgram.handlers.status.status_bubble.time") as mock_time:
             mock_time.time.return_value = 1_000_000.0
             _seed_panes(
                 "@0",
@@ -452,7 +481,7 @@ class TestFormatPaneBlock:
         assert "%6 idle 2m" in result
 
     def test_idle_age_renders_hours(self, _isolated_window_store):
-        with patch("ccgram.handlers.status_bubble.time") as mock_time:
+        with patch("ccgram.handlers.status.status_bubble.time") as mock_time:
             mock_time.time.return_value = 1_000_000.0
             _seed_panes(
                 "@0",
@@ -516,8 +545,13 @@ class TestFormatPaneBlock:
 
 
 class TestFormatClaudeTaskStatusWithPanes:
-    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot", return_value=None)
-    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_task_snapshot",
+        return_value=None,
+    )
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_wait_header", return_value=None
+    )
     def test_pane_block_appended_to_base_text(
         self, mock_wait, mock_snap, _isolated_window_store
     ):
@@ -534,8 +568,13 @@ class TestFormatClaudeTaskStatusWithPanes:
         assert "└ %5 active" in result
         assert "%6" in result
 
-    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot", return_value=None)
-    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_task_snapshot",
+        return_value=None,
+    )
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_wait_header", return_value=None
+    )
     def test_no_pane_block_for_single_pane(
         self, mock_wait, mock_snap, _isolated_window_store
     ):
@@ -543,8 +582,10 @@ class TestFormatClaudeTaskStatusWithPanes:
         result = format_claude_task_status("@0", "Running")
         assert result == "Running"
 
-    @patch("ccgram.handlers.status_bubble.get_claude_task_snapshot")
-    @patch("ccgram.handlers.status_bubble.get_claude_wait_header", return_value=None)
+    @patch("ccgram.handlers.status.status_bubble.get_claude_task_snapshot")
+    @patch(
+        "ccgram.handlers.status.status_bubble.get_claude_wait_header", return_value=None
+    )
     def test_pane_block_inserted_between_header_and_tasks(
         self, mock_wait, mock_snap, _isolated_window_store
     ):

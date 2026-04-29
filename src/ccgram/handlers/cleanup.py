@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 from ..utils import log_throttle_reset
 from .interactive_ui import clear_interactive_msg
 from .messaging_pipeline.message_queue import enqueue_status_update
-from .status_bubble import clear_status_msg_info
+from .status.status_bubble import clear_status_msg_info
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, VOICE_PENDING
 
 

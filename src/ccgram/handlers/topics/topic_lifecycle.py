@@ -289,7 +289,7 @@ async def topic_edited_handler(
         return
 
     from ..callback_helpers import get_thread_id
-    from ..topic_emoji import strip_emoji_prefix, update_stored_topic_name
+    from ..status.topic_emoji import strip_emoji_prefix, update_stored_topic_name
 
     thread_id = get_thread_id(update)
     if thread_id is None:

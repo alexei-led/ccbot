@@ -49,7 +49,7 @@ from ..callback_data import (
 from ..callback_helpers import get_thread_id
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_edit, safe_send
-from ..topic_emoji import format_topic_name_for_mode
+from ..status.topic_emoji import format_topic_name_for_mode
 from ..user_state import (
     PENDING_THREAD_ID,
     PENDING_THREAD_TEXT,

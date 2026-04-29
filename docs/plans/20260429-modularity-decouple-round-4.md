@@ -424,12 +424,12 @@ This keeps each task's diff small.
 
 - Move: `status_bubble.py`, `status_bar_actions.py`, `topic_emoji.py`
 
-- [ ] create subpackage; re-export `build_status_keyboard`, `register_rc_active_provider`, `convert_status_to_content`, `clear_status_message`, `update_topic_emoji`, `format_topic_name_for_mode`, `strip_emoji_prefix`
-- [ ] git mv three modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group status subpackage"
+- [x] create subpackage; re-export `build_status_keyboard`, `register_rc_active_provider`, `convert_status_to_content`, `clear_status_message`, `update_topic_emoji`, `format_topic_name_for_mode`, `strip_emoji_prefix`
+- [x] git mv three modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group status subpackage"
 
 #### Task F1.8: Create `handlers/interactive/` subpackage
 

@@ -44,7 +44,7 @@ def batch_env():
     try:
         with (
             patch(
-                "ccgram.handlers.status_bubble.clear_status_message",
+                "ccgram.handlers.status.status_bubble.clear_status_message",
                 new_callable=AsyncMock,
             ) as mock_clear,
             patch(

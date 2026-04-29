@@ -18,7 +18,7 @@ from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
 from ...utils import task_done_callback
 from ...window_query import is_tool_calls_hidden
-from ..status_bubble import (
+from ..status.status_bubble import (
     clear_status_message,
     convert_status_to_content,
     process_status_clear,
