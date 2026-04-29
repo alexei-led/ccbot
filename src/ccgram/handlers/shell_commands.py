@@ -48,7 +48,7 @@ from .messaging_pipeline.message_sender import (
     safe_send,
 )
 from .messaging_pipeline.message_queue import enqueue_status_update
-from .polling_strategies import lifecycle_strategy
+from .polling.polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 
 logger = structlog.get_logger()

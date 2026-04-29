@@ -27,7 +27,7 @@ from ..session import session_manager
 from ..session_map import session_map_sync
 from ..tmux_manager import tmux_manager
 from ..window_resolver import is_foreign_window
-from .polling_strategies import is_shell_prompt
+from .polling.polling_strategies import is_shell_prompt
 
 if TYPE_CHECKING:
     from telegram import Bot

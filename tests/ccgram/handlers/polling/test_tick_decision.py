@@ -2,8 +2,8 @@
 
 import time
 
-from ccgram.handlers.polling_strategies import TickContext, TickDecision
-from ccgram.handlers.window_tick import decide_tick
+from ccgram.handlers.polling.polling_strategies import TickContext, TickDecision
+from ccgram.handlers.polling.window_tick import decide_tick
 
 
 def _ctx(

@@ -133,7 +133,9 @@ class TestRemoteControl:
         query = _q()
         with (
             patch(f"{MOD}.user_owns_window", return_value=True),
-            patch("ccgram.handlers.polling_strategies.terminal_screen_buffer") as tsb,
+            patch(
+                "ccgram.handlers.polling.polling_strategies.terminal_screen_buffer"
+            ) as tsb,
             patch(f"{MOD}.thread_router") as tr,
             patch(f"{MOD}.send_to_window", new_callable=AsyncMock) as mock_send,
         ):
@@ -149,7 +151,9 @@ class TestRemoteControl:
         query = _q()
         with (
             patch(f"{MOD}.user_owns_window", return_value=True),
-            patch("ccgram.handlers.polling_strategies.terminal_screen_buffer") as tsb,
+            patch(
+                "ccgram.handlers.polling.polling_strategies.terminal_screen_buffer"
+            ) as tsb,
         ):
             tsb.is_rc_active.return_value = True
             await _handle_status_bar_action(

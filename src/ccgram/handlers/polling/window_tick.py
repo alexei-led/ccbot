@@ -17,27 +17,27 @@ import structlog
 from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
-from ..claude_task_state import claude_task_state
-from ..providers import get_provider_for_window
-from ..providers.base import StatusUpdate
-from .. import window_query
-from ..session_monitor import get_active_monitor
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from .cleanup import clear_topic_state
-from .interactive_ui import (
+from ...claude_task_state import claude_task_state
+from ...providers import get_provider_for_window
+from ...providers.base import StatusUpdate
+from ... import window_query
+from ...session_monitor import get_active_monitor
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ..cleanup import clear_topic_state
+from ..interactive_ui import (
     clear_interactive_mode,
     clear_interactive_msg,
     get_interactive_window,
     handle_interactive_ui,
     set_interactive_mode,
 )
-from .messaging_pipeline.message_queue import (
+from ..messaging_pipeline.message_queue import (
     clear_tool_msg_ids_for_topic,
     enqueue_status_update,
     get_message_queue,
 )
-from .messaging_pipeline.message_sender import rate_limit_send_message
+from ..messaging_pipeline.message_sender import rate_limit_send_message
 from .polling_strategies import (
     STARTUP_TIMEOUT,
     PaneTransition,
@@ -49,15 +49,15 @@ from .polling_strategies import (
     terminal_poll_state,
     terminal_screen_buffer,
 )
-from .recovery_callbacks import RecoveryBanner, render_banner
-from .topic_emoji import update_topic_emoji
-from .transcript_discovery import discover_and_register_transcript
+from ..recovery_callbacks import RecoveryBanner, render_banner
+from ..topic_emoji import update_topic_emoji
+from ..transcript_discovery import discover_and_register_transcript
 
 if TYPE_CHECKING:
     from telegram import Bot
 
-    from ..providers.base import AgentProvider
-    from ..tmux_manager import TmuxWindow
+    from ...providers.base import AgentProvider
+    from ...tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()
 
@@ -115,7 +115,7 @@ async def _transition_to_idle(
     lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
     if notif_mode not in ("muted", "errors_only"):
-        from .callback_data import IDLE_STATUS_TEXT
+        from ..callback_data import IDLE_STATUS_TEXT
 
         await enqueue_status_update(
             bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
@@ -150,8 +150,8 @@ async def _forward_pane_output(
     the user sees the most-recent output, and labels the message with the
     pane's friendly name when one is set.
     """
-    from ..window_state_store import window_store
-    from .messaging_pipeline.message_sender import safe_send
+    from ...window_state_store import window_store
+    from ..messaging_pipeline.message_sender import safe_send
 
     pane = window_store.get_pane(window_id, pane_id)
     if pane is None or not pane.subscribed:
@@ -224,9 +224,9 @@ async def _notify_pane_lifecycle(
     active ↔ blocked) are intentionally suppressed to keep the channel
     quiet.
     """
-    from ..config import config
-    from ..window_state_store import window_store
-    from .messaging_pipeline.message_sender import safe_send
+    from ...config import config
+    from ...window_state_store import window_store
+    from ..messaging_pipeline.message_sender import safe_send
 
     enabled = window_store.get_pane_lifecycle_notify(
         window_id, config.pane_lifecycle_notify
@@ -315,7 +315,7 @@ async def _maybe_check_passive_shell(
         if not raw:
             return
         rendered = raw
-    from .shell_capture import check_passive_shell_output
+    from ..shell_capture import check_passive_shell_output
 
     await check_passive_shell_output(bot, user_id, thread_id, window_id, rendered)
 
@@ -415,7 +415,7 @@ async def _resolve_status(
 
 
 def _check_vim_insert(window_id: str, pane_text: str, w: TmuxWindow) -> None:
-    from ..tmux_manager import has_insert_indicator, notify_vim_insert_seen
+    from ...tmux_manager import has_insert_indicator, notify_vim_insert_seen
 
     vim_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
     if has_insert_indicator(vim_text):
@@ -427,7 +427,7 @@ def _build_status_line(status: StatusUpdate | None) -> str | None:
         return None
     if "\n" in status.raw_text:
         return status.raw_text
-    from ..terminal_parser import status_emoji_prefix
+    from ...terminal_parser import status_emoji_prefix
 
     return f"{status_emoji_prefix(status.raw_text)} {status.raw_text}"
 
@@ -491,7 +491,7 @@ async def _apply_active_transition(
         terminal_poll_state.mark_seen_status(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
-            from ..claude_task_state import build_subagent_label, get_subagent_names
+            from ...claude_task_state import build_subagent_label, get_subagent_names
 
             subagent_names = get_subagent_names(window_id)
             display_status = decision.status_text or ""

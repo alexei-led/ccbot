@@ -28,15 +28,15 @@ from typing import TYPE_CHECKING, Literal
 
 import structlog
 
-from ..providers.base import StatusUpdate
-from ..topic_state_registry import topic_state
+from ...providers.base import StatusUpdate
+from ...topic_state_registry import topic_state
 
 if TYPE_CHECKING:
     from telegram import Bot
 
-    from ..providers.base import AgentProvider
-    from ..screen_buffer import ScreenBuffer
-    from ..tmux_manager import PaneInfo as TmuxPaneInfo
+    from ...providers.base import AgentProvider
+    from ...screen_buffer import ScreenBuffer
+    from ...tmux_manager import PaneInfo as TmuxPaneInfo
 
 logger = structlog.get_logger()
 
@@ -179,7 +179,7 @@ class TerminalScreenBuffer:
         self, window_id: str, columns: int, rows: int
     ) -> "ScreenBuffer":
         """Get or create a ScreenBuffer for a window, resizing if needed."""
-        from ..screen_buffer import ScreenBuffer
+        from ...screen_buffer import ScreenBuffer
 
         ws = self._poll_state.get_state(window_id)
         buf = ws.screen_buffer
@@ -204,7 +204,7 @@ class TerminalScreenBuffer:
         Content-hash optimization: unchanged pane content returns cached result
         without re-parsing.
         """
-        from ..terminal_parser import (
+        from ...terminal_parser import (
             detect_remote_control,
             format_status_display,
             parse_from_screen,
@@ -689,7 +689,7 @@ class PaneStatusStrategy:
 
     def _clear_pane_content_state(self, window_id: str) -> None:
         """Drop cached pane content hashes for a window's panes (cleanup)."""
-        from ..window_state_store import window_store
+        from ...window_state_store import window_store
 
         state = window_store.window_states.get(window_id)
         pane_ids = set(state.panes) if state else set()
@@ -729,7 +729,7 @@ class PaneStatusStrategy:
         after the ``PaneInfo`` entry has been removed. Also purges any cached
         interactive alerts so they don't linger if the pane is later recreated.
         """
-        from ..window_state_store import window_store
+        from ...window_state_store import window_store
 
         state = window_store.window_states.get(window_id)
         if state is None:
@@ -755,7 +755,7 @@ class PaneStatusStrategy:
         last_active_ts: float | None = None,
     ) -> PaneStateName | None:
         """Upsert ``WindowState.panes`` entry; return the prior state or None."""
-        from ..window_state_store import window_store
+        from ...window_state_store import window_store
 
         existing = window_store.get_pane(window_id, pane_id)
         prev_state = existing.state if existing else None
@@ -776,8 +776,8 @@ class PaneStatusStrategy:
         Tries the per-pane process basename first, falls back to the window's
         stored provider, then to the supplied fallback.
         """
-        from ..providers import detect_provider_from_command
-        from ..window_query import get_window_provider
+        from ...providers import detect_provider_from_command
+        from ...window_query import get_window_provider
 
         return (
             detect_provider_from_command(pane_command)
@@ -807,7 +807,7 @@ class PaneStatusStrategy:
         included so the caller can both surface an interactive alert and
         forward the text to subscribers.
         """
-        from ..tmux_manager import tmux_manager
+        from ...tmux_manager import tmux_manager
 
         pane_text = await tmux_manager.capture_pane_by_id(
             pane.pane_id, window_id=window_id
@@ -867,9 +867,9 @@ class PaneStatusStrategy:
         windows whose count is cached) returns an empty list without any
         tmux subprocess work.
         """
-        from ..providers import get_provider_for_window
-        from ..tmux_manager import tmux_manager
-        from ..window_query import get_window_provider
+        from ...providers import get_provider_for_window
+        from ...tmux_manager import tmux_manager
+        from ...window_query import get_window_provider
 
         if self._screen_buffer.is_single_pane_cached(window_id):
             return []
@@ -1033,7 +1033,7 @@ class PaneStatusStrategy:
         on_pane_output: PaneOutputCallback,
     ) -> None:
         """Forward freshly-captured pane text to subscribers when content changed."""
-        from ..window_state_store import window_store
+        from ...window_state_store import window_store
 
         pane = window_store.get_pane(window_id, pane_id)
         if pane is None or not pane.subscribed:

@@ -38,7 +38,7 @@ from .messaging_pipeline.message_sender import (
     safe_reply,
 )
 from .recovery_callbacks import RecoveryBanner, render_banner
-from .polling_strategies import lifecycle_strategy
+from .polling.polling_strategies import lifecycle_strategy
 from ..topic_state_registry import topic_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 from .. import window_query

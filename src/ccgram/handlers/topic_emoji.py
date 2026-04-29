@@ -227,7 +227,7 @@ def _resolve_rc_mode(chat_id: int, thread_id: int) -> bool:
     window_id = thread_router.get_window_for_chat_thread(chat_id, thread_id)
     if not window_id:
         return False
-    from .polling_strategies import terminal_screen_buffer
+    from .polling.polling_strategies import terminal_screen_buffer
 
     return terminal_screen_buffer.is_rc_active(window_id)
 

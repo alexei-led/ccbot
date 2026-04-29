@@ -17,13 +17,13 @@ import structlog
 from telegram import Bot
 from telegram.error import TelegramError
 
-from ..config import config
-from ..session import session_manager
-from ..tmux_manager import tmux_manager
-from ..utils import log_throttle_sweep
-from .msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
-from .live_view import tick_live_views
-from .topic_lifecycle import (
+from ...config import config
+from ...session import session_manager
+from ...tmux_manager import tmux_manager
+from ...utils import log_throttle_sweep
+from ..msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
+from ..live_view import tick_live_views
+from ..topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
     probe_topic_existence,
@@ -31,7 +31,7 @@ from .topic_lifecycle import (
 )
 
 if TYPE_CHECKING:
-    from ..tmux_manager import TmuxWindow
+    from ...tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()
 
@@ -48,9 +48,9 @@ async def run_broker_cycle(
     idle_windows: frozenset[str] = frozenset(),
 ) -> None:
     """Run one broker delivery cycle (called from poll loop and hook_events)."""
-    from ..mailbox import Mailbox
+    from ...mailbox import Mailbox
 
-    from .msg_broker import broker_delivery_cycle
+    from ..msg_broker import broker_delivery_cycle
 
     mailbox = Mailbox(config.mailbox_dir)
     await broker_delivery_cycle(
@@ -68,8 +68,8 @@ async def run_broker_cycle(
 
 async def _run_spawn_cycle(bot: Bot) -> None:
     """Scan for file-based spawn requests and post approval keyboards or auto-approve."""
-    from ..spawn_request import pop_pending, scan_spawn_requests
-    from .msg_spawn import (
+    from ...spawn_request import pop_pending, scan_spawn_requests
+    from ..msg_spawn import (
         handle_spawn_approval,
         post_spawn_approval_keyboard,
     )
@@ -94,7 +94,7 @@ async def _run_spawn_cycle(bot: Bot) -> None:
 
 def _run_mailbox_sweep() -> None:
     """Run periodic mailbox sweep."""
-    from ..mailbox import Mailbox
+    from ...mailbox import Mailbox
 
     mailbox = Mailbox(config.mailbox_dir)
     removed = mailbox.sweep()

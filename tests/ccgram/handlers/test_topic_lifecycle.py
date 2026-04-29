@@ -13,7 +13,7 @@ from ccgram.handlers.topic_lifecycle import (
     probe_topic_existence,
     prune_stale_state,
 )
-from ccgram.handlers.polling_strategies import (
+from ccgram.handlers.polling.polling_strategies import (
     lifecycle_strategy,
     terminal_poll_state,
 )

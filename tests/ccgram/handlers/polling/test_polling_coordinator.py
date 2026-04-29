@@ -8,17 +8,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from telegram import Bot
 from telegram.error import TelegramError
 
-from ccgram.handlers.polling_coordinator import (
+from ccgram.handlers.polling.polling_coordinator import (
     _BACKOFF_MAX,
     _BACKOFF_MIN,
     status_poll_loop,
 )
 
 SRC_FILE = (
-    Path(__file__).resolve().parents[3]
+    Path(__file__).resolve().parents[4]
     / "src"
     / "ccgram"
     / "handlers"
+    / "polling"
     / "polling_coordinator.py"
 )
 
@@ -44,22 +45,28 @@ def _patch_loop_deps(
     external = external or []
 
     patches: dict[str, Any] = {
-        "thread_router": patch("ccgram.handlers.polling_coordinator.thread_router"),
-        "tmux_manager": patch("ccgram.handlers.polling_coordinator.tmux_manager"),
+        "thread_router": patch(
+            "ccgram.handlers.polling.polling_coordinator.thread_router"
+        ),
+        "tmux_manager": patch(
+            "ccgram.handlers.polling.polling_coordinator.tmux_manager"
+        ),
         "tick_window": patch(
-            "ccgram.handlers.polling_coordinator.window_tick.tick_window",
+            "ccgram.handlers.polling.polling_coordinator.window_tick.tick_window",
             new_callable=AsyncMock,
         ),
         "run_periodic": patch(
-            "ccgram.handlers.polling_coordinator.run_periodic_tasks",
+            "ccgram.handlers.polling.polling_coordinator.run_periodic_tasks",
             new_callable=AsyncMock,
         ),
         "run_lifecycle": patch(
-            "ccgram.handlers.polling_coordinator.run_lifecycle_tasks",
+            "ccgram.handlers.polling.polling_coordinator.run_lifecycle_tasks",
             new_callable=AsyncMock,
         ),
         "config": patch("ccgram.config.config"),
-        "log_throttled": patch("ccgram.handlers.polling_coordinator.log_throttled"),
+        "log_throttled": patch(
+            "ccgram.handlers.polling.polling_coordinator.log_throttled"
+        ),
     }
 
     ctx = _LoopCtx()
@@ -93,7 +100,7 @@ async def _run_loop_once(bot: Bot, **kwargs: Any) -> _LoopCtx:
     with (
         combined(),
         patch(
-            "ccgram.handlers.polling_coordinator.asyncio.sleep",
+            "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
             side_effect=_stop_after_one,
         ),
         contextlib.suppress(asyncio.CancelledError),
@@ -170,7 +177,7 @@ class TestStatusPollLoopRespectsConfigInterval:
             ctx.mocks["config"].status_poll_interval = 2.5
             with (
                 patch(
-                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
                     side_effect=_capture_sleep,
                 ),
                 contextlib.suppress(asyncio.CancelledError),
@@ -204,7 +211,7 @@ class TestBackoffOnTelegramError:
             )
             with (
                 patch(
-                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
                     side_effect=_capture_sleep,
                 ),
                 contextlib.suppress(asyncio.CancelledError),
@@ -244,7 +251,7 @@ class TestPerBindingError:
 
             with (
                 patch(
-                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
                     side_effect=_stop_sleep,
                 ),
                 contextlib.suppress(asyncio.CancelledError),
@@ -349,7 +356,7 @@ class TestBackoffBehavior:
             )
             with (
                 patch(
-                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
                     side_effect=_capture_sleep,
                 ),
                 contextlib.suppress(asyncio.CancelledError),
@@ -377,7 +384,7 @@ class TestBackoffBehavior:
             )
             with (
                 patch(
-                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
                     side_effect=_capture_sleep,
                 ),
                 contextlib.suppress(asyncio.CancelledError),
@@ -407,7 +414,7 @@ class TestBackoffBehavior:
             ctx.mocks["config"].status_poll_interval = 0.5
             with (
                 patch(
-                    "ccgram.handlers.polling_coordinator.asyncio.sleep",
+                    "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
                     side_effect=_capture_sleep,
                 ),
                 contextlib.suppress(asyncio.CancelledError),

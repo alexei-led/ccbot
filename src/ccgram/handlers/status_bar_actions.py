@@ -100,7 +100,7 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
         return
     new_mode = session_manager.cycle_notification_mode(window_id)
     label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
-    from .polling_strategies import terminal_screen_buffer
+    from .polling.polling_strategies import terminal_screen_buffer
     from .status_bubble import build_status_keyboard
 
     keyboard = build_status_keyboard(
@@ -181,7 +181,7 @@ async def _handle_status_recall(
 
 async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_STATUS_REMOTE: activate Remote Control or show status."""
-    from .polling_strategies import terminal_screen_buffer
+    from .polling.polling_strategies import terminal_screen_buffer
 
     window_id = data[len(CB_STATUS_REMOTE) :]
     if not user_owns_window(user_id, window_id):

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot
 
-from ccgram.handlers.polling_strategies import (
+from ccgram.handlers.polling.polling_strategies import (
     InteractiveUIStrategy,
     PaneStatusStrategy,
     PaneTransition,

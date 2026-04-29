@@ -27,7 +27,7 @@ from ccgram.handlers.pane_callbacks import (
     build_pane_buttons,
     build_pane_lifecycle_button,
 )
-from ccgram.handlers.polling_strategies import (
+from ccgram.handlers.polling.polling_strategies import (
     InteractiveUIStrategy,
     PaneStatusStrategy,
     TerminalPollState,

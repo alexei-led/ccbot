@@ -358,12 +358,12 @@ This keeps each task's diff small.
 - Modify: import sites
 - Create/move tests
 
-- [ ] create subpackage with `__init__.py` re-exporting `status_poll_loop`, `terminal_screen_buffer`, `terminal_poll_state`, `lifecycle_strategy`, `pane_status_strategy`, `tick_window`, `run_periodic_tasks`, `run_lifecycle_tasks`, `run_broker_cycle`
-- [ ] git mv four modules
-- [ ] rewrite import sites (bot.py, status_bubble.py — the RC callback wiring; etc.)
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group polling subpackage"
+- [x] create subpackage with `__init__.py` re-exporting `status_poll_loop`, `terminal_screen_buffer`, `terminal_poll_state`, `lifecycle_strategy`, `pane_status_strategy`, `tick_window`, `run_periodic_tasks`, `run_lifecycle_tasks`, `run_broker_cycle`
+- [x] git mv four modules
+- [x] rewrite import sites (bot.py, status_bubble.py — the RC callback wiring; etc.)
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group polling subpackage"
 
 #### Task F1.3: Create `handlers/topics/` subpackage
 

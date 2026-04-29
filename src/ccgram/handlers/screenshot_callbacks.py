@@ -550,7 +550,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    from .polling_strategies import interactive_strategy
+    from .polling.polling_strategies import interactive_strategy
 
     lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]
     rows: list[list] = []

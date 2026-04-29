@@ -5,15 +5,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot
 
-from ccgram.handlers import window_tick
-from ccgram.handlers.polling_strategies import (
+from ccgram.handlers.polling import window_tick
+from ccgram.handlers.polling.polling_strategies import (
     TickContext,
     interactive_strategy,
     lifecycle_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
 )
-from ccgram.handlers.window_tick import (
+from ccgram.handlers.polling.window_tick import (
     _check_interactive_only,
     _handle_dead_window_notification,
     _maybe_check_passive_shell,
@@ -182,26 +182,28 @@ class TestUpdateStatusInteractive:
         interactive_status = _make_status(raw_text="Accept?", is_interactive=True)
 
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.window_query"),
-            patch("ccgram.handlers.window_tick.thread_router"),
+            patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.polling.window_tick.window_query"),
+            patch("ccgram.handlers.polling.window_tick.thread_router"),
             patch(
-                "ccgram.handlers.window_tick.get_interactive_window", return_value=None
+                "ccgram.handlers.polling.window_tick.get_interactive_window",
+                return_value=None,
             ),
             patch(
-                "ccgram.handlers.window_tick._parse_with_pyte",
+                "ccgram.handlers.polling.window_tick._parse_with_pyte",
                 return_value=interactive_status,
             ),
             patch(
-                "ccgram.handlers.window_tick.handle_interactive_ui",
+                "ccgram.handlers.polling.window_tick.handle_interactive_ui",
                 new_callable=AsyncMock,
             ) as mock_handle,
             patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
+                "ccgram.handlers.polling.window_tick.enqueue_status_update",
                 new_callable=AsyncMock,
             ) as mock_enqueue,
             patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
+                "ccgram.handlers.polling.window_tick.update_topic_emoji",
+                new_callable=AsyncMock,
             ),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=w)
@@ -218,26 +220,31 @@ class TestUpdateStatusActiveLine:
         status = _make_status(raw_text="Working on task", is_interactive=False)
 
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
+            patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.polling.window_tick.window_query") as mock_sm,
+            patch("ccgram.handlers.polling.window_tick.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_tick.get_interactive_window", return_value=None
+                "ccgram.handlers.polling.window_tick.get_interactive_window",
+                return_value=None,
             ),
-            patch("ccgram.handlers.window_tick._parse_with_pyte", return_value=status),
             patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
+                "ccgram.handlers.polling.window_tick._parse_with_pyte",
+                return_value=status,
+            ),
+            patch(
+                "ccgram.handlers.polling.window_tick.enqueue_status_update",
                 new_callable=AsyncMock,
             ) as mock_enqueue,
             patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
+                "ccgram.handlers.polling.window_tick.update_topic_emoji",
+                new_callable=AsyncMock,
             ) as mock_emoji,
             patch(
-                "ccgram.handlers.window_tick._send_typing_throttled",
+                "ccgram.handlers.polling.window_tick._send_typing_throttled",
                 new_callable=AsyncMock,
             ),
-            patch("ccgram.handlers.window_tick.claude_task_state") as mock_cts,
-            patch("ccgram.handlers.window_tick.get_provider_for_window"),
+            patch("ccgram.handlers.polling.window_tick.claude_task_state") as mock_cts,
+            patch("ccgram.handlers.polling.window_tick.get_provider_for_window"),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=w)
             mock_tm.capture_pane = AsyncMock(return_value="pane text")
@@ -257,26 +264,31 @@ class TestUpdateStatusActiveLine:
         status = _make_status(raw_text="Working", is_interactive=False)
 
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
+            patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.polling.window_tick.window_query") as mock_sm,
+            patch("ccgram.handlers.polling.window_tick.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_tick.get_interactive_window", return_value=None
+                "ccgram.handlers.polling.window_tick.get_interactive_window",
+                return_value=None,
             ),
-            patch("ccgram.handlers.window_tick._parse_with_pyte", return_value=status),
             patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
+                "ccgram.handlers.polling.window_tick._parse_with_pyte",
+                return_value=status,
+            ),
+            patch(
+                "ccgram.handlers.polling.window_tick.enqueue_status_update",
                 new_callable=AsyncMock,
             ) as mock_enqueue,
             patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
-            ),
-            patch(
-                "ccgram.handlers.window_tick._send_typing_throttled",
+                "ccgram.handlers.polling.window_tick.update_topic_emoji",
                 new_callable=AsyncMock,
             ),
-            patch("ccgram.handlers.window_tick.claude_task_state") as mock_cts,
-            patch("ccgram.handlers.window_tick.get_provider_for_window"),
+            patch(
+                "ccgram.handlers.polling.window_tick._send_typing_throttled",
+                new_callable=AsyncMock,
+            ),
+            patch("ccgram.handlers.polling.window_tick.claude_task_state") as mock_cts,
+            patch("ccgram.handlers.polling.window_tick.get_provider_for_window"),
             patch(
                 "ccgram.claude_task_state.get_subagent_names",
                 return_value=["subagent-1"],
@@ -303,26 +315,31 @@ class TestUpdateStatusActiveLine:
         status = _make_status(raw_text="Working", is_interactive=False)
 
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
-            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
-            patch("ccgram.handlers.window_tick.thread_router"),
+            patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.polling.window_tick.window_query") as mock_sm,
+            patch("ccgram.handlers.polling.window_tick.thread_router"),
             patch(
-                "ccgram.handlers.window_tick.get_interactive_window", return_value=None
+                "ccgram.handlers.polling.window_tick.get_interactive_window",
+                return_value=None,
             ),
-            patch("ccgram.handlers.window_tick._parse_with_pyte", return_value=status),
             patch(
-                "ccgram.handlers.window_tick.enqueue_status_update",
+                "ccgram.handlers.polling.window_tick._parse_with_pyte",
+                return_value=status,
+            ),
+            patch(
+                "ccgram.handlers.polling.window_tick.enqueue_status_update",
                 new_callable=AsyncMock,
             ) as mock_enqueue,
             patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
+                "ccgram.handlers.polling.window_tick.update_topic_emoji",
+                new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.window_tick._send_typing_throttled",
+                "ccgram.handlers.polling.window_tick._send_typing_throttled",
                 new_callable=AsyncMock,
             ) as mock_typing,
-            patch("ccgram.handlers.window_tick.claude_task_state") as mock_cts,
-            patch("ccgram.handlers.window_tick.get_provider_for_window"),
+            patch("ccgram.handlers.polling.window_tick.claude_task_state") as mock_cts,
+            patch("ccgram.handlers.polling.window_tick.get_provider_for_window"),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=w)
             mock_tm.capture_pane = AsyncMock(return_value="pane text")
@@ -404,7 +421,7 @@ class TestScanPanes:
             patch("ccgram.tmux_manager.tmux_manager") as mock_tm,
             patch("ccgram.providers.get_provider_for_window") as mock_prov,
             patch(
-                "ccgram.handlers.window_tick.handle_interactive_ui",
+                "ccgram.handlers.polling.window_tick.handle_interactive_ui",
                 new_callable=AsyncMock,
             ) as mock_ui,
         ):
@@ -422,8 +439,8 @@ class TestMaybeCheckPassiveShell:
     async def test_non_shell_noop(self):
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
-            patch("ccgram.handlers.window_tick.tmux_manager"),
+            patch("ccgram.handlers.polling.window_tick.window_query") as mock_sm,
+            patch("ccgram.handlers.polling.window_tick.tmux_manager"),
         ):
             mock_sm.get_window_state.return_value = MagicMock(provider_name="claude")
             await _maybe_check_passive_shell(bot, 1, "@0", 100)
@@ -431,8 +448,10 @@ class TestMaybeCheckPassiveShell:
     async def test_shell_provider_calls_passive_check(self):
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.get_provider_for_window") as mock_prov,
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch(
+                "ccgram.handlers.polling.window_tick.get_provider_for_window"
+            ) as mock_prov,
+            patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
             patch(
                 "ccgram.handlers.shell_capture.check_passive_shell_output",
                 new_callable=AsyncMock,
@@ -452,9 +471,10 @@ class TestCheckInteractiveOnly:
         w = _make_window()
 
         with (
-            patch("ccgram.handlers.window_tick.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.polling.window_tick.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.window_tick.get_interactive_window", return_value="@0"
+                "ccgram.handlers.polling.window_tick.get_interactive_window",
+                return_value="@0",
             ),
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=w)
@@ -467,14 +487,15 @@ class TestDeadWindowNotification:
     async def test_sends_once(self):
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
+            patch("ccgram.handlers.polling.window_tick.thread_router") as mock_tr,
+            patch("ccgram.handlers.polling.window_tick.window_query") as mock_sm,
             patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
+                "ccgram.handlers.polling.window_tick.update_topic_emoji",
+                new_callable=AsyncMock,
             ),
-            patch("ccgram.handlers.window_tick.clear_tool_msg_ids_for_topic"),
+            patch("ccgram.handlers.polling.window_tick.clear_tool_msg_ids_for_topic"),
             patch(
-                "ccgram.handlers.window_tick.rate_limit_send_message",
+                "ccgram.handlers.polling.window_tick.rate_limit_send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -504,7 +525,7 @@ class TestContractTests:
             if not name.startswith("_")
             and inspect.iscoroutinefunction(getattr(window_tick, name))
             and getattr(getattr(window_tick, name), "__module__", None)
-            == "ccgram.handlers.window_tick"
+            == "ccgram.handlers.polling.window_tick"
         ]
         assert public_async == ["tick_window"]
 
@@ -514,7 +535,7 @@ class TestContractTests:
         assert callable(window_tick.decide_tick)
 
     def test_polling_coordinator_imports_only_tick_window(self):
-        import ccgram.handlers.polling_coordinator as pc
+        import ccgram.handlers.polling.polling_coordinator as pc
 
         source = inspect.getsource(pc)
         tree = ast.parse(source)
@@ -534,7 +555,7 @@ class TestContractTests:
         ), f"Unexpected imports from window_tick: {window_tick_imports}"
 
     def test_polling_coordinator_does_not_import_per_window_collaborators(self):
-        import ccgram.handlers.polling_coordinator as pc
+        import ccgram.handlers.polling.polling_coordinator as pc
 
         source = inspect.getsource(pc)
         tree = ast.parse(source)
@@ -576,19 +597,20 @@ class TestDeadWindowTopicDeleted:
         )
 
         with (
-            patch("ccgram.handlers.window_tick.thread_router") as mock_tr,
-            patch("ccgram.handlers.window_tick.window_query") as mock_sm,
+            patch("ccgram.handlers.polling.window_tick.thread_router") as mock_tr,
+            patch("ccgram.handlers.polling.window_tick.window_query") as mock_sm,
             patch(
-                "ccgram.handlers.window_tick.update_topic_emoji", new_callable=AsyncMock
+                "ccgram.handlers.polling.window_tick.update_topic_emoji",
+                new_callable=AsyncMock,
             ),
-            patch("ccgram.handlers.window_tick.clear_tool_msg_ids_for_topic"),
+            patch("ccgram.handlers.polling.window_tick.clear_tool_msg_ids_for_topic"),
             patch(
-                "ccgram.handlers.window_tick.rate_limit_send_message",
+                "ccgram.handlers.polling.window_tick.rate_limit_send_message",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
             patch(
-                "ccgram.handlers.window_tick.clear_topic_state",
+                "ccgram.handlers.polling.window_tick.clear_topic_state",
                 new_callable=AsyncMock,
             ) as mock_clear,
         ):
@@ -618,7 +640,7 @@ class TestPaneLifecycleNotify:
 
     @pytest.fixture
     def transitions(self):
-        from ccgram.handlers.polling_strategies import PaneTransition
+        from ccgram.handlers.polling.polling_strategies import PaneTransition
 
         return [
             PaneTransition(pane_id="%5", prev_state=None, new_state="active"),
@@ -627,7 +649,7 @@ class TestPaneLifecycleNotify:
         ]
 
     async def test_disabled_globally_and_per_window_no_notify(self, transitions):
-        from ccgram.handlers import window_tick
+        from ccgram.handlers.polling import window_tick
 
         bot = AsyncMock(spec=Bot)
         with (
@@ -646,7 +668,7 @@ class TestPaneLifecycleNotify:
         mock_send.assert_not_called()
 
     async def test_per_window_override_enables(self, transitions):
-        from ccgram.handlers import window_tick
+        from ccgram.handlers.polling import window_tick
         from ccgram.window_state_store import window_store
 
         window_store.set_pane_lifecycle_notify("@0", True)
@@ -671,7 +693,7 @@ class TestPaneLifecycleNotify:
         assert any("➖" in t and "%6" in t and "closed" in t for t in texts)
 
     async def test_per_window_override_disables(self, transitions):
-        from ccgram.handlers import window_tick
+        from ccgram.handlers.polling import window_tick
         from ccgram.window_state_store import window_store
 
         # Global default ON, but per-window override OFF wins.
@@ -693,7 +715,7 @@ class TestPaneLifecycleNotify:
         mock_send.assert_not_called()
 
     async def test_global_default_enables_when_no_override(self, transitions):
-        from ccgram.handlers import window_tick
+        from ccgram.handlers.polling import window_tick
 
         bot = AsyncMock(spec=Bot)
         with (
@@ -712,8 +734,8 @@ class TestPaneLifecycleNotify:
         assert mock_send.await_count == 2
 
     async def test_named_pane_used_in_label(self):
-        from ccgram.handlers import window_tick
-        from ccgram.handlers.polling_strategies import PaneTransition
+        from ccgram.handlers.polling import window_tick
+        from ccgram.handlers.polling.polling_strategies import PaneTransition
         from ccgram.window_state_store import window_store
 
         window_store.set_pane_lifecycle_notify("@0", True)
@@ -742,8 +764,8 @@ class TestPaneLifecycleNotify:
     async def test_telegram_error_logged_not_raised(self):
         from telegram.error import TelegramError
 
-        from ccgram.handlers import window_tick
-        from ccgram.handlers.polling_strategies import PaneTransition
+        from ccgram.handlers.polling import window_tick
+        from ccgram.handlers.polling.polling_strategies import PaneTransition
         from ccgram.window_state_store import window_store
 
         window_store.set_pane_lifecycle_notify("@0", True)
@@ -768,7 +790,7 @@ class TestPaneLifecycleNotify:
             await window_tick._notify_pane_lifecycle(bot, 1, "@0", 100, transitions)
 
     async def test_empty_transitions_short_circuits(self):
-        from ccgram.handlers import window_tick
+        from ccgram.handlers.polling import window_tick
         from ccgram.window_state_store import window_store
 
         window_store.set_pane_lifecycle_notify("@0", True)
@@ -789,8 +811,8 @@ class TestPaneLifecycleNotify:
         mock_send.assert_not_called()
 
     async def test_scan_panes_invokes_lifecycle(self):
-        from ccgram.handlers import window_tick
-        from ccgram.handlers.polling_strategies import PaneTransition
+        from ccgram.handlers.polling import window_tick
+        from ccgram.handlers.polling.polling_strategies import PaneTransition
 
         bot = AsyncMock(spec=Bot)
         scan_transitions = [
@@ -809,7 +831,7 @@ class TestPaneLifecycleNotify:
         assert passed_transitions == scan_transitions
 
     async def test_scan_panes_skips_lifecycle_on_empty(self):
-        from ccgram.handlers import window_tick
+        from ccgram.handlers.polling import window_tick
 
         bot = AsyncMock(spec=Bot)
         with (

@@ -83,7 +83,7 @@ from .handlers.messaging_pipeline.message_queue import (
     shutdown_workers,
 )
 from .handlers.messaging_pipeline.message_sender import safe_reply
-from .handlers.polling_coordinator import status_poll_loop
+from .handlers.polling.polling_coordinator import status_poll_loop
 from .handlers.file_handler import handle_document_message, handle_photo_message
 from .handlers.voice_handler import handle_voice_message
 from .handlers.text_handler import handle_text_message
@@ -490,8 +490,8 @@ async def post_init(application: Application) -> None:
 
     # Wire module-level callbacks to break cross-subsystem direct imports.
     from .handlers.hook_events import register_stop_callback
-    from .handlers.periodic_tasks import run_broker_cycle
-    from .handlers.polling_strategies import terminal_screen_buffer
+    from .handlers.polling.periodic_tasks import run_broker_cycle
+    from .handlers.polling.polling_strategies import terminal_screen_buffer
     from .handlers.shell_capture import register_approval_callback
     from .handlers.shell_commands import show_command_approval
     from .handlers.status_bubble import register_rc_active_provider

@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 import structlog
 from telegram.error import TelegramError
 
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from ..utils import log_throttled
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ...utils import log_throttled
 from . import window_tick
 from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 
@@ -37,7 +37,7 @@ _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 
 async def status_poll_loop(bot: "Bot") -> None:
     """Background task to poll terminal status for all thread-bound windows."""
-    from ..config import config as _cfg
+    from ...config import config as _cfg
 
     poll_interval = _cfg.status_poll_interval
     logger.info("Status polling started (interval: %ss)", poll_interval)
