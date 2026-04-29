@@ -17,6 +17,7 @@ from telegram.error import RetryAfter, TelegramError
 from ..thread_router import thread_router
 from ..topic_state_registry import topic_state
 from ..utils import task_done_callback
+from ..window_query import is_tool_calls_hidden
 from .message_sender import edit_with_fallback, rate_limit_send_message, send_kwargs
 from .message_task import (
     ContentTask,
@@ -211,8 +212,6 @@ async def _handle_content_task(
 
     Returns the number of additional merged tasks (caller must call task_done for each).
     """
-    from ..window_query import is_tool_calls_hidden
-
     if task.content_type in ("tool_use", "tool_result") and is_tool_calls_hidden(
         task.window_id
     ):

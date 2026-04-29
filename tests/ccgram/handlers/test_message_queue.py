@@ -385,7 +385,7 @@ class TestToolCallsGate:
     @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
     async def test_hidden_suppresses_tool_use(
         self,
         mock_hidden,
@@ -410,7 +410,7 @@ class TestToolCallsGate:
     @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
     async def test_hidden_suppresses_tool_result(
         self,
         mock_hidden,
@@ -433,7 +433,7 @@ class TestToolCallsGate:
     )
     @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=False)
+    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=False)
     async def test_shown_allows_tool_use(
         self,
         mock_hidden,
@@ -455,7 +455,7 @@ class TestToolCallsGate:
     )
     @patch("ccgram.handlers.message_queue.flush_if_active", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=False)
-    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
     async def test_text_unaffected_when_hidden(
         self,
         mock_hidden,
@@ -478,7 +478,7 @@ class TestToolCallsGate:
     )
     @patch("ccgram.handlers.message_queue.process_tool_event", new_callable=AsyncMock)
     @patch("ccgram.handlers.message_queue.is_batch_eligible", return_value=True)
-    @patch("ccgram.window_query.is_tool_calls_hidden", return_value=True)
+    @patch("ccgram.handlers.message_queue.is_tool_calls_hidden", return_value=True)
     async def test_hidden_does_not_register_tool_msg_ids(
         self,
         mock_hidden,
