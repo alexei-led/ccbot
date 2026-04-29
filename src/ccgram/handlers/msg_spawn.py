@@ -184,7 +184,7 @@ async def _create_topic_for_spawn(
     req: SpawnRequest,
 ) -> None:
     from .msg_telegram import resolve_topic
-    from .topic_orchestration import collect_target_chats, create_topic_in_chat
+    from .topics.topic_orchestration import collect_target_chats, create_topic_in_chat
 
     target_chats = collect_target_chats(window_id)
     for chat_id in target_chats:

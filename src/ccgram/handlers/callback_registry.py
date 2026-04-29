@@ -111,7 +111,6 @@ def load_handlers() -> None:
     """Import handler modules to trigger @register and @topic_state.register decorators."""
     from . import (  # noqa: F401
         command_history,
-        directory_callbacks,
         history_callbacks,
         hook_events,
         interactive_callbacks,
@@ -130,7 +129,7 @@ def load_handlers() -> None:
         shell_prompt_orchestrator,
         sync_command,
         voice_callbacks,
-        window_callbacks,
     )
+    from .topics import directory_callbacks, window_callbacks  # noqa: F401
 
     from .. import msg_discovery  # noqa: F401

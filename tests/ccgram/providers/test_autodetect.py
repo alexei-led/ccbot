@@ -93,11 +93,11 @@ class TestDetectProviderFromRuntime:
 
 
 class TestHandleNewWindowAutoDetection:
-    @patch("ccgram.handlers.topic_orchestration.tmux_manager")
-    @patch("ccgram.handlers.topic_orchestration.session_manager")
-    @patch("ccgram.handlers.topic_orchestration.config")
+    @patch("ccgram.handlers.topics.topic_orchestration.tmux_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.session_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.config")
     @patch(
-        "ccgram.handlers.topic_orchestration.detect_provider_from_pane",
+        "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
         new_callable=AsyncMock,
         return_value="codex",
     )
@@ -108,7 +108,7 @@ class TestHandleNewWindowAutoDetection:
         mock_sm: MagicMock,
         mock_tmux: MagicMock,
     ) -> None:
-        from ccgram.handlers.topic_orchestration import (
+        from ccgram.handlers.topics.topic_orchestration import (
             handle_new_window as _handle_new_window,
         )
         from ccgram.session_monitor import NewWindowEvent
@@ -131,11 +131,11 @@ class TestHandleNewWindowAutoDetection:
         mock_detect.assert_awaited_once()
         mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
 
-    @patch("ccgram.handlers.topic_orchestration.tmux_manager")
-    @patch("ccgram.handlers.topic_orchestration.session_manager")
-    @patch("ccgram.handlers.topic_orchestration.config")
+    @patch("ccgram.handlers.topics.topic_orchestration.tmux_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.session_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.config")
     @patch(
-        "ccgram.handlers.topic_orchestration.detect_provider_from_pane",
+        "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
         new_callable=AsyncMock,
     )
     async def test_skips_detection_when_no_pane_command(
@@ -145,7 +145,7 @@ class TestHandleNewWindowAutoDetection:
         mock_sm: MagicMock,
         mock_tmux: MagicMock,
     ) -> None:
-        from ccgram.handlers.topic_orchestration import (
+        from ccgram.handlers.topics.topic_orchestration import (
             handle_new_window as _handle_new_window,
         )
         from ccgram.session_monitor import NewWindowEvent
@@ -167,11 +167,11 @@ class TestHandleNewWindowAutoDetection:
         mock_detect.assert_not_called()
         mock_sm.set_window_provider.assert_not_called()
 
-    @patch("ccgram.handlers.topic_orchestration.tmux_manager")
-    @patch("ccgram.handlers.topic_orchestration.session_manager")
-    @patch("ccgram.handlers.topic_orchestration.config")
+    @patch("ccgram.handlers.topics.topic_orchestration.tmux_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.session_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.config")
     @patch(
-        "ccgram.handlers.topic_orchestration.detect_provider_from_pane",
+        "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
         new_callable=AsyncMock,
     )
     async def test_skips_detection_when_window_not_found(
@@ -181,7 +181,7 @@ class TestHandleNewWindowAutoDetection:
         mock_sm: MagicMock,
         mock_tmux: MagicMock,
     ) -> None:
-        from ccgram.handlers.topic_orchestration import (
+        from ccgram.handlers.topics.topic_orchestration import (
             handle_new_window as _handle_new_window,
         )
         from ccgram.session_monitor import NewWindowEvent
@@ -201,11 +201,11 @@ class TestHandleNewWindowAutoDetection:
         mock_detect.assert_not_called()
         mock_sm.set_window_provider.assert_not_called()
 
-    @patch("ccgram.handlers.topic_orchestration.tmux_manager")
-    @patch("ccgram.handlers.topic_orchestration.session_manager")
-    @patch("ccgram.handlers.topic_orchestration.config")
+    @patch("ccgram.handlers.topics.topic_orchestration.tmux_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.session_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.config")
     @patch(
-        "ccgram.handlers.topic_orchestration.detect_provider_from_pane",
+        "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
         new_callable=AsyncMock,
         return_value="",
     )
@@ -216,7 +216,7 @@ class TestHandleNewWindowAutoDetection:
         mock_sm: MagicMock,
         mock_tmux: MagicMock,
     ) -> None:
-        from ccgram.handlers.topic_orchestration import (
+        from ccgram.handlers.topics.topic_orchestration import (
             handle_new_window as _handle_new_window,
         )
         from ccgram.session_monitor import NewWindowEvent
@@ -241,11 +241,11 @@ class TestHandleNewWindowAutoDetection:
         mock_tmux.get_pane_title.assert_awaited_once_with("@8")
         mock_sm.set_window_provider.assert_called_once_with("@8", "gemini")
 
-    @patch("ccgram.handlers.topic_orchestration.tmux_manager")
-    @patch("ccgram.handlers.topic_orchestration.session_manager")
-    @patch("ccgram.handlers.topic_orchestration.config")
+    @patch("ccgram.handlers.topics.topic_orchestration.tmux_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.session_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.config")
     @patch(
-        "ccgram.handlers.topic_orchestration.detect_provider_from_pane",
+        "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
         new_callable=AsyncMock,
         return_value="",
     )
@@ -256,7 +256,7 @@ class TestHandleNewWindowAutoDetection:
         mock_sm: MagicMock,
         mock_tmux: MagicMock,
     ) -> None:
-        from ccgram.handlers.topic_orchestration import (
+        from ccgram.handlers.topics.topic_orchestration import (
             handle_new_window as _handle_new_window,
         )
         from ccgram.session_monitor import NewWindowEvent
@@ -281,11 +281,11 @@ class TestHandleNewWindowAutoDetection:
         mock_tmux.get_pane_title.assert_awaited_once_with("@10")
         mock_sm.set_window_provider.assert_not_called()
 
-    @patch("ccgram.handlers.topic_orchestration.tmux_manager")
-    @patch("ccgram.handlers.topic_orchestration.session_manager")
-    @patch("ccgram.handlers.topic_orchestration.config")
+    @patch("ccgram.handlers.topics.topic_orchestration.tmux_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.session_manager")
+    @patch("ccgram.handlers.topics.topic_orchestration.config")
     @patch(
-        "ccgram.handlers.topic_orchestration.detect_provider_from_pane",
+        "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
         new_callable=AsyncMock,
         return_value="",
     )
@@ -296,7 +296,7 @@ class TestHandleNewWindowAutoDetection:
         mock_sm: MagicMock,
         mock_tmux: MagicMock,
     ) -> None:
-        from ccgram.handlers.topic_orchestration import (
+        from ccgram.handlers.topics.topic_orchestration import (
             handle_new_window as _handle_new_window,
         )
         from ccgram.session_monitor import NewWindowEvent

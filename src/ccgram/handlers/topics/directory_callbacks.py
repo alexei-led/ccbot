@@ -23,14 +23,14 @@ from telegram import CallbackQuery, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..providers import registry as provider_registry
-from ..session import session_manager
-from ..session_map import session_map_sync
-from ..user_preferences import user_preferences
-from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
-from ..thread_router import thread_router
-from ..tmux_manager import send_to_window, tmux_manager
-from .callback_data import (
+from ...providers import registry as provider_registry
+from ...session import session_manager
+from ...session_map import session_map_sync
+from ...user_preferences import user_preferences
+from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
+from ...thread_router import thread_router
+from ...tmux_manager import send_to_window, tmux_manager
+from ..callback_data import (
     CB_DIR_CANCEL,
     CB_DIR_CONFIRM,
     CB_DIR_FAV,
@@ -42,7 +42,7 @@ from .callback_data import (
     CB_MODE_SELECT,
     CB_PROV_SELECT,
 )
-from .callback_helpers import get_thread_id
+from ..callback_helpers import get_thread_id
 from .directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
@@ -53,10 +53,10 @@ from .directory_browser import (
     clear_browse_state,
     get_favorites,
 )
-from .callback_registry import register
-from .messaging_pipeline.message_sender import safe_edit, safe_send
-from .topic_emoji import format_topic_name_for_mode
-from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import safe_edit, safe_send
+from ..topic_emoji import format_topic_name_for_mode
+from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
 logger = structlog.get_logger()
 
@@ -518,7 +518,7 @@ def _try_install_messaging_skill(provider_name: str, cwd: str) -> None:
     """Install the messaging skill for Claude windows (no-op for other providers)."""
     if provider_name != "claude":
         return
-    from ..msg_skill import ensure_skill_installed
+    from ...msg_skill import ensure_skill_installed
 
     try:
         ensure_skill_installed(cwd)
@@ -576,7 +576,7 @@ async def _create_window_and_bind(
 
     provider_caps = provider_registry.get(provider_name).capabilities
     if provider_caps.chat_first_command_path:
-        from .shell_prompt_orchestrator import ensure_setup
+        from ..shell_prompt_orchestrator import ensure_setup
 
         await _wait_for_shell_ready(created_wid)
         await ensure_setup(created_wid, "auto")
@@ -632,7 +632,7 @@ async def _create_window_and_bind(
 
         # Chat-first providers (shell): route through NL→command approval flow
         if provider_caps.chat_first_command_path:
-            from .shell_commands import handle_shell_message
+            from ..shell_commands import handle_shell_message
 
             await handle_shell_message(
                 context.bot,

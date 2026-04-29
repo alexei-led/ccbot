@@ -17,22 +17,22 @@ from telegram.error import BadRequest, TelegramError
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..config import config
-from ..session import session_manager
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from ..utils import log_throttled
-from ..window_resolver import is_foreign_window
-from ..window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
-from .cleanup import clear_topic_state
-from .messaging_pipeline.message_sender import is_thread_gone
-from .polling.polling_strategies import (
+from ...config import config
+from ...session import session_manager
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ...utils import log_throttled
+from ...window_resolver import is_foreign_window
+from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
+from ..cleanup import clear_topic_state
+from ..messaging_pipeline.message_sender import is_thread_gone
+from ..polling.polling_strategies import (
     lifecycle_strategy,
     terminal_poll_state,
 )
 
 if TYPE_CHECKING:
-    from ..tmux_manager import TmuxWindow
+    from ...tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()
 
@@ -147,7 +147,7 @@ async def _kill_expired_unbound(now: float, timeout: float) -> None:
     for wid in expired:
         await tmux_manager.kill_window(wid)
 
-        from ..topic_state_registry import topic_state
+        from ...topic_state_registry import topic_state
 
         topic_state.clear_window(wid)
         qualified_id = (
@@ -240,7 +240,7 @@ async def topic_closed_handler(
     if not user or not config.is_user_allowed(user.id):
         return
 
-    from .callback_helpers import get_thread_id
+    from ..callback_helpers import get_thread_id
 
     thread_id = get_thread_id(update)
     if thread_id is None:
@@ -288,8 +288,8 @@ async def topic_edited_handler(
     if not new_name:
         return
 
-    from .callback_helpers import get_thread_id
-    from .topic_emoji import strip_emoji_prefix, update_stored_topic_name
+    from ..callback_helpers import get_thread_id
+    from ..topic_emoji import strip_emoji_prefix, update_stored_topic_name
 
     thread_id = get_thread_id(update)
     if thread_id is None:

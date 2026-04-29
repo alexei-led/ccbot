@@ -49,7 +49,7 @@ from .providers import (
     get_provider_for_window,
 )
 from .config import config
-from .handlers.topic_orchestration import (
+from .handlers.topics.topic_orchestration import (
     adopt_unbound_windows as _adopt_unbound_windows,
     handle_new_window as _handle_new_window,
 )
@@ -65,7 +65,7 @@ from .handlers.callback_registry import load_handlers as _load_callback_handlers
 from .handlers.restore_command import restore_command
 from .handlers.resume_command import resume_command
 from .handlers.send_command import send_command
-from .handlers.directory_browser import clear_browse_state
+from .handlers.topics.directory_browser import clear_browse_state
 from .handlers.cleanup import unbind_command
 from .handlers.command_history import recall_command
 from .handlers.messaging_pipeline.message_routing import handle_new_message
@@ -74,7 +74,7 @@ from .handlers.screenshot_callbacks import (
     panes_command,
     screenshot_command,
 )
-from .handlers.topic_lifecycle import topic_closed_handler, topic_edited_handler
+from .handlers.topics.topic_lifecycle import topic_closed_handler, topic_edited_handler
 from .handlers.history import send_history
 from .handlers.sessions_dashboard import sessions_command
 from .handlers.sync_command import sync_command

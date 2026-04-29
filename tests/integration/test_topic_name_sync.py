@@ -65,7 +65,7 @@ async def app():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     application = Application.builder().token(token).build()
 
-    from ccgram.handlers.topic_lifecycle import topic_edited_handler
+    from ccgram.handlers.topics.topic_lifecycle import topic_edited_handler
     from ccgram.handlers.sync_command import sync_command
     from telegram.ext import CommandHandler, MessageHandler, filters
 
@@ -149,7 +149,7 @@ async def test_topic_edited_dispatches_rename_to_tmux(app) -> None:
         ),
         patch("ccgram.bot.thread_router.get_display_name", return_value="fish"),
         patch(
-            "ccgram.handlers.topic_lifecycle.tmux_manager.rename_window",
+            "ccgram.handlers.topics.topic_lifecycle.tmux_manager.rename_window",
             new_callable=AsyncMock,
             return_value=True,
         ) as mock_rename_window,
@@ -173,7 +173,7 @@ async def test_topic_edited_ignores_bot_generated_name_update(app) -> None:
             return_value="ccgram-codex",
         ),
         patch(
-            "ccgram.handlers.topic_lifecycle.tmux_manager.rename_window",
+            "ccgram.handlers.topics.topic_lifecycle.tmux_manager.rename_window",
             new_callable=AsyncMock,
         ) as mock_rename_window,
     ):

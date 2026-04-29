@@ -409,7 +409,7 @@ class TestSyncFix:
         with (
             patch("ccgram.handlers.sync_command.safe_edit"),
             patch(
-                "ccgram.handlers.topic_orchestration.handle_new_window",
+                "ccgram.handlers.topics.topic_orchestration.handle_new_window",
                 new_callable=AsyncMock,
             ) as mock_handle,
         ):
@@ -504,7 +504,7 @@ class TestDeadTopicRecreation:
         bot = AsyncMock()
 
         with patch(
-            "ccgram.handlers.topic_orchestration.handle_new_window",
+            "ccgram.handlers.topics.topic_orchestration.handle_new_window",
             new_callable=AsyncMock,
         ) as mock_handle:
             recreated = await _recreate_dead_topics(bot, issues)
@@ -534,7 +534,7 @@ class TestDeadTopicRecreation:
         mock_bot = AsyncMock()
 
         with patch(
-            "ccgram.handlers.topic_orchestration.handle_new_window",
+            "ccgram.handlers.topics.topic_orchestration.handle_new_window",
             new_callable=AsyncMock,
         ) as mock_handle:
             count = await _recreate_dead_topics(mock_bot, issues)
@@ -552,7 +552,7 @@ class TestDeadTopicRecreation:
         mock_bot = AsyncMock()
 
         with patch(
-            "ccgram.handlers.topic_orchestration.handle_new_window",
+            "ccgram.handlers.topics.topic_orchestration.handle_new_window",
             new_callable=AsyncMock,
         ) as mock_handle:
             count = await _recreate_dead_topics(mock_bot, issues)
@@ -577,7 +577,7 @@ class TestDeadTopicRecreation:
         mock_bot = AsyncMock()
 
         with patch(
-            "ccgram.handlers.topic_orchestration.handle_new_window",
+            "ccgram.handlers.topics.topic_orchestration.handle_new_window",
             new_callable=AsyncMock,
             side_effect=TelegramError("Failed"),
         ):
@@ -663,7 +663,7 @@ class TestSyncFixDeadTopic:
         with (
             patch("ccgram.handlers.sync_command.safe_edit") as mock_edit,
             patch(
-                "ccgram.handlers.topic_orchestration.handle_new_window",
+                "ccgram.handlers.topics.topic_orchestration.handle_new_window",
                 new_callable=AsyncMock,
             ) as mock_handle,
         ):

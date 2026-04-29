@@ -9,8 +9,11 @@ from ccgram.handlers.callback_data import (
     CB_MODE_SELECT,
     CB_PROV_SELECT,
 )
-from ccgram.handlers.directory_browser import build_mode_picker, build_provider_picker
-from ccgram.handlers.directory_callbacks import (
+from ccgram.handlers.topics.directory_browser import (
+    build_mode_picker,
+    build_provider_picker,
+)
+from ccgram.handlers.topics.directory_callbacks import (
     _handle_confirm,
     _handle_mode_select,
     _handle_provider_select,
@@ -120,9 +123,11 @@ def _make_update(thread_id: int = 42) -> MagicMock:
 
 
 class TestHandleConfirmShowsProviderPicker:
-    @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.session_manager")
-    @patch("ccgram.handlers.directory_callbacks.thread_router")
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.session_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.thread_router")
     async def test_confirm_shows_provider_picker(
         self, mock_tr: MagicMock, mock_sm: MagicMock, mock_edit: AsyncMock
     ) -> None:
@@ -144,9 +149,11 @@ class TestHandleConfirmShowsProviderPicker:
         keyboard = call_args.kwargs.get("reply_markup") or call_args[0][2]
         assert isinstance(keyboard, InlineKeyboardMarkup)
 
-    @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.session_manager")
-    @patch("ccgram.handlers.directory_callbacks.thread_router")
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.session_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.thread_router")
     async def test_confirm_clears_browse_state(
         self, mock_tr: MagicMock, mock_sm: MagicMock, mock_edit: AsyncMock
     ) -> None:
@@ -169,11 +176,13 @@ class TestHandleConfirmShowsProviderPicker:
 
 
 class TestHandleProviderSelect:
-    @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
-    @patch("ccgram.handlers.directory_callbacks.provider_registry")
-    @patch("ccgram.handlers.directory_callbacks.session_manager")
-    @patch("ccgram.handlers.directory_callbacks.thread_router")
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
+    @patch("ccgram.handlers.topics.directory_callbacks.session_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.thread_router")
     async def test_shows_mode_picker(
         self,
         mock_tr: MagicMock,
@@ -200,7 +209,7 @@ class TestHandleProviderSelect:
         text = mock_edit.call_args[0][1]
         assert "Select Session Mode" in text
 
-    @patch("ccgram.handlers.directory_callbacks.provider_registry")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
     async def test_rejects_unknown_provider(self, mock_registry: MagicMock) -> None:
         mock_registry.is_valid.return_value = False
         query = _make_query(data=f"{CB_PROV_SELECT}unknown")
@@ -215,11 +224,13 @@ class TestHandleProviderSelect:
 
 class TestHandleModeSelect:
     @patch("ccgram.providers.resolve_launch_command")
-    @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.session_manager")
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
-    @patch("ccgram.handlers.directory_callbacks.provider_registry")
-    @patch("ccgram.handlers.directory_callbacks.thread_router")
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.session_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
+    @patch("ccgram.handlers.topics.directory_callbacks.thread_router")
     async def test_creates_window_with_yolo_mode(
         self,
         mock_tr: MagicMock,
@@ -268,16 +279,18 @@ class TestHandleModeSelect:
         mock_tr.set_group_chat_id.assert_called_once_with(100, 42, -100999)
 
     @patch(
-        "ccgram.handlers.directory_callbacks._accept_yolo_confirmation",
+        "ccgram.handlers.topics.directory_callbacks._accept_yolo_confirmation",
         new_callable=AsyncMock,
     )
     @patch("ccgram.providers.resolve_launch_command")
-    @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.session_map_sync")
-    @patch("ccgram.handlers.directory_callbacks.session_manager")
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
-    @patch("ccgram.handlers.directory_callbacks.provider_registry")
-    @patch("ccgram.handlers.directory_callbacks.thread_router")
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.session_map_sync")
+    @patch("ccgram.handlers.topics.directory_callbacks.session_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
+    @patch("ccgram.handlers.topics.directory_callbacks.thread_router")
     async def test_claude_yolo_accepts_bypass_prompt(
         self,
         mock_tr: MagicMock,
@@ -319,7 +332,7 @@ class TestHandleModeSelect:
         mock_accept_yolo.assert_awaited_once_with("@5")
         mock_sms.wait_for_session_map_entry.assert_awaited_once_with("@5")
 
-    @patch("ccgram.handlers.directory_callbacks.provider_registry")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
     async def test_rejects_unknown_mode(self, mock_registry: MagicMock) -> None:
         mock_registry.is_valid.return_value = True
         query = _make_query(data=f"{CB_MODE_SELECT}codex:unknown")
@@ -332,12 +345,17 @@ class TestHandleModeSelect:
         query.answer.assert_any_call("Unknown mode", show_alert=True)
 
     @patch("ccgram.providers.resolve_launch_command")
-    @patch("ccgram.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.send_to_window", new_callable=AsyncMock)
-    @patch("ccgram.handlers.directory_callbacks.session_manager")
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
-    @patch("ccgram.handlers.directory_callbacks.provider_registry")
-    @patch("ccgram.handlers.directory_callbacks.thread_router")
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.send_to_window",
+        new_callable=AsyncMock,
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.session_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
+    @patch("ccgram.handlers.topics.directory_callbacks.thread_router")
     async def test_forwards_pending_text(
         self,
         mock_tr: MagicMock,
@@ -409,17 +427,17 @@ class TestTryInstallMessagingSkill:
 class TestAcceptYoloConfirmation:
     @pytest.fixture(autouse=True)
     def _instant_yolo_sleep(self, monkeypatch):
-        from ccgram.handlers import directory_callbacks
+        from ccgram.handlers.topics import directory_callbacks
 
         monkeypatch.setattr(directory_callbacks.asyncio, "sleep", AsyncMock())
 
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
     async def test_detects_prompt_and_sends_down_then_enter(
         self, mock_tmux: MagicMock
     ) -> None:
         from unittest.mock import call
 
-        from ccgram.handlers.directory_callbacks import _accept_yolo_confirmation
+        from ccgram.handlers.topics.directory_callbacks import _accept_yolo_confirmation
 
         mock_tmux.capture_pane = AsyncMock(
             return_value=(
@@ -438,11 +456,11 @@ class TestAcceptYoloConfirmation:
         assert calls[0] == call("@5", "Down", enter=False, literal=False)
         assert calls[1] == call("@5", "Enter", enter=False, literal=False)
 
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
     async def test_returns_false_on_timeout_without_sending_keys(
         self, mock_tmux: MagicMock
     ) -> None:
-        from ccgram.handlers.directory_callbacks import _accept_yolo_confirmation
+        from ccgram.handlers.topics.directory_callbacks import _accept_yolo_confirmation
 
         mock_tmux.capture_pane = AsyncMock(return_value="some other output")
         mock_tmux.send_keys = AsyncMock(return_value=True)
@@ -452,9 +470,9 @@ class TestAcceptYoloConfirmation:
         assert result is False
         mock_tmux.send_keys.assert_not_awaited()
 
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
     async def test_handles_none_capture(self, mock_tmux: MagicMock) -> None:
-        from ccgram.handlers.directory_callbacks import _accept_yolo_confirmation
+        from ccgram.handlers.topics.directory_callbacks import _accept_yolo_confirmation
 
         mock_tmux.capture_pane = AsyncMock(return_value=None)
         mock_tmux.send_keys = AsyncMock(return_value=True)
@@ -464,9 +482,9 @@ class TestAcceptYoloConfirmation:
         assert result is False
         mock_tmux.send_keys.assert_not_awaited()
 
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
     async def test_case_insensitive_detection(self, mock_tmux: MagicMock) -> None:
-        from ccgram.handlers.directory_callbacks import _accept_yolo_confirmation
+        from ccgram.handlers.topics.directory_callbacks import _accept_yolo_confirmation
 
         mock_tmux.capture_pane = AsyncMock(
             return_value="BYPASS PERMISSIONS mode warning"
@@ -478,9 +496,9 @@ class TestAcceptYoloConfirmation:
         assert result is True
         assert mock_tmux.send_keys.await_count == 2
 
-    @patch("ccgram.handlers.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
     async def test_polls_until_prompt_appears(self, mock_tmux: MagicMock) -> None:
-        from ccgram.handlers.directory_callbacks import _accept_yolo_confirmation
+        from ccgram.handlers.topics.directory_callbacks import _accept_yolo_confirmation
 
         mock_tmux.capture_pane = AsyncMock(
             side_effect=[

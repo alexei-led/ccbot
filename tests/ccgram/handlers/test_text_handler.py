@@ -9,7 +9,7 @@ from ccgram.handlers.text_handler import (
     _handle_dead_window,
     _handle_unbound_topic,
 )
-from ccgram.handlers.directory_browser import (
+from ccgram.handlers.topics.directory_browser import (
     STATE_BROWSING_DIRECTORY,
     STATE_KEY,
     STATE_SELECTING_WINDOW,

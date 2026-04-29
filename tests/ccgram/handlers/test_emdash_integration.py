@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from ccgram.handlers.directory_browser import _window_label, build_window_picker
+from ccgram.handlers.topics.directory_browser import _window_label, build_window_picker
 from ccgram.session import SessionManager, WindowState
 from ccgram.session_map import parse_emdash_provider, session_map_sync
 from ccgram.thread_router import thread_router

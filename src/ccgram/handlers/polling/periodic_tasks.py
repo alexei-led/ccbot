@@ -23,7 +23,7 @@ from ...tmux_manager import tmux_manager
 from ...utils import log_throttle_sweep
 from ..msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
 from ..live_view import tick_live_views
-from ..topic_lifecycle import (
+from ..topics.topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
     probe_topic_existence,

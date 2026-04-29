@@ -15,11 +15,11 @@ from telegram import Bot, CallbackQuery, Chat, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..session import session_manager
-from ..thread_router import thread_router
-from ..tmux_manager import send_to_window, tmux_manager
-from .callback_data import CB_WIN_BIND, CB_WIN_CANCEL, CB_WIN_NEW
-from .callback_helpers import get_thread_id
+from ...session import session_manager
+from ...thread_router import thread_router
+from ...tmux_manager import send_to_window, tmux_manager
+from ..callback_data import CB_WIN_BIND, CB_WIN_CANCEL, CB_WIN_NEW
+from ..callback_helpers import get_thread_id
 from .directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
@@ -30,10 +30,10 @@ from .directory_browser import (
     build_directory_browser,
     clear_window_picker_state,
 )
-from .callback_registry import register
-from .messaging_pipeline.message_sender import safe_edit, safe_send
-from .topic_emoji import format_topic_name_for_mode
-from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import safe_edit, safe_send
+from ..topic_emoji import format_topic_name_for_mode
+from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
 
 logger = structlog.get_logger()
 
@@ -89,7 +89,7 @@ async def _detect_and_setup_provider(
     falling back to basename-only matching.
     Returns the detected provider name (empty string if undetected).
     """
-    from ..providers import detect_provider_from_pane
+    from ...providers import detect_provider_from_pane
 
     detected = (
         await detect_provider_from_pane(
@@ -100,11 +100,11 @@ async def _detect_and_setup_provider(
     )
     if detected:
         session_manager.set_window_provider(window_id, detected)
-        from ..providers import get_provider_for_window
+        from ...providers import get_provider_for_window
 
         provider = get_provider_for_window(window_id, detected)
         if provider and provider.capabilities.chat_first_command_path:
-            from .shell_prompt_orchestrator import ensure_setup
+            from ..shell_prompt_orchestrator import ensure_setup
 
             await ensure_setup(
                 window_id,
@@ -133,12 +133,12 @@ async def _forward_pending_text(
             one from directory browser).  For shell, skips handle_shell_message
             to avoid _ensure_prompt_marker racing with the offer keyboard.
     """
-    from ..providers import get_provider_for_window
+    from ...providers import get_provider_for_window
 
     provider = get_provider_for_window(window_id, provider_name)
     is_chat_first = bool(provider and provider.capabilities.chat_first_command_path)
     if is_chat_first and not is_existing_window:
-        from .shell_commands import handle_shell_message
+        from ..shell_commands import handle_shell_message
 
         await handle_shell_message(bot, user_id, thread_id, window_id, text)
     else:

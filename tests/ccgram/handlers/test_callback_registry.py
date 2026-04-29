@@ -251,8 +251,8 @@ class TestLoadHandlers:
     def test_load_handlers_imports_modules(self) -> None:
         load_handlers()
         expected_modules = [
-            "ccgram.handlers.directory_callbacks",
-            "ccgram.handlers.window_callbacks",
+            "ccgram.handlers.topics.directory_callbacks",
+            "ccgram.handlers.topics.window_callbacks",
             "ccgram.handlers.history_callbacks",
             "ccgram.handlers.screenshot_callbacks",
             "ccgram.handlers.interactive_callbacks",

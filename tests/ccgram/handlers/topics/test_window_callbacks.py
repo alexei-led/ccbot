@@ -6,9 +6,9 @@ from telegram import Bot, CallbackQuery, Update
 from telegram.ext import ContextTypes
 
 from ccgram.handlers.callback_data import CB_WIN_BIND, CB_WIN_CANCEL, CB_WIN_NEW
-from ccgram.handlers.directory_browser import UNBOUND_WINDOWS_KEY
+from ccgram.handlers.topics.directory_browser import UNBOUND_WINDOWS_KEY
 from ccgram.handlers.user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
-from ccgram.handlers.window_callbacks import handle_window_callback
+from ccgram.handlers.topics.window_callbacks import handle_window_callback
 
 
 def _make_query_update_context(
@@ -46,15 +46,15 @@ class TestBindWindowCallback:
         mock_window.window_name = "my-project"
 
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_callbacks.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.window_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.window_callbacks.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_callbacks.tmux_manager.find_window_by_id",
+                "ccgram.handlers.topics.window_callbacks.tmux_manager.find_window_by_id",
                 new_callable=AsyncMock,
                 return_value=mock_window,
             ),
-            patch("ccgram.handlers.window_callbacks.safe_edit") as mock_edit,
-            patch("ccgram.handlers.window_callbacks.format_topic_name_for_mode"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit") as mock_edit,
+            patch("ccgram.handlers.topics.window_callbacks.format_topic_name_for_mode"),
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_sm.get_approval_mode.return_value = "normal"
@@ -106,17 +106,17 @@ class TestBindWindowCallback:
         mock_window.window_name = "proj"
 
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_callbacks.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.window_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.window_callbacks.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_callbacks.tmux_manager.find_window_by_id",
+                "ccgram.handlers.topics.window_callbacks.tmux_manager.find_window_by_id",
                 new_callable=AsyncMock,
                 return_value=mock_window,
             ),
-            patch("ccgram.handlers.window_callbacks.safe_edit"),
-            patch("ccgram.handlers.window_callbacks.format_topic_name_for_mode"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit"),
+            patch("ccgram.handlers.topics.window_callbacks.format_topic_name_for_mode"),
             patch(
-                "ccgram.handlers.window_callbacks.send_to_window",
+                "ccgram.handlers.topics.window_callbacks.send_to_window",
                 new_callable=AsyncMock,
                 return_value=(True, "ok"),
             ) as mock_send,
@@ -136,11 +136,11 @@ class TestNewWindowCallback:
 
         with (
             patch(
-                "ccgram.handlers.window_callbacks.build_directory_browser",
+                "ccgram.handlers.topics.window_callbacks.build_directory_browser",
                 return_value=("Browse:", MagicMock(), ["/a", "/b"]),
             ),
-            patch("ccgram.handlers.window_callbacks.safe_edit") as mock_edit,
-            patch("ccgram.handlers.window_callbacks.clear_window_picker_state"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit") as mock_edit,
+            patch("ccgram.handlers.topics.window_callbacks.clear_window_picker_state"),
         ):
             await handle_window_callback(query, 100, CB_WIN_NEW, update, context)
 
@@ -168,8 +168,8 @@ class TestCancelCallback:
         query, update, context = _make_query_update_context(user_data=user_data)
 
         with (
-            patch("ccgram.handlers.window_callbacks.safe_edit") as mock_edit,
-            patch("ccgram.handlers.window_callbacks.clear_window_picker_state"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit") as mock_edit,
+            patch("ccgram.handlers.topics.window_callbacks.clear_window_picker_state"),
         ):
             await handle_window_callback(query, 100, CB_WIN_CANCEL, update, context)
 
@@ -201,15 +201,15 @@ class TestBindProviderDetection:
         mock_window.pane_tty = "/dev/ttys003"
 
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_callbacks.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.window_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.window_callbacks.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_callbacks.tmux_manager.find_window_by_id",
+                "ccgram.handlers.topics.window_callbacks.tmux_manager.find_window_by_id",
                 new_callable=AsyncMock,
                 return_value=mock_window,
             ),
-            patch("ccgram.handlers.window_callbacks.safe_edit"),
-            patch("ccgram.handlers.window_callbacks.format_topic_name_for_mode"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit"),
+            patch("ccgram.handlers.topics.window_callbacks.format_topic_name_for_mode"),
             patch(
                 "ccgram.providers.detect_provider_from_pane",
                 new_callable=AsyncMock,
@@ -238,15 +238,15 @@ class TestBindProviderDetection:
         mock_window.pane_current_command = "claude"
 
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_callbacks.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.window_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.window_callbacks.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_callbacks.tmux_manager.find_window_by_id",
+                "ccgram.handlers.topics.window_callbacks.tmux_manager.find_window_by_id",
                 new_callable=AsyncMock,
                 return_value=mock_window,
             ),
-            patch("ccgram.handlers.window_callbacks.safe_edit"),
-            patch("ccgram.handlers.window_callbacks.format_topic_name_for_mode"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit"),
+            patch("ccgram.handlers.topics.window_callbacks.format_topic_name_for_mode"),
             patch(
                 "ccgram.providers.detect_provider_from_pane",
                 new_callable=AsyncMock,
@@ -276,15 +276,15 @@ class TestBindProviderDetection:
         mock_window.pane_current_command = "bash"
 
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager") as mock_sm,
-            patch("ccgram.handlers.window_callbacks.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.window_callbacks.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.window_callbacks.thread_router") as mock_tr,
             patch(
-                "ccgram.handlers.window_callbacks.tmux_manager.find_window_by_id",
+                "ccgram.handlers.topics.window_callbacks.tmux_manager.find_window_by_id",
                 new_callable=AsyncMock,
                 return_value=mock_window,
             ),
-            patch("ccgram.handlers.window_callbacks.safe_edit"),
-            patch("ccgram.handlers.window_callbacks.format_topic_name_for_mode"),
+            patch("ccgram.handlers.topics.window_callbacks.safe_edit"),
+            patch("ccgram.handlers.topics.window_callbacks.format_topic_name_for_mode"),
             patch(
                 "ccgram.providers.detect_provider_from_pane",
                 new_callable=AsyncMock,
@@ -295,7 +295,7 @@ class TestBindProviderDetection:
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.window_callbacks._forward_pending_text",
+                "ccgram.handlers.topics.window_callbacks._forward_pending_text",
                 new_callable=AsyncMock,
             ) as mock_forward,
         ):
@@ -316,17 +316,17 @@ class TestBindProviderDetection:
 
 class TestForwardPendingText:
     async def test_existing_shell_window_sends_raw(self) -> None:
-        from ccgram.handlers.window_callbacks import _forward_pending_text
+        from ccgram.handlers.topics.window_callbacks import _forward_pending_text
 
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.window_callbacks.session_manager"),
+            patch("ccgram.handlers.topics.window_callbacks.session_manager"),
             patch(
                 "ccgram.handlers.shell_commands.handle_shell_message",
                 new_callable=AsyncMock,
             ) as mock_shell,
             patch(
-                "ccgram.handlers.window_callbacks.send_to_window",
+                "ccgram.handlers.topics.window_callbacks.send_to_window",
                 new_callable=AsyncMock,
                 return_value=(True, ""),
             ) as mock_send,
@@ -339,7 +339,7 @@ class TestForwardPendingText:
         mock_send.assert_called_once_with("@5", "list files")
 
     async def test_new_shell_window_routes_through_handler(self) -> None:
-        from ccgram.handlers.window_callbacks import _forward_pending_text
+        from ccgram.handlers.topics.window_callbacks import _forward_pending_text
 
         bot = AsyncMock(spec=Bot)
         with patch(

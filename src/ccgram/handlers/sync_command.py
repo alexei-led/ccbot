@@ -248,7 +248,7 @@ async def _close_ghost_topics(bot: Bot, issues: list[AuditIssue]) -> int:
 
 async def _adopt_orphaned_windows(bot: Bot, issues: list[AuditIssue]) -> None:
     """Create Telegram topics for unbound tmux windows."""
-    from .topic_orchestration import handle_new_window as _handle_new_window
+    from .topics.topic_orchestration import handle_new_window as _handle_new_window
     from ..session_monitor import NewWindowEvent
 
     for issue in issues:
@@ -335,7 +335,7 @@ async def _recreate_dead_topics(bot: Bot, issues: list[AuditIssue]) -> int:
 
     Returns count of successfully recreated topics.
     """
-    from .topic_orchestration import handle_new_window as _handle_new_window
+    from .topics.topic_orchestration import handle_new_window as _handle_new_window
     from ..session_monitor import NewWindowEvent
 
     recreated = 0

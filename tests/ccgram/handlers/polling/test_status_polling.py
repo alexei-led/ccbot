@@ -8,7 +8,7 @@ from telegram.error import BadRequest, TelegramError
 
 from _helpers import make_mock_provider
 
-from ccgram.handlers.topic_lifecycle import (
+from ccgram.handlers.topics.topic_lifecycle import (
     check_autoclose_timers,
     probe_topic_existence,
     prune_stale_state,
@@ -111,10 +111,10 @@ class TestAutocloseTimers:
         _start_autoclose_timer(1, 42, state, 0.0)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
-            patch("ccgram.handlers.topic_lifecycle.clear_topic_state"),
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.topic_lifecycle.time") as mock_time,
+            patch("ccgram.handlers.topics.topic_lifecycle.clear_topic_state"),
         ):
             mock_config.autoclose_done_minutes = 30
             mock_config.autoclose_dead_minutes = minutes
@@ -131,8 +131,8 @@ class TestAutocloseTimers:
         _start_autoclose_timer(1, 42, "done", 0.0)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_lifecycle.time") as mock_time,
         ):
             mock_config.autoclose_done_minutes = 30
             mock_config.autoclose_dead_minutes = 10
@@ -145,8 +145,8 @@ class TestAutocloseTimers:
         _start_autoclose_timer(1, 42, "done", 0.0)
         bot = AsyncMock(spec=Bot)
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_lifecycle.time") as mock_time,
         ):
             mock_config.autoclose_done_minutes = 0
             mock_config.autoclose_dead_minutes = 0
@@ -159,9 +159,9 @@ class TestAutocloseTimers:
         bot = AsyncMock(spec=Bot)
         bot.close_forum_topic.side_effect = TelegramError("fail")
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.topic_lifecycle.time") as mock_time,
         ):
             mock_config.autoclose_done_minutes = 30
             mock_config.autoclose_dead_minutes = 10
@@ -175,11 +175,11 @@ class TestAutocloseTimers:
         bot = AsyncMock(spec=Bot)
         bot.delete_forum_topic.side_effect = BadRequest("Topic_id_invalid")
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_lifecycle.time") as mock_time,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.topic_lifecycle.time") as mock_time,
             patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
+                "ccgram.handlers.topics.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ) as mock_clear,
         ):
@@ -649,7 +649,7 @@ class TestProbeFailures:
     async def test_probe_skips_suspended_windows(self) -> None:
         terminal_poll_state.get_state("@5").probe_failures = MAX_PROBE_FAILURES
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             await probe_topic_existence(bot)
         bot.unpin_all_forum_topic_messages.assert_not_called()
@@ -657,7 +657,7 @@ class TestProbeFailures:
     async def test_probe_success_resets_counter(self) -> None:
         terminal_poll_state.get_state("@5").probe_failures = 2
         bot = AsyncMock(spec=Bot)
-        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_tr.resolve_chat_id.return_value = -100
             await probe_topic_existence(bot)
@@ -679,7 +679,7 @@ class TestProbeFailures:
     async def test_probe_error_increments_counter(self, exc: TelegramError) -> None:
         bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = exc
-        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_tr.resolve_chat_id.return_value = -100
             await probe_topic_existence(bot)
@@ -688,7 +688,7 @@ class TestProbeFailures:
     async def test_probe_suspends_after_max_failures(self) -> None:
         bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = TelegramError("Timed out")
-        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr:
+        with patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr:
             mock_tr.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_tr.resolve_chat_id.return_value = -100
             for _ in range(MAX_PROBE_FAILURES + 1):
@@ -710,10 +710,10 @@ class TestProbeFailures:
         mock_window = MagicMock()
         mock_window.window_id = "@5"
         with (
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
+                "ccgram.handlers.topics.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ) as mock_cleanup,
         ):
@@ -738,7 +738,7 @@ class TestPruneStaleStatePolling:
         mock_win = MagicMock()
         mock_win.window_id = "@1"
         mock_win.window_name = "proj"
-        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
+        with patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm:
             mock_sm.sync_display_names.return_value = False
             mock_sm.prune_stale_state.return_value = False
             await prune_stale_state([mock_win])
@@ -746,7 +746,7 @@ class TestPruneStaleStatePolling:
         mock_sm.prune_stale_state.assert_called_once_with({"@1"})
 
     async def test_empty_window_list(self) -> None:
-        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
+        with patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm:
             mock_sm.sync_display_names.return_value = False
             mock_sm.prune_stale_state.return_value = False
             await prune_stale_state([])
@@ -1741,10 +1741,10 @@ class TestDeadWindowNotification:
         mock_window = MagicMock()
         mock_window.window_id = "@5"
         with (
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tm,
+            patch("ccgram.handlers.topics.topic_lifecycle.thread_router") as mock_tr,
+            patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tm,
             patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
+                "ccgram.handlers.topics.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ) as mock_cleanup,
         ):

@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.topic_orchestration import handle_new_window as _handle_new_window
+from ccgram.handlers.topics.topic_orchestration import (
+    handle_new_window as _handle_new_window,
+)
 from ccgram.session import SessionManager
 from ccgram.thread_router import thread_router
 from ccgram.session_monitor import NewWindowEvent, SessionMonitor
@@ -65,8 +67,10 @@ class TestNewWindowSyncWithBindings:
         async def on_new_window(event: NewWindowEvent) -> None:
             captured_events.append(event)
             with (
-                patch("ccgram.handlers.topic_orchestration.session_manager", sm),
-                patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+                patch("ccgram.handlers.topics.topic_orchestration.session_manager", sm),
+                patch(
+                    "ccgram.handlers.topics.topic_orchestration.config"
+                ) as mock_config,
             ):
                 mock_config.group_id = None
                 mock_config.allowed_users = {user_id}
@@ -135,8 +139,10 @@ class TestNewWindowSyncWithBindings:
 
         async def on_new_window(event: NewWindowEvent) -> None:
             with (
-                patch("ccgram.handlers.topic_orchestration.session_manager", sm),
-                patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+                patch("ccgram.handlers.topics.topic_orchestration.session_manager", sm),
+                patch(
+                    "ccgram.handlers.topics.topic_orchestration.config"
+                ) as mock_config,
             ):
                 mock_config.group_id = None
                 mock_config.allowed_users = {user_a, user_b}
@@ -184,8 +190,10 @@ class TestNewWindowSyncColdStart:
 
         async def on_new_window(event: NewWindowEvent) -> None:
             with (
-                patch("ccgram.handlers.topic_orchestration.session_manager", sm),
-                patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+                patch("ccgram.handlers.topics.topic_orchestration.session_manager", sm),
+                patch(
+                    "ccgram.handlers.topics.topic_orchestration.config"
+                ) as mock_config,
             ):
                 mock_config.group_id = group_id
                 mock_config.allowed_users = {user_id}
@@ -221,8 +229,10 @@ class TestNewWindowSyncColdStart:
 
         async def on_new_window(event: NewWindowEvent) -> None:
             with (
-                patch("ccgram.handlers.topic_orchestration.session_manager", sm),
-                patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+                patch("ccgram.handlers.topics.topic_orchestration.session_manager", sm),
+                patch(
+                    "ccgram.handlers.topics.topic_orchestration.config"
+                ) as mock_config,
             ):
                 mock_config.group_id = None
                 mock_config.allowed_users = set()
@@ -269,8 +279,10 @@ class TestNewWindowSyncEdgeCases:
 
         async def on_new_window(event: NewWindowEvent) -> None:
             with (
-                patch("ccgram.handlers.topic_orchestration.session_manager", sm),
-                patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+                patch("ccgram.handlers.topics.topic_orchestration.session_manager", sm),
+                patch(
+                    "ccgram.handlers.topics.topic_orchestration.config"
+                ) as mock_config,
             ):
                 mock_config.group_id = -100100
                 mock_config.allowed_users = {user_id}
@@ -309,8 +321,10 @@ class TestNewWindowSyncEdgeCases:
 
         async def on_new_window(event: NewWindowEvent) -> None:
             with (
-                patch("ccgram.handlers.topic_orchestration.session_manager", sm),
-                patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+                patch("ccgram.handlers.topics.topic_orchestration.session_manager", sm),
+                patch(
+                    "ccgram.handlers.topics.topic_orchestration.config"
+                ) as mock_config,
             ):
                 mock_config.group_id = group_id
                 mock_config.allowed_users = {user_id}

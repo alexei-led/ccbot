@@ -7,7 +7,7 @@ from telegram.error import BadRequest
 
 from ccgram.window_view import WindowView
 
-from ccgram.handlers.topic_lifecycle import (
+from ccgram.handlers.topics.topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
     probe_topic_existence,
@@ -44,10 +44,12 @@ class TestCheckAutocloseTimers:
             user_id, thread_id, "done", time.monotonic() - 99999
         )
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
             patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
+                "ccgram.handlers.topics.topic_lifecycle.thread_router"
+            ) as mock_router,
+            patch(
+                "ccgram.handlers.topics.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ),
         ):
@@ -63,7 +65,7 @@ class TestCheckAutocloseTimers:
         lifecycle_strategy.start_autoclose_timer(
             user_id, thread_id, "done", time.monotonic()
         )
-        with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
+        with patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config:
             mock_config.autoclose_done_minutes = 60
             await check_autoclose_timers(bot)
         bot.delete_forum_topic.assert_not_called()
@@ -88,7 +90,7 @@ def _window_view(origin: str) -> WindowView:
 
 class TestCheckUnboundWindowTtl:
     async def test_no_timeout_is_noop(self):
-        with patch("ccgram.handlers.topic_lifecycle.config") as mock_config:
+        with patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config:
             mock_config.autoclose_done_minutes = 0
             await check_unbound_window_ttl([])
 
@@ -97,8 +99,10 @@ class TestCheckUnboundWindowTtl:
         ws.unbound_timer = time.monotonic() - 100
         mock_window = MagicMock(window_id="@0", window_name="test")
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_lifecycle.thread_router"
+            ) as mock_router,
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
@@ -110,10 +114,12 @@ class TestCheckUnboundWindowTtl:
         ws.unbound_timer = time.monotonic() - 100
         mock_window = MagicMock(window_id="@0", window_name="test")
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm,
-            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_lifecycle.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tmux,
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.iter_thread_bindings.return_value = []
@@ -128,10 +134,12 @@ class TestCheckUnboundWindowTtl:
         ws.unbound_timer = time.monotonic() - 100
         mock_window = MagicMock(window_id="@0", window_name="test")
         with (
-            patch("ccgram.handlers.topic_lifecycle.config") as mock_config,
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm,
-            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topics.topic_lifecycle.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_lifecycle.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tmux,
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.iter_thread_bindings.return_value = []
@@ -144,7 +152,7 @@ class TestCheckUnboundWindowTtl:
 class TestPruneStaleState:
     async def test_syncs_display_names(self):
         mock_window = MagicMock(window_id="@0", window_name="test")
-        with patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm:
+        with patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm:
             await prune_stale_state([mock_window])
             mock_sm.sync_display_names.assert_called_once_with([("@0", "test")])
             mock_sm.prune_stale_state.assert_called_once_with({"@0"})
@@ -157,11 +165,13 @@ class TestProbeTopicExistence:
             side_effect=BadRequest("Topic_id_invalid")
         )
         with (
-            patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_lifecycle.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.topic_lifecycle.session_manager") as mock_sm,
             patch(
-                "ccgram.handlers.topic_lifecycle.clear_topic_state",
+                "ccgram.handlers.topics.topic_lifecycle.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.topics.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
             ),
         ):
@@ -180,7 +190,9 @@ class TestProbeTopicExistence:
         bot = AsyncMock(spec=Bot)
         ws = terminal_poll_state.get_state("@0")
         ws.probe_failures = 999
-        with patch("ccgram.handlers.topic_lifecycle.thread_router") as mock_router:
+        with patch(
+            "ccgram.handlers.topics.topic_lifecycle.thread_router"
+        ) as mock_router:
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
             await probe_topic_existence(bot)
         bot.unpin_all_forum_topic_messages.assert_not_called()

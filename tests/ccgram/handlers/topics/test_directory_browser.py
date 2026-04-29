@@ -5,14 +5,18 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from ccgram.handlers.directory_browser import build_directory_browser, get_favorites
+from ccgram.handlers.topics.directory_browser import (
+    build_directory_browser,
+    get_favorites,
+)
 from ccgram.user_preferences import UserPreferences
 
 
 @pytest.fixture
 def mock_session_manager():
     with patch(
-        "ccgram.handlers.directory_browser.user_preferences", spec=UserPreferences
+        "ccgram.handlers.topics.directory_browser.user_preferences",
+        spec=UserPreferences,
     ) as mgr:
         mgr.get_user_starred.return_value = []
         mgr.get_user_mru.return_value = []
@@ -102,7 +106,7 @@ class TestHiddenDirs:
         (tmp_path / "visible").mkdir()
         (tmp_path / ".hidden").mkdir()
 
-        with patch("ccgram.handlers.directory_browser.config") as mock_cfg:
+        with patch("ccgram.handlers.topics.directory_browser.config") as mock_cfg:
             mock_cfg.show_hidden_dirs = False
             _text, _kb, subdirs = build_directory_browser(str(tmp_path))
 
@@ -115,7 +119,7 @@ class TestHiddenDirs:
         (tmp_path / "visible").mkdir()
         (tmp_path / ".hidden").mkdir()
 
-        with patch("ccgram.handlers.directory_browser.config") as mock_cfg:
+        with patch("ccgram.handlers.topics.directory_browser.config") as mock_cfg:
             mock_cfg.show_hidden_dirs = True
             _text, _kb, subdirs = build_directory_browser(str(tmp_path))
 

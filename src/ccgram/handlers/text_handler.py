@@ -15,7 +15,7 @@ from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from .callback_helpers import get_thread_id as _get_thread_id
-from .directory_browser import (
+from .topics.directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
     BROWSE_PATH_KEY,

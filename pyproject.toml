@@ -113,7 +113,7 @@ max-statements = 60
 # Message queue: worker loop with task dispatch and error handling
 "src/ccgram/handlers/message_queue.py" = ["C901"]
 # Directory callbacks: confirm handler with state cleanup branches
-"src/ccgram/handlers/directory_callbacks.py" = ["C901"]
+"src/ccgram/handlers/topics/directory_callbacks.py" = ["C901"]
 # Recovery callbacks: fresh handler with state cleanup branches
 "src/ccgram/handlers/recovery_callbacks.py" = ["C901"]
 

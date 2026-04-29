@@ -372,12 +372,12 @@ This keeps each task's diff small.
 - Move: `topic_orchestration.py`, `topic_lifecycle.py`, `directory_browser.py`, `directory_callbacks.py`, `window_callbacks.py`
 - Note: `topic_emoji.py` goes to `handlers/status/` (it owns status emoji), not here
 
-- [ ] create subpackage; re-export `handle_new_window`, `adopt_unbound_windows`, `topic_closed_handler`, `topic_edited_handler`, `clear_browse_state`, plus directory browser builders
-- [ ] git mv five modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group topics subpackage"
+- [x] create subpackage; re-export `handle_new_window`, `adopt_unbound_windows`, `topic_closed_handler`, `topic_edited_handler`, `clear_browse_state`, plus directory browser builders
+- [x] git mv five modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group topics subpackage"
 
 #### Task F1.4: Create `handlers/recovery/` subpackage
 

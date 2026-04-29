@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram.error import BadRequest, RetryAfter, TelegramError, TimedOut
 
-from ccgram.handlers.topic_orchestration import (
+from ccgram.handlers.topics.topic_orchestration import (
     collect_target_chats,
     _is_window_already_bound,
     _topic_create_retry_until,
@@ -27,7 +27,7 @@ def _clear_retry_state():
 def _mock_tmux():
     mock_window = MagicMock()
     mock_window.pane_current_command = ""
-    with patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux:
+    with patch("ccgram.handlers.topics.topic_orchestration.tmux_manager") as mock_tmux:
         mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
         yield mock_tmux
 
@@ -54,24 +54,32 @@ def _make_topic(thread_id: int = 999) -> MagicMock:
 
 class TestIsWindowAlreadyBound:
     def test_bound_window(self):
-        with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
+        with patch(
+            "ccgram.handlers.topics.topic_orchestration.thread_router"
+        ) as mock_router:
             mock_router.has_window.return_value = True
             assert _is_window_already_bound("@5") is True
 
     def test_unbound_window(self):
-        with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
+        with patch(
+            "ccgram.handlers.topics.topic_orchestration.thread_router"
+        ) as mock_router:
             mock_router.has_window.return_value = False
             assert _is_window_already_bound("@5") is False
 
     def test_no_bindings(self):
-        with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
+        with patch(
+            "ccgram.handlers.topics.topic_orchestration.thread_router"
+        ) as mock_router:
             mock_router.has_window.return_value = False
             assert _is_window_already_bound("@0") is False
 
 
 class TestCollectTargetChats:
     def test_from_bindings(self):
-        with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
+        with patch(
+            "ccgram.handlers.topics.topic_orchestration.thread_router"
+        ) as mock_router:
             mock_router.iter_thread_bindings.return_value = [
                 (1, 100, "@0"),
             ]
@@ -80,7 +88,9 @@ class TestCollectTargetChats:
             assert result == {-1001}
 
     def test_fallback_to_group_chat_ids(self):
-        with patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router:
+        with patch(
+            "ccgram.handlers.topics.topic_orchestration.thread_router"
+        ) as mock_router:
             mock_router.iter_thread_bindings.return_value = []
             mock_router.group_chat_ids = {1: -2002}
             result = collect_target_chats("@5")
@@ -88,8 +98,10 @@ class TestCollectTargetChats:
 
     def test_fallback_to_config_group_id(self):
         with (
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_router.iter_thread_bindings.return_value = []
             mock_router.group_chat_ids = {}
@@ -99,8 +111,10 @@ class TestCollectTargetChats:
 
     def test_no_chats_available(self):
         with (
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_router.iter_thread_bindings.return_value = []
             mock_router.group_chat_ids = {}
@@ -110,8 +124,10 @@ class TestCollectTargetChats:
 
     def test_skips_positive_ids(self):
         with (
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_router.iter_thread_bindings.return_value = []
             mock_router.group_chat_ids = {"100:5": 100}
@@ -127,7 +143,7 @@ class TestHandleNewWindow:
         )
         bot = AsyncMock()
         with patch(
-            "ccgram.handlers.topic_orchestration._is_window_already_bound",
+            "ccgram.handlers.topics.topic_orchestration._is_window_already_bound",
             return_value=True,
         ):
             await handle_new_window(event, bot)
@@ -144,19 +160,21 @@ class TestHandleNewWindow:
 
         with (
             patch(
-                "ccgram.handlers.topic_orchestration._is_window_already_bound",
+                "ccgram.handlers.topics.topic_orchestration._is_window_already_bound",
                 return_value=False,
             ),
             patch(
-                "ccgram.handlers.topic_orchestration._auto_detect_provider",
+                "ccgram.handlers.topics.topic_orchestration._auto_detect_provider",
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.topic_orchestration.collect_target_chats",
+                "ccgram.handlers.topics.topic_orchestration.collect_target_chats",
                 return_value={-1001},
             ),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_router,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_router,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_router.iter_thread_bindings.return_value = [(1, 100, "@0")]
             mock_router.resolve_chat_id.return_value = -1001
@@ -173,15 +191,15 @@ class TestHandleNewWindow:
 
         with (
             patch(
-                "ccgram.handlers.topic_orchestration._is_window_already_bound",
+                "ccgram.handlers.topics.topic_orchestration._is_window_already_bound",
                 return_value=False,
             ),
             patch(
-                "ccgram.handlers.topic_orchestration._auto_detect_provider",
+                "ccgram.handlers.topics.topic_orchestration._auto_detect_provider",
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.topic_orchestration.collect_target_chats",
+                "ccgram.handlers.topics.topic_orchestration.collect_target_chats",
                 return_value=set(),
             ),
         ):
@@ -198,15 +216,15 @@ class TestHandleNewWindow:
 
         with (
             patch(
-                "ccgram.handlers.topic_orchestration._is_window_already_bound",
+                "ccgram.handlers.topics.topic_orchestration._is_window_already_bound",
                 return_value=False,
             ),
             patch(
-                "ccgram.handlers.topic_orchestration._auto_detect_provider",
+                "ccgram.handlers.topics.topic_orchestration._auto_detect_provider",
                 new_callable=AsyncMock,
             ),
             patch(
-                "ccgram.handlers.topic_orchestration.collect_target_chats",
+                "ccgram.handlers.topics.topic_orchestration.collect_target_chats",
                 return_value={-1001},
             ),
         ):
@@ -220,9 +238,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=42))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
@@ -241,9 +261,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=42))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
@@ -264,9 +286,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=77))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config"),
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config"),
         ):
             bindings = [(100, 5, "@1")]
             mock_tr.has_window.return_value = False
@@ -289,9 +313,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=77))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config"),
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config"),
         ):
             bindings = [(100, 5, "@1")]
             mock_tr.has_window.return_value = False
@@ -315,9 +341,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=42))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
@@ -336,9 +364,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(side_effect=TelegramError("API error"))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
@@ -353,12 +383,17 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(side_effect=RetryAfter(27))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
-            patch("ccgram.handlers.topic_orchestration._topic_create_retry_until", {}),
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
             patch(
-                "ccgram.handlers.topic_orchestration.time.monotonic",
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration._topic_create_retry_until",
+                {},
+            ),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.time.monotonic",
                 side_effect=[100.0, 100.0, 101.0],
             ),
         ):
@@ -387,12 +422,17 @@ class TestHandleNewWindow:
         )
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
-            patch("ccgram.handlers.topic_orchestration._topic_create_retry_until", {}),
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
             patch(
-                "ccgram.handlers.topic_orchestration.time.monotonic",
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration._topic_create_retry_until",
+                {},
+            ),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.time.monotonic",
                 side_effect=[100.0, 100.0, 106.0],
             ),
         ):
@@ -422,9 +462,11 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=42))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([])
@@ -447,9 +489,13 @@ class TestHandleNewWindow:
         bot.delete_message = AsyncMock()
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.return_value = iter([(100, 120014, "@1")])
@@ -472,10 +518,14 @@ class TestHandleNewWindow:
         bot.create_forum_topic = AsyncMock(return_value=_make_topic(thread_id=77))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
         ):
             mock_tr.has_window.return_value = False
             mock_tr.iter_thread_bindings.side_effect = [
@@ -507,11 +557,13 @@ class TestCreateForumTopicTransientRetry:
         )
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
             patch(
-                "ccgram.handlers.topic_orchestration.asyncio.sleep",
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
         ):
@@ -530,11 +582,13 @@ class TestCreateForumTopicTransientRetry:
         bot.create_forum_topic = AsyncMock(side_effect=TimedOut("persistent"))
 
         with (
-            patch("ccgram.handlers.topic_orchestration.session_manager"),
-            patch("ccgram.handlers.topic_orchestration.thread_router") as mock_tr,
-            patch("ccgram.handlers.topic_orchestration.config") as mock_config,
+            patch("ccgram.handlers.topics.topic_orchestration.session_manager"),
             patch(
-                "ccgram.handlers.topic_orchestration.asyncio.sleep",
+                "ccgram.handlers.topics.topic_orchestration.thread_router"
+            ) as mock_tr,
+            patch("ccgram.handlers.topics.topic_orchestration.config") as mock_config,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
         ):
@@ -562,10 +616,14 @@ class TestAdoptUnboundWindows:
         mock_audit.issues = [mock_issue]
 
         with (
-            patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.topic_orchestration.session_manager") as mock_sm,
             patch(
-                "ccgram.handlers.topic_orchestration._adopt_orphaned_windows",
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.session_manager"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration._adopt_orphaned_windows",
                 new_callable=AsyncMock,
                 create=True,
             ),
@@ -586,8 +644,12 @@ class TestAdoptUnboundWindows:
         mock_audit.issues = []
 
         with (
-            patch("ccgram.handlers.topic_orchestration.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.topic_orchestration.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.session_manager"
+            ) as mock_sm,
         ):
             mock_tmux.list_windows = AsyncMock(return_value=[])
             mock_sm.audit_state.return_value = mock_audit

@@ -239,7 +239,7 @@ async def setup_bound_topic(
 
     # Set the browse_path in user_data to our work_dir
     # Access the mutable internal defaultdict (app.user_data is a read-only proxy)
-    from ccgram.handlers.directory_browser import BROWSE_PATH_KEY
+    from ccgram.handlers.topics.directory_browser import BROWSE_PATH_KEY
 
     user_data = app._user_data[user_id]  # defaultdict auto-creates entry
     user_data[BROWSE_PATH_KEY] = str(work_dir)

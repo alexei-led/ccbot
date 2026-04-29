@@ -13,7 +13,7 @@ from ccgram.handlers.topic_emoji import (
     _disabled_chats,
     clear_disabled_chat,
 )
-from ccgram.handlers.topic_orchestration import (
+from ccgram.handlers.topics.topic_orchestration import (
     _topic_create_retry_until,
     clear_topic_create_retry,
 )

@@ -20,18 +20,18 @@ import structlog
 from telegram import Bot
 from telegram.error import NetworkError, RetryAfter, TelegramError, TimedOut
 
-from ..config import config
-from ..providers import (
+from ...config import config
+from ...providers import (
     detect_provider_from_pane,
     detect_provider_from_runtime,
     should_probe_pane_title_for_provider_detection,
 )
-from ..session import session_manager
-from ..session_monitor import NewWindowEvent
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from .messaging_pipeline.message_sender import is_thread_gone
-from .topic_emoji import strip_emoji_prefix
+from ...session import session_manager
+from ...session_monitor import NewWindowEvent
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ..messaging_pipeline.message_sender import is_thread_gone
+from ..topic_emoji import strip_emoji_prefix
 
 logger = structlog.get_logger()
 
@@ -332,7 +332,7 @@ async def adopt_unbound_windows(bot: Bot) -> None:
     audit = session_manager.audit_state(live_ids, live_pairs)
     orphaned = [i for i in audit.issues if i.category == "orphaned_window"]
     if orphaned:
-        from .sync_command import _adopt_orphaned_windows
+        from ..sync_command import _adopt_orphaned_windows
 
         await _adopt_orphaned_windows(bot, orphaned)
         logger.info("Startup: adopted %d unbound window(s)", len(orphaned))
