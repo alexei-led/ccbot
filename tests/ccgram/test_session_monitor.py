@@ -822,7 +822,9 @@ class TestGeminiTranscriptReading:
 
             # Third read: append a message
             with open(transcript, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"type": "gemini", "content": [{"text": "bye"}]}) + "\n")
+                f.write(
+                    json.dumps({"type": "gemini", "content": [{"text": "bye"}]}) + "\n"
+                )
 
             entries = await monitor._read_new_lines(tracked, transcript, window_id="@5")
             assert len(entries) == 1
@@ -848,7 +850,9 @@ class TestGeminiTranscriptReading:
 
         # Append new message
         with open(transcript, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"type": "gemini", "content": [{"text": "new!"}]}) + "\n")
+            f.write(
+                json.dumps({"type": "gemini", "content": [{"text": "new!"}]}) + "\n"
+            )
 
         new_messages: list = []
         with patch(

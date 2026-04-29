@@ -148,6 +148,8 @@ GEMINI_UI_PATTERNS: list[UIPattern] = [
 
 _TRANSCRIPT_MAX_AGE_SECS = 120.0
 _MAX_TOOL_SUMMARY = 200
+_SHORT_SESSION_ID_LEN = 8
+_SHORT_SESSION_ID_THRESHOLD = 10
 _JSON_READ_ERRORS = (OSError, json.JSONDecodeError)
 _TOML_READ_ERRORS = (OSError, tomllib.TOMLDecodeError)
 _GEMINI_SYSTEM_SETTINGS_FILE = "gemini-system-settings.json"
@@ -279,6 +281,62 @@ def _extract_tool_result_text(tool_call: dict[str, Any]) -> str:
             if isinstance(value, str) and value:
                 return value
     return ""
+
+
+def _emit_tool_calls(
+    tool_calls: list[Any],
+    entry: dict[str, Any],
+    pending: dict[str, Any],
+) -> list[AgentMessage]:
+    """Emit tool_use / tool_result messages from a Gemini toolCalls list.
+
+    Skips re-announcing a tool whose id is already in ``pending`` (Gemini
+    re-appends the same message line on every toolCalls update). Emits
+    ``tool_result`` once a result payload becomes available and pops the
+    tool from ``pending``.
+    """
+    out: list[AgentMessage] = []
+    timestamp = entry.get("timestamp")
+    for tc in tool_calls:
+        if not isinstance(tc, dict):
+            continue
+        raw_name = tc.get("displayName") or tc.get("name") or "unknown"
+        tool_name = raw_name if isinstance(raw_name, str) else "unknown"
+        call_id = tc.get("id")
+        tool_use_id = call_id if isinstance(call_id, str) and call_id else None
+        already_announced = bool(tool_use_id) and tool_use_id in pending
+        if tool_use_id:
+            pending[tool_use_id] = tool_name
+        if not already_announced:
+            summary = _summarize_tool_args(tc.get("args"))
+            tool_use_text = (
+                f"**{tool_name}** `{summary}`" if summary else f"**{tool_name}**"
+            )
+            out.append(
+                AgentMessage(
+                    text=tool_use_text,
+                    role="assistant",
+                    content_type="tool_use",
+                    tool_use_id=tool_use_id,
+                    tool_name=tool_name,
+                    timestamp=timestamp,
+                )
+            )
+        result_text = _extract_tool_result_text(tc)
+        if result_text:
+            out.append(
+                AgentMessage(
+                    text=result_text,
+                    role="assistant",
+                    content_type="tool_result",
+                    tool_use_id=tool_use_id,
+                    tool_name=tool_name,
+                    timestamp=timestamp,
+                )
+            )
+            if tool_use_id:
+                pending.pop(tool_use_id, None)
+    return out
 
 
 def _read_project_alias(config_dir: Path, resolved_cwd: str) -> str:
@@ -465,6 +523,12 @@ class GeminiProvider(JsonlProvider):
         """
         messages: list[AgentMessage] = []
         pending = dict(pending_tools)
+        # Gemini's JSONL transcript re-appends the same message id on every
+        # toolCalls update (see chatRecordingService.pushMessage upstream).
+        # Track seen message ids to avoid duplicate text emission; track
+        # tool_use ids in `pending` so we only announce a tool once and emit
+        # tool_result on the update that carries the result payload.
+        seen_msg_ids: set[str] = pending.setdefault("__seen_msg_ids__", set())
 
         for entry in entries:
             msg_type = entry.get("type", "")
@@ -472,54 +536,15 @@ class GeminiProvider(JsonlProvider):
             if not role:
                 continue
 
-            # Gemini tool calls are attached to a gemini turn and may contain
-            # both input args and immediate result payloads.
+            entry_id = entry.get("id")
+            msg_id = entry_id if isinstance(entry_id, str) else ""
+
             tool_calls = entry.get("toolCalls", [])
             if isinstance(tool_calls, list):
-                for tc in tool_calls:
-                    if not isinstance(tc, dict):
-                        continue
-                    raw_name = tc.get("displayName") or tc.get("name") or "unknown"
-                    tool_name = raw_name if isinstance(raw_name, str) else "unknown"
-                    call_id = tc.get("id")
-                    tool_use_id = (
-                        call_id if isinstance(call_id, str) and call_id else None
-                    )
-                    if tool_use_id:
-                        pending[tool_use_id] = tool_name
-                    summary = _summarize_tool_args(tc.get("args"))
-                    tool_use_text = (
-                        f"**{tool_name}** `{summary}`"
-                        if summary
-                        else f"**{tool_name}**"
-                    )
-                    messages.append(
-                        AgentMessage(
-                            text=tool_use_text,
-                            role="assistant",
-                            content_type="tool_use",
-                            tool_use_id=tool_use_id,
-                            tool_name=tool_name,
-                            timestamp=entry.get("timestamp"),
-                        )
-                    )
-                    result_text = _extract_tool_result_text(tc)
-                    if result_text:
-                        messages.append(
-                            AgentMessage(
-                                text=result_text,
-                                role="assistant",
-                                content_type="tool_result",
-                                tool_use_id=tool_use_id,
-                                tool_name=tool_name,
-                                timestamp=entry.get("timestamp"),
-                            )
-                        )
-                        if tool_use_id:
-                            pending.pop(tool_use_id, None)
+                messages.extend(_emit_tool_calls(tool_calls, entry, pending))
 
             text = _entry_text(entry)
-            if text:
+            if text and msg_id not in seen_msg_ids:
                 messages.append(
                     AgentMessage(
                         text=text,
@@ -528,6 +553,9 @@ class GeminiProvider(JsonlProvider):
                         timestamp=entry.get("timestamp"),
                     )
                 )
+
+            if msg_id:
+                seen_msg_ids.add(msg_id)
 
         return messages, pending
 
@@ -709,7 +737,7 @@ class GeminiProvider(JsonlProvider):
         self,
         transcript_path: str,
         *,
-        display_name: str,
+        display_name: str = "",
         session_id: str = "",
         cwd: str = "",
     ) -> str | None:
@@ -719,8 +747,11 @@ class GeminiProvider(JsonlProvider):
         except OSError:
             return None
 
-        # Show up to 8 chars of ID, but don't truncate if it's already short
-        short_id = session_id[:8] if len(session_id) > 10 else session_id
+        short_id = (
+            session_id[:_SHORT_SESSION_ID_LEN]
+            if len(session_id) > _SHORT_SESSION_ID_THRESHOLD
+            else session_id
+        )
 
         return (
             f"\u2726 [{display_name}] Gemini session active.\n"

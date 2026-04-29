@@ -913,6 +913,46 @@ class TestGeminiTranscriptParsing:
         assert gemini.is_user_transcript_entry({"type": "user"}) is True
         assert gemini.is_user_transcript_entry({"type": "gemini"}) is False
 
+    def test_dedup_repeated_message_id(self) -> None:
+        # Gemini's JSONL transcript re-appends the same message line on every
+        # toolCalls update. The parser must dedup by id across calls.
+        gemini = GeminiProvider()
+        first = [
+            {
+                "id": "msg-1",
+                "type": "gemini",
+                "content": "checking the file",
+                "toolCalls": [
+                    {"id": "tc-1", "name": "read_file", "args": {"path": "x"}}
+                ],
+            }
+        ]
+        msgs1, pending = gemini.parse_transcript_entries(first, {})
+        # First emission: text once + tool_use once, no result yet.
+        assert [m.content_type for m in msgs1] == ["tool_use", "text"]
+        assert "tc-1" in pending
+
+        # Same message id re-appended with the result attached.
+        second = [
+            {
+                "id": "msg-1",
+                "type": "gemini",
+                "content": "checking the file",
+                "toolCalls": [
+                    {
+                        "id": "tc-1",
+                        "name": "read_file",
+                        "args": {"path": "x"},
+                        "resultDisplay": "ok",
+                    }
+                ],
+            }
+        ]
+        msgs2, pending = gemini.parse_transcript_entries(second, pending)
+        # Second emission: only tool_result. No duplicate text or tool_use.
+        assert [m.content_type for m in msgs2] == ["tool_result"]
+        assert "tc-1" not in pending
+
 
 class TestGeminiTerminalStatus:
     SHELL_PERMISSION_PANE = (
@@ -1180,153 +1220,6 @@ class TestExtractContentBlocks:
         assert result == {"t1": "Read"}
 
 
-_SAMPLE_GEMINI_TRANSCRIPT: dict = {
-    "sessionId": "gemini-sess-1",
-    "projectHash": "abc123",
-    "startTime": "2026-01-01T00:00:00Z",
-    "lastUpdated": "2026-01-01T00:05:00Z",
-    "messages": [
-        {"type": "user", "content": "hello gemini"},
-        {"type": "gemini", "content": "hi there!"},
-        {"type": "user", "content": "what is 2+2?"},
-        {"type": "gemini", "content": "4"},
-    ],
-}
-
-
-class TestGeminiReadTranscriptFile:
-    def test_reads_all_messages_from_zero(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 0)
-        assert len(entries) == 4
-        assert offset == 4
-        assert entries[0]["content"] == "hello gemini"
-        assert entries[3]["content"] == "4"
-
-    def test_returns_only_new_messages(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 2)
-        assert len(entries) == 2
-        assert offset == 4
-        assert entries[0]["content"] == "what is 2+2?"
-
-    def test_no_new_messages_when_offset_at_end(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 4)
-        assert entries == []
-        assert offset == 4
-
-    def test_detects_new_messages_after_file_update(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        data = dict(_SAMPLE_GEMINI_TRANSCRIPT)
-        data["messages"] = list(data["messages"][:2])
-        f.write_text(json.dumps(data))
-        gemini = GeminiProvider()
-
-        entries, offset = gemini.read_transcript_file(str(f), 0)
-        assert len(entries) == 2
-        assert offset == 2
-
-        data["messages"] = list(_SAMPLE_GEMINI_TRANSCRIPT["messages"])
-        f.write_text(json.dumps(data))
-
-        entries, offset = gemini.read_transcript_file(str(f), 2)
-        assert len(entries) == 2
-        assert offset == 4
-
-    def test_handles_invalid_json(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text("{not valid json")
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 0)
-        assert entries == []
-        assert offset == 0
-
-    def test_handles_missing_file(self, tmp_path) -> None:
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(
-            str(tmp_path / "nonexistent.json"), 0
-        )
-        assert entries == []
-        assert offset == 0
-
-    def test_handles_no_messages_key(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text(json.dumps({"sessionId": "s1"}))
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 0)
-        assert entries == []
-        assert offset == 0
-
-    def test_handles_non_dict_messages(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        data = dict(_SAMPLE_GEMINI_TRANSCRIPT)
-        data["messages"] = [{"type": "user", "content": "ok"}, "not a dict", 42]
-        f.write_text(json.dumps(data))
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 0)
-        assert len(entries) == 1
-        assert offset == 3
-
-    def test_handles_non_dict_root(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text(json.dumps([1, 2, 3]))
-        gemini = GeminiProvider()
-        entries, offset = gemini.read_transcript_file(str(f), 0)
-        assert entries == []
-        assert offset == 0
-
-
-class TestGeminiMtimeCache:
-    @pytest.fixture(autouse=True)
-    def _clear_cache(self):
-        from ccgram.providers.gemini import _transcript_cache
-
-        _transcript_cache.clear()
-        yield
-        _transcript_cache.clear()
-
-    def test_cache_hit_skips_reparse(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        f.write_text(json.dumps(_SAMPLE_GEMINI_TRANSCRIPT))
-        gemini = GeminiProvider()
-
-        entries1, _ = gemini.read_transcript_file(str(f), 0)
-        assert len(entries1) == 4
-
-        with patch(
-            "ccgram.providers.gemini.json.load",
-            side_effect=AssertionError("should not be called"),
-        ):
-            entries2, offset2 = gemini.read_transcript_file(str(f), 0)
-        assert len(entries2) == 4
-        assert offset2 == 4
-
-    def test_cache_invalidated_on_file_change(self, tmp_path) -> None:
-        f = tmp_path / "transcript.json"
-        data = dict(_SAMPLE_GEMINI_TRANSCRIPT)
-        data["messages"] = list(data["messages"][:2])
-        f.write_text(json.dumps(data))
-        gemini = GeminiProvider()
-
-        entries1, offset1 = gemini.read_transcript_file(str(f), 0)
-        assert len(entries1) == 2
-        assert offset1 == 2
-
-        data["messages"] = list(_SAMPLE_GEMINI_TRANSCRIPT["messages"])
-        f.write_text(json.dumps(data))
-
-        entries2, offset2 = gemini.read_transcript_file(str(f), 2)
-        assert len(entries2) == 2
-        assert offset2 == 4
-
-
 def _write_gemini_session(
     tmp_dir: Path,
     project_dir: str,
@@ -1336,15 +1229,14 @@ def _write_gemini_session(
 ) -> Path:
     chats_dir = tmp_dir / ".gemini" / "tmp" / project_key / "chats"
     chats_dir.mkdir(parents=True, exist_ok=True)
-    fpath = chats_dir / f"{session_name}.json"
-    payload = {
+    fpath = chats_dir / f"{session_name}.jsonl"
+    header = {
         "sessionId": session_id,
         "projectHash": hashlib.sha256(project_dir.encode()).hexdigest(),
         "startTime": "2026-03-01T00:00:00.000Z",
         "lastUpdated": "2026-03-01T00:00:00.000Z",
-        "messages": [],
     }
-    fpath.write_text(json.dumps(payload))
+    fpath.write_text(json.dumps(header) + "\n")
     return fpath
 
 
@@ -1685,9 +1577,10 @@ class TestDiscoverTranscriptContract:
 
 
 class TestGeminiCapabilityFlag:
-    def test_gemini_does_not_support_incremental_read(self) -> None:
+    def test_gemini_supports_incremental_read(self) -> None:
         gemini = GeminiProvider()
-        assert gemini.capabilities.supports_incremental_read is False
+        assert gemini.capabilities.supports_incremental_read is True
+        assert gemini.capabilities.transcript_format == "jsonl"
 
     def test_codex_supports_incremental_read(self) -> None:
         codex = CodexProvider()
