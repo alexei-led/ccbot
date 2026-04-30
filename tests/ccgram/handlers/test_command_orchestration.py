@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.bot import forward_command_handler
 from ccgram.handlers.command_orchestration import (
     _command_known_in_other_provider,
     _extract_pane_delta,
@@ -14,6 +13,7 @@ from ccgram.handlers.command_orchestration import (
     _normalize_slash_token,
     _probe_transcript_command_error,
     _short_supported_commands,
+    forward_command_handler,
     get_global_provider_menu,
     set_global_provider_menu,
     sync_scoped_provider_menu,

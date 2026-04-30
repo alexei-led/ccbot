@@ -65,17 +65,17 @@ async def app():
     application = Application.builder().token(token).build()
 
     from ccgram.bot import (
-        forward_command_handler,
         history_command,
         new_command,
-        sessions_command,
         text_handler,
-        topic_closed_handler,
     )
     from ccgram.handlers.callback_registry import (
         dispatch as callback_handler,
         load_handlers,
     )
+    from ccgram.handlers.command_orchestration import forward_command_handler
+    from ccgram.handlers.sessions_dashboard import sessions_command
+    from ccgram.handlers.topics.topic_lifecycle import topic_closed_handler
 
     load_handlers()
     from telegram.ext import (

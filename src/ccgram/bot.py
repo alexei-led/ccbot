@@ -32,11 +32,7 @@ from telegram.error import BadRequest, Conflict, NetworkError, TelegramError
 from telegram.ext import (
     AIORateLimiter,
     Application,
-    CallbackQueryHandler,
-    CommandHandler,
     ContextTypes,
-    InlineQueryHandler,
-    MessageHandler,
     filters,
 )
 
@@ -54,36 +50,20 @@ from .handlers.topics.topic_orchestration import (
     handle_new_window as _handle_new_window,
 )
 from .handlers.command_orchestration import (
-    forward_command_handler,
     sync_scoped_menu_for_text_context as _sync_scoped_menu_for_text_context,
     sync_scoped_provider_menu as _sync_scoped_provider_menu,
     setup_menu_refresh_job,
 )
 from .handlers.callback_helpers import get_thread_id as _get_thread_id
-from .handlers.callback_registry import dispatch as _dispatch_callback
-from .handlers.callback_registry import load_handlers as _load_callback_handlers
-from .handlers.recovery import restore_command, resume_command, send_history
-from .handlers.send import send_command
+from .handlers.recovery import send_history
+from .handlers.registry import register_all
 from .handlers.topics.directory_browser import clear_browse_state
-from .handlers.cleanup import unbind_command
-from .handlers.command_history import recall_command
 from .handlers.messaging_pipeline.message_routing import handle_new_message
-from .handlers.live import (
-    live_command,
-    panes_command,
-    screenshot_command,
-)
-from .handlers.topics.topic_lifecycle import topic_closed_handler, topic_edited_handler
-from .handlers.sessions_dashboard import sessions_command
-from .handlers.sync_command import sync_command
-from .handlers.upgrade import upgrade_command
 from .handlers.messaging_pipeline.message_queue import (
     shutdown_workers,
 )
 from .handlers.messaging_pipeline.message_sender import safe_reply
 from .handlers.polling.polling_coordinator import status_poll_loop
-from .handlers.file_handler import handle_document_message, handle_photo_message
-from .handlers.voice import handle_voice_message
 from .handlers.text import handle_text_message
 from . import window_query
 from .session import session_manager
@@ -620,101 +600,18 @@ def create_bot() -> Application:
     )
 
     application.add_error_handler(_error_handler)
-    application.add_handler(CommandHandler("new", new_command, filters=_group_filter))
-    application.add_handler(
-        CommandHandler("start", new_command, filters=_group_filter)  # compat alias
+    register_all(
+        application,
+        _group_filter,
+        new_command=new_command,
+        history_command=history_command,
+        commands_command=commands_command,
+        toolbar_command=toolbar_command,
+        verbose_command=verbose_command,
+        toolcalls_command=toolcalls_command,
+        text_handler=text_handler,
+        inline_query_handler=inline_query_handler,
+        unsupported_content_handler=unsupported_content_handler,
     )
-    application.add_handler(
-        CommandHandler("history", history_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("commands", commands_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("sessions", sessions_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("resume", resume_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("unbind", unbind_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("upgrade", upgrade_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("recall", recall_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("screenshot", screenshot_command, filters=_group_filter)
-    )
-    application.add_handler(CommandHandler("live", live_command, filters=_group_filter))
-    application.add_handler(
-        CommandHandler("panes", panes_command, filters=_group_filter)
-    )
-    application.add_handler(CommandHandler("sync", sync_command, filters=_group_filter))
-    application.add_handler(
-        CommandHandler("toolbar", toolbar_command, filters=_group_filter)
-    )
-    application.add_handler(CommandHandler("send", send_command, filters=_group_filter))
-    application.add_handler(
-        CommandHandler("verbose", verbose_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("toolcalls", toolcalls_command, filters=_group_filter)
-    )
-    application.add_handler(
-        CommandHandler("restore", restore_command, filters=_group_filter)
-    )
-    _load_callback_handlers()
-    application.add_handler(CallbackQueryHandler(_dispatch_callback))
-    # Topic closed event — unbind window (kept alive for rebinding)
-    application.add_handler(
-        MessageHandler(
-            filters.StatusUpdate.FORUM_TOPIC_CLOSED & _group_filter,
-            topic_closed_handler,
-        )
-    )
-    # Topic renamed event — sync name to tmux window
-    application.add_handler(
-        MessageHandler(
-            filters.StatusUpdate.FORUM_TOPIC_EDITED & _group_filter,
-            topic_edited_handler,
-        )
-    )
-    # Forward any other /command to the topic's provider CLI
-    application.add_handler(
-        MessageHandler(filters.COMMAND & _group_filter, forward_command_handler)
-    )
-    application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND & _group_filter, text_handler)
-    )
-    # Photos
-    application.add_handler(
-        MessageHandler(filters.PHOTO & _group_filter, handle_photo_message)
-    )
-    # Documents
-    application.add_handler(
-        MessageHandler(filters.Document.ALL & _group_filter, handle_document_message)
-    )
-    # Voice messages (transcription when configured)
-    application.add_handler(
-        MessageHandler(filters.VOICE & _group_filter, handle_voice_message)
-    )
-    # Catch-all: unsupported content (stickers, voice, video, etc.)
-    application.add_handler(
-        MessageHandler(
-            ~filters.COMMAND
-            & ~filters.TEXT
-            & ~filters.PHOTO
-            & ~filters.Document.ALL
-            & ~filters.VOICE
-            & ~filters.StatusUpdate.ALL
-            & _group_filter,
-            unsupported_content_handler,
-        )
-    )
-    # Inline query handler (serves switch_inline_query_current_chat from history buttons)
-    application.add_handler(InlineQueryHandler(inline_query_handler))
 
     return application

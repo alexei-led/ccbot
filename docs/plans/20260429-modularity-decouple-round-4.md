@@ -653,12 +653,12 @@ This keeps each task's diff small.
 - Create: `src/ccgram/handlers/registry.py`
 - Modify: `src/ccgram/bot.py` (delegate registration)
 
-- [ ] define a `CommandSpec` dataclass: `(name, handler, filter)` and a `register_all(application, group_filter)` function
-- [ ] move the 17 `application.add_handler(CommandHandler(...))` calls plus the `MessageHandler` registrations from `bot.py` into a single `_COMMAND_TABLE: list[CommandSpec]` and message-handler list
-- [ ] `bot.py` calls `handlers.registry.register_all(application, _group_filter)`
-- [ ] add unit test verifying `register_all` registers exactly N handlers in the expected order (sentinel)
-- [ ] `make check` passes
-- [ ] commit "refactor(bot): extract handlers/registry.py for command/message handlers"
+- [x] define a `CommandSpec` dataclass: `(name, handler)` and a `register_all(application, group_filter, **inline_handlers)` function — `CommandSpec` is `frozen=True`; the `filter` field was dropped because `register_all` applies the same `group_filter` uniformly. Inline handlers (`new_command`, `history_command`, etc.) are passed as kwargs during F3.1; F3.3 will move them out and replace the kwargs with direct imports.
+- [x] move the 18 `application.add_handler(CommandHandler(...))` calls (plan said 17, actual count is 18 — `start` is a compat alias for `new_command`) plus the 1 `CallbackQueryHandler`, 8 `MessageHandler`s, and 1 `InlineQueryHandler` from `bot.py` into a single `command_specs: list[CommandSpec]` and the explicit `MessageHandler`/`CallbackQueryHandler`/`InlineQueryHandler` block in `register_all`
+- [x] `bot.py` calls `register_all(application, _group_filter, **inline_handlers)` — this shrank `bot.py` from 720 → 617 lines (-103); registry.py is 171 lines
+- [x] add unit test (`tests/ccgram/handlers/test_registry.py`) verifying: CommandSpec is frozen; `register_all` installs exactly the names in `COMMAND_NAMES`; counts of `CommandHandler`/`CallbackQueryHandler`/`InlineQueryHandler`/`MessageHandler` match (18/1/1/8); CommandHandlers precede the COMMAND-fallback MessageHandler so PTB dispatch order is correct (4 tests)
+- [x] `make check` passes (4361 unit + 97 integration; typecheck 0 errors / 0 warnings / 0 informations; lint clean). Notable side fixes: had to reorder imports in `registry.py` to load `polling` before `recovery` (otherwise window_tick → recovery.transcript_discovery → polling.polling_strategies forms a partial-init cycle that bot.py avoids only because `topics.topic_orchestration` happens to load polling first there). Documented inline. Tests `test_message_dispatch.py`, `test_shell_dispatch.py`, and `test_command_orchestration.py` were updated to import `forward_command_handler`/`sessions_command`/`topic_closed_handler` from their canonical modules instead of re-exports through `ccgram.bot` (those re-exports went away when bot.py shrank).
+- [x] commit "refactor(bot): extract handlers/registry.py for command/message handlers"
 
 #### Task F3.2: Create `bootstrap.py` for post_init wiring
 
