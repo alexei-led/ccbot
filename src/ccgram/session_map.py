@@ -5,9 +5,8 @@ file written by the Claude Code hook. Extracted from SessionManager so that
 session_map concerns live in one place without pulling in the full
 SessionManager stack.
 
-The ``schedule_save`` callback is injected via the constructor — there is
-no ``unwired_save`` default and the sync cannot be built without an
-explicit callback.
+The ``schedule_save`` callback is injected via the constructor — the
+sync cannot be built without an explicit callback.
 
 Module-level access: ``get_session_map_sync()`` returns the
 SessionManager-owned instance (raises RuntimeError until SessionManager

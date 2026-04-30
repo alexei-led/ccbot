@@ -3,9 +3,9 @@
 All four state singletons — ``WindowStateStore`` (F2.1),
 ``ThreadRouter`` (F2.2), ``UserPreferences`` (F2.3) and
 ``SessionMapSync`` (F2.4) — are constructor-injected. Their
-``schedule_save`` callbacks are required arguments, so they have no
-unwired default. ``unwired_save`` itself remains until F2.5 cleans it
-up.
+``schedule_save`` callbacks are required arguments, so a singleton
+cannot be built without explicit wiring. The legacy ``unwired_save``
+fallback was removed in F2.5.
 
 This guarantees that any test or caller that builds a singleton without
 wiring it fails loudly instead of silently dropping the save.
@@ -16,17 +16,9 @@ from __future__ import annotations
 import pytest
 
 from ccgram.session_map import SessionMapSync
-from ccgram.state_persistence import unwired_save
 from ccgram.thread_router import ThreadRouter
 from ccgram.user_preferences import UserPreferences
 from ccgram.window_state_store import WindowStateStore
-
-
-class TestUnwiredSave:
-    def test_default_raises_with_owner_name(self) -> None:
-        cb = unwired_save("MyOwner")
-        with pytest.raises(RuntimeError, match="MyOwner._schedule_save was called"):
-            cb()
 
 
 class TestWindowStateStoreRequiresCallbacks:
@@ -152,16 +144,13 @@ class TestSessionMapSyncRequiresCallback:
 
 
 class TestSessionManagerWiresAllSingletons:
-    def test_post_init_replaces_unwired_defaults(self) -> None:
+    def test_post_init_wires_all_schedule_save_callbacks(self) -> None:
         # SessionManager.__post_init__ wires every singleton's _schedule_save
         # to its own _save_state. After construction, calling _schedule_save
         # on any singleton must NOT raise.
         from ccgram.session import SessionManager
 
         sm = SessionManager()
-        # Calling these should not raise — they delegate to sm._save_state.
-        # We don't assert behavior beyond "no RuntimeError" since the real
-        # save path is async and depends on event loop state.
         from ccgram.session_map import session_map_sync
         from ccgram.thread_router import thread_router
         from ccgram.user_preferences import user_preferences
@@ -174,12 +163,54 @@ class TestSessionManagerWiresAllSingletons:
             session_map_sync,
         ):
             assert singleton._schedule_save is not None
-            # Confirm it's no longer the unwired default by calling it.
             # _save_state may schedule via asyncio if a loop is running,
             # otherwise saves synchronously — either path is fine here.
             singleton._schedule_save()
 
-        # Cleanup so the singleton state doesn't leak to other tests.
+        del sm
+
+    def test_set_window_provider_triggers_save(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # End-to-end check that SessionManager-level mutations propagate
+        # through the wired stores into StatePersistence.
+        from ccgram.session import SessionManager
+
+        sm = SessionManager()
+        saves: list[None] = []
+        monkeypatch.setattr(
+            sm._persistence, "schedule_save", lambda: saves.append(None)
+        )
+        sm.set_window_provider("@99", "claude")
+        assert saves, "set_window_provider must trigger a debounced save"
+        del sm
+
+    def test_thread_router_bind_triggers_save(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from ccgram.session import SessionManager
+
+        sm = SessionManager()
+        saves: list[None] = []
+        monkeypatch.setattr(
+            sm._persistence, "schedule_save", lambda: saves.append(None)
+        )
+        sm._thread_router.bind_thread(100, 1, "@1")
+        assert saves, "ThreadRouter.bind_thread must trigger a debounced save"
+        del sm
+
+    def test_user_preferences_star_triggers_save(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from ccgram.session import SessionManager
+
+        sm = SessionManager()
+        saves: list[None] = []
+        monkeypatch.setattr(
+            sm._persistence, "schedule_save", lambda: saves.append(None)
+        )
+        sm._user_preferences.toggle_user_star(100, "/tmp/proj")
+        assert saves, "UserPreferences.toggle_user_star must trigger a save"
         del sm
 
 

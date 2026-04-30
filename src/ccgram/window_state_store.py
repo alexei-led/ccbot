@@ -6,8 +6,8 @@ providers, handlers, and tests can import window state without pulling in
 the full session management stack.
 
 Key class: WindowStateStore. Persistence and hookless-provider hooks are
-injected via the constructor — there is no ``unwired_save`` default and
-the store cannot be built without explicit callbacks.
+injected via the constructor — the store cannot be built without
+explicit callbacks.
 
 Module-level access: ``get_window_store()`` returns the
 SessionManager-owned instance (raises RuntimeError until SessionManager

@@ -5,8 +5,8 @@ bidirectionally.  Manages group chat IDs for multi-group forum topic
 routing and display names for windows.
 
 Key class: ThreadRouter. Persistence and window-state queries are
-injected via the constructor — there is no ``unwired_save`` default and
-the router cannot be built without explicit callbacks.
+injected via the constructor — the router cannot be built without
+explicit callbacks.
 
 Module-level access: ``get_thread_router()`` returns the
 SessionManager-owned instance (raises RuntimeError until SessionManager

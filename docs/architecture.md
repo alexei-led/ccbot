@@ -122,7 +122,7 @@ graph LR
 graph TB
     SM["SessionManager<br>26 public methods<br>(down from 39)"]
 
-    SM --> Startup["Startup orchestration<br>__post_init__, _wire_singletons<br>resolve_stale_ids"]
+    SM --> Startup["Startup orchestration<br>__post_init__ (constructs+installs stores)<br>resolve_stale_ids"]
     SM --> Writes["Write coordination<br>set_window_provider<br>set_window_cwd<br>set_*_mode<br>set_display_name"]
     SM --> Audit["Cross-cutting audit<br>audit_state<br>prune_stale_state<br>prune_stale_window_states"]
 

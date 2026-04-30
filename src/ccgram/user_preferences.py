@@ -1,9 +1,8 @@
 """User preferences — starred directories, MRU, and read offsets.
 
 Extracted from SessionManager to reduce its surface area. The
-``schedule_save`` callback is injected via the constructor — there is
-no ``unwired_save`` default and the store cannot be built without an
-explicit callback.
+``schedule_save`` callback is injected via the constructor — the store
+cannot be built without an explicit callback.
 
 Module-level access: ``get_user_preferences()`` returns the
 SessionManager-owned instance (raises RuntimeError until SessionManager

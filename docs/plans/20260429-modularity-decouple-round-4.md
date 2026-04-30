@@ -610,13 +610,13 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/state_persistence.py` (delete `unwired_save`)
 - Modify: `src/ccgram/session.py` (delete `_wire_singletons`)
 
-- [ ] confirm no remaining call sites for `unwired_save` (grep)
-- [ ] delete the function and its callers
-- [ ] delete `SessionManager._wire_singletons` — its body is now empty since stores are constructor-injected
-- [ ] simplify `SessionManager.__post_init__` to: `self._persistence = StatePersistence(...); self._construct_stores(); self._load_state()`
-- [ ] add a unit test that builds a `SessionManager` with stub state file and verifies all stores are wired (i.e., calling `set_window_provider` triggers a save)
-- [ ] `make check` passes
-- [ ] commit "refactor(state): remove unwired_save and \_wire_singletons"
+- [x] confirm no remaining call sites for `unwired_save` (grep) — only references were in `state_persistence.py` (the function itself) and `tests/ccgram/test_schedule_save_wiring.py` (the `TestUnwiredSave` class + import)
+- [x] delete the function and its callers — removed the `unwired_save` definition from `state_persistence.py`, deleted `TestUnwiredSave` and the import from `test_schedule_save_wiring.py`
+- [x] delete `SessionManager._wire_singletons` — already removed in F2.4 (verified via grep: no method definition remains anywhere in `src/ccgram/`)
+- [x] simplify `SessionManager.__post_init__` to: `self._persistence = StatePersistence(...); self._construct_stores(); self._load_state()` — already in this shape after F2.4 (constructs+installs the four stores inline, then `_load_state()`); kept inline rather than introducing a `_construct_stores` helper since the four-line block is already clear
+- [x] add a unit test that builds a `SessionManager` with stub state file and verifies all stores are wired (i.e., calling `set_window_provider` triggers a save) — added `TestSessionManagerWiresAllSingletons.test_set_window_provider_triggers_save`, plus sibling `test_thread_router_bind_triggers_save` and `test_user_preferences_star_triggers_save` to exercise the same end-to-end path through the other two store APIs. Also dropped obsolete docstring/comment references to `unwired_save` in `window_state_store.py`, `thread_router.py`, `user_preferences.py`, `session_map.py`, and `docs/architecture.md`.
+- [x] `make check` passes (typecheck: 0 errors / 0 warnings / 0 informations; lint: clean; 4350 unit + 97 integration pass)
+- [x] commit "refactor(state): remove unwired_save and \_wire_singletons"
 
 #### Task F2.6: Add explicit failure mode for `register_*_callback`
 
