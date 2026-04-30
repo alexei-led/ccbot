@@ -112,7 +112,6 @@ def load_handlers() -> None:
     from . import (  # noqa: F401
         command_history,
         hook_events,
-        toolbar_callbacks,
         sessions_dashboard,
         sync_command,
         voice_callbacks,
@@ -124,6 +123,7 @@ def load_handlers() -> None:
     from .send import send_callbacks  # noqa: F401
     from .shell import shell_capture, shell_commands, shell_prompt_orchestrator  # noqa: F401
     from .status import status_bar_actions  # noqa: F401
+    from .toolbar import toolbar_callbacks  # noqa: F401
     from .topics import directory_callbacks, window_callbacks  # noqa: F401
 
     from .. import msg_discovery  # noqa: F401

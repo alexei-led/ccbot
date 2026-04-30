@@ -476,12 +476,12 @@ This keeps each task's diff small.
 
 - Move: `toolbar_keyboard.py`, `toolbar_callbacks.py`
 
-- [ ] create subpackage; re-export `build_toolbar_keyboard`, `seed_button_states`, callback dispatcher
-- [ ] git mv two modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` passes
-- [ ] commit "refactor(handlers): group toolbar subpackage"
+- [x] create subpackage; re-export `build_toolbar_keyboard`, `seed_button_states`, callback dispatcher
+- [x] git mv two modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes
+- [x] commit "refactor(handlers): group toolbar subpackage"
 
 #### Task F1.12: Create `handlers/voice/` subpackage and `handlers/text/` for text_handler
 

@@ -222,7 +222,7 @@ async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    from .handlers.toolbar_keyboard import (
+    from .handlers.toolbar import (
         build_toolbar_keyboard,
         seed_button_states,
     )

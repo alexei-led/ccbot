@@ -29,7 +29,7 @@ from ccgram.handlers.live.screenshot_callbacks import (
     _handle_live_stop,
     build_screenshot_keyboard,
 )
-from ccgram.handlers.toolbar_keyboard import build_toolbar_keyboard
+from ccgram.handlers.toolbar import build_toolbar_keyboard
 
 
 @pytest.fixture(autouse=True)

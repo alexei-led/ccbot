@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ccgram.handlers.callback_data import CB_TOOLBAR
-from ccgram.handlers.toolbar_callbacks import (
+from ccgram.handlers.toolbar.toolbar_callbacks import (
     _parse_callback_data,
     handle_toolbar_callback,
 )
-from ccgram.handlers.toolbar_keyboard import (
+from ccgram.handlers.toolbar.toolbar_keyboard import (
     _clear_toolbar_labels,
     _get_action_label,
     _set_action_label,
@@ -84,7 +84,7 @@ class TestBuildToolbarKeyboardCustom:
             actions=dict(BUILTIN_ACTIONS),
         )
         with patch(
-            "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
+            "ccgram.handlers.toolbar.toolbar_keyboard.get_toolbar_config",
             return_value=custom_cfg,
         ):
             kb = build_toolbar_keyboard("@7", "claude")
@@ -101,7 +101,7 @@ class TestBuildToolbarKeyboardCustom:
             actions=dict(BUILTIN_ACTIONS),
         )
         with patch(
-            "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
+            "ccgram.handlers.toolbar.toolbar_keyboard.get_toolbar_config",
             return_value=custom_cfg,
         ):
             kb = build_toolbar_keyboard("@7", "claude")
@@ -170,10 +170,12 @@ class TestDispatchKey:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@5")
@@ -191,12 +193,14 @@ class TestDispatchKey:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.toolbar_callbacks.refresh_button_label",
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.refresh_button_label",
                 new=AsyncMock(return_value="Edit"),
             ),
         ):
@@ -216,10 +220,12 @@ class TestDispatchKey:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tmux.find_window_by_id = AsyncMock(return_value=None)
             await handle_toolbar_callback(query, 100, "tb:@5:esc", update, context)
@@ -249,14 +255,16 @@ class TestDispatchText:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_callbacks.get_toolbar_config",
                 return_value=custom_cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@5")
@@ -281,10 +289,12 @@ class TestDispatchBuiltinCtrlc:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
         ):
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@5")
@@ -302,7 +312,7 @@ class TestDispatchBuiltinDismiss:
         update = _make_update_with_user()
         context = _make_context()
         with patch(
-            "ccgram.handlers.toolbar_callbacks.user_owns_window",
+            "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
             return_value=True,
         ):
             await handle_toolbar_callback(query, 100, "tb:@5:close", update, context)
@@ -316,10 +326,10 @@ class TestDispatchBuiltinSend:
         context = _make_context()
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.view_window") as mock_view,
+            patch("ccgram.handlers.toolbar.toolbar_callbacks.view_window") as mock_view,
         ):
             mock_view.return_value = None
             await handle_toolbar_callback(query, 100, "tb:@5:send", update, context)
@@ -346,7 +356,7 @@ class TestDispatchErrorPaths:
         update = _make_update_with_user()
         context = _make_context()
         with patch(
-            "ccgram.handlers.toolbar_callbacks.user_owns_window",
+            "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
             return_value=False,
         ):
             await handle_toolbar_callback(query, 100, "tb:@5:esc", update, context)
@@ -357,7 +367,7 @@ class TestDispatchErrorPaths:
         update = _make_update_with_user()
         context = _make_context()
         with patch(
-            "ccgram.handlers.toolbar_callbacks.user_owns_window",
+            "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
             return_value=True,
         ):
             await handle_toolbar_callback(
@@ -383,10 +393,12 @@ class TestRefreshButtonLabel:
         mock_provider.scrape_current_mode = AsyncMock(return_value="Edit")
         with (
             patch(
-                "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+                "ccgram.handlers.toolbar.toolbar_keyboard.get_provider_for_window",
                 return_value=mock_provider,
             ),
-            patch("ccgram.handlers.toolbar_keyboard.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_keyboard.session_manager"
+            ) as mock_sm,
         ):
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
             result = await refresh_button_label(mode_action, query, "@5", delay=0)
@@ -414,7 +426,7 @@ class TestRefreshButtonLabel:
         mock_provider = AsyncMock()
         mock_provider.scrape_current_mode = AsyncMock(return_value="Plan")
         with patch(
-            "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+            "ccgram.handlers.toolbar.toolbar_keyboard.get_provider_for_window",
             return_value=mock_provider,
         ):
             await seed_button_states("@111")
@@ -425,7 +437,7 @@ class TestRefreshButtonLabel:
         mock_provider = AsyncMock()
         mock_provider.scrape_current_mode = AsyncMock(return_value=None)
         with patch(
-            "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+            "ccgram.handlers.toolbar.toolbar_keyboard.get_provider_for_window",
             return_value=mock_provider,
         ):
             await seed_button_states("@222")
@@ -438,10 +450,12 @@ class TestRefreshButtonLabel:
         mock_provider.scrape_current_mode = AsyncMock(return_value=None)
         with (
             patch(
-                "ccgram.handlers.toolbar_keyboard.get_provider_for_window",
+                "ccgram.handlers.toolbar.toolbar_keyboard.get_provider_for_window",
                 return_value=mock_provider,
             ),
-            patch("ccgram.handlers.toolbar_keyboard.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_keyboard.session_manager"
+            ) as mock_sm,
         ):
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
             result = await refresh_button_label(

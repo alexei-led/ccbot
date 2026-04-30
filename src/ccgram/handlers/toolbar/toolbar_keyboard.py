@@ -10,17 +10,17 @@ from __future__ import annotations
 
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-from ..config import config
-from ..providers import get_provider_for_window
-from .. import window_query
-from ..session import session_manager
-from ..topic_state_registry import topic_state
-from ..toolbar_config import (
+from ...config import config
+from ...providers import get_provider_for_window
+from ... import window_query
+from ...session import session_manager
+from ...topic_state_registry import topic_state
+from ...toolbar_config import (
     ToolbarAction,
     ToolbarConfig,
     load_toolbar_config,
 )
-from .callback_data import CB_TOOLBAR
+from ..callback_data import CB_TOOLBAR
 
 # ──────────────────────────────────────────────────────────────────────
 # Loaded config (lazy singleton)

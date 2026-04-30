@@ -21,7 +21,7 @@ from ccgram.handlers.callback_registry import (
     dispatch as callback_dispatch,
     load_handlers,
 )
-from ccgram.handlers.toolbar_keyboard import (
+from ccgram.handlers.toolbar.toolbar_keyboard import (
     build_toolbar_keyboard,
     reload_toolbar_config,
 )
@@ -155,12 +155,14 @@ class TestDispatchRoundTrip:
         )
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
             patch(
-                "ccgram.handlers.toolbar_callbacks.refresh_button_label",
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.refresh_button_label",
                 new=AsyncMock(return_value="Edit"),
             ),
             patch.object(
@@ -192,18 +194,20 @@ class TestDispatchRoundTrip:
         update = _make_callback_query_update(f"tb:{TEST_WINDOW_ID}:clear", bot=app.bot)
         with (
             patch(
-                "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_keyboard.get_toolbar_config",
                 return_value=cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_callbacks.get_toolbar_config",
                 return_value=cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
             patch.object(CallbackQuery, "answer", new_callable=AsyncMock),
         ):
             mock_tmux.find_window_by_id = AsyncMock(
@@ -219,10 +223,12 @@ class TestDispatchRoundTrip:
         update = _make_callback_query_update(f"tb:{TEST_WINDOW_ID}:ctrlc", bot=app.bot)
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
             patch.object(CallbackQuery, "answer", new_callable=AsyncMock),
         ):
             mock_tmux.find_window_by_id = AsyncMock(
@@ -238,7 +244,7 @@ class TestDispatchRoundTrip:
         update = _make_callback_query_update(f"tb:{TEST_WINDOW_ID}:close", bot=app.bot)
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch.object(
@@ -255,7 +261,7 @@ class TestDispatchRoundTrip:
         )
         with (
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
             patch.object(
@@ -296,7 +302,7 @@ class TestCustomConfigDispatch:
         )
         # Render the keyboard and verify shape + labels.
         with patch(
-            "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
+            "ccgram.handlers.toolbar.toolbar_keyboard.get_toolbar_config",
             return_value=cfg,
         ):
             kb = build_toolbar_keyboard(TEST_WINDOW_ID, "claude")
@@ -311,18 +317,20 @@ class TestCustomConfigDispatch:
         )
         with (
             patch(
-                "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_keyboard.get_toolbar_config",
                 return_value=cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_callbacks.get_toolbar_config",
                 return_value=cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
             patch.object(CallbackQuery, "answer", new_callable=AsyncMock),
         ):
             mock_tmux.find_window_by_id = AsyncMock(
@@ -352,18 +360,20 @@ class TestCustomConfigDispatch:
         update = _make_callback_query_update(f"tb:{TEST_WINDOW_ID}:mode", bot=app.bot)
         with (
             patch(
-                "ccgram.handlers.toolbar_keyboard.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_keyboard.get_toolbar_config",
                 return_value=cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.get_toolbar_config",
+                "ccgram.handlers.toolbar.toolbar_callbacks.get_toolbar_config",
                 return_value=cfg,
             ),
             patch(
-                "ccgram.handlers.toolbar_callbacks.user_owns_window",
+                "ccgram.handlers.toolbar.toolbar_callbacks.user_owns_window",
                 return_value=True,
             ),
-            patch("ccgram.handlers.toolbar_callbacks.tmux_manager") as mock_tmux,
+            patch(
+                "ccgram.handlers.toolbar.toolbar_callbacks.tmux_manager"
+            ) as mock_tmux,
             patch.object(CallbackQuery, "answer", new_callable=AsyncMock),
         ):
             mock_tmux.find_window_by_id = AsyncMock(

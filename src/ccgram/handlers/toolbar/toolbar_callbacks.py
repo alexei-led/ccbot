@@ -25,13 +25,13 @@ from telegram import (
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..window_query import view_window
-from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
-from ..toolbar_config import ToolbarAction
-from .callback_data import CB_TOOLBAR
-from .callback_helpers import get_thread_id, user_owns_window
-from .callback_registry import register
+from ...window_query import view_window
+from ...thread_router import thread_router
+from ...tmux_manager import tmux_manager
+from ...toolbar_config import ToolbarAction
+from ..callback_data import CB_TOOLBAR
+from ..callback_helpers import get_thread_id, user_owns_window
+from ..callback_registry import register
 from .toolbar_keyboard import get_toolbar_config, refresh_button_label
 
 logger = structlog.get_logger()
@@ -89,8 +89,8 @@ async def _builtin_screenshot(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Builtin: trigger the screenshot handler."""
-    from .callback_data import CB_STATUS_SCREENSHOT
-    from .live.screenshot_callbacks import handle_screenshot_callback
+    from ..callback_data import CB_STATUS_SCREENSHOT
+    from ..live.screenshot_callbacks import handle_screenshot_callback
 
     user = update.effective_user
     if user is None:
@@ -124,8 +124,8 @@ async def _builtin_live(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Builtin: start the live view via the existing screenshot dispatcher."""
-    from .callback_data import CB_LIVE_START
-    from .live.screenshot_callbacks import handle_screenshot_callback
+    from ..callback_data import CB_LIVE_START
+    from ..live.screenshot_callbacks import handle_screenshot_callback
 
     user = update.effective_user
     if user is None:
@@ -161,7 +161,7 @@ async def _builtin_send(
     if chat_id is None:
         await query.answer("Use in a topic", show_alert=True)
         return
-    from .send import open_file_browser
+    from ..send import open_file_browser
 
     await open_file_browser(
         query.get_bot(), chat_id, thread_id, context.user_data, window_id, cwd
