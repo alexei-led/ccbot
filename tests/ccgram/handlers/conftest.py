@@ -20,19 +20,18 @@ def _instant_session_map_wait(monkeypatch):
 def _wire_runtime_callbacks_for_tests():
     """Wire safe no-op defaults for the three startup-registered callbacks.
 
-    Production wires these in bot.post_init; unit tests bypass that path
-    entirely.  Without this fixture, every test exercising a Stop event,
-    status bubble render, or shell approval would have to wire the callback
-    itself.  Tests that exercise the unwired-state failure mode call
-    `_reset_*_for_testing()` themselves.
+    Production wires these in bot.post_init via ``bootstrap.wire_runtime_callbacks``;
+    unit tests bypass that path entirely.  Without this fixture, every test
+    exercising a Stop event, status bubble render, or shell approval would
+    have to wire the callback itself.  Tests that exercise the unwired-state
+    failure mode call ``bootstrap.reset_for_testing()`` themselves.
     """
+    from ccgram import bootstrap
     from ccgram.handlers import hook_events
     from ccgram.handlers.shell import shell_capture
     from ccgram.handlers.status import status_bubble
 
-    hook_events._reset_stop_callback_for_testing()
-    status_bubble._reset_rc_active_provider_for_testing()
-    shell_capture._reset_approval_callback_for_testing()
+    bootstrap.reset_for_testing()
 
     hook_events.register_stop_callback(AsyncMock())
     status_bubble.register_rc_active_provider(lambda _wid: False)
@@ -40,9 +39,7 @@ def _wire_runtime_callbacks_for_tests():
 
     yield
 
-    hook_events._reset_stop_callback_for_testing()
-    status_bubble._reset_rc_active_provider_for_testing()
-    shell_capture._reset_approval_callback_for_testing()
+    bootstrap.reset_for_testing()
 
 
 @pytest.fixture(autouse=True)

@@ -17,18 +17,16 @@ Core responsibilities:
 Key functions: create_bot(), handle_new_message().
 """
 
-import asyncio
-import contextlib
-import structlog
 import os
 import signal
 
+import structlog
 from telegram import (
     InlineQueryResultArticle,
     InputTextMessageContent,
     Update,
 )
-from telegram.error import BadRequest, Conflict, NetworkError, TelegramError
+from telegram.error import BadRequest, Conflict, NetworkError
 from telegram.ext import (
     AIORateLimiter,
     Application,
@@ -36,51 +34,30 @@ from telegram.ext import (
     filters,
 )
 
-from .cc_commands import (
-    discover_provider_commands,
-    register_commands,
-)
-from .providers import (
-    get_provider,
-    get_provider_for_window,
-)
+from . import bootstrap, window_query
 from .config import config
-from .handlers.topics.topic_orchestration import (
-    adopt_unbound_windows as _adopt_unbound_windows,
-    handle_new_window as _handle_new_window,
-)
+from .cc_commands import discover_provider_commands
+from .handlers.callback_helpers import get_thread_id as _get_thread_id
 from .handlers.command_orchestration import (
     sync_scoped_menu_for_text_context as _sync_scoped_menu_for_text_context,
-    sync_scoped_provider_menu as _sync_scoped_provider_menu,
-    setup_menu_refresh_job,
 )
-from .handlers.callback_helpers import get_thread_id as _get_thread_id
-from .handlers.recovery import send_history
-from .handlers.registry import register_all
-from .handlers.topics.directory_browser import clear_browse_state
-from .handlers.messaging_pipeline.message_routing import handle_new_message
-from .handlers.messaging_pipeline.message_queue import (
-    shutdown_workers,
+from .handlers.command_orchestration import (
+    sync_scoped_provider_menu as _sync_scoped_provider_menu,
 )
 from .handlers.messaging_pipeline.message_sender import safe_reply
-from .handlers.polling.polling_coordinator import status_poll_loop
+from .handlers.recovery import send_history
+from .handlers.registry import register_all
 from .handlers.text import handle_text_message
-from . import window_query
+from .handlers.topics.directory_browser import clear_browse_state
+from .providers import (
+    get_provider_for_window,
+)
 from .session import session_manager
-from .session_monitor import NewMessage, NewWindowEvent, SessionMonitor
-from .thread_router import thread_router
 from .telegram_request import ResilientPollingHTTPXRequest
-from .utils import handle_general_topic_message, is_general_topic, task_done_callback
+from .thread_router import thread_router
+from .utils import handle_general_topic_message, is_general_topic
 
 logger = structlog.get_logger()
-
-# Error keyword pattern for errors_only notification mode (word boundaries)
-
-# Session monitor instance
-session_monitor: SessionMonitor | None = None
-
-# Status polling task
-_status_poll_task: asyncio.Task | None = None
 
 
 def is_user_allowed(user_id: int | None) -> bool:
@@ -376,128 +353,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # --- App lifecycle ---
 
 
-def _global_exception_handler(
-    _loop: asyncio.AbstractEventLoop, context: dict[str, object]
-) -> None:
-    """Last-resort handler for uncaught exceptions in asyncio tasks."""
-    exc = context.get("exception")
-    msg = context.get("message", "Unhandled exception in event loop")
-    if isinstance(exc, BaseException):
-        logger.error(
-            "asyncio exception handler: %s",
-            msg,
-            exc_info=(type(exc), exc, exc.__traceback__),
-        )
-    else:
-        logger.error("asyncio exception handler: %s", msg)
-
-
 async def post_init(application: Application) -> None:
-    global session_monitor, _status_poll_task
-
-    # Install global asyncio exception handler as safety net
-    asyncio.get_running_loop().set_exception_handler(_global_exception_handler)
-
-    default_provider = get_provider()
-    try:
-        await register_commands(application.bot, provider=default_provider)
-    except TelegramError:
-        logger.warning("Failed to register bot commands at startup, will retry later")
-    setup_menu_refresh_job(application)
-
-    # Re-resolve stale window IDs from persisted state against live tmux windows
-    await session_manager.resolve_stale_ids()
-
-    await _adopt_unbound_windows(application.bot)
-
-    # Warn if Claude Code hooks are not installed (provider-aware, non-blocking)
-    provider = get_provider()
-    if provider.capabilities.supports_hook:
-        from .hook import _claude_settings_file, get_installed_events
-
-        settings_file = _claude_settings_file()
-        import json
-
-        if settings_file.exists():
-            try:
-                settings = json.loads(settings_file.read_text())
-                events = get_installed_events(settings)
-                missing = [e for e, ok in events.items() if not ok]
-                if missing:
-                    logger.warning(
-                        "Claude Code hooks incomplete — %d missing: %s. "
-                        "Run: ccgram hook --install",
-                        len(missing),
-                        ", ".join(missing),
-                    )
-            except (json.JSONDecodeError, OSError):  # fmt: skip
-                logger.warning(
-                    "Claude Code hooks not installed. Run: ccgram hook --install"
-                )
-        else:
-            logger.warning(
-                "Claude Code hooks not installed (%s missing). "
-                "Run: ccgram hook --install",
-                settings_file,
-            )
-
-    monitor = SessionMonitor()
-    # Expose to other modules (status_polling activity heuristic)
-    from ccgram.session_monitor import set_active_monitor
-
-    set_active_monitor(monitor)
-
-    async def message_callback(msg: NewMessage) -> None:
-        await handle_new_message(msg, application.bot)
-
-    monitor.set_message_callback(message_callback)
-
-    async def new_window_callback(event: NewWindowEvent) -> None:
-        await _handle_new_window(event, application.bot)
-
-    monitor.set_new_window_callback(new_window_callback)
-
-    # Wire hook event dispatcher for structured Claude Code events
-    from ccgram.providers.base import HookEvent
-    from ccgram.handlers.hook_events import dispatch_hook_event
-
-    async def hook_event_callback(event: HookEvent) -> None:
-        await dispatch_hook_event(event, application.bot)
-
-    monitor.set_hook_event_callback(hook_event_callback)
-
-    # Wire module-level callbacks to break cross-subsystem direct imports.
-    from .handlers.hook_events import register_stop_callback
-    from .handlers.polling.periodic_tasks import run_broker_cycle
-    from .handlers.polling.polling_strategies import terminal_screen_buffer
-    from .handlers.shell import register_approval_callback, show_command_approval
-    from .handlers.status import register_rc_active_provider
-
-    # hook_events triggers broker delivery on Stop via callback (not a direct import).
-    async def _on_stop(bot_, window_key: str) -> None:  # type: ignore[no-untyped-def]
-        await run_broker_cycle(bot_, idle_windows=frozenset({window_key}))
-
-    register_stop_callback(_on_stop)
-
-    # status_bubble asks polling layer for RC state via callback (not a direct import).
-    register_rc_active_provider(terminal_screen_buffer.is_rc_active)
-
-    # shell_capture calls show_command_approval via callback to break the runtime cycle.
-    register_approval_callback(show_command_approval)
-
-    monitor.start()
-    session_monitor = monitor
-    logger.info("Session monitor started")
-
-    # Start status polling task (routed through PTB error handler)
-    _status_poll_task = asyncio.create_task(status_poll_loop(application.bot))
-    _status_poll_task.add_done_callback(task_done_callback)
-    logger.info("Status polling task started")
-
-    # Optional Mini App server — starts only when CCGRAM_MINIAPP_BASE_URL is set.
-    from .main import start_miniapp_if_enabled
-
-    await start_miniapp_if_enabled()
+    """Run the post_init wiring sequence — see ``bootstrap.bootstrap_application``."""
+    await bootstrap.bootstrap_application(application)
 
 
 async def _send_shutdown_notification(application: Application) -> None:
@@ -511,6 +369,7 @@ async def _send_shutdown_notification(application: Application) -> None:
     reason = f"Received {signal.Signals(sig).name}" if sig else "Clean exit"
 
     from . import __version__
+    from telegram.error import TelegramError
 
     text = f"🔌 ccgram stopped — {reason} (v{__version__})"
     try:
@@ -529,36 +388,8 @@ async def post_stop(application: Application) -> None:
 
 
 async def post_shutdown(_application: Application) -> None:
-    global _status_poll_task
-
-    # Stop status polling
-    if _status_poll_task:
-        _status_poll_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await _status_poll_task
-        _status_poll_task = None
-        logger.info("Status polling stopped")
-
-    # Stop session monitor first (it may enqueue messages to workers)
-    if session_monitor:
-        session_monitor.stop()
-        logger.info("Session monitor stopped")
-
-    # Stop all queue workers after monitor is stopped
-    await shutdown_workers()
-
-    # Sweep expired mailbox messages before final state flush
-    from .mailbox import Mailbox
-
-    Mailbox(config.mailbox_dir).sweep()
-
-    # Tear down the Mini App server if it was started.
-    from .main import stop_miniapp_if_enabled
-
-    await stop_miniapp_if_enabled()
-
-    # Flush debounced state to disk AFTER workers/monitor stop (captures final mutations)
-    session_manager.flush_state()
+    """Tear down runtime state — see ``bootstrap.shutdown_runtime``."""
+    await bootstrap.shutdown_runtime()
 
 
 async def _error_handler(_update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

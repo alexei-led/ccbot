@@ -257,13 +257,13 @@ class TestPollStateCleanup:
 
 class TestGlobalExceptionHandler:
     def test_handler_logs_exception(self):
-        from ccgram.bot import _global_exception_handler
+        from ccgram.bootstrap import _global_exception_handler
 
         loop = MagicMock()
         error = ValueError("test error")
         context = {"exception": error, "message": "test context"}
 
-        with patch("ccgram.bot.logger") as mock_logger:
+        with patch("ccgram.bootstrap.logger") as mock_logger:
             _global_exception_handler(loop, context)
 
         mock_logger.error.assert_called_once()
@@ -295,10 +295,10 @@ class TestShutdownNotificationLifecycle:
             patch(
                 "ccgram.bot._send_shutdown_notification", new_callable=AsyncMock
             ) as mock_send,
-            patch("ccgram.bot._status_poll_task", None),
-            patch("ccgram.bot.session_monitor", None),
-            patch("ccgram.bot.session_manager"),
-            patch("ccgram.bot.shutdown_workers", new_callable=AsyncMock),
+            patch("ccgram.bootstrap._status_poll_task", None),
+            patch("ccgram.bootstrap.session_monitor", None),
+            patch("ccgram.bootstrap.session_manager"),
+            patch("ccgram.bootstrap.shutdown_workers", new_callable=AsyncMock),
         ):
             await post_shutdown(application)
 

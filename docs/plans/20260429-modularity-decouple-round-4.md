@@ -667,12 +667,12 @@ This keeps each task's diff small.
 - Create: `src/ccgram/bootstrap.py`
 - Modify: `src/ccgram/bot.py` (delegate to bootstrap)
 
-- [ ] move `post_init` logic out of `bot.py` into `bootstrap.py` — split into named functions: `register_provider_commands`, `verify_hooks_installed`, `start_session_monitor`, `wire_runtime_callbacks` (the three `register_*_callback` calls), `start_status_polling`, `start_miniapp_if_enabled`
-- [ ] `bot.py.post_init(application)` becomes a 5-line delegate calling the named functions in order
-- [ ] make ordering explicit: `wire_runtime_callbacks` must run before `start_session_monitor`; raise if order violated (fits with F2.6 "fail loud on not-wired")
-- [ ] add unit test that calls `bootstrap.bootstrap_application(stub_app)` against a fake Application and verifies the ordering + that all callbacks were registered
-- [ ] `make check` passes
-- [ ] commit "refactor(bot): extract bootstrap.py for post_init wiring"
+- [x] move `post_init` logic out of `bot.py` into `bootstrap.py` — split into named functions: `register_provider_commands`, `verify_hooks_installed`, `start_session_monitor`, `wire_runtime_callbacks` (the three `register_*_callback` calls), `start_status_polling`, `start_miniapp_if_enabled`. Also moved `_global_exception_handler` (now `install_global_exception_handler`) and `shutdown_runtime` (the post_shutdown teardown sequence) into bootstrap so the lifecycle ownership is consistent.
+- [x] `bot.py.post_init(application)` becomes a 5-line delegate calling the named functions in order — `bot.py.post_init` now delegates entirely to `bootstrap.bootstrap_application`; `bot.py.post_shutdown` delegates to `bootstrap.shutdown_runtime`
+- [x] make ordering explicit: `wire_runtime_callbacks` must run before `start_session_monitor`; raise if order violated (fits with F2.6 "fail loud on not-wired") — `start_session_monitor` checks the bootstrap-module `_callbacks_wired` flag and raises `RuntimeError("wire_runtime_callbacks() must run before start_session_monitor()")` when violated
+- [x] add unit test that calls `bootstrap.bootstrap_application(stub_app)` against a fake Application and verifies the ordering + that all callbacks were registered — `tests/ccgram/test_bootstrap.py` covers ordering (`TestBootstrapApplication.test_runs_full_sequence_in_order`), wiring (`TestWireRuntimeCallbacks`), unwired-callback failure (`TestBootstrapApplicationOrdering`), shutdown teardown (`TestShutdownRuntime`), reset semantics (`TestResetForTesting`), and hook-verification branches (`TestVerifyHooksInstalled`); 11 tests total
+- [x] `make check` passes — typecheck 0 errors / 0 warnings / 0 informations; lint clean; 4371 unit + 97 integration pass. Single pre-existing parallel-xdist flake (`test_pyte_fallback_in_update_status::test_uses_pyte_result_when_available`) passes standalone — known flake from observations 8534/8538/8539, orthogonal to F3.2 lifecycle extraction.
+- [x] commit "refactor(bot): extract bootstrap.py for post_init wiring"
 
 #### Task F3.3: Slim `bot.py` to factory + lifecycle delegates
 
