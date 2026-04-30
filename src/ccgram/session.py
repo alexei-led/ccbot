@@ -23,7 +23,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import config
-from .session_map import session_map_sync
+from .session_map import (
+    SessionMapSync,
+    install_session_map_sync,
+    session_map_sync,
+)
 from .state_persistence import StatePersistence
 from .tmux_manager import tmux_manager
 from .thread_router import ThreadRouter, install_thread_router, thread_router
@@ -159,20 +163,9 @@ class SessionManager:
         install_thread_router(self._thread_router)
         self._user_preferences = UserPreferences(schedule_save=self._save_state)
         install_user_preferences(self._user_preferences)
-        self._wire_singletons()
+        self._session_map_sync = SessionMapSync(schedule_save=self._save_state)
+        install_session_map_sync(self._session_map_sync)
         self._load_state()
-
-    def _wire_singletons(self) -> None:
-        """Wire remaining module-level state singletons to this manager.
-
-        ``WindowStateStore``, ``ThreadRouter`` and ``UserPreferences``
-        are constructor-injected — see ``__post_init__``. Only
-        ``session_map_sync`` still starts with a fail-loud
-        ``unwired_save`` default that raises ``RuntimeError`` if mutated
-        before this method runs. Migration to constructor injection
-        happens in Phase F2 task F2.4.
-        """
-        session_map_sync._schedule_save = self._save_state
 
     def _serialize_state(self) -> dict[str, Any]:
         """Serialize all state to a dict for persistence."""

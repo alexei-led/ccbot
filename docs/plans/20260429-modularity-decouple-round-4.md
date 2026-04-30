@@ -596,12 +596,12 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/session.py`
 - Modify: `tests/ccgram/test_session_map.py`
 
-- [ ] change `SessionMapSync.__init__` to accept `schedule_save`
-- [ ] remove `unwired_save` default
-- [ ] SessionManager constructs and owns it
-- [ ] update tests
-- [ ] `make check` passes
-- [ ] commit "refactor(state): SessionMapSync takes callback via constructor"
+- [x] change `SessionMapSync.__init__` to accept `schedule_save` (was a `@dataclass`-style `__post_init__` defaulting to `unwired_save`; now an explicit `__init__(*, schedule_save)` like the F2.1-F2.3 stores)
+- [x] remove `unwired_save` default
+- [x] SessionManager constructs and owns it — stored on `self._session_map_sync` and installed via `install_session_map_sync(...)`. With this, `_wire_singletons` had no remaining work and was removed in this same task (early F2.5 cleanup, since SessionMapSync was the last unwired singleton); `unwired_save` itself stays until F2.5 also confirms no other call sites
+- [x] update tests — `test_schedule_save_wiring.py`: dropped the obsolete `test_singleton_starts_with_unwired_default` parametrize (no singletons now start unwired), removed the `TestUnwiredSave.test_singleton_starts_with_unwired_default` body, added new `TestSessionMapSyncRequiresCallback` covering the constructor contract, added `TestGetSessionMapSync` verifying SessionManager installs the sync. Module-level `session_map_sync` is now a `_SessionMapSyncProxy` so the existing `monkeypatch.setattr(session_map_sync, ...)` in `test_session_map_primary.py` and module-level patches in handler/integration tests continue to work without churn
+- [x] `make check` passes
+- [x] commit "refactor(state): SessionMapSync takes callback via constructor"
 
 #### Task F2.5: Delete `unwired_save` and `_wire_singletons`
 

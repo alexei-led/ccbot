@@ -5,7 +5,17 @@ file written by the Claude Code hook. Extracted from SessionManager so that
 session_map concerns live in one place without pulling in the full
 SessionManager stack.
 
-Key class: SessionMapSync (singleton instantiated as ``session_map_sync``).
+The ``schedule_save`` callback is injected via the constructor — there is
+no ``unwired_save`` default and the sync cannot be built without an
+explicit callback.
+
+Module-level access: ``get_session_map_sync()`` returns the
+SessionManager-owned instance (raises RuntimeError until SessionManager
+has constructed the sync). The legacy module attribute
+``session_map_sync`` is a thin proxy that delegates to the same instance
+for backward compat.
+
+Key class: SessionMapSync.
 Free functions: parse_session_map, parse_emdash_provider.
 """
 
@@ -18,14 +28,12 @@ import os
 import time
 import structlog
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import aiofiles
 
 from .config import config
-from .state_persistence import unwired_save
 from .utils import atomic_write_json
 from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window_id
 
@@ -156,19 +164,19 @@ def parse_emdash_provider(session_name: str) -> str:
     return ""
 
 
-@dataclass
 class SessionMapSync:
     """Session map I/O and window-state synchronisation.
 
     Reads and writes session_map.json, syncing window states from hook-written
-    entries. Persistence of window_states is delegated: the ``_schedule_save``
-    callback (set by SessionManager) triggers a debounced save after mutations.
+    entries. Persistence of window_states is delegated: the ``schedule_save``
+    callback (provided by SessionManager) triggers a debounced save after
+    mutations.
 
     Depends on ``window_store`` and ``thread_router`` singletons for state access.
     """
 
-    def __post_init__(self) -> None:
-        self._schedule_save: Callable[[], None] = unwired_save("SessionMapSync")
+    def __init__(self, *, schedule_save: Callable[[], None]) -> None:
+        self._schedule_save: Callable[[], None] = schedule_save
 
     # ------------------------------------------------------------------
     # Public: async read/sync methods
@@ -587,4 +595,58 @@ class SessionMapSync:
         return changed
 
 
-session_map_sync = SessionMapSync()
+_active_sync: SessionMapSync | None = None
+
+
+def get_session_map_sync() -> SessionMapSync:
+    """Return the SessionManager-owned SessionMapSync.
+
+    Raises:
+        RuntimeError: when called before SessionManager has constructed
+        and installed the sync.
+    """
+    if _active_sync is None:
+        raise RuntimeError(
+            "SessionMapSync not yet wired. "
+            "Instantiate SessionManager() before accessing session_map_sync."
+        )
+    return _active_sync
+
+
+def install_session_map_sync(sync: SessionMapSync) -> None:
+    """Install the SessionManager-owned sync as the module-level singleton.
+
+    Called once by ``SessionManager.__post_init__``. Replaces any
+    previously installed instance (used by tests that build a fresh
+    SessionManager).
+    """
+    global _active_sync
+    _active_sync = sync
+
+
+class _SessionMapSyncProxy:
+    """Backward-compat module-level facade that resolves to the wired sync.
+
+    All attribute access delegates to the SessionManager-owned
+    ``SessionMapSync``. Raises ``RuntimeError`` if accessed before
+    SessionManager has installed an instance.
+    """
+
+    __slots__ = ()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_session_map_sync(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(get_session_map_sync(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(get_session_map_sync(), name)
+
+    def __repr__(self) -> str:
+        if _active_sync is None:
+            return "<SessionMapSyncProxy unwired>"
+        return f"<SessionMapSyncProxy → {_active_sync!r}>"
+
+
+session_map_sync: SessionMapSync = cast("SessionMapSync", _SessionMapSyncProxy())

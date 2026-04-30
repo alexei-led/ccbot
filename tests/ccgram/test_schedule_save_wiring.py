@@ -1,15 +1,14 @@
-"""Tests for fail-loud _schedule_save defaults on persistence singletons.
+"""Tests for required _schedule_save callbacks on persistence singletons.
 
-Only ``session_map_sync`` still starts with a default
-``_schedule_save`` callback that raises ``RuntimeError`` when called.
-``SessionManager.__post_init__`` replaces it with the real persistence
-callback. ``WindowStateStore`` (F2.1), ``ThreadRouter`` (F2.2) and
-``UserPreferences`` (F2.3) are constructor-injected — their callbacks
-are required arguments, so they have no unwired default.
+All four state singletons — ``WindowStateStore`` (F2.1),
+``ThreadRouter`` (F2.2), ``UserPreferences`` (F2.3) and
+``SessionMapSync`` (F2.4) — are constructor-injected. Their
+``schedule_save`` callbacks are required arguments, so they have no
+unwired default. ``unwired_save`` itself remains until F2.5 cleans it
+up.
 
-This guarantees that any test or caller that mutates a singleton before
-SessionManager has been instantiated fails loudly instead of silently
-dropping the save.
+This guarantees that any test or caller that builds a singleton without
+wiring it fails loudly instead of silently dropping the save.
 """
 
 from __future__ import annotations
@@ -28,19 +27,6 @@ class TestUnwiredSave:
         cb = unwired_save("MyOwner")
         with pytest.raises(RuntimeError, match="MyOwner._schedule_save was called"):
             cb()
-
-    @pytest.mark.parametrize(
-        ("singleton_factory", "owner"),
-        [
-            (SessionMapSync, "SessionMapSync"),
-        ],
-    )
-    def test_singleton_starts_with_unwired_default(
-        self, singleton_factory: type, owner: str
-    ) -> None:
-        instance = singleton_factory()
-        with pytest.raises(RuntimeError, match=f"{owner}._schedule_save was called"):
-            instance._schedule_save()
 
 
 class TestWindowStateStoreRequiresCallbacks:
@@ -153,6 +139,18 @@ class TestThreadRouterRequiresCallbacks:
         assert router.get_display_name("@1") == "@1"
 
 
+class TestSessionMapSyncRequiresCallback:
+    def test_constructor_requires_schedule_save(self) -> None:
+        with pytest.raises(TypeError, match="schedule_save"):
+            SessionMapSync()  # type: ignore[call-arg]
+
+    def test_constructor_wires_schedule_save(self) -> None:
+        calls: list[int] = []
+        sync = SessionMapSync(schedule_save=lambda: calls.append(1))
+        sync._schedule_save()
+        assert calls == [1]
+
+
 class TestSessionManagerWiresAllSingletons:
     def test_post_init_replaces_unwired_defaults(self) -> None:
         # SessionManager.__post_init__ wires every singleton's _schedule_save
@@ -215,4 +213,15 @@ class TestGetUserPreferences:
         sm = SessionManager()
         prefs = get_user_preferences()
         assert prefs is sm._user_preferences
+        del sm
+
+
+class TestGetSessionMapSync:
+    def test_returns_installed_sync(self) -> None:
+        from ccgram.session import SessionManager
+        from ccgram.session_map import get_session_map_sync
+
+        sm = SessionManager()
+        sync = get_session_map_sync()
+        assert sync is sm._session_map_sync
         del sm
