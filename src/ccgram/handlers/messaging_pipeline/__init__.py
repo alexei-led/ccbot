@@ -44,6 +44,7 @@ from .message_task import (
     StatusUpdateTask,
     thread_key,
 )
+from .topic_commands import toolcalls_command, verbose_command
 from .tool_batch import (
     ToolBatch,
     ToolBatchEntry,
@@ -98,4 +99,6 @@ __all__ = [
     "send_kwargs",
     "shutdown_workers",
     "thread_key",
+    "toolcalls_command",
+    "verbose_command",
 ]

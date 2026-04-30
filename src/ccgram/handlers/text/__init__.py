@@ -13,3 +13,7 @@ from .text_handler import handle_text_message
 __all__ = [
     "handle_text_message",
 ]
+
+# Note: ``text_handler`` (the top-level MessageHandler callback) is imported
+# directly from ``handlers.text.text_handler`` rather than re-exported here
+# to avoid shadowing the same-named submodule attribute on the package.

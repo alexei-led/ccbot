@@ -11,13 +11,16 @@ import pytest
 from telegram import BotCommandScopeChat, BotCommandScopeChatMember
 
 import ccgram.handlers.command_orchestration as cmd_orch_mod
-from ccgram.bot import commands_command
 from ccgram.handlers.command_orchestration import (
     _scoped_provider_menu,
     _chat_scoped_provider_menu,
+    commands_command,
     sync_scoped_provider_menu as _sync_scoped_provider_menu,
 )
 from ccgram.cc_commands import CCCommand
+
+
+_CO = "ccgram.handlers.command_orchestration"
 
 
 def _make_update(
@@ -39,7 +42,7 @@ def _make_update(
 
 @pytest.fixture(autouse=True)
 def _allow_user():
-    with patch("ccgram.bot.is_user_allowed", return_value=True):
+    with patch(f"{_CO}.config.is_user_allowed", return_value=True):
         yield
 
 
@@ -57,8 +60,8 @@ def _clean_scoped_caches():
 class TestCommandsCommand:
     async def test_unauthorized_user_returns_early(self) -> None:
         with (
-            patch("ccgram.bot.is_user_allowed", return_value=False),
-            patch("ccgram.bot.thread_router") as mock_tr,
+            patch(f"{_CO}.config.is_user_allowed", return_value=False),
+            patch(f"{_CO}.thread_router") as mock_tr,
         ):
             await commands_command(_make_update(), MagicMock())
 
@@ -67,15 +70,15 @@ class TestCommandsCommand:
     async def test_no_message_returns_early(self) -> None:
         update = _make_update()
         update.message = None
-        with patch("ccgram.bot.thread_router") as mock_tr:
+        with patch(f"{_CO}.thread_router") as mock_tr:
             await commands_command(update, MagicMock())
         mock_tr.resolve_window_for_thread.assert_not_called()
 
     async def test_unbound_topic_reports_error(self) -> None:
         update = _make_update()
         with (
-            patch("ccgram.bot.thread_router") as mock_tr,
-            patch("ccgram.bot.safe_reply", new_callable=AsyncMock) as mock_reply,
+            patch(f"{_CO}.thread_router") as mock_tr,
+            patch(f"{_CO}.safe_reply", new_callable=AsyncMock) as mock_reply,
         ):
             mock_tr.resolve_window_for_thread.return_value = None
             await commands_command(update, MagicMock())
@@ -89,11 +92,11 @@ class TestCommandsCommand:
             "AgentProvider", SimpleNamespace(capabilities=SimpleNamespace(name="codex"))
         )
         with (
-            patch("ccgram.bot.thread_router") as mock_tr,
-            patch("ccgram.bot.get_provider_for_window", return_value=provider),
-            patch("ccgram.bot._sync_scoped_provider_menu", new_callable=AsyncMock),
-            patch("ccgram.bot.discover_provider_commands", return_value=[]),
-            patch("ccgram.bot.safe_reply", new_callable=AsyncMock) as mock_reply,
+            patch(f"{_CO}.thread_router") as mock_tr,
+            patch(f"{_CO}.get_provider_for_window", return_value=provider),
+            patch(f"{_CO}.sync_scoped_provider_menu", new_callable=AsyncMock),
+            patch(f"{_CO}.discover_provider_commands", return_value=[]),
+            patch(f"{_CO}.safe_reply", new_callable=AsyncMock) as mock_reply,
         ):
             mock_tr.resolve_window_for_thread.return_value = "@1"
             await commands_command(update, MagicMock())
@@ -129,13 +132,13 @@ class TestCommandsCommand:
             ),
         ]
         with (
-            patch("ccgram.bot.thread_router") as mock_tr,
-            patch("ccgram.bot.get_provider_for_window", return_value=provider),
+            patch(f"{_CO}.thread_router") as mock_tr,
+            patch(f"{_CO}.get_provider_for_window", return_value=provider),
             patch(
-                "ccgram.bot._sync_scoped_provider_menu", new_callable=AsyncMock
+                f"{_CO}.sync_scoped_provider_menu", new_callable=AsyncMock
             ) as mock_sync,
-            patch("ccgram.bot.discover_provider_commands", return_value=discovered),
-            patch("ccgram.bot.safe_reply", new_callable=AsyncMock) as mock_reply,
+            patch(f"{_CO}.discover_provider_commands", return_value=discovered),
+            patch(f"{_CO}.safe_reply", new_callable=AsyncMock) as mock_reply,
         ):
             mock_tr.resolve_window_for_thread.return_value = "@1"
             await commands_command(update, MagicMock())

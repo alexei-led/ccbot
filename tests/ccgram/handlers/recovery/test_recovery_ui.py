@@ -5,7 +5,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 
 import ccgram.handlers.command_orchestration as cmd_orch_mod
-from ccgram.bot import text_handler
+from ccgram.handlers.text.text_handler import text_handler
 from ccgram.handlers.recovery.recovery_callbacks import (
     _SessionEntry,
     _recovery_help_text,
@@ -243,14 +243,17 @@ class TestRecoveryHelpText:
 
 @pytest.fixture(autouse=True)
 def _allow_user():
-    with patch("ccgram.bot.is_user_allowed", return_value=True):
+    with patch(
+        "ccgram.handlers.text.text_handler.config.is_user_allowed", return_value=True
+    ):
         yield
 
 
 @pytest.fixture()
 def _no_group():
-    with patch("ccgram.bot.config") as mock_config:
+    with patch("ccgram.handlers.text.text_handler.config") as mock_config:
         mock_config.group_id = None
+        mock_config.is_user_allowed = MagicMock(return_value=True)
         yield mock_config
 
 
@@ -427,7 +430,9 @@ class TestTextHandlerDeadWindow:
 
 
 class TestBotTextHandlerScopedMenu:
-    @patch("ccgram.bot.handle_text_message", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.text.text_handler.handle_text_message", new_callable=AsyncMock
+    )
     @patch(
         "ccgram.handlers.command_orchestration.sync_scoped_provider_menu",
         new_callable=AsyncMock,
@@ -454,7 +459,9 @@ class TestBotTextHandlerScopedMenu:
         mock_sync_menu.assert_called_once_with(update.message, 100, provider)
         mock_handle_text.assert_called_once_with(update, ctx)
 
-    @patch("ccgram.bot.handle_text_message", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.text.text_handler.handle_text_message", new_callable=AsyncMock
+    )
     @patch(
         "ccgram.handlers.command_orchestration.sync_scoped_provider_menu",
         new_callable=AsyncMock,
@@ -477,7 +484,9 @@ class TestBotTextHandlerScopedMenu:
         mock_sync_menu.assert_not_called()
         mock_handle_text.assert_called_once_with(update, ctx)
 
-    @patch("ccgram.bot.handle_text_message", new_callable=AsyncMock)
+    @patch(
+        "ccgram.handlers.text.text_handler.handle_text_message", new_callable=AsyncMock
+    )
     @patch(
         "ccgram.handlers.command_orchestration.sync_scoped_provider_menu",
         new_callable=AsyncMock,

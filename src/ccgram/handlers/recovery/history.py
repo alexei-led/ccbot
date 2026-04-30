@@ -3,6 +3,7 @@
 Provides history viewing functionality for Claude Code sessions:
   - _build_history_keyboard: Build inline keyboard for page navigation
   - send_history: Send or edit message history with pagination support
+  - history_command: ``/history`` Telegram command handler
 
 Supports both full history and unread message range views.
 """
@@ -11,14 +12,18 @@ import structlog
 from datetime import datetime
 from typing import Any
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
 from ...expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
-from ... import session_query
+from ... import session_query, window_query
+from ...config import config
+from ...providers import get_provider_for_window
 from ...user_preferences import user_preferences
 from ...thread_router import thread_router
 from ...telegram_sender import split_message
 from ..callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
+from ..callback_helpers import get_thread_id as _get_thread_id
 from ..messaging_pipeline.message_sender import safe_edit, safe_reply, safe_send
 
 logger = structlog.get_logger()
@@ -201,3 +206,27 @@ async def send_history(
     # Update user's read offset after viewing unread
     if is_unread and user_id is not None and end_byte > 0:
         user_preferences.update_user_window_offset(user_id, window_id, end_byte)
+
+
+async def history_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show message history for the active session or bound thread."""
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    window_id = thread_router.resolve_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(update.message, "❌ No session bound to this topic.")
+        return
+
+    provider = get_provider_for_window(
+        window_id, provider_name=window_query.get_window_provider(window_id)
+    )
+    if not provider.capabilities.supports_structured_transcript:
+        await safe_reply(update.message, "No transcript available for this provider.")
+        return
+
+    await send_history(update.message, window_id)

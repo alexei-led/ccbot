@@ -30,6 +30,7 @@ from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
 from ..cc_commands import discover_provider_commands, register_commands
+from ..config import config
 from ..providers import (
     AgentProvider,
     get_provider,
@@ -40,7 +41,7 @@ from .. import window_query
 from ..window_state_store import window_store
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
-from ..utils import task_done_callback
+from ..utils import handle_general_topic_message, is_general_topic, task_done_callback
 from .callback_helpers import get_thread_id as _get_thread_id
 from .messaging_pipeline.message_sender import safe_reply
 
@@ -681,3 +682,84 @@ def setup_menu_refresh_job(application: "Application") -> None:
     jq = getattr(application, "job_queue", None)
     if jq is not None:
         jq.run_repeating(_refresh_commands, interval=600, first=600)
+
+
+# --- Telegram command handlers ---
+
+
+async def commands_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/commands`` — list provider-specific slash commands for the topic."""
+
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    window_id = thread_router.resolve_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(update.message, "❌ No session bound to this topic.")
+        return
+
+    provider = get_provider_for_window(
+        window_id, provider_name=window_query.get_window_provider(window_id)
+    )
+    await sync_scoped_provider_menu(update.message, user.id, provider)
+    commands = discover_provider_commands(provider)
+    if not commands:
+        await safe_reply(
+            update.message,
+            f"Provider: `{provider.capabilities.name}`\nNo discoverable commands.",
+        )
+        return
+
+    lines = [f"Provider: `{provider.capabilities.name}`", "Supported commands:"]
+    for cmd in sorted(commands, key=lambda c: c.telegram_name):
+        if not cmd.telegram_name:
+            continue
+        original = cmd.name if cmd.name.startswith("/") else f"/{cmd.name}"
+        lines.append(f"- `/{cmd.telegram_name}` → `{original}`")
+    await safe_reply(update.message, "\n".join(lines))
+
+
+async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """``/toolbar`` — show the persistent action toolbar for the topic."""
+    from .toolbar import build_toolbar_keyboard, seed_button_states
+
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        return
+    if not update.message:
+        return
+
+    thread_id = _get_thread_id(update)
+    if thread_id is None:
+        if (
+            update.message
+            and update.effective_chat
+            and is_general_topic(update.message)
+        ):
+            await handle_general_topic_message(
+                update.get_bot(), update.message, update.effective_chat.id
+            )
+        else:
+            await safe_reply(update.message, "❌ Use this command inside a topic.")
+        return
+
+    window_id = thread_router.get_window_for_thread(user.id, thread_id)
+    if not window_id:
+        await safe_reply(update.message, "❌ This topic is not bound to any session.")
+        return
+
+    provider_name = window_query.get_window_provider(window_id) or "claude"
+    # Seed toggle-button labels with the actual current state so the
+    # initial render shows "Edit"/"Plan"/"YOLO"/"Def" instead of "Mode".
+    await seed_button_states(window_id)
+    keyboard = build_toolbar_keyboard(window_id, provider_name)
+    display = thread_router.get_display_name(window_id)
+    await safe_reply(
+        update.message,
+        f"\U0001f39b `{display}` toolbar",
+        reply_markup=keyboard,
+    )

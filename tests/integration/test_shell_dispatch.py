@@ -116,8 +116,14 @@ async def test_text_in_shell_topic_reaches_text_handler(app) -> None:
     update = _make_text_update("list files", bot=app.bot)
 
     with (
-        patch("ccgram.bot.handle_text_message", new_callable=AsyncMock) as mock_handler,
-        patch("ccgram.bot.is_user_allowed", return_value=True),
+        patch(
+            "ccgram.handlers.text.text_handler.handle_text_message",
+            new_callable=AsyncMock,
+        ) as mock_handler,
+        patch(
+            "ccgram.handlers.text.text_handler.config.is_user_allowed",
+            return_value=True,
+        ),
     ):
         await app.process_update(update)
         mock_handler.assert_awaited_once()
@@ -132,8 +138,14 @@ async def test_bang_prefix_reaches_text_handler(app) -> None:
     update = _make_text_update("!ls -la", bot=app.bot)
 
     with (
-        patch("ccgram.bot.handle_text_message", new_callable=AsyncMock) as mock_handler,
-        patch("ccgram.bot.is_user_allowed", return_value=True),
+        patch(
+            "ccgram.handlers.text.text_handler.handle_text_message",
+            new_callable=AsyncMock,
+        ) as mock_handler,
+        patch(
+            "ccgram.handlers.text.text_handler.config.is_user_allowed",
+            return_value=True,
+        ),
     ):
         await app.process_update(update)
         mock_handler.assert_awaited_once()
@@ -153,7 +165,10 @@ async def test_shell_callback_dispatches_to_shell_handler(app) -> None:
             "ccgram.handlers.shell.shell_commands.handle_shell_callback",
             new_callable=AsyncMock,
         ) as mock_shell_cb,
-        patch("ccgram.bot.is_user_allowed", return_value=True),
+        patch(
+            "ccgram.handlers.callback_registry.config.is_user_allowed",
+            return_value=True,
+        ),
     ):
         await app.process_update(update)
         mock_shell_cb.assert_awaited_once()

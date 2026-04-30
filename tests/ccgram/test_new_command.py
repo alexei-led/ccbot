@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.bot import create_bot, new_command
+from ccgram.bot import create_bot
+from ccgram.handlers.topics import new_command
+
+
+_NC = "ccgram.handlers.topics.new_command"
 
 
 def _make_update(user_id: int, thread_id: int | None = None) -> MagicMock:
@@ -23,7 +27,7 @@ def _make_context() -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def _allow_user():
-    with patch("ccgram.bot.is_user_allowed", return_value=True):
+    with patch(f"{_NC}.config.is_user_allowed", return_value=True):
         yield
 
 
@@ -42,7 +46,7 @@ class TestNewCommand:
         update = _make_update(100)
         ctx = _make_context()
 
-        with patch("ccgram.bot.clear_browse_state") as mock_clear:
+        with patch(f"{_NC}.clear_browse_state") as mock_clear:
             await new_command(update, ctx)
             mock_clear.assert_called_once_with(ctx.user_data)
 
@@ -50,7 +54,7 @@ class TestNewCommand:
         update = _make_update(999)
         ctx = _make_context()
 
-        with patch("ccgram.bot.is_user_allowed", return_value=False):
+        with patch(f"{_NC}.config.is_user_allowed", return_value=False):
             await new_command(update, ctx)
 
         update.message.reply_text.assert_called_once()

@@ -1,13 +1,12 @@
 """Central handler registration for the Telegram bot Application.
 
 Owns the command/message/callback/inline handler registration that used
-to live inline in `bot.py`. `register_all()` is the single entry point;
-`bot.py` becomes a factory + lifecycle hooks only.
+to live inline in ``bot.py``. ``register_all()`` is the single entry
+point; ``bot.py`` is a factory + lifecycle hooks only.
 
-Inline command handlers (`new_command`, `history_command`, etc.) still
-live in `bot.py` during the F3 phase and are passed in as kwargs. They
-will move into their respective subpackages in F3.3, at which point the
-kwargs are replaced with direct imports.
+Every handler called below lives in a feature subpackage under
+``handlers/`` — this module only assembles them in the order PTB
+requires.
 """
 
 from dataclasses import dataclass
@@ -27,9 +26,15 @@ from .callback_registry import dispatch as _dispatch_callback
 from .callback_registry import load_handlers as _load_callback_handlers
 from .cleanup import unbind_command
 from .command_history import recall_command
-from .command_orchestration import forward_command_handler
+from .command_orchestration import (
+    commands_command,
+    forward_command_handler,
+    toolbar_command,
+)
 from .file_handler import handle_document_message, handle_photo_message
+from .inline import inline_query_handler, unsupported_content_handler
 from .live import live_command, panes_command, screenshot_command
+from .messaging_pipeline import toolcalls_command, verbose_command
 
 # `polling` must load before `recovery`: window_tick eagerly imports
 # recovery.transcript_discovery, and recovery.transcript_discovery in turn
@@ -39,9 +44,12 @@ from .live import live_command, panes_command, screenshot_command
 # polling here forces the full chain to complete via window_tick first.
 from . import polling as _polling  # noqa: F401
 from .recovery import restore_command, resume_command
+from .recovery.history import history_command
 from .send import send_command
 from .sessions_dashboard import sessions_command
 from .sync_command import sync_command
+from .text.text_handler import text_handler
+from .topics import new_command
 from .topics.topic_lifecycle import topic_closed_handler, topic_edited_handler
 from .upgrade import upgrade_command
 from .voice import handle_voice_message
@@ -60,16 +68,6 @@ class CommandSpec:
 def register_all(
     application: Application,
     group_filter: filters.BaseFilter,
-    *,
-    new_command: HandlerFn,
-    history_command: HandlerFn,
-    commands_command: HandlerFn,
-    toolbar_command: HandlerFn,
-    verbose_command: HandlerFn,
-    toolcalls_command: HandlerFn,
-    text_handler: HandlerFn,
-    inline_query_handler: HandlerFn,
-    unsupported_content_handler: HandlerFn,
 ) -> None:
     """Register every command, callback, message and inline-query handler.
 

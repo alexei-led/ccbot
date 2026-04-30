@@ -14,7 +14,9 @@ from telegram import Bot, Message, Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
+from ...config import config
 from ..callback_helpers import get_thread_id as _get_thread_id
+from ..command_orchestration import sync_scoped_menu_for_text_context
 from ..topics.directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
@@ -360,6 +362,26 @@ async def _forward_message(
     if interactive_window and interactive_window == window_id:
         await asyncio.sleep(0.2)
         await handle_interactive_ui(bot, user_id, window_id, thread_id)
+
+
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Top-level ``MessageHandler(filters.TEXT & ~filters.COMMAND)`` callback.
+
+    Performs auth, refreshes the user's scoped command menu for the
+    current topic, and delegates to ``handle_text_message`` for the
+    bool early-return routing chain.
+    """
+    user = update.effective_user
+    if not user or not config.is_user_allowed(user.id):
+        if update.message:
+            await safe_reply(update.message, "You are not authorized to use this bot.")
+        return
+
+    if not update.message or not update.message.text:
+        return
+
+    await sync_scoped_menu_for_text_context(update, user.id)
+    await handle_text_message(update, context)
 
 
 async def handle_text_message(

@@ -29,6 +29,7 @@ from .directory_browser import (
     get_favorites,
 )
 from .directory_callbacks import handle_directory_callback
+from .new_command import new_command
 from .topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
@@ -71,6 +72,7 @@ __all__ = [
     "handle_directory_callback",
     "handle_new_window",
     "handle_window_callback",
+    "new_command",
     "probe_topic_existence",
     "prune_stale_state",
     "topic_closed_handler",
