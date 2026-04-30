@@ -17,15 +17,19 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, cast
 
 import structlog
-from telegram import Bot
 
+from ...telegram_client import TelegramClient
 from ...telegram_draft import DraftStream
 from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
 from ...window_query import get_batch_mode
 from .message_task import ContentTask, thread_key
+
+if TYPE_CHECKING:
+    from telegram import Bot
 
 logger = structlog.get_logger()
 
@@ -302,7 +306,7 @@ def _extract_task_tool_suffix(entry: ToolBatchEntry) -> str:
 
 
 async def _send_or_edit_batch(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     batch: ToolBatch,
     chat_id: int,
@@ -317,10 +321,10 @@ async def _send_or_edit_batch(
     batch_text = format_batch_message(batch.entries, subagent_label=subagent_label)
 
     if batch.draft is None:
-        await clear_status_message(bot, user_id, thread_id_or_0)
+        await clear_status_message(client, user_id, thread_id_or_0)
         await _rate_limit_chat(chat_id)
         batch.draft = DraftStream(
-            bot,
+            cast("Bot", client),
             chat_id,
             message_thread_id=raw_thread_id,
         )
@@ -341,7 +345,7 @@ async def _rate_limit_chat(chat_id: int) -> None:
 
 
 async def _handle_tool_result(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: ContentTask,
     batch: ToolBatch | None,
@@ -360,7 +364,7 @@ async def _handle_tool_result(
             first_line = text.split("\n", 1)[0][:200]
             entry.tool_result_text = first_line
             return batch, None
-    await flush_batch(bot, user_id, thread_id_or_0)
+    await flush_batch(client, user_id, thread_id_or_0)
     return None, task
 
 
@@ -386,7 +390,7 @@ def _add_tool_use_entry(
 
 
 async def process_tool_event(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: ContentTask,
 ) -> ContentTask | None:
@@ -403,13 +407,13 @@ async def process_tool_event(
 
     if task.content_type == "tool_result":
         batch, followup = await _handle_tool_result(
-            bot, user_id, task, batch, thread_id_or_0
+            client, user_id, task, batch, thread_id_or_0
         )
         if batch is None:
             return followup
     elif task.content_type == "tool_use":
         result = await _handle_tool_use_event(
-            bot, user_id, task, batch, window_id, thread_id_or_0, bkey
+            client, user_id, task, batch, window_id, thread_id_or_0, bkey
         )
         if isinstance(result, ContentTask):
             return result
@@ -420,13 +424,13 @@ async def process_tool_event(
         return task
 
     await _send_or_edit_batch(
-        bot, user_id, batch, chat_id, task.thread_id, thread_id_or_0
+        client, user_id, batch, chat_id, task.thread_id, thread_id_or_0
     )
     return None
 
 
 async def _handle_tool_use_event(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: ContentTask,
     batch: ToolBatch | None,
@@ -440,7 +444,7 @@ async def _handle_tool_use_event(
     should deliver it as regular content (double-overflow), or None on error.
     """
     if batch and batch.window_id != window_id:
-        await flush_batch(bot, user_id, thread_id_or_0)
+        await flush_batch(client, user_id, thread_id_or_0)
         batch = None
 
     if not batch:
@@ -449,7 +453,7 @@ async def _handle_tool_use_event(
 
     overflow = _add_tool_use_entry(task, batch)
     if overflow:
-        await flush_batch(bot, user_id, thread_id_or_0)
+        await flush_batch(client, user_id, thread_id_or_0)
         batch = ToolBatch(window_id=window_id, thread_id=thread_id_or_0)
         still_overflow = _add_tool_use_entry(task, batch)
         _active_batches[bkey] = batch
@@ -460,14 +464,18 @@ async def _handle_tool_use_event(
     return batch
 
 
-async def flush_if_active(bot: Bot, user_id: int, task: ContentTask) -> None:
+async def flush_if_active(
+    client: TelegramClient, user_id: int, task: ContentTask
+) -> None:
     """Flush any active batch for the same topic before delivering non-batchable content."""
     thread_id_or_0 = thread_key(task.thread_id)
     if has_active_batch(user_id, thread_id_or_0):
-        await flush_batch(bot, user_id, thread_id_or_0)
+        await flush_batch(client, user_id, thread_id_or_0)
 
 
-async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
+async def flush_batch(
+    client: TelegramClient, user_id: int, thread_id_or_0: int
+) -> None:
     """Finalize the active batch: do a final edit and clear state."""
     from telegram.error import TelegramError
 
@@ -495,7 +503,7 @@ async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
         # Existing message but no active draft (e.g. batch built before
         # adoption, or draft already closed).  Edit the message in place.
         try:
-            await bot.edit_message_text(
+            await client.edit_message_text(
                 chat_id=chat_id,
                 message_id=batch.telegram_msg_id,
                 text=batch_text,
@@ -506,7 +514,7 @@ async def flush_batch(bot: Bot, user_id: int, thread_id_or_0: int) -> None:
 
     # No prior message at all — open a fresh draft and finalize immediately.
     await _rate_limit_chat(chat_id)
-    draft = DraftStream(bot, chat_id, message_thread_id=thread_id)
+    draft = DraftStream(cast("Bot", client), chat_id, message_thread_id=thread_id)
     try:
         await draft.start(batch_text)
         await draft.finalize()

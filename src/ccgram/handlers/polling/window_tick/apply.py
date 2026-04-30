@@ -22,6 +22,7 @@ from telegram.error import BadRequest, TelegramError
 from .... import window_query
 from ....claude_task_state import claude_task_state
 from ....providers import get_provider_for_window
+from ....telegram_client import PTBTelegramClient
 from ....thread_router import thread_router
 from ....tmux_manager import tmux_manager
 from ...cleanup import clear_topic_state
@@ -101,14 +102,17 @@ async def _transition_to_idle(
     await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
     lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
+    client = PTBTelegramClient(bot)
     if notif_mode not in ("muted", "errors_only"):
         from ...callback_data import IDLE_STATUS_TEXT
 
         await enqueue_status_update(
-            bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
+            client, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
         )
     else:
-        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+        await enqueue_status_update(
+            client, user_id, window_id, None, thread_id=thread_id
+        )
 
 
 # ── Multi-pane scanning (agent teams) ─────────────────────────────────
@@ -154,7 +158,9 @@ async def _forward_pane_output(
     text = f"\U0001f4e1 {label}\n```\n{body}\n```"
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     try:
-        await safe_send(bot, chat_id, text, message_thread_id=thread_id)
+        await safe_send(
+            PTBTelegramClient(bot), chat_id, text, message_thread_id=thread_id
+        )
     except TelegramError as exc:
         logger.warning(
             "pane output forward failed",
@@ -213,7 +219,9 @@ async def _notify_pane_lifecycle(
             label = f"{pane.name} ({t.pane_id})" if pane and pane.name else t.pane_id
             text = f"➕ pane {label} created"
         try:
-            await safe_send(bot, chat_id, text, message_thread_id=thread_id)
+            await safe_send(
+                PTBTelegramClient(bot), chat_id, text, message_thread_id=thread_id
+            )
         except TelegramError as exc:
             logger.warning(
                 "pane lifecycle notify failed",
@@ -313,7 +321,7 @@ async def _handle_dead_window_notification(
         text = f"⚠ Session `{display}` ended."
         keyboard = None
     sent = await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -374,7 +382,11 @@ async def _apply_active_transition(
                 label = build_subagent_label(subagent_names)
                 display_status = f"{display_status} ({label})"
             await enqueue_status_update(
-                bot, user_id, window_id, display_status, thread_id=thread_id
+                PTBTelegramClient(bot),
+                user_id,
+                window_id,
+                display_status,
+                thread_id=thread_id,
             )
     else:
         claude_task_state.clear_wait_header(window_id)
@@ -402,7 +414,9 @@ async def _apply_done_transition(
         user_id, thread_id, "done", time.monotonic()
     )
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
-    await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+    await enqueue_status_update(
+        PTBTelegramClient(bot), user_id, window_id, None, thread_id=thread_id
+    )
     if not _get_provider(window_id).capabilities.supports_hook:
         terminal_poll_state.mark_seen_status(window_id)
 
@@ -469,7 +483,9 @@ async def _update_status(
 ) -> None:
     w = _window or await tmux_manager.find_window_by_id(window_id)
     if not w:
-        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+        await enqueue_status_update(
+            PTBTelegramClient(bot), user_id, window_id, None, thread_id=thread_id
+        )
         return
 
     pane_text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)

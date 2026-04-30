@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from telegram import Update
     from telegram.ext import ContextTypes
 
+from ..telegram_client import PTBTelegramClient
 from ..utils import log_throttle_reset
 from .interactive import clear_interactive_msg
 from .messaging_pipeline.message_queue import enqueue_status_update
@@ -67,7 +68,11 @@ async def clear_topic_state(
     # Enqueue status-message delete BEFORE registry clears the message ID
     if bot is not None:
         await enqueue_status_update(
-            bot, user_id, window_id or "", None, thread_id=thread_id
+            PTBTelegramClient(bot),
+            user_id,
+            window_id or "",
+            None,
+            thread_id=thread_id,
         )
     else:
         clear_status_msg_info(user_id, thread_id)
@@ -150,7 +155,9 @@ async def unbind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     display = thread_router.get_display_name(window_id)
-    await enqueue_status_update(context.bot, user.id, window_id, None, thread_id)
+    await enqueue_status_update(
+        PTBTelegramClient(context.bot), user.id, window_id, None, thread_id
+    )
     await clear_topic_state(
         user.id,
         thread_id,

@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -173,7 +173,7 @@ class TestHandleStop:
             await dispatch_hook_event(event, bot)
 
             mock_emoji.assert_not_called()
-            mock_enqueue.assert_called_once_with(bot, 100, "@0", None, thread_id=42)
+            mock_enqueue.assert_called_once_with(ANY, 100, "@0", None, thread_id=42)
 
     async def test_stop_no_users_skips(self, monkeypatch) -> None:
         monkeypatch.setattr(
@@ -389,7 +389,7 @@ class TestHandleNotification:
             await dispatch_hook_event(event, bot)
 
             assert claude_task_state.get_wait_header("@0") == "Approval needed: Bash"
-            mock_enqueue.assert_awaited_once_with(bot, 100, "@0", None, thread_id=42)
+            mock_enqueue.assert_awaited_once_with(ANY, 100, "@0", None, thread_id=42)
 
 
 class TestHandleSubagentStart:
@@ -558,7 +558,7 @@ class TestHandleTeammateIdle:
             )
             await dispatch_hook_event(event, bot)
             mock_enqueue.assert_called_once_with(
-                bot,
+                ANY,
                 100,
                 "@0",
                 "\U0001f4a4 Teammate 'reviewer' went idle",
@@ -666,7 +666,7 @@ class TestHandleTaskCompleted:
             snapshot = claude_task_state.get_snapshot("@0")
             assert snapshot is not None
             assert snapshot.done_count == 1
-            mock_enqueue.assert_awaited_once_with(bot, 100, "@0", None, thread_id=42)
+            mock_enqueue.assert_awaited_once_with(ANY, 100, "@0", None, thread_id=42)
 
 
 class TestHandleStopFailure:
@@ -741,7 +741,7 @@ class TestHandleSessionEnd:
 
             mock_clear.assert_called_once_with("@0")
             mock_emoji.assert_called_once_with(bot, -100, 42, "done", "project")
-            mock_enqueue.assert_called_once_with(bot, 100, "@0", None, thread_id=42)
+            mock_enqueue.assert_called_once_with(ANY, 100, "@0", None, thread_id=42)
             mock_clear_session.assert_called_once_with("@0")
 
     async def test_clears_claude_task_state(self, monkeypatch) -> None:

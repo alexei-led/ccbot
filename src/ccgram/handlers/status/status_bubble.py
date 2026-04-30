@@ -12,17 +12,22 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 import structlog
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
 from ...claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ...expandable_quote import format_expandable_quote
+from ...telegram_client import TelegramClient
 from ...telegram_draft import DraftStream
 from ...thread_router import thread_router
 from ...window_query import get_notification_mode
 from ...window_state_store import PaneInfo, window_store
+
+if TYPE_CHECKING:
+    from telegram import Bot
 from ..callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -57,7 +62,7 @@ _rc_active_fn_registered: bool = False
 
 
 def register_rc_active_provider(fn: Callable[[str], bool]) -> None:
-    """Wire the polling-layer RC-active lookup (called once from bot.py setup).
+    """Wire the polling-layer RC-active lookup (called once from client.py setup).
 
     Avoids a direct status_bubble → polling_strategies import by accepting
     a callable rather than importing terminal_screen_buffer directly.
@@ -306,7 +311,7 @@ def format_claude_task_status(window_id: str, base_text: str | None) -> str | No
 
 
 async def send_status_text(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     thread_id_or_0: int,
     window_id: str,
@@ -338,7 +343,7 @@ async def send_status_text(
             return
         if stored_wid == window_id:
             success = await _replace_or_edit_bubble(
-                bot, skey, stored_chat_id, msg_id, text, keyboard
+                client, skey, stored_chat_id, msg_id, text, keyboard
             )
             if success:
                 _status_msg_info[skey] = (msg_id, window_id, text, stored_chat_id)
@@ -347,19 +352,19 @@ async def send_status_text(
             # may still exist server-side — best-effort delete to avoid an
             # orphan bubble before creating its replacement.
             with contextlib.suppress(TelegramError):
-                await bot.delete_message(chat_id=stored_chat_id, message_id=msg_id)
+                await client.delete_message(chat_id=stored_chat_id, message_id=msg_id)
             _status_msg_info.pop(skey, None)
             _status_drafts.pop(skey, None)
         else:
-            await clear_status_message(bot, user_id, thread_id_or_0)
+            await clear_status_message(client, user_id, thread_id_or_0)
 
-    msg_id = await _start_bubble(bot, skey, chat_id, thread_id, text, keyboard)
+    msg_id = await _start_bubble(client, skey, chat_id, thread_id, text, keyboard)
     if msg_id is not None:
         _status_msg_info[skey] = (msg_id, window_id, text, chat_id)
 
 
 async def _start_bubble(
-    bot: Bot,
+    client: TelegramClient,
     skey: tuple[int, int],
     chat_id: int,
     thread_id: int | None,
@@ -369,7 +374,7 @@ async def _start_bubble(
     """Open a fresh DraftStream for a status bubble; return message_id."""
     await rate_limit_send(chat_id)
     stream = DraftStream(
-        bot,
+        cast("Bot", client),
         chat_id,
         message_thread_id=thread_id,
         reply_markup=keyboard,
@@ -382,7 +387,7 @@ async def _start_bubble(
 
 
 async def _replace_or_edit_bubble(
-    bot: Bot,
+    client: TelegramClient,
     skey: tuple[int, int],
     chat_id: int,
     msg_id: int,
@@ -400,14 +405,16 @@ async def _replace_or_edit_bubble(
             logger.debug("DraftStream.replace failed for %s: %s", skey, exc)
             _status_drafts.pop(skey, None)
             return await edit_with_fallback(
-                bot, chat_id, msg_id, text, reply_markup=keyboard
+                client, chat_id, msg_id, text, reply_markup=keyboard
             )
         return True
-    return await edit_with_fallback(bot, chat_id, msg_id, text, reply_markup=keyboard)
+    return await edit_with_fallback(
+        client, chat_id, msg_id, text, reply_markup=keyboard
+    )
 
 
 async def clear_status_message(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     thread_id_or_0: int = 0,
 ) -> None:
@@ -423,13 +430,13 @@ async def clear_status_message(
     if info:
         msg_id, _, _, chat_id = info
         try:
-            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            await client.delete_message(chat_id=chat_id, message_id=msg_id)
         except TelegramError as e:
             logger.debug("Failed to delete status message %s: %s", msg_id, e)
 
 
 async def convert_status_to_content(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     thread_id_or_0: int,
     window_id: str,
@@ -452,7 +459,7 @@ async def convert_status_to_content(
                 await stream.abort()
             return None
         with contextlib.suppress(TelegramError):
-            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            await client.delete_message(chat_id=chat_id, message_id=msg_id)
         return None
 
     if stream is not None and not stream.closed:
@@ -463,7 +470,7 @@ async def convert_status_to_content(
             logger.debug("DraftStream.finalize failed for %s: %s", skey, exc)
 
     success = await edit_with_fallback(
-        bot,
+        client,
         chat_id,
         msg_id,
         content_text,
@@ -480,7 +487,7 @@ async def convert_status_to_content(
 
 
 async def process_status_update(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: StatusUpdateTask,
 ) -> None:
@@ -489,14 +496,14 @@ async def process_status_update(
     status_text = format_claude_task_status(task.window_id, task.text)
 
     if not status_text:
-        await clear_status_message(bot, user_id, tkey)
+        await clear_status_message(client, user_id, tkey)
         return
 
-    await send_status_text(bot, user_id, tkey, task.window_id, status_text)
+    await send_status_text(client, user_id, tkey, task.window_id, status_text)
 
 
 async def process_status_clear(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: StatusClearTask,
 ) -> None:
@@ -505,9 +512,9 @@ async def process_status_clear(
     tkey = thread_key(task.thread_id)
     status_text = format_claude_task_status(window_id, None)
     if status_text and window_id:
-        await send_status_text(bot, user_id, tkey, window_id, status_text)
+        await send_status_text(client, user_id, tkey, window_id, status_text)
         return
-    await clear_status_message(bot, user_id, tkey)
+    await clear_status_message(client, user_id, tkey)
 
 
 # ---------------------------------------------------------------------------
@@ -519,7 +526,7 @@ def clear_status_msg_info(user_id: int, thread_id: int | None = None) -> None:
     """Clear status message tracking for a user (and optionally a specific thread).
 
     NOT registered with TopicStateRegistry — must only be called explicitly
-    from cleanup.py in the ``bot is None`` path.  When a bot is available,
+    from cleanup.py in the ``client is None`` path.  When a client is available,
     ``clear_status_message`` (via the queued ``status_clear`` task) pops
     the entry *and* deletes the Telegram message.  Registering this function
     with the registry would pop the entry before the worker runs, preventing

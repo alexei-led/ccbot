@@ -78,7 +78,7 @@ class TestNotifyMessageSent:
 
         mock_send.assert_called_once()
         args, kwargs = mock_send.call_args
-        assert args[0] is bot
+        assert getattr(args[0], "bot", None) is bot
         text = args[2] if len(args) > 2 else kwargs.get("text", "")
         assert "@5" in text or "api-gateway" in text
         assert "request" in text.lower() or "API contract" in text

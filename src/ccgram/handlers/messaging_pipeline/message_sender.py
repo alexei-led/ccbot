@@ -19,10 +19,11 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message, ReactionTypeEmoji
+from telegram import CallbackQuery, LinkPreviewOptions, Message, ReactionTypeEmoji
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ...entity_formatting import convert_to_entities
+from ...telegram_client import TelegramClient
 from ...telegram_sender import TELEGRAM_MAX_MESSAGE_LENGTH
 from ..reactions import (
     ALLOWED_REACTIONS,
@@ -174,7 +175,7 @@ async def _with_entity_fallback(
 
 
 async def _send_with_fallback(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     text: str,
     **kwargs: Any,
@@ -186,7 +187,7 @@ async def _send_with_fallback(
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
 
     async def _send(text: str, **kw: Any) -> Message:
-        return await bot.send_message(chat_id=chat_id, text=text, **kw)
+        return await client.send_message(chat_id=chat_id, text=text, **kw)
 
     return await _with_entity_fallback(
         _send, text, f"send message to {chat_id}", **kwargs
@@ -194,7 +195,7 @@ async def _send_with_fallback(
 
 
 async def rate_limit_send_message(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     text: str,
     **kwargs: Any,
@@ -205,7 +206,7 @@ async def rate_limit_send_message(
     Returns the sent Message on success, None on failure.
     """
     await rate_limit_send(chat_id)
-    return await _send_with_fallback(bot, chat_id, text, **kwargs)
+    return await _send_with_fallback(client, chat_id, text, **kwargs)
 
 
 async def safe_reply(message: Message, text: str, **kwargs: Any) -> Message | None:
@@ -245,7 +246,7 @@ async def safe_edit(target: Message | CallbackQuery, text: str, **kwargs: Any) -
 
 
 async def safe_send(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     text: str,
     message_thread_id: int | None = None,
@@ -257,7 +258,7 @@ async def safe_send(
         kwargs.setdefault("message_thread_id", message_thread_id)
 
     async def _send(text: str, **kw: Any) -> Message:
-        return await bot.send_message(chat_id=chat_id, text=text, **kw)
+        return await client.send_message(chat_id=chat_id, text=text, **kw)
 
     return await _with_entity_fallback(
         _send, text, f"send message to {chat_id}", **kwargs
@@ -265,7 +266,7 @@ async def safe_send(
 
 
 async def edit_with_fallback(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     message_id: int,
     text: str,
@@ -279,7 +280,7 @@ async def edit_with_fallback(
     plain_text, entities = convert_to_entities(text)
 
     try:
-        await bot.edit_message_text(
+        await client.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
             text=plain_text,
@@ -292,7 +293,7 @@ async def edit_with_fallback(
     except TelegramError:
         try:
             fallback = plain_text
-            await bot.edit_message_text(
+            await client.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
                 text=fallback,
@@ -305,14 +306,14 @@ async def edit_with_fallback(
             return False
 
 
-async def ack_reaction(bot: Bot, chat_id: int, message_id: int) -> None:
+async def ack_reaction(client: TelegramClient, chat_id: int, message_id: int) -> None:
     """React to a message with the configured ack emoji, if enabled."""
     from ...config import config
 
     if not config.ack_reaction:
         return
     with contextlib.suppress(TelegramError):
-        await bot.set_message_reaction(
+        await client.set_message_reaction(
             chat_id=chat_id,
             message_id=message_id,
             reaction=[ReactionTypeEmoji(emoji=config.ack_reaction)],

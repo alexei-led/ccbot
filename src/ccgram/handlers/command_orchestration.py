@@ -38,6 +38,7 @@ from ..providers import (
     registry,
 )
 from .. import window_query
+from ..telegram_client import PTBTelegramClient
 from ..window_state_store import window_store
 from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
@@ -542,7 +543,11 @@ async def _handle_clear_command(
     from .polling.polling_strategies import reset_window_polling_state
 
     await enqueue_status_update(
-        update.get_bot(), user_id, window_id, None, thread_id=thread_id
+        PTBTelegramClient(update.get_bot()),
+        user_id,
+        window_id,
+        None,
+        thread_id=thread_id,
     )
     reset_window_polling_state(window_id)
 

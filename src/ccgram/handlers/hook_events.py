@@ -16,6 +16,7 @@ from telegram import Bot
 
 from ..claude_task_state import classify_wait_message, claude_task_state
 from ..providers.base import HookEvent
+from ..telegram_client import PTBTelegramClient
 from ..window_query import view_window
 from ..session_lifecycle import session_lifecycle
 from ..thread_router import thread_router
@@ -105,11 +106,12 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
     )
     wait_header = classify_wait_message(event.data.get("message", ""))
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, window_id in users:
         if wait_header:
             session_lifecycle.handle_notification_wait(window_id, wait_header)
             await enqueue_status_update(
-                bot, user_id, window_id, None, thread_id=thread_id
+                client, user_id, window_id, None, thread_id=thread_id
             )
 
         # Skip if already in interactive mode for this window
@@ -188,6 +190,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
 
     notif_mode = view.notification_mode if view else "all"
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, window_id in users:
         session_lifecycle.handle_stop_task_state(window_id)
         if notif_mode in ("muted", "errors_only"):
@@ -201,7 +204,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
                     "\u2713 Ready", f"\u2713 Done \u2014 {summary}", 1
                 )
         await enqueue_status_update(
-            bot, user_id, window_id, status_text, thread_id=thread_id
+            client, user_id, window_id, status_text, thread_id=thread_id
         )
 
     # Trigger immediate broker delivery for the idle window via registered callback.
@@ -271,9 +274,12 @@ async def _handle_teammate_idle(event: HookEvent, bot: Bot) -> None:
         teammate_name,
     )
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, window_id in users:
         text = f"\U0001f4a4 Teammate '{teammate_name}' went idle"
-        await enqueue_status_update(bot, user_id, window_id, text, thread_id=thread_id)
+        await enqueue_status_update(
+            client, user_id, window_id, text, thread_id=thread_id
+        )
 
 
 async def _handle_stop_failure(event: HookEvent, bot: Bot) -> None:
@@ -296,9 +302,12 @@ async def _handle_stop_failure(event: HookEvent, bot: Bot) -> None:
     detail = f": {error_details}" if error_details else ""
     text = f"\u26a0 API error — {error}{detail}"
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, _window_id in users:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-        await rate_limit_send_message(bot, chat_id, text, message_thread_id=thread_id)
+        await rate_limit_send_message(
+            client, chat_id, text, message_thread_id=thread_id
+        )
 
 
 async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
@@ -319,12 +328,15 @@ async def _handle_session_end(event: HookEvent, bot: Bot) -> None:
         window_id = users[0][2]
         session_lifecycle.handle_session_end(window_id)
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, window_id in users:
         reset_window_polling_state(window_id)
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         display = thread_router.get_display_name(window_id)
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)
-        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+        await enqueue_status_update(
+            client, user_id, window_id, None, thread_id=thread_id
+        )
 
 
 async def _handle_task_completed(event: HookEvent, bot: Bot) -> None:
@@ -343,6 +355,7 @@ async def _handle_task_completed(event: HookEvent, bot: Bot) -> None:
         teammate_name,
     )
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, window_id in users:
         task_id = event.data.get("task_id", "")
         tracked = False
@@ -355,14 +368,16 @@ async def _handle_task_completed(event: HookEvent, bot: Bot) -> None:
             )
         if tracked or claude_task_state.has_snapshot(window_id):
             await enqueue_status_update(
-                bot, user_id, window_id, None, thread_id=thread_id
+                client, user_id, window_id, None, thread_id=thread_id
             )
             continue
 
         text = f"\u2705 Task completed: {task_subject}"
         if teammate_name:
             text += f" (by '{teammate_name}')"
-        await enqueue_status_update(bot, user_id, window_id, text, thread_id=thread_id)
+        await enqueue_status_update(
+            client, user_id, window_id, text, thread_id=thread_id
+        )
 
 
 async def dispatch_hook_event(event: HookEvent, bot: Bot) -> None:

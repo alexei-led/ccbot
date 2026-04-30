@@ -21,6 +21,7 @@ import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...providers import resolve_launch_command
 from ... import window_query
@@ -168,7 +169,7 @@ async def post_spawn_approval_keyboard(
     )
 
     result = await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -195,7 +196,7 @@ async def _create_topic_for_spawn(
         _, thread_id, chat_id, _ = topic_info
         text = f"\u2705 Spawned {window_name} ({window_id}) for: {req.prompt}"
         await rate_limit_send_message(
-            bot,
+            PTBTelegramClient(bot),
             chat_id,
             text,
             message_thread_id=thread_id,

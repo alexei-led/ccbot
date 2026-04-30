@@ -13,6 +13,7 @@ from pathlib import Path
 from telegram import Bot, Message, Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...config import config
 from ..callback_helpers import get_thread_id as _get_thread_id
@@ -71,7 +72,7 @@ def cancel_bash_capture(user_id: int, thread_id: int) -> None:
 
 async def _edit_bash_message(bot: Bot, chat_id: int, msg_id: int, output: str) -> None:
     """Edit an existing bash-output message with entity-based formatting fallback."""
-    await edit_with_fallback(bot, chat_id, msg_id, output)
+    await edit_with_fallback(PTBTelegramClient(bot), chat_id, msg_id, output)
 
 
 async def _capture_bash_output(
@@ -117,7 +118,7 @@ async def _capture_bash_output(
             if msg_id is None:
                 # First capture — send a new message
                 sent = await rate_limit_send_message(
-                    bot,
+                    PTBTelegramClient(bot),
                     chat_id,
                     output,
                     message_thread_id=thread_id,
@@ -330,7 +331,9 @@ async def _forward_message(
     await message.chat.send_action(ChatAction.TYPING)  # type: ignore[union-attr]
     # Enqueue a status clear to actually delete the Telegram message
     # (clear_status_msg_info only clears the tracking dict, leaving a ghost)
-    await enqueue_status_update(bot, user_id, window_id, None, thread_id)
+    await enqueue_status_update(
+        PTBTelegramClient(bot), user_id, window_id, None, thread_id
+    )
 
     # Cancel any running bash capture — new message pushes pane content down
     cancel_bash_capture(user_id, thread_id)
@@ -342,7 +345,7 @@ async def _forward_message(
         await safe_reply(message, f"\u274c {err_message}")
         return
 
-    await ack_reaction(bot, message.chat.id, message.message_id)
+    await ack_reaction(PTBTelegramClient(bot), message.chat.id, message.message_id)
 
     from ..command_history import record_command
 

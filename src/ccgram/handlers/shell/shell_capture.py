@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from telegram import Bot
+from ...telegram_client import PTBTelegramClient
 
 from ...providers.shell import match_prompt
 from ...thread_router import thread_router
@@ -330,7 +331,7 @@ async def _relay_output(
 
     if msg_id is None:
         sent = await rate_limit_send_message(
-            bot,
+            PTBTelegramClient(bot),
             chat_id,
             formatted,
             message_thread_id=thread_id,
@@ -339,7 +340,7 @@ async def _relay_output(
             return sent.message_id
         return None
     else:
-        await edit_with_fallback(bot, chat_id, msg_id, formatted)
+        await edit_with_fallback(PTBTelegramClient(bot), chat_id, msg_id, formatted)
         return msg_id
 
 
@@ -355,7 +356,7 @@ async def _update_error_message(
         display = display[-max_body:]
     display = display.replace("```", "` ` `")
     formatted = f"{error_prefix}```\n{display}\n```"
-    await edit_with_fallback(bot, chat_id, msg_id, formatted)
+    await edit_with_fallback(PTBTelegramClient(bot), chat_id, msg_id, formatted)
 
 
 async def _maybe_suggest_fix(

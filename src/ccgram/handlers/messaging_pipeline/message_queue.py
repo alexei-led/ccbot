@@ -11,9 +11,9 @@ import contextlib
 from typing import assert_never
 
 import structlog
-from telegram import Bot
 from telegram.error import RetryAfter, TelegramError
 
+from ...telegram_client import TelegramClient
 from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
 from ...utils import task_done_callback
@@ -61,7 +61,9 @@ def get_message_queue(user_id: int) -> asyncio.Queue[MessageTask] | None:
     return _message_queues.get(user_id)
 
 
-def get_or_create_queue(bot: Bot, user_id: int) -> asyncio.Queue[MessageTask]:
+def get_or_create_queue(
+    client: TelegramClient, user_id: int
+) -> asyncio.Queue[MessageTask]:
     """Get or create message queue and worker for a user.
 
     Also detects dead workers and respawns them so messages are not lost.
@@ -75,7 +77,7 @@ def get_or_create_queue(bot: Bot, user_id: int) -> asyncio.Queue[MessageTask]:
     if existing is None or existing.done():
         if existing is not None:
             logger.warning("Respawning dead queue worker for user %s", user_id)
-        task = asyncio.create_task(_message_queue_worker(bot, user_id))
+        task = asyncio.create_task(_message_queue_worker(client, user_id))
         task.add_done_callback(task_done_callback)
         _queue_workers[user_id] = task
     return _message_queues[user_id]
@@ -202,7 +204,7 @@ async def _coalesce_status_updates(
 
 
 async def _handle_content_task(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: ContentTask,
     queue: asyncio.Queue[MessageTask],
@@ -218,17 +220,17 @@ async def _handle_content_task(
         return 0
 
     if is_batch_eligible(task):
-        followup = await process_tool_event(bot, user_id, task)
+        followup = await process_tool_event(client, user_id, task)
         if followup is not None:
-            await _process_content_task(bot, user_id, followup)
+            await _process_content_task(client, user_id, followup)
         return 0
 
-    await flush_if_active(bot, user_id, task)
+    await flush_if_active(client, user_id, task)
 
     merged_task, merge_count = await _merge_content_tasks(queue, task, lock)
     if merge_count > 0:
         logger.debug("Merged %d tasks for user %s", merge_count, user_id)
-    await _process_content_task(bot, user_id, merged_task)
+    await _process_content_task(client, user_id, merged_task)
     return merge_count
 
 
@@ -240,15 +242,17 @@ def _is_ghost_window_task_at_enqueue(window_id: str) -> bool:
     return False
 
 
-async def _flush_batch_for_task(user_id: int, task: MessageTask, bot: Bot) -> None:
+async def _flush_batch_for_task(
+    user_id: int, task: MessageTask, client: TelegramClient
+) -> None:
     """Flush any active batch for the topic that owns this task."""
     tkey = thread_key(task.thread_id)
     if has_active_batch(user_id, tkey):
-        await flush_batch(bot, user_id, tkey)
+        await flush_batch(client, user_id, tkey)
 
 
 async def _dispatch(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     task: MessageTask,
     queue: asyncio.Queue[MessageTask],
@@ -257,24 +261,24 @@ async def _dispatch(
     """Dispatch a task by type. Returns extra task_done count for merged tasks."""
     match task:
         case ContentTask() as ct:
-            return await _handle_content_task(bot, user_id, ct, queue, lock)
+            return await _handle_content_task(client, user_id, ct, queue, lock)
         case StatusUpdateTask() as st:
-            await _flush_batch_for_task(user_id, st, bot)
+            await _flush_batch_for_task(user_id, st, client)
             collapsed_task, dropped = await _coalesce_status_updates(queue, st, lock)
             if dropped > 0:
                 for _ in range(dropped):
                     queue.task_done()
-            await process_status_update(bot, user_id, collapsed_task)
+            await process_status_update(client, user_id, collapsed_task)
             return 0
         case StatusClearTask() as cl:
-            await _flush_batch_for_task(user_id, cl, bot)
-            await process_status_clear(bot, user_id, cl)
+            await _flush_batch_for_task(user_id, cl, client)
+            await process_status_clear(client, user_id, cl)
             return 0
         case _ as unreachable:
             assert_never(unreachable)
 
 
-async def _message_queue_worker(bot: Bot, user_id: int) -> None:
+async def _message_queue_worker(client: TelegramClient, user_id: int) -> None:
     """Process message tasks for a user sequentially."""
     queue = _message_queues[user_id]
     lock = _queue_locks[user_id]
@@ -286,7 +290,7 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
             try:
                 while True:
                     try:
-                        extra = await _dispatch(bot, user_id, task, queue, lock)
+                        extra = await _dispatch(client, user_id, task, queue, lock)
                         for _ in range(extra):
                             queue.task_done()
                         break
@@ -323,7 +327,9 @@ async def _message_queue_worker(bot: Bot, user_id: int) -> None:
             )
 
 
-async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> None:
+async def _process_content_task(
+    client: TelegramClient, user_id: int, task: ContentTask
+) -> None:
     """Process a content message task."""
     tkey = thread_key(task.thread_id)
     chat_id = thread_router.resolve_chat_id(user_id, task.thread_id)
@@ -332,10 +338,10 @@ async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> No
         _tkey = (task.tool_use_id, user_id, tkey)
         edit_msg_id = _tool_msg_ids.pop(_tkey, None)
         if edit_msg_id is not None:
-            await clear_status_message(bot, user_id, tkey)
+            await clear_status_message(client, user_id, tkey)
             full_text = "\n\n".join(task.parts)
             success = await edit_with_fallback(
-                bot,
+                client,
                 chat_id,
                 edit_msg_id,
                 full_text,
@@ -352,7 +358,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> No
         if first_part:
             first_part = False
             converted_msg_id = await convert_status_to_content(
-                bot,
+                client,
                 user_id,
                 tkey,
                 task.window_id,
@@ -363,7 +369,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> No
                 continue
 
         sent = await rate_limit_send_message(
-            bot, chat_id, part, **send_kwargs(task.thread_id)
+            client, chat_id, part, **send_kwargs(task.thread_id)
         )
 
         if sent:
@@ -374,7 +380,7 @@ async def _process_content_task(bot: Bot, user_id: int, task: ContentTask) -> No
 
 
 async def enqueue_content_message(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     window_id: str,
     parts: list[str],
@@ -386,7 +392,7 @@ async def enqueue_content_message(
     """Enqueue a content message task."""
     if _is_ghost_window_task_at_enqueue(window_id):
         return
-    queue = get_or_create_queue(bot, user_id)
+    queue = get_or_create_queue(client, user_id)
 
     task = ContentTask(
         window_id=window_id,
@@ -400,14 +406,14 @@ async def enqueue_content_message(
 
 
 async def enqueue_status_update(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     window_id: str,
     status_text: str | None,
     thread_id: int | None = None,
 ) -> None:
     """Enqueue status update or clear."""
-    queue = get_or_create_queue(bot, user_id)
+    queue = get_or_create_queue(client, user_id)
 
     if status_text is not None:
         task: MessageTask = StatusUpdateTask(
@@ -439,7 +445,7 @@ def clear_tool_msg_ids_for_topic(user_id: int, thread_id: int | None = None) -> 
 
 
 async def shutdown_workers() -> None:
-    """Stop all queue workers (called during bot shutdown)."""
+    """Stop all queue workers (called during client shutdown)."""
     for _, worker in list(_queue_workers.items()):
         worker.cancel()
         with contextlib.suppress(asyncio.CancelledError):

@@ -14,6 +14,7 @@ from typing import Any
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ... import session_query, window_query
@@ -194,7 +195,7 @@ async def send_history(
     elif bot is not None and user_id is not None:
         # Direct send mode (for unread catch-up after window switch)
         await safe_send(
-            bot,
+            PTBTelegramClient(bot),
             thread_router.resolve_chat_id(user_id, message_thread_id),
             text,
             message_thread_id=message_thread_id,

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Literal
 import structlog
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
+from ...telegram_client import PTBTelegramClient
 
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_send
@@ -139,7 +140,7 @@ async def _show_offer_keyboard(
         ]
     )
     sent = await safe_send(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         "Shell prompt marker helps ccgram detect command output. Set up now?",
         message_thread_id=thread_id,

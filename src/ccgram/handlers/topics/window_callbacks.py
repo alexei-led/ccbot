@@ -14,6 +14,7 @@ from pathlib import Path
 from telegram import Bot, CallbackQuery, Chat, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...session import session_manager
 from ...thread_router import thread_router
@@ -149,7 +150,7 @@ async def _forward_pending_text(
         if not send_ok:
             logger.warning("Failed to forward pending text: %s", send_msg)
             await safe_send(
-                bot,
+                PTBTelegramClient(bot),
                 thread_router.resolve_chat_id(user_id, thread_id),
                 f"❌ Failed to send pending message: {send_msg}",
                 message_thread_id=thread_id,

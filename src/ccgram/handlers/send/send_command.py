@@ -21,6 +21,7 @@ from telegram import Bot, Message, Update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...config import config
 from ...window_query import view_window
@@ -350,7 +351,11 @@ async def open_file_browser(
     text, markup, items = build_file_browser(cwd, cwd, 0)
     _cache_browser_state(user_data, cwd, items, window_id)
     await safe_send(
-        bot, chat_id, text, message_thread_id=thread_id, reply_markup=markup
+        PTBTelegramClient(bot),
+        chat_id,
+        text,
+        message_thread_id=thread_id,
+        reply_markup=markup,
     )
 
 

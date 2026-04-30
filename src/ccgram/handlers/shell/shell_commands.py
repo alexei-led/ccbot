@@ -27,6 +27,7 @@ from telegram import (
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...llm import get_completer
 from ...llm import CommandResult
@@ -194,7 +195,9 @@ async def handle_shell_message(
     message: Message | None = None,
 ) -> None:
     """Route shell provider messages: ``!`` prefix = raw, else = NL via LLM."""
-    await enqueue_status_update(bot, user_id, window_id, None, thread_id)
+    await enqueue_status_update(
+        PTBTelegramClient(bot), user_id, window_id, None, thread_id
+    )
     lifecycle_strategy.clear_probe_failures(window_id)
 
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
@@ -227,7 +230,7 @@ async def handle_shell_message(
     except ValueError:
         logger.warning("LLM misconfigured")
         await safe_send(
-            bot,
+            PTBTelegramClient(bot),
             chat_id,
             "⚠ LLM misconfigured — command not sent.\nUse `!` prefix for raw commands.",
             message_thread_id=thread_id,
@@ -264,7 +267,7 @@ async def handle_shell_message(
     except RuntimeError:
         logger.warning("LLM command generation failed")
         await safe_send(
-            bot,
+            PTBTelegramClient(bot),
             chat_id,
             "⚠ LLM request failed — command not sent.\n"
             "Use `!` prefix for raw commands.",
@@ -292,7 +295,9 @@ async def _show_bang_hint_once(bot: Bot, chat_id: int, thread_id: int) -> None:
     if key in _shell_hint_seen:
         return
     _shell_hint_seen.add(key)
-    await safe_send(bot, chat_id, _BANG_HINT_TEXT, message_thread_id=thread_id)
+    await safe_send(
+        PTBTelegramClient(bot), chat_id, _BANG_HINT_TEXT, message_thread_id=thread_id
+    )
 
 
 async def _execute_raw_command(
@@ -314,7 +319,12 @@ async def _execute_raw_command(
     success, err_message = await send_to_window(window_id, command, raw=True)
     if not success:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
-        await safe_send(bot, chat_id, f"❌ {err_message}", message_thread_id=thread_id)
+        await safe_send(
+            PTBTelegramClient(bot),
+            chat_id,
+            f"❌ {err_message}",
+            message_thread_id=thread_id,
+        )
         return
 
     from .shell_capture import mark_telegram_command
@@ -358,7 +368,11 @@ async def show_command_approval(
             await safe_reply(message, text, reply_markup=keyboard)
         else:
             await safe_send(
-                bot, chat_id, text, message_thread_id=thread_id, reply_markup=keyboard
+                PTBTelegramClient(bot),
+                chat_id,
+                text,
+                message_thread_id=thread_id,
+                reply_markup=keyboard,
             )
     except TelegramError, OSError:
         # If send fails, release the slot so future attempts aren't blocked

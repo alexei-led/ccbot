@@ -14,6 +14,7 @@ from telegram import Bot
 
 from ... import session_query, window_query
 from ...session_monitor import NewMessage
+from ...telegram_client import PTBTelegramClient
 from ...user_preferences import user_preferences
 from ..interactive import (
     INTERACTIVE_TOOL_NAMES,
@@ -112,7 +113,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
 
         if msg.is_complete:
             await enqueue_content_message(
-                bot=bot,
+                client=PTBTelegramClient(bot),
                 user_id=user_id,
                 window_id=window_id,
                 parts=parts,

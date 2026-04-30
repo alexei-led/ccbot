@@ -533,8 +533,10 @@ async def _create_and_bind_window(
         send_ok, send_msg = await send_to_window(created_wid, pending_text)
         if not send_ok:
             logger.warning("Failed to forward pending text: %s", send_msg)
+            from ...telegram_client import PTBTelegramClient
+
             await safe_send(
-                context.bot,
+                PTBTelegramClient(context.bot),
                 thread_router.resolve_chat_id(user_id, thread_id),
                 f"\u274c Failed to send pending message: {send_msg}",
                 message_thread_id=thread_id,

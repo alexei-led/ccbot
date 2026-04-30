@@ -1,6 +1,6 @@
 import time
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from telegram import Bot
@@ -645,7 +645,7 @@ class TestTransitionToIdle:
             ) as mock_enqueue,
         ):
             await _transition_to_idle(bot, 1, "@0", 42, -100, "project", mode)
-        mock_enqueue.assert_called_once_with(bot, 1, "@0", None, thread_id=42)
+        mock_enqueue.assert_called_once_with(ANY, 1, "@0", None, thread_id=42)
 
 
 class TestShellPromptClearsStatus:
@@ -2086,7 +2086,7 @@ class TestUpdateStatusMessageEdgeCases:
         ):
             mock_tm.find_window_by_id = AsyncMock(return_value=None)
             await update_status_message(bot, 1, "@0", thread_id=42)
-        mock_enqueue.assert_called_once_with(bot, 1, "@0", None, thread_id=42)
+        mock_enqueue.assert_called_once_with(ANY, 1, "@0", None, thread_id=42)
 
     async def test_empty_capture_keeps_existing_status(self) -> None:
         from ccgram.handlers.polling.window_tick import (

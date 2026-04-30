@@ -25,6 +25,7 @@ from telegram import (
     Update,
 )
 from telegram.ext import ContextTypes
+from ...telegram_client import PTBTelegramClient
 
 from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
@@ -164,7 +165,7 @@ async def notify_message_sent(
     text = f"\u2192 {to_wid} ({to_name}) [{message.type}]{subj_part}"
 
     await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -208,7 +209,7 @@ async def notify_messages_delivered(
         text = "\n".join(lines)
 
     sent = await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -242,7 +243,7 @@ async def notify_reply_received(
     text = f"\u2713 Reply received from {from_wid} ({from_name}){subj_part}"
 
     await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -279,7 +280,7 @@ async def notify_pending_shell(
     )
 
     await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -342,7 +343,7 @@ async def notify_loop_detected(
     )
 
     await rate_limit_send_message(
-        bot,
+        PTBTelegramClient(bot),
         chat_id,
         text,
         message_thread_id=thread_id,
