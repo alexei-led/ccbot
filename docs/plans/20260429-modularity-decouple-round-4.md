@@ -697,14 +697,14 @@ This keeps each task's diff small.
 - Create: `tests/ccgram/test_telegram_client.py`
 - Modify: `src/ccgram/bootstrap.py` (build `PTBTelegramClient` and pass to wired components — start with one, not all, to keep this task small)
 
-- [ ] grep all `bot.<method>` calls in `src/ccgram/handlers/**` and `src/ccgram/*.py` to enumerate the actual API surface used
-- [ ] define `TelegramClient` Protocol covering exactly that surface (no aspirational methods)
-- [ ] implement `PTBTelegramClient(bot: Bot)` adapter that delegates each Protocol method to the underlying PTB Bot
-- [ ] implement `FakeTelegramClient` recording every call as a `(method_name, kwargs)` tuple, returning canned `Message`/bool values configured per-test
-- [ ] add unit tests: real adapter delegates correctly (mocked PTB Bot); fake records calls
-- [ ] DO NOT migrate any handler in this task — Protocol + adapter only
-- [ ] `make check` passes
-- [ ] commit "feat(telegram): introduce TelegramClient Protocol + PTB adapter"
+- [x] grep all `bot.<method>` calls in `src/ccgram/handlers/**` and `src/ccgram/*.py` to enumerate the actual API surface used — 18 distinct methods: `send_message`, `edit_message_text`, `edit_message_media`, `edit_message_caption`, `delete_message`, `send_photo`, `send_document`, `send_chat_action`, `set_message_reaction`, `get_chat`, `get_file`, `create_forum_topic`, `edit_forum_topic`, `close_forum_topic`, `delete_forum_topic`, `unpin_all_forum_topic_messages`, `delete_my_commands`, `set_my_commands`. Note: `query.answer()` and `query.edit_message_reply_markup()` go through PTB shortcut methods on `CallbackQuery`/`Message`, not bot, so they are not part of this Protocol; they continue to work via Update objects in handlers.
+- [x] define `TelegramClient` Protocol covering exactly that surface (no aspirational methods) — `runtime_checkable` Protocol in `src/ccgram/telegram_client.py`. Each method takes the primary positional/keyword args used at call sites plus `**kwargs: Any` to allow PTB's wide kwarg surface (entities, parse_mode, link_preview_options, request timeouts, etc.) without enumerating them. `get_chat` returns `ChatFullInfo` matching PTB's actual return type.
+- [x] implement `PTBTelegramClient(bot: Bot)` adapter that delegates each Protocol method to the underlying PTB Bot — straight delegation, one method per Protocol method. Exposes `bot` property as a temporary escape hatch for callers still being migrated (will be removed once F5 completes).
+- [x] implement `FakeTelegramClient` recording every call as a `(method_name, kwargs)` tuple, returning canned `Message`/bool values configured per-test — recording dataclass `_FakeCall`, list `calls`, helpers `call_count` / `last_call`, optional `returns[method]` for static value or `lambda **kw:` for dynamic; bool-returning methods default to `True` via `_DEFAULT_RETURNS`. Uses `inspect.isfunction`/`inspect.ismethod` to distinguish lambdas from MagicMock sentinels (Mocks are callable, so a plain `callable()` check would mis-classify them).
+- [x] add unit tests: real adapter delegates correctly (mocked PTB Bot); fake records calls — `tests/ccgram/test_telegram_client.py` (23 tests): runtime-checkable Protocol structure (Fake + PTB adapter both pass `isinstance`); PTB adapter delegation for every method (15 tests using `AsyncMock` Bot); Fake recording semantics (calls list ordering, kwargs snapshot isolation, default bool return, custom static return via Mock sentinel, custom dynamic return via lambda, last_call/call_count helpers).
+- [x] DO NOT migrate any handler in this task — Protocol + adapter only — confirmed: zero handler files modified; `bootstrap.py` untouched; the adapter is built and threaded into handlers in F5.2 onward.
+- [x] `make check` passes — typecheck 0 errors / 0 warnings / 0 informations; lint clean; 97 integration pass; full unit suite passes (4395 tests after this task adds 23).
+- [x] commit "feat(telegram): introduce TelegramClient Protocol + PTB adapter"
 
 #### Task F5.2: Migrate `messaging_pipeline/` (queue, sender)
 
