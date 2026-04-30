@@ -531,10 +531,10 @@ This keeps each task's diff small.
 
 #### Task F4.2: F4 verification
 
-- [ ] verify `decide.py` has zero imports from `tmux_manager`, `telegram.*`, or any singleton
-- [ ] verify `observe.py` has zero imports from `telegram.*` (it can use `tmux_manager` and `screen_buffer`)
-- [ ] verify `apply.py` is the only file with side effects
-- [ ] commit any final cleanup
+- [x] verify `decide.py` has zero imports from `tmux_manager`, `telegram.*`, or any singleton — confirmed: imports only `time` (stdlib), `providers.base.StatusUpdate` (type), `terminal_parser.status_emoji_prefix` (pure helper), and pure types/constants from `polling_strategies` (`STARTUP_TIMEOUT`, `TickContext`, `TickDecision`, `is_shell_prompt`)
+- [x] verify `observe.py` has zero imports from `telegram.*` (it can use `tmux_manager` and `screen_buffer`) — confirmed via grep: zero `from telegram` lines; uses `tmux_manager`, `screen_buffer` (via `terminal_screen_buffer`), `session_monitor`, `window_query`, and `providers` for read-only resolution
+- [x] verify `apply.py` is the only file with side effects — confirmed: only file in the package importing `telegram.constants` (`ChatAction`) and `telegram.error` (`BadRequest`, `TelegramError`); all I/O calls (`enqueue_status_update`, `update_topic_emoji`, `rate_limit_send_message`, `safe_send`, `lifecycle_strategy.start_autoclose_timer`, dead-window probe via `bot.unpin_all_forum_topic_messages`, `clear_topic_state`, `thread_router.unbind_thread`) live here. Documented exceptions in observe.py (`mark_seen_status` via `is_recently_active`, `notify_vim_insert_seen`) are mark/cache mutations called explicitly via the file docstring, not Telegram side effects.
+- [x] commit any final cleanup — none needed; verification only, criteria met without code changes
 
 ---
 
