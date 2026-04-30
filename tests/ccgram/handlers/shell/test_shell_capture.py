@@ -1322,3 +1322,22 @@ class TestWrapModeHasMarkersInTail:
 
         text = "file1.txt\nfile2.txt\n~/code main ❯ "
         assert _has_markers_in_tail(text) is False
+
+
+class TestRegisterApprovalCallback:
+    def test_double_registration_raises(self) -> None:
+        from ccgram.handlers.shell import shell_capture
+
+        shell_capture._reset_approval_callback_for_testing()
+        shell_capture.register_approval_callback(AsyncMock())
+        with pytest.raises(RuntimeError, match="already registered"):
+            shell_capture.register_approval_callback(AsyncMock())
+
+    async def test_default_raises_when_not_wired(self) -> None:
+        from ccgram.handlers.shell import shell_capture
+
+        shell_capture._reset_approval_callback_for_testing()
+        with pytest.raises(RuntimeError, match="not wired"):
+            await shell_capture._approval_callback(
+                AsyncMock(spec=Bot), 1, 1, "@0", MagicMock(), 1
+            )

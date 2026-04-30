@@ -46,11 +46,14 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 
 
-def _rc_active_default(_window_id: str) -> bool:
-    return False
+def _rc_active_unwired(_window_id: str) -> bool:
+    raise RuntimeError(
+        "register_rc_active_provider not wired — call register_rc_active_provider() at startup"
+    )
 
 
-_rc_active_fn: Callable[[str], bool] = _rc_active_default
+_rc_active_fn: Callable[[str], bool] = _rc_active_unwired
+_rc_active_fn_registered: bool = False
 
 
 def register_rc_active_provider(fn: Callable[[str], bool]) -> None:
@@ -58,9 +61,22 @@ def register_rc_active_provider(fn: Callable[[str], bool]) -> None:
 
     Avoids a direct status_bubble → polling_strategies import by accepting
     a callable rather than importing terminal_screen_buffer directly.
+
+    Raises RuntimeError if called more than once — wiring should happen exactly
+    once at startup; double registration is a programming error.
     """
-    global _rc_active_fn
+    global _rc_active_fn, _rc_active_fn_registered
+    if _rc_active_fn_registered:
+        raise RuntimeError("register_rc_active_provider already registered")
     _rc_active_fn = fn
+    _rc_active_fn_registered = True
+
+
+def _reset_rc_active_provider_for_testing() -> None:
+    """Restore the unwired default — only for tests."""
+    global _rc_active_fn, _rc_active_fn_registered
+    _rc_active_fn = _rc_active_unwired
+    _rc_active_fn_registered = False
 
 
 # ---------------------------------------------------------------------------

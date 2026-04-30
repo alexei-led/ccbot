@@ -627,11 +627,11 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/handlers/shell/shell_capture.py` (`register_approval_callback`)
 - Modify: `src/ccgram/bot.py` / future bootstrap
 
-- [ ] change each `register_*_callback` to raise `RuntimeError` if called twice (was silently overwriting)
-- [ ] change the _callee_ default to raise `RuntimeError("not wired")` if invoked before registration — instead of silent `False` / no-op (this makes a missed wire produce a loud error in dev/test)
-- [ ] add unit tests asserting both behaviours
-- [ ] `make check` passes
-- [ ] commit "refactor(wiring): register\_\*\_callback fails loud on missing/double registration"
+- [x] change each `register_*_callback` to raise `RuntimeError` if called twice (was silently overwriting) — added `_<name>_registered: bool` flag to each of `hook_events.register_stop_callback`, `status_bubble.register_rc_active_provider`, and `shell_capture.register_approval_callback`; second call raises `RuntimeError("... already registered")`
+- [x] change the _callee_ default to raise `RuntimeError("not wired")` if invoked before registration — instead of silent `False` / no-op (this makes a missed wire produce a loud error in dev/test). Added `_stop_callback_unwired`, `_rc_active_unwired`, `_approval_unwired` defaults that raise. The conditional `if _stop_callback is not None` guard in `_handle_stop` is removed (callee unconditionally invoked). Each module also exposes a `_reset_<name>_for_testing()` helper used by the autouse fixture in `tests/ccgram/handlers/conftest.py` (which wires safe AsyncMock/lambda defaults for unit tests that don't intend to test wiring) and by the new failure-mode tests below.
+- [x] add unit tests asserting both behaviours — `TestRegisterStopCallback` (test_double_registration_raises, test_default_raises_when_not_wired, test_dispatch_stop_raises_when_not_wired) in `test_hook_events.py`; `TestRegisterRcActiveProvider` (double-register + unwired-default) in `test_status_bubble.py`; `TestRegisterApprovalCallback` (double-register + unwired-default) in `test_shell_capture.py`
+- [x] `make check` passes (4357 unit + 97 integration; typecheck 0 errors / 0 warnings / 0 informations; lint clean)
+- [x] commit "refactor(wiring): register\_\*\_callback fails loud on missing/double registration"
 
 #### Task F2.7: F2 verification
 

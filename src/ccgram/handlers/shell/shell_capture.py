@@ -65,7 +65,7 @@ class CommandApprovalCallback(Protocol):
     ) -> bool: ...
 
 
-async def _approval_noop(  # type: ignore[misc]
+async def _approval_unwired(  # type: ignore[misc]
     _bot: Any,
     _chat_id: Any,
     _thread_id: Any,
@@ -73,19 +73,35 @@ async def _approval_noop(  # type: ignore[misc]
     _result: Any,
     _user_id: Any,
 ) -> bool:
-    return False
+    raise RuntimeError(
+        "register_approval_callback not wired — call register_approval_callback() at startup"
+    )
 
 
-_approval_callback: CommandApprovalCallback = _approval_noop  # type: ignore[assignment]
+_approval_callback: CommandApprovalCallback = _approval_unwired  # type: ignore[assignment]
+_approval_callback_registered: bool = False
 
 
 def register_approval_callback(fn: CommandApprovalCallback) -> None:
     """Wire show_command_approval from shell_commands (called once from bot.py setup).
 
     Avoids the shell_capture ↔ shell_commands runtime circular import.
+
+    Raises RuntimeError if called more than once — wiring should happen exactly
+    once at startup; double registration is a programming error.
     """
-    global _approval_callback
+    global _approval_callback, _approval_callback_registered
+    if _approval_callback_registered:
+        raise RuntimeError("register_approval_callback already registered")
     _approval_callback = fn
+    _approval_callback_registered = True
+
+
+def _reset_approval_callback_for_testing() -> None:
+    """Restore the unwired default — only for tests."""
+    global _approval_callback, _approval_callback_registered
+    _approval_callback = _approval_unwired  # type: ignore[assignment]
+    _approval_callback_registered = False
 
 
 # Maximum characters per message (fits Telegram 4096-char limit with margin)

@@ -29,15 +29,37 @@ from .messaging_pipeline.message_queue import enqueue_status_update
 from .polling.polling_strategies import reset_window_polling_state
 from .status.topic_emoji import update_topic_emoji
 
+
+async def _stop_callback_unwired(_bot: Bot, _window_key: str) -> None:
+    raise RuntimeError(
+        "register_stop_callback not wired — call register_stop_callback() at startup"
+    )
+
+
 # Wired at startup by bot.py to trigger broker delivery on Stop events.
 # Avoids a direct hook_events → periodic_tasks import.
-_stop_callback: Callable[[Bot, str], Awaitable[None]] | None = None
+_stop_callback: Callable[[Bot, str], Awaitable[None]] = _stop_callback_unwired
+_stop_callback_registered: bool = False
 
 
 def register_stop_callback(fn: Callable[[Bot, str], Awaitable[None]]) -> None:
-    """Register the function called when a Stop event fires (wired by bot.py)."""
-    global _stop_callback
+    """Register the function called when a Stop event fires (wired by bot.py).
+
+    Raises RuntimeError if called more than once — wiring should happen exactly
+    once at startup; double registration is a programming error.
+    """
+    global _stop_callback, _stop_callback_registered
+    if _stop_callback_registered:
+        raise RuntimeError("register_stop_callback already registered")
     _stop_callback = fn
+    _stop_callback_registered = True
+
+
+def _reset_stop_callback_for_testing() -> None:
+    """Restore the unwired default — only for tests."""
+    global _stop_callback, _stop_callback_registered
+    _stop_callback = _stop_callback_unwired
+    _stop_callback_registered = False
 
 
 logger = structlog.get_logger()
@@ -183,8 +205,7 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
         )
 
     # Trigger immediate broker delivery for the idle window via registered callback.
-    if _stop_callback is not None:
-        await _stop_callback(bot, event.window_key)
+    await _stop_callback(bot, event.window_key)
 
 
 async def _handle_subagent_start(event: HookEvent, _bot: Bot) -> None:
