@@ -254,7 +254,7 @@ def _no_group():
         yield mock_config
 
 
-_TH = "ccgram.handlers.text_handler"
+_TH = "ccgram.handlers.text.text_handler"
 
 
 class TestTextHandlerDeadWindow:

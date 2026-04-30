@@ -8,14 +8,15 @@ sweep, lifecycle ticking).
 
 Public surface re-exported here is the entry point for ``bot.py`` and
 the rest of ``handlers/``; internals stay in the per-module files.
+
+``periodic_tasks`` is intentionally NOT re-exported here: it imports
+``topics.topic_lifecycle``, which itself imports ``polling_strategies``,
+and re-exporting would force the load through ``polling/__init__.py``,
+creating an import cycle. Callers that need ``run_periodic_tasks`` /
+``run_lifecycle_tasks`` / ``run_broker_cycle`` import them directly from
+``handlers.polling.periodic_tasks``.
 """
 
-from .periodic_tasks import (
-    TOPIC_CHECK_INTERVAL,
-    run_broker_cycle,
-    run_lifecycle_tasks,
-    run_periodic_tasks,
-)
 from .polling_coordinator import status_poll_loop
 from .polling_strategies import (
     ACTIVITY_THRESHOLD,
@@ -52,7 +53,6 @@ __all__ = [
     "RC_DEBOUNCE_SECONDS",
     "SHELL_COMMANDS",
     "STARTUP_TIMEOUT",
-    "TOPIC_CHECK_INTERVAL",
     "TYPING_INTERVAL",
     "InteractiveUIStrategy",
     "PaneStatusStrategy",
@@ -70,9 +70,6 @@ __all__ = [
     "lifecycle_strategy",
     "pane_status_strategy",
     "reset_window_polling_state",
-    "run_broker_cycle",
-    "run_lifecycle_tasks",
-    "run_periodic_tasks",
     "status_poll_loop",
     "terminal_poll_state",
     "terminal_screen_buffer",

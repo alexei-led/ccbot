@@ -83,8 +83,8 @@ from .handlers.messaging_pipeline.message_queue import (
 from .handlers.messaging_pipeline.message_sender import safe_reply
 from .handlers.polling.polling_coordinator import status_poll_loop
 from .handlers.file_handler import handle_document_message, handle_photo_message
-from .handlers.voice_handler import handle_voice_message
-from .handlers.text_handler import handle_text_message
+from .handlers.voice import handle_voice_message
+from .handlers.text import handle_text_message
 from . import window_query
 from .session import session_manager
 from .session_monitor import NewMessage, NewWindowEvent, SessionMonitor

@@ -7,8 +7,8 @@ import pytest
 from ccgram.handlers.user_state import VOICE_PENDING
 from ccgram.whisper.base import TranscriptionResult
 
-_VH = "ccgram.handlers.voice_handler"
-_VC = "ccgram.handlers.voice_callbacks"
+_VH = "ccgram.handlers.voice.voice_handler"
+_VC = "ccgram.handlers.voice.voice_callbacks"
 
 
 def _make_update(
@@ -70,7 +70,7 @@ class TestHandleVoiceMessage:
         mock_thread_router: MagicMock,
         mock_download: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_get_transcriber.return_value = None
@@ -96,7 +96,7 @@ class TestHandleVoiceMessage:
         mock_config: MagicMock,
         mock_thread_router: MagicMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = False
 
@@ -119,7 +119,7 @@ class TestHandleVoiceMessage:
         mock_config: MagicMock,
         mock_thread_router: MagicMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_get_transcriber.return_value = MagicMock()
@@ -145,7 +145,7 @@ class TestHandleVoiceMessage:
         mock_config: MagicMock,
         mock_thread_router: MagicMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_get_transcriber.return_value = MagicMock()
@@ -174,7 +174,7 @@ class TestHandleVoiceMessage:
     ) -> None:
         from telegram.constants import ChatAction
 
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_transcriber = MagicMock()
@@ -217,7 +217,7 @@ class TestHandleVoiceMessage:
         mock_thread_router: MagicMock,
         mock_download: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_transcriber = MagicMock()
@@ -251,7 +251,7 @@ class TestHandleVoiceMessage:
         mock_thread_router: MagicMock,
         mock_download: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_get_transcriber.side_effect = ValueError("missing OPENAI_API_KEY")
@@ -277,7 +277,7 @@ class TestHandleVoiceMessage:
         mock_thread_router: MagicMock,
         mock_download: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_transcriber = MagicMock()
@@ -310,7 +310,7 @@ class TestHandleVoiceMessage:
         mock_thread_router: MagicMock,
         mock_download: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_transcriber = MagicMock()
@@ -339,7 +339,7 @@ class TestHandleVoiceMessage:
     ) -> None:
         from telegram.error import TelegramError
 
-        from ccgram.handlers import voice_handler
+        from ccgram.handlers.voice import voice_handler
 
         mock_config.is_user_allowed.return_value = True
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
@@ -366,7 +366,7 @@ class TestHandleVoiceCallback:
         mock_thread_router: MagicMock,
         mock_send_to_window: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
         mock_send_to_window.return_value = (True, None)
@@ -406,7 +406,7 @@ class TestHandleVoiceCallback:
     ) -> None:
         from telegram.error import TelegramError
 
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
         mock_send_to_window.return_value = (True, None)
@@ -429,7 +429,7 @@ class TestHandleVoiceCallback:
 
     @patch(f"{_VC}.get_thread_id")
     async def test_drop(self, mock_get_thread_id: MagicMock) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
 
@@ -451,7 +451,7 @@ class TestHandleVoiceCallback:
     async def test_drop_delete_fails(self, mock_get_thread_id: MagicMock) -> None:
         from telegram.error import TelegramError
 
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
 
@@ -472,7 +472,7 @@ class TestHandleVoiceCallback:
 
     @patch(f"{_VC}.get_thread_id")
     async def test_drop_no_pending_entry(self, mock_get_thread_id: MagicMock) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
 
@@ -490,7 +490,7 @@ class TestHandleVoiceCallback:
 
     @patch(f"{_VC}.get_thread_id")
     async def test_expired_entry(self, mock_get_thread_id: MagicMock) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
 
@@ -512,7 +512,7 @@ class TestHandleVoiceCallback:
     async def test_send_without_bound_window(
         self, mock_get_thread_id: MagicMock, mock_thread_router: MagicMock
     ) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
         mock_thread_router.resolve_window_for_thread.return_value = None
@@ -549,7 +549,7 @@ class TestHandleVoiceCallback:
         mock_send_to_window: AsyncMock,
         error_msg: str,
     ) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
@@ -571,7 +571,7 @@ class TestHandleVoiceCallback:
         assert (999, 42) in context.user_data.get(VOICE_PENDING, {})
 
     async def test_invalid_payload(self) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         update = MagicMock()
         update.callback_query = _make_callback_query("vc:send:not-an-int")
@@ -598,7 +598,7 @@ class TestHandleVoiceCallback:
         mock_send_to_window: AsyncMock,
         mock_ack: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
@@ -646,7 +646,7 @@ class TestHandleVoiceCallback:
         mock_get_provider: MagicMock,
         mock_send_to_window: AsyncMock,
     ) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         mock_get_thread_id.return_value = 42
         mock_thread_router.resolve_window_for_thread.return_value = "@0"
@@ -678,7 +678,7 @@ class TestHandleVoiceCallback:
         mock_send_to_window.assert_not_called()
 
     async def test_inaccessible_message(self) -> None:
-        from ccgram.handlers import voice_callbacks
+        from ccgram.handlers.voice import voice_callbacks
 
         update = MagicMock()
         query = MagicMock()

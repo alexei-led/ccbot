@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ccgram.handlers.text_handler import (
+from ccgram.handlers.text.text_handler import (
     _check_ui_guards,
     _forward_message,
     _handle_dead_window,
@@ -20,7 +20,7 @@ from ccgram.handlers.user_state import (
     RECOVERY_WINDOW_ID,
 )
 
-_TH = "ccgram.handlers.text_handler"
+_TH = "ccgram.handlers.text.text_handler"
 
 
 class TestCheckUiGuards:
@@ -189,7 +189,7 @@ class TestHandleUnboundTopic:
 
         await _handle_unbound_topic(100, 42, "hello", user_data, message)
 
-        from ccgram.handlers.text_handler import PENDING_DELIVERY_NOTICE
+        from ccgram.handlers.text.text_handler import PENDING_DELIVERY_NOTICE
 
         assert mock_reply.call_count == 2
         assert mock_reply.call_args_list[1].args[1] == PENDING_DELIVERY_NOTICE
@@ -216,7 +216,7 @@ class TestHandleUnboundTopic:
 
         await _handle_unbound_topic(100, 42, "hello", user_data, message)
 
-        from ccgram.handlers.text_handler import PENDING_DELIVERY_NOTICE
+        from ccgram.handlers.text.text_handler import PENDING_DELIVERY_NOTICE
 
         assert mock_reply.call_count == 2
         assert mock_reply.call_args_list[1].args[1] == PENDING_DELIVERY_NOTICE
@@ -368,7 +368,7 @@ class TestShellProviderRouting:
             "ccgram.handlers.shell.shell_commands.handle_shell_message",
             new_callable=AsyncMock,
         ) as mock_shell:
-            from ccgram.handlers.text_handler import handle_text_message
+            from ccgram.handlers.text.text_handler import handle_text_message
 
             update = MagicMock()
             update.effective_user.id = 100
@@ -417,7 +417,7 @@ class TestShellProviderRouting:
             ) as mock_shell,
             patch(f"{_TH}.get_interactive_window", return_value=None),
         ):
-            from ccgram.handlers.text_handler import handle_text_message
+            from ccgram.handlers.text.text_handler import handle_text_message
 
             update = MagicMock()
             context = MagicMock()
@@ -485,7 +485,7 @@ class TestForwardMessage:
 
         await _forward_message("@0", 100, 42, "!ls -la", bot, message)
 
-        from ccgram.handlers.text_handler import _bash_capture_tasks
+        from ccgram.handlers.text.text_handler import _bash_capture_tasks
 
         key = (100, 42)
         assert key in _bash_capture_tasks
@@ -503,7 +503,7 @@ class TestForwardMessage:
         bot = AsyncMock()
         message = AsyncMock()
 
-        from ccgram.handlers.text_handler import _bash_capture_tasks
+        from ccgram.handlers.text.text_handler import _bash_capture_tasks
 
         dummy_task = AsyncMock(spec=asyncio.Task)
         dummy_task.done.return_value = False
@@ -552,14 +552,14 @@ class TestForwardMessage:
 class TestBashCaptureCleanup:
     @pytest.fixture(autouse=True)
     def _clear_bash_tasks(self):
-        from ccgram.handlers.text_handler import _bash_capture_tasks
+        from ccgram.handlers.text.text_handler import _bash_capture_tasks
 
         _bash_capture_tasks.clear()
         yield
         _bash_capture_tasks.clear()
 
     async def test_cleanup_on_early_return(self, monkeypatch) -> None:
-        from ccgram.handlers.text_handler import (
+        from ccgram.handlers.text.text_handler import (
             _bash_capture_tasks,
             _capture_bash_output,
         )
@@ -583,7 +583,7 @@ class TestBashCaptureCleanup:
         assert key not in _bash_capture_tasks
 
     async def test_cleanup_on_cancel(self) -> None:
-        from ccgram.handlers.text_handler import (
+        from ccgram.handlers.text.text_handler import (
             _bash_capture_tasks,
             _capture_bash_output,
         )
@@ -608,7 +608,7 @@ class TestBashCaptureCleanup:
         assert key not in _bash_capture_tasks
 
     async def test_identity_check_preserves_replacement_task(self) -> None:
-        from ccgram.handlers.text_handler import (
+        from ccgram.handlers.text.text_handler import (
             _bash_capture_tasks,
             _capture_bash_output,
         )

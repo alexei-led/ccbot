@@ -56,11 +56,11 @@ def _patch_loop_deps(
             new_callable=AsyncMock,
         ),
         "run_periodic": patch(
-            "ccgram.handlers.polling.polling_coordinator.run_periodic_tasks",
+            "ccgram.handlers.polling.periodic_tasks.run_periodic_tasks",
             new_callable=AsyncMock,
         ),
         "run_lifecycle": patch(
-            "ccgram.handlers.polling.polling_coordinator.run_lifecycle_tasks",
+            "ccgram.handlers.polling.periodic_tasks.run_lifecycle_tasks",
             new_callable=AsyncMock,
         ),
         "config": patch("ccgram.config.config"),

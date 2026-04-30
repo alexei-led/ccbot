@@ -14,8 +14,8 @@ from telegram import Bot, Message, Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
-from .callback_helpers import get_thread_id as _get_thread_id
-from .topics.directory_browser import (
+from ..callback_helpers import get_thread_id as _get_thread_id
+from ..topics.directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,
     BROWSE_PATH_KEY,
@@ -28,24 +28,24 @@ from .topics.directory_browser import (
     clear_browse_state,
     clear_window_picker_state,
 )
-from .interactive import get_interactive_window, handle_interactive_ui
-from .messaging_pipeline.message_queue import enqueue_status_update
-from .live.pane_callbacks import apply_pane_rename
-from .messaging_pipeline.message_sender import (
+from ..interactive import get_interactive_window, handle_interactive_ui
+from ..messaging_pipeline.message_queue import enqueue_status_update
+from ..live.pane_callbacks import apply_pane_rename
+from ..messaging_pipeline.message_sender import (
     ack_reaction,
     edit_with_fallback,
     rate_limit_send_message,
     safe_reply,
 )
-from .recovery.recovery_callbacks import RecoveryBanner, render_banner
-from .polling.polling_strategies import lifecycle_strategy
-from ..topic_state_registry import topic_state
-from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
-from .. import window_query
-from ..thread_router import thread_router
-from ..providers import get_provider_for_window
-from ..tmux_manager import send_to_window, tmux_manager
-from ..utils import handle_general_topic_message, is_general_topic, task_done_callback
+from ..recovery.recovery_callbacks import RecoveryBanner, render_banner
+from ..polling.polling_strategies import lifecycle_strategy
+from ...topic_state_registry import topic_state
+from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
+from ... import window_query
+from ...thread_router import thread_router
+from ...providers import get_provider_for_window
+from ...tmux_manager import send_to_window, tmux_manager
+from ...utils import handle_general_topic_message, is_general_topic, task_done_callback
 
 logger = structlog.get_logger()
 
@@ -342,7 +342,7 @@ async def _forward_message(
 
     await ack_reaction(bot, message.chat.id, message.message_id)
 
-    from .command_history import record_command
+    from ..command_history import record_command
 
     record_command(user_id, thread_id, text)
 
@@ -423,7 +423,7 @@ async def handle_text_message(
         window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
-        from .shell.shell_commands import handle_shell_message
+        from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(
             context.bot, user.id, thread_id, window_id, text, message

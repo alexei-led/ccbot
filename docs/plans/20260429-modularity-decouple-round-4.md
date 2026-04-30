@@ -490,12 +490,12 @@ This keeps each task's diff small.
 - Move: `voice_handler.py`, `voice_callbacks.py` → `handlers/voice/`
 - Move: `text_handler.py` → `handlers/text/`
 
-- [ ] create both subpackages; re-export `handle_voice_message`, voice callbacks; re-export `handle_text_message`
-- [ ] git mv three modules
-- [ ] rewrite import sites
-- [ ] move tests
-- [ ] `make check` + `make test-e2e` pass (last F1 task — run full e2e to verify nothing regressed across all subpackage moves)
-- [ ] commit "refactor(handlers): group voice and text subpackages (F1 complete)"
+- [x] create both subpackages; re-export `handle_voice_message`, voice callbacks; re-export `handle_text_message`
+- [x] git mv three modules
+- [x] rewrite import sites
+- [x] move tests
+- [x] `make check` passes; `make test-e2e` skipped — pre-existing failures (TimeoutError on group_chat_id pruning) unrelated to F1.12 path moves; verified by running e2e on the prior commit (also broken). F1.12 actually fixed a latent import cycle (`polling/__init__.py` ↔ `topics.topic_lifecycle`) by deferring the `periodic_tasks` import inside `status_poll_loop`.
+- [x] commit "refactor(handlers): group voice and text subpackages (F1 complete)"
 
 #### Task F1.13: F1 verification
 

@@ -114,9 +114,9 @@ def load_handlers() -> None:
         hook_events,
         sessions_dashboard,
         sync_command,
-        voice_callbacks,
     )
     from .interactive import interactive_callbacks  # noqa: F401
+    from .voice import voice_callbacks  # noqa: F401
     from .live import pane_callbacks, screenshot_callbacks  # noqa: F401
     from .messaging import msg_spawn, msg_telegram  # noqa: F401
     from .recovery import history_callbacks, recovery_callbacks, resume_command  # noqa: F401

@@ -4,7 +4,7 @@ from ccgram.handlers.interactive.interactive_ui import (
     _send_cooldowns,
     clear_send_cooldowns,
 )
-from ccgram.handlers.text_handler import (
+from ccgram.handlers.text.text_handler import (
     _bash_capture_tasks,
     cancel_bash_capture,
 )

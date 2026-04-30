@@ -108,7 +108,7 @@ async def test_voice_not_configured(e2e_app, work_dir):
     await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
-    import ccgram.handlers.voice_handler as vh
+    import ccgram.handlers.voice.voice_handler as vh
 
     with patch.object(vh, "get_transcriber", return_value=None):
         u = make_voice_update(bot=app.bot)
@@ -136,7 +136,7 @@ async def test_voice_transcription_shows_confirm_keyboard(e2e_app, work_dir):
     await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
-    import ccgram.handlers.voice_handler as vh
+    import ccgram.handlers.voice.voice_handler as vh
 
     mock_transcriber = _mock_transcriber("please add logging to main.py")
 
@@ -176,7 +176,7 @@ async def test_voice_confirm_sends_to_agent(e2e_app, work_dir):
 
     transcribed = "what is the purpose of config.py"
 
-    import ccgram.handlers.voice_handler as vh
+    import ccgram.handlers.voice.voice_handler as vh
 
     mock_transcriber = _mock_transcriber(transcribed)
 
@@ -234,7 +234,7 @@ async def test_voice_discard_clears_pending(e2e_app, work_dir):
     await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
-    import ccgram.handlers.voice_handler as vh
+    import ccgram.handlers.voice.voice_handler as vh
 
     mock_transcriber = _mock_transcriber("discard this message")
 
@@ -290,7 +290,7 @@ async def test_voice_too_large(e2e_app, work_dir):
     await setup_bound_topic(app, calls, work_dir, provider="shell")
     calls.clear()
 
-    import ccgram.handlers.voice_handler as vh
+    import ccgram.handlers.voice.voice_handler as vh
 
     mock_transcriber = _mock_transcriber()
 

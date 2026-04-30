@@ -12,20 +12,20 @@ from telegram import CallbackQuery, Message, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from ..providers import get_provider_for_window
-from ..window_query import get_window_provider
-from ..tmux_manager import send_to_window
-from ..thread_router import thread_router
-from .callback_data import CB_VOICE
-from .callback_helpers import get_thread_id
-from .callback_registry import register
-from .messaging_pipeline.message_sender import (
+from ...providers import get_provider_for_window
+from ...window_query import get_window_provider
+from ...tmux_manager import send_to_window
+from ...thread_router import thread_router
+from ..callback_data import CB_VOICE
+from ..callback_helpers import get_thread_id
+from ..callback_registry import register
+from ..messaging_pipeline.message_sender import (
     REACT_DONE,
     REACT_SEEN,
     ack_reaction,
     react,
 )
-from .user_state import VOICE_PENDING
+from ..user_state import VOICE_PENDING
 
 logger = structlog.get_logger()
 
@@ -97,7 +97,7 @@ async def _handle_send(
         window_id, provider_name=get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery and thread_id is not None:
-        from .shell.shell_commands import handle_shell_message
+        from ..shell.shell_commands import handle_shell_message
 
         try:
             await handle_shell_message(bot, user_id, thread_id, window_id, pending_text)

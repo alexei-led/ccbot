@@ -17,7 +17,6 @@ from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttled
 from . import window_tick
-from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 
 if TYPE_CHECKING:
     from telegram import Bot
@@ -38,6 +37,12 @@ _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 async def status_poll_loop(bot: "Bot") -> None:
     """Background task to poll terminal status for all thread-bound windows."""
     from ...config import config as _cfg
+
+    # Deferred import: periodic_tasks transitively imports topics.topic_lifecycle,
+    # which imports polling_strategies. Importing eagerly forms a cycle through
+    # polling/__init__.py whenever a module reaches polling_strategies before
+    # polling_coordinator finishes loading.
+    from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 
     poll_interval = _cfg.status_poll_interval
     logger.info("Status polling started (interval: %ss)", poll_interval)
