@@ -499,10 +499,10 @@ This keeps each task's diff small.
 
 #### Task F1.13: F1 verification
 
-- [ ] verify only the listed top-level files remain in `handlers/`: `__init__.py`, `callback_data.py`, `callback_helpers.py`, `callback_registry.py`, `cleanup.py`, `command_history.py`, `command_orchestration.py`, `file_handler.py`, `hook_events.py`, `response_builder.py`, `sessions_dashboard.py`, `sync_command.py`, `upgrade.py`, `user_state.py`
-- [ ] verify `bot.py` imports look like `from .handlers.recovery import restore_command` (subpackage clarity)
-- [ ] verify CLAUDE.md handler table reflects new layout (defer the rewrite to the final docs task — no double-edit)
-- [ ] `make check` green; commit if any final fixups landed
+- [x] verify only the listed top-level files remain in `handlers/`: `__init__.py`, `callback_data.py`, `callback_helpers.py`, `callback_registry.py`, `cleanup.py`, `command_history.py`, `command_orchestration.py`, `file_handler.py`, `hook_events.py`, `reactions.py` (added post-plan — pure leaf, used cross-package), `response_builder.py`, `sessions_dashboard.py`, `sync_command.py`, `upgrade.py`, `user_state.py`
+- [x] verify `bot.py` imports look like `from .handlers.recovery import restore_command` (subpackage clarity) — confirmed: subpackage-qualified imports throughout (`from .handlers.send`, `from .handlers.live`, `from .handlers.voice`, `from .handlers.text`, `from .handlers.topics.*`, `from .handlers.messaging_pipeline.*`, etc.)
+- [x] verify CLAUDE.md handler table reflects new layout (defer the rewrite to the final docs task — no double-edit) — deferred per plan instruction
+- [x] `make check` green; no fixups required
 
 ---
 
