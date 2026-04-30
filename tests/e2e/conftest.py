@@ -17,6 +17,29 @@ from ._helpers import TEST_CHAT_ID, _bump_message_id
 
 pytestmark = pytest.mark.e2e
 
+
+@pytest.fixture(autouse=True)
+def _reset_runtime_callbacks():
+    """Reset register-once callbacks between e2e tests.
+
+    Each e2e test runs `app.post_init(app)`, which calls
+    `register_stop_callback`, `register_rc_active_provider`, and
+    `register_approval_callback`. F2.6 made those fail loud on double
+    registration; without this reset, the second test in a run would raise.
+    """
+    from ccgram.handlers import hook_events
+    from ccgram.handlers.shell import shell_capture
+    from ccgram.handlers.status import status_bubble
+
+    hook_events._reset_stop_callback_for_testing()
+    status_bubble._reset_rc_active_provider_for_testing()
+    shell_capture._reset_approval_callback_for_testing()
+    yield
+    hook_events._reset_stop_callback_for_testing()
+    status_bubble._reset_rc_active_provider_for_testing()
+    shell_capture._reset_approval_callback_for_testing()
+
+
 # ---------------------------------------------------------------------------
 # State directory fixture
 # ---------------------------------------------------------------------------
