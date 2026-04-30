@@ -1,8 +1,10 @@
-"""Per-window poll cycle — one tick for one thread-bound tmux window.
+"""Side-effecting transition functions for window_tick.
 
-Owns all per-window decisions that the polling coordinator delegates:
-dead-window detection, transcript discovery, interactive UI checks,
-status updates, multi-pane scanning, and passive shell relay.
+All Telegram, tmux, and singleton mutations live here. Functions accept
+the inputs gathered by ``observe`` and the decision returned by
+``decide``, and apply the resulting effects: emoji updates, status
+enqueuing, typing indicators, autoclose timers, dead-window
+notifications, multi-pane scans, passive shell relay.
 """
 
 from __future__ import annotations
@@ -17,47 +19,42 @@ import structlog
 from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
-from ...claude_task_state import claude_task_state
-from ...providers import get_provider_for_window
-from ...providers.base import StatusUpdate
-from ... import window_query
-from ...session_monitor import get_active_monitor
-from ...thread_router import thread_router
-from ...tmux_manager import tmux_manager
-from ..cleanup import clear_topic_state
-from ..interactive import (
+from .... import window_query
+from ....claude_task_state import claude_task_state
+from ....providers import get_provider_for_window
+from ....thread_router import thread_router
+from ....tmux_manager import tmux_manager
+from ...cleanup import clear_topic_state
+from ...interactive import (
     clear_interactive_mode,
     clear_interactive_msg,
     get_interactive_window,
     handle_interactive_ui,
     set_interactive_mode,
 )
-from ..messaging_pipeline.message_queue import (
+from ...messaging_pipeline.message_queue import (
     clear_tool_msg_ids_for_topic,
     enqueue_status_update,
     get_message_queue,
 )
-from ..messaging_pipeline.message_sender import rate_limit_send_message
-from .polling_strategies import (
-    STARTUP_TIMEOUT,
+from ...messaging_pipeline.message_sender import rate_limit_send_message
+from ...recovery.recovery_callbacks import RecoveryBanner, render_banner
+from ...status.topic_emoji import update_topic_emoji
+from ..polling_strategies import (
     PaneTransition,
-    TickContext,
     TickDecision,
-    is_shell_prompt,
     lifecycle_strategy,
     pane_status_strategy,
     terminal_poll_state,
-    terminal_screen_buffer,
 )
-from ..recovery.recovery_callbacks import RecoveryBanner, render_banner
-from ..recovery.transcript_discovery import discover_and_register_transcript
-from ..status.topic_emoji import update_topic_emoji
+from .decide import decide_tick
+from .observe import _check_vim_insert, _resolve_status, build_context
 
 if TYPE_CHECKING:
     from telegram import Bot
 
-    from ...providers.base import AgentProvider
-    from ...tmux_manager import TmuxWindow
+    from ....providers.base import AgentProvider
+    from ....tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()
 
@@ -71,7 +68,9 @@ def _get_provider(window_id: str) -> "AgentProvider":
 # ── Typing throttle ─────────────────────────────────────────────────────
 
 
-async def _send_typing_throttled(bot: Bot, user_id: int, thread_id: int | None) -> None:
+async def _send_typing_throttled(
+    bot: "Bot", user_id: int, thread_id: int | None
+) -> None:
     if thread_id is None:
         return
     if lifecycle_strategy.is_typing_throttled(user_id, thread_id):
@@ -86,23 +85,11 @@ async def _send_typing_throttled(bot: Bot, user_id: int, thread_id: int | None) 
         )
 
 
-# ── Pyte parsing ────────────────────────────────────────────────────────
-
-
-def _parse_with_pyte(
-    window_id: str,
-    pane_text: str,
-    columns: int = 0,
-    rows: int = 0,
-) -> StatusUpdate | None:
-    return terminal_screen_buffer.parse_with_pyte(window_id, pane_text, columns, rows)
-
-
 # ── Idle / no-status transitions ────────────────────────────────────────
 
 
 async def _transition_to_idle(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int,
@@ -115,7 +102,7 @@ async def _transition_to_idle(
     lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
     if notif_mode not in ("muted", "errors_only"):
-        from ..callback_data import IDLE_STATUS_TEXT
+        from ...callback_data import IDLE_STATUS_TEXT
 
         await enqueue_status_update(
             bot, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
@@ -128,7 +115,7 @@ async def _transition_to_idle(
 
 
 async def _surface_pane_alert(
-    bot: Bot, user_id: int, window_id: str, thread_id: int, pane_id: str
+    bot: "Bot", user_id: int, window_id: str, thread_id: int, pane_id: str
 ) -> None:
     await handle_interactive_ui(bot, user_id, window_id, thread_id, pane_id=pane_id)
 
@@ -137,7 +124,7 @@ _PANE_OUTPUT_PREVIEW_LINES = 12
 
 
 async def _forward_pane_output(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int,
@@ -150,16 +137,12 @@ async def _forward_pane_output(
     the user sees the most-recent output, and labels the message with the
     pane's friendly name when one is set.
     """
-    from ...window_state_store import window_store
-    from ..messaging_pipeline.message_sender import safe_send
+    from ....window_state_store import window_store
+    from ...messaging_pipeline.message_sender import safe_send
 
     pane = window_store.get_pane(window_id, pane_id)
     if pane is None or not pane.subscribed:
         return
-    # capture_pane_by_id (in PaneStatusStrategy._classify_non_active) returns
-    # ANSI-stripped text already; using the window-level rendered cache here
-    # would surface another pane's output because that cache is keyed by
-    # window, not pane.
     cleaned = pane_text.strip()
     if not cleaned:
         return
@@ -182,20 +165,12 @@ async def _forward_pane_output(
 
 
 async def _scan_window_panes(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int,
 ) -> None:
-    """Delegate multi-pane scanning to ``PaneStatusStrategy``.
-
-    The strategy handles enumeration, classification, ``WindowState.panes``
-    upserts, and transition detection. ``_surface_pane_alert`` keeps blocked
-    panes surfacing as inline alerts (FLOW-4a behavior); ``_forward_pane_output``
-    forwards content from panes the user has subscribed to via ``/panes``.
-    Returned transitions feed ``_notify_pane_lifecycle`` for opt-in
-    created/closed announcements.
-    """
+    """Delegate multi-pane scanning to ``PaneStatusStrategy``."""
     transitions = await pane_status_strategy.scan_window(
         bot,
         user_id,
@@ -209,24 +184,16 @@ async def _scan_window_panes(
 
 
 async def _notify_pane_lifecycle(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int,
     transitions: list[PaneTransition],
 ) -> None:
-    """Emit one-line "pane created"/"pane closed" notifications when enabled.
-
-    The flag is per-window with a global config default. Only first-sight
-    (``prev_state is None``) transitions trigger output: a non-dead new state
-    means the pane was just discovered ("created"); a ``"dead"`` new state
-    means the pane vanished ("closed"). Intra-pane state changes (idle ↔
-    active ↔ blocked) are intentionally suppressed to keep the channel
-    quiet.
-    """
-    from ...config import config
-    from ...window_state_store import window_store
-    from ..messaging_pipeline.message_sender import safe_send
+    """Emit one-line "pane created"/"pane closed" notifications when enabled."""
+    from ....config import config
+    from ....window_state_store import window_store
+    from ...messaging_pipeline.message_sender import safe_send
 
     enabled = window_store.get_pane_lifecycle_notify(
         window_id, config.pane_lifecycle_notify
@@ -239,9 +206,6 @@ async def _notify_pane_lifecycle(
         if t.prev_state is not None:
             continue
         if t.new_state == "dead":
-            # PaneTransition captures the user-assigned name at reconcile
-            # time so the notification still reads correctly even though
-            # the PaneInfo has already been removed.
             label = f"{t.name} ({t.pane_id})" if t.name else t.pane_id
             text = f"➖ pane {label} closed"
         else:
@@ -263,12 +227,12 @@ async def _notify_pane_lifecycle(
 
 
 async def _check_interactive_only(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int,
     *,
-    _window: TmuxWindow | None = None,
+    _window: "TmuxWindow | None" = None,
 ) -> None:
     w = _window or await tmux_manager.find_window_by_id(window_id)
     if not w:
@@ -281,17 +245,7 @@ async def _check_interactive_only(
     if not pane_text:
         return
 
-    status = _parse_with_pyte(
-        window_id, pane_text, columns=w.pane_width, rows=w.pane_height
-    )
-
-    if status is None:
-        clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-        provider = _get_provider(window_id)
-        pane_title = ""
-        if provider.capabilities.uses_pane_title:
-            pane_title = await tmux_manager.get_pane_title(w.window_id)
-        status = provider.parse_terminal_status(clean_text, pane_title=pane_title)
+    status = await _resolve_status(window_id, pane_text, w)
 
     if status is not None and status.is_interactive:
         set_interactive_mode(user_id, window_id, thread_id)
@@ -304,7 +258,7 @@ async def _check_interactive_only(
 
 
 async def _maybe_check_passive_shell(
-    bot: Bot, user_id: int, window_id: str, thread_id: int
+    bot: "Bot", user_id: int, window_id: str, thread_id: int
 ) -> None:
     if not _get_provider(window_id).capabilities.chat_first_command_path:
         return
@@ -315,7 +269,7 @@ async def _maybe_check_passive_shell(
         if not raw:
             return
         rendered = raw
-    from ..shell.shell_capture import check_passive_shell_output
+    from ...shell.shell_capture import check_passive_shell_output
 
     await check_passive_shell_output(bot, user_id, thread_id, window_id, rendered)
 
@@ -324,7 +278,7 @@ async def _maybe_check_passive_shell(
 
 
 async def _handle_dead_window_notification(
-    bot: Bot, user_id: int, thread_id: int, wid: str
+    bot: "Bot", user_id: int, thread_id: int, wid: str
 ) -> None:
     if lifecycle_strategy.is_dead_notified(user_id, thread_id, wid):
         return
@@ -356,7 +310,7 @@ async def _handle_dead_window_notification(
         )
         text, keyboard = render_banner(banner)
     else:
-        text = f"\u26a0 Session `{display}` ended."
+        text = f"⚠ Session `{display}` ended."
         keyboard = None
     sent = await rate_limit_send_message(
         bot,
@@ -395,90 +349,11 @@ async def _handle_dead_window_notification(
     lifecycle_strategy.mark_dead_notified(user_id, thread_id, wid)
 
 
-# ── Status resolution helpers ──────────────────────────────────────────
-
-
-async def _resolve_status(
-    window_id: str, pane_text: str, w: TmuxWindow
-) -> StatusUpdate | None:
-    status = _parse_with_pyte(
-        window_id, pane_text, columns=w.pane_width, rows=w.pane_height
-    )
-    if status is not None:
-        return status
-    clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-    provider = _get_provider(window_id)
-    pane_title = ""
-    if provider.capabilities.uses_pane_title:
-        pane_title = await tmux_manager.get_pane_title(w.window_id)
-    return provider.parse_terminal_status(clean_text, pane_title=pane_title)
-
-
-def _check_vim_insert(window_id: str, pane_text: str, w: TmuxWindow) -> None:
-    from ...tmux_manager import has_insert_indicator, notify_vim_insert_seen
-
-    vim_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-    if has_insert_indicator(vim_text):
-        notify_vim_insert_seen(w.window_id)
-
-
-def _build_status_line(status: StatusUpdate | None) -> str | None:
-    if not status or status.is_interactive:
-        return None
-    if "\n" in status.raw_text:
-        return status.raw_text
-    from ...terminal_parser import status_emoji_prefix
-
-    return f"{status_emoji_prefix(status.raw_text)} {status.raw_text}"
-
-
-# ── Pure decision kernel ─────────────────────────────────────────────────
-
-
-def decide_tick(ctx: TickContext) -> TickDecision:
-    """Pure status/idle transition decision — no I/O, no side effects.
-
-    All mutable state reads (has_seen_status, is_recently_active, startup_time)
-    must be computed by the coordinator before building TickContext. The
-    is_recently_active flag is special: its computation in the coordinator
-    may mark_seen_status as a side effect, so it must not be re-derived here.
-    """
-    if ctx.is_dead_window:
-        return TickDecision(show_recovery=True)
-
-    if ctx.resolved_status_text:
-        return TickDecision(
-            send_status=True,
-            status_text=ctx.resolved_status_text,
-            transition="active",
-        )
-
-    if ctx.is_recently_active:
-        return TickDecision(transition="active")
-
-    if ctx.is_shell_prompt:
-        if ctx.supports_hook:
-            return TickDecision(clear_status=True, transition="done")
-        return TickDecision(transition="idle")
-
-    if ctx.has_seen_status:
-        return TickDecision(transition="idle")
-
-    startup_expired = (
-        ctx.startup_time is not None
-        and (time.monotonic() - ctx.startup_time) >= STARTUP_TIMEOUT
-    )
-    if startup_expired:
-        return TickDecision(transition="idle")
-
-    return TickDecision(transition="starting")
-
-
-# ── Main per-window orchestration ──────────────────────────────────────
+# ── Decision-application transitions ───────────────────────────────────
 
 
 async def _apply_active_transition(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int | None,
@@ -491,7 +366,7 @@ async def _apply_active_transition(
         terminal_poll_state.mark_seen_status(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
-            from ...claude_task_state import build_subagent_label, get_subagent_names
+            from ....claude_task_state import build_subagent_label, get_subagent_names
 
             subagent_names = get_subagent_names(window_id)
             display_status = decision.status_text or ""
@@ -512,7 +387,7 @@ async def _apply_active_transition(
 
 
 async def _apply_done_transition(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int | None,
@@ -533,7 +408,7 @@ async def _apply_done_transition(
 
 
 async def _apply_starting_transition(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int | None,
@@ -550,14 +425,14 @@ async def _apply_starting_transition(
 
 
 async def _apply_tick_decision(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int | None,
     decision: TickDecision,
     notif_mode: str,
 ) -> None:
-    """Apply the effects dictated by a TickDecision. All I/O lives here."""
+    """Apply the effects dictated by a ``TickDecision``. All I/O lives here."""
     if decision.show_recovery or decision.transition is None:
         return
 
@@ -581,22 +456,16 @@ async def _apply_tick_decision(
         await _apply_starting_transition(bot, user_id, window_id, thread_id)
 
 
-def _get_last_activity_ts(window_id: str) -> float | None:
-    """Read last transcript activity timestamp from the session monitor."""
-    session_id = window_query.get_session_id_for_window(window_id)
-    if not session_id:
-        return None
-    mon = get_active_monitor()
-    return mon.get_last_activity(session_id) if mon else None
+# ── Status-update orchestration ─────────────────────────────────────────
 
 
 async def _update_status(
-    bot: Bot,
+    bot: "Bot",
     user_id: int,
     window_id: str,
     thread_id: int | None = None,
     *,
-    _window: TmuxWindow | None = None,
+    _window: "TmuxWindow | None" = None,
 ) -> None:
     w = _window or await tmux_manager.find_window_by_id(window_id)
     if not w:
@@ -625,70 +494,52 @@ async def _update_status(
         await handle_interactive_ui(bot, user_id, window_id, thread_id)
         return
 
-    # Compute inputs for the pure decision kernel.
-    # is_recently_active has a side effect (marks seen_status) — must be computed here.
-    last_activity_ts = _get_last_activity_ts(window_id)
-    is_recently_active = terminal_poll_state.is_recently_active(
-        window_id, last_activity_ts
-    )
-
-    resolved_status_text = _build_status_line(status)
-    ws = terminal_poll_state.peek_state(window_id)
-    provider = _get_provider(window_id)
-    ctx = TickContext(
-        window_id=window_id,
-        resolved_status_text=resolved_status_text,
-        is_shell_prompt=is_shell_prompt(w.pane_current_command),
-        has_seen_status=terminal_poll_state.check_seen_status(window_id),
-        is_recently_active=is_recently_active,
-        startup_time=ws.startup_time if ws else None,
-        is_dead_window=False,
-        supports_hook=provider.capabilities.supports_hook,
-        notification_mode=window_query.get_notification_mode(window_id),
-        queue_has_content=False,
-    )
-
+    notification_mode = window_query.get_notification_mode(window_id)
+    ctx = build_context(window_id, w, status, notification_mode=notification_mode)
     decision = decide_tick(ctx)
     await _apply_tick_decision(
-        bot, user_id, window_id, thread_id, decision, notif_mode=ctx.notification_mode
-    )
-
-
-# ── Entry point ──────────────────────────────────────────────────────────
-
-
-async def tick_window(
-    bot: Bot,
-    user_id: int,
-    thread_id: int,
-    window_id: str,
-    window: TmuxWindow | None,
-) -> None:
-    """Run one poll cycle for one window."""
-    if lifecycle_strategy.is_dead_notified(user_id, thread_id, window_id):
-        return
-
-    if window is None:
-        await _handle_dead_window_notification(bot, user_id, thread_id, window_id)
-        return
-
-    await discover_and_register_transcript(
+        bot,
+        user_id,
         window_id,
-        _window=window,
-        bot=bot,
-        user_id=user_id,
-        thread_id=thread_id,
+        thread_id,
+        decision,
+        notif_mode=ctx.notification_mode,
     )
 
-    queue = get_message_queue(user_id)
-    if queue and not queue.empty():
-        await _check_interactive_only(
-            bot, user_id, window_id, thread_id, _window=window
-        )
-        await _scan_window_panes(bot, user_id, window_id, thread_id)
-        await _maybe_check_passive_shell(bot, user_id, window_id, thread_id)
-        return
 
-    await _update_status(bot, user_id, window_id, thread_id=thread_id, _window=window)
-    await _scan_window_panes(bot, user_id, window_id, thread_id)
-    await _maybe_check_passive_shell(bot, user_id, window_id, thread_id)
+__all__ = [
+    "_apply_active_transition",
+    "_apply_done_transition",
+    "_apply_starting_transition",
+    "_apply_tick_decision",
+    "_check_interactive_only",
+    "_forward_pane_output",
+    "_handle_dead_window_notification",
+    "_maybe_check_passive_shell",
+    "_notify_pane_lifecycle",
+    "_scan_window_panes",
+    "_send_typing_throttled",
+    "_surface_pane_alert",
+    "_transition_to_idle",
+    "_update_status",
+    "asyncio",
+    "claude_task_state",
+    "clear_interactive_mode",
+    "clear_interactive_msg",
+    "clear_tool_msg_ids_for_topic",
+    "clear_topic_state",
+    "enqueue_status_update",
+    "get_interactive_window",
+    "get_message_queue",
+    "get_provider_for_window",
+    "handle_interactive_ui",
+    "lifecycle_strategy",
+    "pane_status_strategy",
+    "rate_limit_send_message",
+    "render_banner",
+    "set_interactive_mode",
+    "thread_router",
+    "tmux_manager",
+    "update_topic_emoji",
+    "window_query",
+]

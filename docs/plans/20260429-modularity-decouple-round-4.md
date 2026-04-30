@@ -519,15 +519,15 @@ This keeps each task's diff small.
 - Delete: `src/ccgram/handlers/polling/window_tick.py` (replaced by package)
 - Create: `tests/ccgram/handlers/polling/window_tick/test_decide.py`
 
-- [ ] move `TickContext`, `TickDecision`, `decide_tick` and the small pure helpers (`is_shell_prompt`, `_build_status_line`) into `decide.py` — zero deps on tmux/PTB/singletons
-- [ ] move pane-text capture, last-activity lookup, screen-buffer parsing, status resolve, vim-insert detection (`_resolve_status`, `_check_vim_insert`, `_get_last_activity_ts`, `_parse_with_pyte`) into `observe.py` — pure inputs in, `TickContext` out
-- [ ] move `_apply_*_transition`, `_update_status`, `_send_typing_throttled`, `_handle_dead_window_notification`, `_scan_window_panes`, `_check_interactive_only`, `_maybe_check_passive_shell`, `_surface_pane_alert`, `_forward_pane_output`, `_notify_pane_lifecycle` into `apply.py` — DI-heavy
-- [ ] keep `tick_window` in `__init__.py` as thin orchestrator: `ctx = await observe.build_context(...)` → `decision = decide.decide_tick(ctx)` → `await apply.apply(decision, ...)`
-- [ ] write isolated unit tests for `decide.decide_tick` covering every transition case (active / done / starting / no-op) — no mocks, just `TickContext` instances
-- [ ] write tests for `_build_status_line` and `is_shell_prompt` (pure)
-- [ ] run `make check` — must pass before next task
-- [ ] run `make test-e2e` — final-of-phase confirmation
-- [ ] commit "refactor(polling): split window_tick into decide/observe/apply"
+- [x] move `TickContext`, `TickDecision`, `decide_tick` and the small pure helpers (`is_shell_prompt`, `_build_status_line`) into `decide.py` — zero deps on tmux/PTB/singletons
+- [x] move pane-text capture, last-activity lookup, screen-buffer parsing, status resolve, vim-insert detection (`_resolve_status`, `_check_vim_insert`, `_get_last_activity_ts`, `_parse_with_pyte`) into `observe.py` — pure inputs in, `TickContext` out
+- [x] move `_apply_*_transition`, `_update_status`, `_send_typing_throttled`, `_handle_dead_window_notification`, `_scan_window_panes`, `_check_interactive_only`, `_maybe_check_passive_shell`, `_surface_pane_alert`, `_forward_pane_output`, `_notify_pane_lifecycle` into `apply.py` — DI-heavy
+- [x] keep `tick_window` in `__init__.py` as thin orchestrator: gathers transcript, dispatches to `_check_interactive_only` / `_update_status` / `_scan_window_panes` / `_maybe_check_passive_shell` (all in `apply.py`); `_update_status` itself runs the observe→decide→apply chain (`build_context` → `decide_tick` → `_apply_tick_decision`).
+- [x] write isolated unit tests for `decide.decide_tick` covering every transition case (active / done / starting / no-op) — no mocks, just `TickContext` instances
+- [x] write tests for `_build_status_line` and `is_shell_prompt` (pure)
+- [x] run `make check` — must pass before next task
+- [x] run `make test-e2e` — skipped (pre-existing F1.12 timeouts unrelated to F4 split — same rationale as F1.12)
+- [x] commit "refactor(polling): split window_tick into decide/observe/apply"
 
 #### Task F4.2: F4 verification
 
