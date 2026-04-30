@@ -1,10 +1,17 @@
 """User preferences — starred directories, MRU, and read offsets.
 
-Extracted from SessionManager to reduce its surface area. Follows the
-ThreadRouter pattern: a module-level singleton with persistence delegated
-via a ``_schedule_save`` callback set by SessionManager at init time.
+Extracted from SessionManager to reduce its surface area. The
+``schedule_save`` callback is injected via the constructor — there is
+no ``unwired_save`` default and the store cannot be built without an
+explicit callback.
 
-Key class: UserPreferences (singleton instantiated as ``user_preferences``).
+Module-level access: ``get_user_preferences()`` returns the
+SessionManager-owned instance (raises RuntimeError until SessionManager
+has constructed the store). The legacy module attribute
+``user_preferences`` is a thin proxy that delegates to the same instance
+for backward compat.
+
+Key class: UserPreferences.
 Key data:
   - user_dir_favorites (user_id -> {"starred": [...], "mru": [...]})
   - user_window_offsets (user_id -> {window_id -> byte_offset})
@@ -14,28 +21,23 @@ from __future__ import annotations
 
 import structlog
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
-
-from .state_persistence import unwired_save
+from typing import Any, cast
 
 logger = structlog.get_logger()
 
 
-@dataclass
 class UserPreferences:
     """Per-user directory favorites and transcript read offsets.
 
-    Persistence is delegated: the ``_schedule_save`` callback (set by
-    SessionManager) triggers a debounced save after mutations.
+    Persistence is delegated: the ``schedule_save`` callback (provided
+    by SessionManager) triggers a debounced save after mutations.
     """
 
-    user_dir_favorites: dict[int, dict[str, list[str]]] = field(default_factory=dict)
-    user_window_offsets: dict[int, dict[str, int]] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        self._schedule_save: Callable[[], None] = unwired_save("UserPreferences")
+    def __init__(self, *, schedule_save: Callable[[], None]) -> None:
+        self.user_dir_favorites: dict[int, dict[str, list[str]]] = {}
+        self.user_window_offsets: dict[int, dict[str, int]] = {}
+        self._schedule_save: Callable[[], None] = schedule_save
 
     def reset(self) -> None:
         """Clear all state. Used for test isolation."""
@@ -157,4 +159,58 @@ class UserPreferences:
         return changed
 
 
-user_preferences = UserPreferences()
+_active_prefs: UserPreferences | None = None
+
+
+def get_user_preferences() -> UserPreferences:
+    """Return the SessionManager-owned UserPreferences.
+
+    Raises:
+        RuntimeError: when called before SessionManager has constructed
+        and installed the preferences store.
+    """
+    if _active_prefs is None:
+        raise RuntimeError(
+            "UserPreferences not yet wired. "
+            "Instantiate SessionManager() before accessing user_preferences."
+        )
+    return _active_prefs
+
+
+def install_user_preferences(prefs: UserPreferences) -> None:
+    """Install the SessionManager-owned preferences as the module-level singleton.
+
+    Called once by ``SessionManager.__post_init__``. Replaces any
+    previously installed instance (used by tests that build a fresh
+    SessionManager).
+    """
+    global _active_prefs
+    _active_prefs = prefs
+
+
+class _UserPreferencesProxy:
+    """Backward-compat module-level facade that resolves to the wired prefs.
+
+    All attribute access delegates to the SessionManager-owned
+    ``UserPreferences``. Raises ``RuntimeError`` if accessed before
+    SessionManager has installed an instance.
+    """
+
+    __slots__ = ()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_user_preferences(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(get_user_preferences(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(get_user_preferences(), name)
+
+    def __repr__(self) -> str:
+        if _active_prefs is None:
+            return "<UserPreferencesProxy unwired>"
+        return f"<UserPreferencesProxy → {_active_prefs!r}>"
+
+
+user_preferences: UserPreferences = cast("UserPreferences", _UserPreferencesProxy())

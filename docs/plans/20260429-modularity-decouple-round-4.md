@@ -580,13 +580,13 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/session.py`
 - Modify: `tests/ccgram/test_user_preferences.py`
 
-- [ ] change `UserPreferences.__init__` to accept `schedule_save`
-- [ ] remove `unwired_save` default
-- [ ] SessionManager constructs `UserPreferences(schedule_save=self._save_state)`
-- [ ] lazy `get_user_preferences()` for legacy call sites
-- [ ] update tests
-- [ ] `make check` passes
-- [ ] commit "refactor(state): UserPreferences takes callback via constructor"
+- [x] change `UserPreferences.__init__` to accept `schedule_save`
+- [x] remove `unwired_save` default
+- [x] SessionManager constructs `UserPreferences(schedule_save=self._save_state)` — stored on `self._user_preferences` and installed via `install_user_preferences(...)`
+- [x] lazy `get_user_preferences()` for legacy call sites — kept the name `user_preferences` as a `_UserPreferencesProxy` so existing call sites (directory_browser, directory_callbacks, history, message_routing, sync_command, session.py) don't churn
+- [x] update tests — `test_session_favorites.py` fixture now builds `UserPreferences(schedule_save=...)`; `test_schedule_save_wiring.py` parametrize list trimmed to SessionMapSync only; new `TestUserPreferencesRequiresCallback` covers the constructor contract; new `TestGetUserPreferences` verifies SessionManager installs the prefs
+- [x] `make check` passes
+- [x] commit "refactor(state): UserPreferences takes callback via constructor"
 
 #### Task F2.4: SessionMapSync takes callback in `__init__`
 

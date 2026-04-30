@@ -27,7 +27,11 @@ from .session_map import session_map_sync
 from .state_persistence import StatePersistence
 from .tmux_manager import tmux_manager
 from .thread_router import ThreadRouter, install_thread_router, thread_router
-from .user_preferences import user_preferences
+from .user_preferences import (
+    UserPreferences,
+    install_user_preferences,
+    user_preferences,
+)
 from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window_id
 from .window_view import WindowView
 from .window_state_store import (
@@ -153,20 +157,21 @@ class SessionManager:
             has_window_state=self._window_store.has_window,
         )
         install_thread_router(self._thread_router)
+        self._user_preferences = UserPreferences(schedule_save=self._save_state)
+        install_user_preferences(self._user_preferences)
         self._wire_singletons()
         self._load_state()
 
     def _wire_singletons(self) -> None:
         """Wire remaining module-level state singletons to this manager.
 
-        ``WindowStateStore`` and ``ThreadRouter`` are constructor-injected
-        — see ``__post_init__``. The other two singletons
-        (user_preferences, session_map_sync) still start with a
-        fail-loud ``unwired_save`` default that raises ``RuntimeError``
-        if mutated before this method runs. Migration to constructor
-        injection happens in Phase F2 tasks F2.3-F2.4.
+        ``WindowStateStore``, ``ThreadRouter`` and ``UserPreferences``
+        are constructor-injected — see ``__post_init__``. Only
+        ``session_map_sync`` still starts with a fail-loud
+        ``unwired_save`` default that raises ``RuntimeError`` if mutated
+        before this method runs. Migration to constructor injection
+        happens in Phase F2 task F2.4.
         """
-        user_preferences._schedule_save = self._save_state
         session_map_sync._schedule_save = self._save_state
 
     def _serialize_state(self) -> dict[str, Any]:

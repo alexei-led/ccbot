@@ -13,9 +13,7 @@ def _resolved(path: str) -> str:
 
 @pytest.fixture
 def prefs() -> UserPreferences:
-    p = UserPreferences()
-    p._schedule_save = lambda: None
-    return p
+    return UserPreferences(schedule_save=lambda: None)
 
 
 class TestUserFavorites:
@@ -94,14 +92,13 @@ class TestUserFavorites:
 
 class TestUserFavoritesPersistence:
     def test_roundtrip_via_to_dict_and_from_dict(self) -> None:
-        prefs = UserPreferences()
-        prefs._schedule_save = lambda: None
+        prefs = UserPreferences(schedule_save=lambda: None)
         prefs.update_user_mru(100, "/tmp/proj1")
         prefs.toggle_user_star(100, "/tmp/proj2")
         prefs.update_user_window_offset(100, "@0", 42)
 
         data = prefs.to_dict()
-        prefs2 = UserPreferences()
+        prefs2 = UserPreferences(schedule_save=lambda: None)
         prefs2.from_dict(data)
 
         assert prefs2.get_user_mru(100) == prefs.get_user_mru(100)

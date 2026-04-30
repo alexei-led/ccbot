@@ -1,11 +1,11 @@
 """Tests for fail-loud _schedule_save defaults on persistence singletons.
 
-Two state singletons (user_preferences, session_map_sync) start with
-a default _schedule_save callback that raises RuntimeError when
-called. SessionManager.__post_init__ replaces them with the real
-persistence callback. WindowStateStore (F2.1) and ThreadRouter (F2.2)
-are constructor-injected — their callbacks are required arguments,
-so they have no unwired default.
+Only ``session_map_sync`` still starts with a default
+``_schedule_save`` callback that raises ``RuntimeError`` when called.
+``SessionManager.__post_init__`` replaces it with the real persistence
+callback. ``WindowStateStore`` (F2.1), ``ThreadRouter`` (F2.2) and
+``UserPreferences`` (F2.3) are constructor-injected — their callbacks
+are required arguments, so they have no unwired default.
 
 This guarantees that any test or caller that mutates a singleton before
 SessionManager has been instantiated fails loudly instead of silently
@@ -32,7 +32,6 @@ class TestUnwiredSave:
     @pytest.mark.parametrize(
         ("singleton_factory", "owner"),
         [
-            (UserPreferences, "UserPreferences"),
             (SessionMapSync, "SessionMapSync"),
         ],
     )
@@ -76,6 +75,38 @@ class TestWindowStateStoreRequiresCallbacks:
         state.provider_name = "claude"
         store.set_window_provider("@1", "shell", new_provider_supports_hook=False)
         assert seen == ["@1"]
+
+
+class TestUserPreferencesRequiresCallback:
+    def test_constructor_requires_schedule_save(self) -> None:
+        with pytest.raises(TypeError, match="schedule_save"):
+            UserPreferences()  # type: ignore[call-arg]
+
+    def test_constructor_wires_schedule_save_for_mru(self) -> None:
+        calls: list[int] = []
+        prefs = UserPreferences(schedule_save=lambda: calls.append(1))
+        prefs.update_user_mru(100, "/tmp/proj")
+        assert calls == [1]
+
+    def test_constructor_wires_schedule_save_for_star(self) -> None:
+        calls: list[int] = []
+        prefs = UserPreferences(schedule_save=lambda: calls.append(1))
+        prefs.toggle_user_star(100, "/tmp/proj")
+        assert calls == [1]
+
+    def test_constructor_wires_schedule_save_for_offset(self) -> None:
+        calls: list[int] = []
+        prefs = UserPreferences(schedule_save=lambda: calls.append(1))
+        prefs.update_user_window_offset(100, "@1", 42)
+        assert calls == [1]
+
+    def test_from_dict_does_not_trigger_save(self) -> None:
+        calls: list[int] = []
+        prefs = UserPreferences(schedule_save=lambda: calls.append(1))
+        prefs.from_dict(
+            {"user_window_offsets": {"100": {"@1": 42}}, "user_dir_favorites": {}}
+        )
+        assert calls == []
 
 
 class TestThreadRouterRequiresCallbacks:
@@ -173,4 +204,15 @@ class TestGetThreadRouter:
         sm = SessionManager()
         router = get_thread_router()
         assert router is sm._thread_router
+        del sm
+
+
+class TestGetUserPreferences:
+    def test_returns_installed_prefs(self) -> None:
+        from ccgram.session import SessionManager
+        from ccgram.user_preferences import get_user_preferences
+
+        sm = SessionManager()
+        prefs = get_user_preferences()
+        assert prefs is sm._user_preferences
         del sm
