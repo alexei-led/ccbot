@@ -564,13 +564,13 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/session.py`
 - Modify: `tests/ccgram/test_thread_router.py`
 
-- [ ] change `ThreadRouter.__init__` signature: `schedule_save`, `has_window_state` (was monkey-patched lambda)
-- [ ] remove `unwired_save` defaults
-- [ ] SessionManager constructs `ThreadRouter(schedule_save=self._save_state, has_window_state=self._window_store.has_window)`
-- [ ] make module-level `thread_router` lazy via `get_thread_router()` shim (same pattern as F2.1)
-- [ ] update tests to build with stub callbacks
-- [ ] `make check` passes
-- [ ] commit "refactor(state): ThreadRouter takes callbacks via constructor"
+- [x] change `ThreadRouter.__init__` signature: `schedule_save`, `has_window_state` (was monkey-patched lambda)
+- [x] remove `unwired_save` defaults
+- [x] SessionManager constructs `ThreadRouter(schedule_save=self._save_state, has_window_state=self._window_store.has_window)`
+- [x] make module-level `thread_router` lazy via `get_thread_router()` shim (same pattern as F2.1) — kept the name `thread_router` as a `_ThreadRouterProxy` so the 40+ existing call sites don't churn; added `install_thread_router(router)` and `get_thread_router()` mirrors of the F2.1 window-store API
+- [x] update tests to build with stub callbacks — `test_thread_router.py` fixture now builds `ThreadRouter(schedule_save=..., has_window_state=...)`; `test_schedule_save_wiring.py` parametrize list trimmed to UserPreferences/SessionMapSync; new `TestThreadRouterRequiresCallbacks` covers the constructor contract; new `TestGetThreadRouter` verifies SessionManager installs the router. `tests/conftest.py` `_clear_window_store` now uses `contextlib.suppress(RuntimeError)` so tests that don't build a SessionManager still run.
+- [x] `make check` passes
+- [x] commit "refactor(state): ThreadRouter takes callbacks via constructor"
 
 #### Task F2.3: UserPreferences takes callback in `__init__`
 

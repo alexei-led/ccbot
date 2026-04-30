@@ -5,11 +5,10 @@ from ccgram.thread_router import ThreadRouter
 
 @pytest.fixture
 def router() -> ThreadRouter:
-    r = ThreadRouter()
-    # Tests use router in isolation (no SessionManager). Wire _schedule_save
-    # to a no-op so mutations don't trip the fail-loud default.
-    r._schedule_save = lambda: None
-    return r
+    return ThreadRouter(
+        schedule_save=lambda: None,
+        has_window_state=lambda _wid: False,
+    )
 
 
 class TestBindThread:
@@ -170,7 +169,10 @@ class TestToDictRoundtrip:
         router.set_group_chat_id(100, 1, -999)
 
         data = router.to_dict()
-        new_router = ThreadRouter()
+        new_router = ThreadRouter(
+            schedule_save=lambda: None,
+            has_window_state=lambda _wid: False,
+        )
         new_router.from_dict(data)
 
         assert new_router.get_window_for_thread(100, 1) == "@1"

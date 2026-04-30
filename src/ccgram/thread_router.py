@@ -4,7 +4,16 @@ Maps Telegram topics (user_id + thread_id) to tmux windows (window_id)
 bidirectionally.  Manages group chat IDs for multi-group forum topic
 routing and display names for windows.
 
-Key class: ThreadRouter (singleton instantiated as ``thread_router``).
+Key class: ThreadRouter. Persistence and window-state queries are
+injected via the constructor — there is no ``unwired_save`` default and
+the router cannot be built without explicit callbacks.
+
+Module-level access: ``get_thread_router()`` returns the
+SessionManager-owned instance (raises RuntimeError until SessionManager
+has constructed the router). The legacy module attribute
+``thread_router`` is a thin proxy that delegates to the same instance
+for backward compat.
+
 Key data:
   - thread_bindings  (user_id -> {thread_id -> window_id})
   - _window_to_thread (reverse index for O(1) inbound lookups)
@@ -16,39 +25,41 @@ from __future__ import annotations
 
 import structlog
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
-from typing import Any
-
-from .state_persistence import unwired_save
+from typing import Any, cast
 
 logger = structlog.get_logger()
 
 
-@dataclass
 class ThreadRouter:
     """Bidirectional mapping between Telegram topics and tmux windows.
 
     Owns thread_bindings, group_chat_ids, window_display_names, and
-    the reverse index _window_to_thread.  Persistence is delegated:
-    the ``_schedule_save`` callback (set by SessionManager) triggers
-    a debounced save after mutations.
+    the reverse index _window_to_thread.
+
+    Persistence and window-state queries are injected via the
+    constructor:
+
+    * ``schedule_save``: triggers a debounced save after mutations.
+    * ``has_window_state``: returns True when a window has tracked
+      WindowState — used to decide whether a display name is still
+      load-bearing during ``unbind_thread``.
     """
 
-    thread_bindings: dict[int, dict[int, str]] = field(default_factory=dict)
-    # "user_id:thread_id" -> chat_id (supports multiple groups per user)
-    group_chat_ids: dict[str, int] = field(default_factory=dict)
-    # window_id -> display name (window_name)
-    window_display_names: dict[str, str] = field(default_factory=dict)
-
-    # Reverse index: (user_id, window_id) -> thread_id for O(1) inbound lookups
-    _window_to_thread: dict[tuple[int, str], int] = field(
-        default_factory=dict, repr=False
-    )
-
-    def __post_init__(self) -> None:
-        # Instance attributes (not fields) — avoids descriptor protocol binding
-        self._schedule_save: Callable[[], None] = unwired_save("ThreadRouter")
-        self._has_window_state: Callable[[str], bool] = lambda _wid: False
+    def __init__(
+        self,
+        *,
+        schedule_save: Callable[[], None],
+        has_window_state: Callable[[str], bool],
+    ) -> None:
+        self.thread_bindings: dict[int, dict[int, str]] = {}
+        # "user_id:thread_id" -> chat_id (supports multiple groups per user)
+        self.group_chat_ids: dict[str, int] = {}
+        # window_id -> display name (window_name)
+        self.window_display_names: dict[str, str] = {}
+        # Reverse index: (user_id, window_id) -> thread_id for O(1) lookups
+        self._window_to_thread: dict[tuple[int, str], int] = {}
+        self._schedule_save: Callable[[], None] = schedule_save
+        self._has_window_state: Callable[[str], bool] = has_window_state
 
     def reset(self) -> None:
         """Clear all state.  Used for test isolation."""
@@ -331,5 +342,58 @@ class ThreadRouter:
         return changed
 
 
-# Module-level singleton — wired by SessionManager.__post_init__()
-thread_router = ThreadRouter()
+_active_router: ThreadRouter | None = None
+
+
+def get_thread_router() -> ThreadRouter:
+    """Return the SessionManager-owned ThreadRouter.
+
+    Raises:
+        RuntimeError: when called before SessionManager has constructed
+        and installed the router.
+    """
+    if _active_router is None:
+        raise RuntimeError(
+            "ThreadRouter not yet wired. "
+            "Instantiate SessionManager() before accessing thread_router."
+        )
+    return _active_router
+
+
+def install_thread_router(router: ThreadRouter) -> None:
+    """Install the SessionManager-owned router as the module-level singleton.
+
+    Called once by ``SessionManager.__post_init__``. Replaces any
+    previously installed router (used by tests that build a fresh
+    SessionManager).
+    """
+    global _active_router
+    _active_router = router
+
+
+class _ThreadRouterProxy:
+    """Backward-compat module-level facade that resolves to the wired router.
+
+    All attribute access delegates to the SessionManager-owned
+    ``ThreadRouter``. Raises ``RuntimeError`` if accessed before
+    SessionManager has installed an instance.
+    """
+
+    __slots__ = ()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_thread_router(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(get_thread_router(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(get_thread_router(), name)
+
+    def __repr__(self) -> str:
+        if _active_router is None:
+            return "<ThreadRouterProxy unwired>"
+        return f"<ThreadRouterProxy → {_active_router!r}>"
+
+
+thread_router: ThreadRouter = cast("ThreadRouter", _ThreadRouterProxy())

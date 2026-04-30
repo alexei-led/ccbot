@@ -1,11 +1,11 @@
 """Tests for fail-loud _schedule_save defaults on persistence singletons.
 
-Three state singletons (thread_router, user_preferences, session_map_sync)
-start with a default _schedule_save callback that raises RuntimeError when
+Two state singletons (user_preferences, session_map_sync) start with
+a default _schedule_save callback that raises RuntimeError when
 called. SessionManager.__post_init__ replaces them with the real
-persistence callback. WindowStateStore is constructor-injected (Phase
-F2.1 of the modularity refactor) — its callbacks are required arguments,
-so it has no unwired default.
+persistence callback. WindowStateStore (F2.1) and ThreadRouter (F2.2)
+are constructor-injected — their callbacks are required arguments,
+so they have no unwired default.
 
 This guarantees that any test or caller that mutates a singleton before
 SessionManager has been instantiated fails loudly instead of silently
@@ -32,7 +32,6 @@ class TestUnwiredSave:
     @pytest.mark.parametrize(
         ("singleton_factory", "owner"),
         [
-            (ThreadRouter, "ThreadRouter"),
             (UserPreferences, "UserPreferences"),
             (SessionMapSync, "SessionMapSync"),
         ],
@@ -79,6 +78,50 @@ class TestWindowStateStoreRequiresCallbacks:
         assert seen == ["@1"]
 
 
+class TestThreadRouterRequiresCallbacks:
+    def test_constructor_requires_schedule_save(self) -> None:
+        with pytest.raises(TypeError, match="schedule_save"):
+            ThreadRouter(  # type: ignore[call-arg]
+                has_window_state=lambda _wid: False,
+            )
+
+    def test_constructor_requires_has_window_state(self) -> None:
+        with pytest.raises(TypeError, match="has_window_state"):
+            ThreadRouter(  # type: ignore[call-arg]
+                schedule_save=lambda: None,
+            )
+
+    def test_constructor_wires_schedule_save(self) -> None:
+        calls: list[int] = []
+        router = ThreadRouter(
+            schedule_save=lambda: calls.append(1),
+            has_window_state=lambda _wid: False,
+        )
+        router.bind_thread(100, 1, "@1")
+        assert calls == [1]
+
+    def test_constructor_wires_has_window_state(self) -> None:
+        # When has_window_state returns True, unbind_thread must NOT
+        # remove the display name (the WindowState still references it).
+        router = ThreadRouter(
+            schedule_save=lambda: None,
+            has_window_state=lambda _wid: True,
+        )
+        router.bind_thread(100, 1, "@1", window_name="proj")
+        router.unbind_thread(100, 1)
+        assert router.get_display_name("@1") == "proj"
+
+    def test_unbind_drops_display_name_when_window_state_absent(self) -> None:
+        router = ThreadRouter(
+            schedule_save=lambda: None,
+            has_window_state=lambda _wid: False,
+        )
+        router.bind_thread(100, 1, "@1", window_name="proj")
+        router.unbind_thread(100, 1)
+        # Falls back to window_id when display name was removed.
+        assert router.get_display_name("@1") == "@1"
+
+
 class TestSessionManagerWiresAllSingletons:
     def test_post_init_replaces_unwired_defaults(self) -> None:
         # SessionManager.__post_init__ wires every singleton's _schedule_save
@@ -119,4 +162,15 @@ class TestGetWindowStore:
         sm = SessionManager()
         store = get_window_store()
         assert store is sm._window_store
+        del sm
+
+
+class TestGetThreadRouter:
+    def test_returns_installed_router(self) -> None:
+        from ccgram.session import SessionManager
+        from ccgram.thread_router import get_thread_router
+
+        sm = SessionManager()
+        router = get_thread_router()
+        assert router is sm._thread_router
         del sm
