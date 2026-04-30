@@ -18,9 +18,9 @@ Key functions:
 import time
 
 import structlog
-from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 
+from ...telegram_client import TelegramClient
 from ...topic_state_registry import topic_state
 
 logger = structlog.get_logger()
@@ -166,7 +166,7 @@ def _compose_topic_name(
 
 
 async def _edit_topic_name(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     thread_id: int,
     key: tuple[int, int],
@@ -177,7 +177,7 @@ async def _edit_topic_name(
 ) -> None:
     """Apply a topic name update with shared Telegram error handling."""
     try:
-        await bot.edit_forum_topic(
+        await client.edit_forum_topic(
             chat_id=chat_id,
             message_thread_id=thread_id,
             name=new_name,
@@ -239,7 +239,7 @@ def format_topic_name_for_mode(display_name: str, approval_mode: str) -> str:
 
 
 async def sync_topic_name(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     thread_id: int,
     display_name: str,
@@ -266,7 +266,7 @@ async def sync_topic_name(
         rc_active=rc_active,
     )
     await _edit_topic_name(
-        bot,
+        client,
         chat_id,
         thread_id,
         key,
@@ -277,7 +277,7 @@ async def sync_topic_name(
 
 
 async def update_topic_emoji(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     thread_id: int,
     state: str,
@@ -290,7 +290,7 @@ async def update_topic_emoji(
     active/idle flickering from generating lots of "topic renamed" messages.
 
     Args:
-        bot: Telegram Bot instance
+        client: Telegram client (TelegramClient Protocol)
         chat_id: Group chat ID
         thread_id: Forum topic thread ID
         state: One of "active", "idle", "done", "dead"
@@ -327,7 +327,7 @@ async def update_topic_emoji(
         rc_active=rc_active,
     )
     await _edit_topic_name(
-        bot,
+        client,
         chat_id,
         thread_id,
         key,

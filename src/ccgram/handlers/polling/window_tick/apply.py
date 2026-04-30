@@ -99,10 +99,10 @@ async def _transition_to_idle(
     notif_mode: str,
 ) -> None:
     terminal_poll_state.cancel_startup_timer(window_id)
-    await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+    client = PTBTelegramClient(bot)
+    await update_topic_emoji(client, chat_id, thread_id, "idle", display)
     lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
-    client = PTBTelegramClient(bot)
     if notif_mode not in ("muted", "errors_only"):
         from ...callback_data import IDLE_STATUS_TEXT
 
@@ -295,7 +295,9 @@ async def _handle_dead_window_notification(
     clear_tool_msg_ids_for_topic(user_id, thread_id)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     display = thread_router.get_display_name(wid)
-    await update_topic_emoji(bot, chat_id, thread_id, "dead", display)
+    await update_topic_emoji(
+        PTBTelegramClient(bot), chat_id, thread_id, "dead", display
+    )
     lifecycle_strategy.start_autoclose_timer(
         user_id, thread_id, "dead", time.monotonic()
     )
@@ -394,7 +396,9 @@ async def _apply_active_transition(
     if thread_id is not None:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         display = thread_router.get_display_name(window_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+        await update_topic_emoji(
+            PTBTelegramClient(bot), chat_id, thread_id, "active", display
+        )
         lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
 
 
@@ -409,14 +413,13 @@ async def _apply_done_transition(
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     display = thread_router.get_display_name(window_id)
     terminal_poll_state.cancel_startup_timer(window_id)
-    await update_topic_emoji(bot, chat_id, thread_id, "done", display)
+    client = PTBTelegramClient(bot)
+    await update_topic_emoji(client, chat_id, thread_id, "done", display)
     lifecycle_strategy.start_autoclose_timer(
         user_id, thread_id, "done", time.monotonic()
     )
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
-    await enqueue_status_update(
-        PTBTelegramClient(bot), user_id, window_id, None, thread_id=thread_id
-    )
+    await enqueue_status_update(client, user_id, window_id, None, thread_id=thread_id)
     if not _get_provider(window_id).capabilities.supports_hook:
         terminal_poll_state.mark_seen_status(window_id)
 
@@ -434,7 +437,9 @@ async def _apply_starting_transition(
     if thread_id is not None:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         display = thread_router.get_display_name(window_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "active", display)
+        await update_topic_emoji(
+            PTBTelegramClient(bot), chat_id, thread_id, "active", display
+        )
         lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
 
 

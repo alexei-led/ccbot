@@ -730,11 +730,11 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/handlers/status/status_bar_actions.py`
 - Modify: `src/ccgram/handlers/status/topic_emoji.py`
 
-- [ ] migrate `process_status_update`, `clear_status_message`, `update_topic_emoji`, `format_topic_name_for_mode` (only places it sends) to depend on `TelegramClient`
-- [ ] migrate status-bar-action callback handlers
-- [ ] update tests
-- [ ] `make check` passes
-- [ ] commit "refactor(status): depend on TelegramClient Protocol"
+- [x] migrate `process_status_update`, `clear_status_message`, `update_topic_emoji`, `format_topic_name_for_mode` (only places it sends) to depend on `TelegramClient` — `status_bubble.send_status_text`, `_start_bubble`, `_replace_or_edit_bubble`, `clear_status_message`, `convert_status_to_content`, `process_status_update`, `process_status_clear` already took `client: TelegramClient` from the F5.2 wave; this task migrated `topic_emoji.update_topic_emoji`, `topic_emoji.sync_topic_name`, and `topic_emoji._edit_topic_name` from `bot: Bot` to `client: TelegramClient`. `format_topic_name_for_mode` is a pure formatter (no I/O) — unchanged. Replaced the type-only `cast("Bot", client)` in `_start_bubble` with `unwrap_bot(client)` (the same fix landed in F5.2 for `tool_batch.DraftStream`) — `DraftStream` needs `do_api_request` which is not on the Protocol, so it must drop down to the underlying PTB Bot.
+- [x] migrate status-bar-action callback handlers — no change needed. `status_bar_actions.py` does its primary I/O via `query.answer()`, `query.edit_message_reply_markup()`, `query.edit_message_media()` (PTB shortcut methods on `CallbackQuery`/`Message`), which are not part of the `TelegramClient` Protocol per F5.7 plan note. The two raw-Bot calls (`react(query.get_bot(), ...)` and `handle_shell_message(query.get_bot(), ...)`) are downstream — `react` lives in `handlers/reactions.py` and `handle_shell_message` lives in `handlers/shell/`, and both are the responsibility of F5.6. No migration touch in F5.3.
+- [x] update tests — `tests/ccgram/handlers/status/test_topic_emoji.py`: added `_assert_emoji_call(mock_emoji, bot, ...)` helper that asserts the first arg is a `PTBTelegramClient` wrapping the expected Bot; replaced 4 `mock_emoji.assert_called_once_with(bot, ...)` calls in `TestStatusPollingIntegration` with the helper. `tests/ccgram/handlers/test_hook_events.py::TestHandleSessionEnd::test_transitions_to_done` switched `mock_emoji.assert_called_once_with(bot, ...)` to use `ANY` for the client arg (consistent with the existing `mock_enqueue` assertion). `tests/ccgram/handlers/test_sync_command.py::test_reconciles_live_topic_names_before_reporting`: replaced exact-args assertion with isinstance + .bot identity check. `tests/integration/test_topic_name_sync.py::test_sync_dispatches_live_topic_name_reconciliation`: same isinstance + .bot identity pattern. Callers in `apply.py`, `hook_events.py`, `sync_command.py` were updated to construct `PTBTelegramClient(bot)` at the call site (in some cases hoisted to a local `client = PTBTelegramClient(bot)` to avoid re-wrapping).
+- [x] `make check` passes — typecheck 0 errors / 0 warnings / 0 informations; lint clean; 4399 unit + 97 integration pass
+- [x] commit "refactor(status): depend on TelegramClient Protocol"
 
 #### Task F5.4: Migrate `recovery/` (banner, restore, resume, history)
 

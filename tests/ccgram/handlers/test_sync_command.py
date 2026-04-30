@@ -217,12 +217,13 @@ class TestSyncCommand:
             ) as mock_sync_topic_name,
         ):
             await sync_command(update, MagicMock())
-            mock_sync_topic_name.assert_called_once_with(
-                bot,
-                -999,
-                42,
-                "ccgram-codex",
-            )
+            mock_sync_topic_name.assert_called_once()
+            args = mock_sync_topic_name.call_args.args
+            assert args[1:] == (-999, 42, "ccgram-codex")
+            from ccgram.telegram_client import PTBTelegramClient
+
+            assert isinstance(args[0], PTBTelegramClient)
+            assert args[0].bot is bot
 
 
 class TestSyncFix:

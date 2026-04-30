@@ -73,6 +73,24 @@ class TestStripEmojiPrefix:
 _PATCH_MONOTONIC = "ccgram.handlers.status.topic_emoji.time.monotonic"
 
 
+def _assert_emoji_call(
+    mock_emoji: MagicMock,
+    bot: AsyncMock,
+    chat_id: int,
+    thread_id: int,
+    state: str,
+    display: str,
+) -> None:
+    """Assert update_topic_emoji was called once with PTBTelegramClient(bot)."""
+    from ccgram.telegram_client import PTBTelegramClient
+
+    mock_emoji.assert_called_once()
+    args = mock_emoji.call_args.args
+    assert isinstance(args[0], PTBTelegramClient)
+    assert args[0].bot is bot
+    assert args[1:] == (chat_id, thread_id, state, display)
+
+
 async def _debounced_update(
     bot: AsyncMock,
     chat_id: int,
@@ -421,7 +439,7 @@ class TestStatusPollingIntegration:
             bot = AsyncMock()
             await update_status_message(bot, 1, "@0", thread_id=42)
 
-            mock_emoji.assert_called_once_with(bot, -100, 42, "active", "myproject")
+            _assert_emoji_call(mock_emoji, bot, -100, 42, "active", "myproject")
 
     async def test_idle_window_without_status_updates_emoji(self) -> None:
         with (
@@ -458,7 +476,7 @@ class TestStatusPollingIntegration:
             bot = AsyncMock()
             await update_status_message(bot, 1, "@0", thread_id=42)
 
-            mock_emoji.assert_called_once_with(bot, -100, 42, "idle", "myproject")
+            _assert_emoji_call(mock_emoji, bot, -100, 42, "idle", "myproject")
 
     async def test_startup_window_shows_active_not_idle(self) -> None:
         with (
@@ -495,7 +513,7 @@ class TestStatusPollingIntegration:
             bot = AsyncMock()
             await update_status_message(bot, 1, "@99", thread_id=99)
 
-            mock_emoji.assert_called_once_with(bot, -100, 99, "active", "newproject")
+            _assert_emoji_call(mock_emoji, bot, -100, 99, "active", "newproject")
 
     async def test_done_when_shell_prompt(self) -> None:
         with (
@@ -529,7 +547,7 @@ class TestStatusPollingIntegration:
             bot = AsyncMock()
             await update_status_message(bot, 1, "@0", thread_id=42)
 
-            mock_emoji.assert_called_once_with(bot, -100, 42, "done", "myproject")
+            _assert_emoji_call(mock_emoji, bot, -100, 42, "done", "myproject")
 
     async def test_no_thread_id_skips_emoji(self) -> None:
         with (

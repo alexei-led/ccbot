@@ -12,7 +12,6 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, cast
 
 import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -20,14 +19,12 @@ from telegram.error import TelegramError
 
 from ...claude_task_state import get_claude_task_snapshot, get_claude_wait_header
 from ...expandable_quote import format_expandable_quote
-from ...telegram_client import TelegramClient
+from ...telegram_client import TelegramClient, unwrap_bot
 from ...telegram_draft import DraftStream
 from ...thread_router import thread_router
 from ...window_query import get_notification_mode
 from ...window_state_store import PaneInfo, window_store
 
-if TYPE_CHECKING:
-    from telegram import Bot
 from ..callback_data import (
     CB_STATUS_ESC,
     CB_STATUS_NOTIFY,
@@ -374,7 +371,7 @@ async def _start_bubble(
     """Open a fresh DraftStream for a status bubble; return message_id."""
     await rate_limit_send(chat_id)
     stream = DraftStream(
-        cast("Bot", client),
+        unwrap_bot(client),
         chat_id,
         message_thread_id=thread_id,
         reply_markup=keyboard,

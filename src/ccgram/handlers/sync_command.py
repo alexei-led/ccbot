@@ -29,6 +29,7 @@ from ..config import config
 from .. import window_query
 from ..session import AuditIssue, AuditResult, session_manager
 from ..session_map import session_map_sync
+from ..telegram_client import PTBTelegramClient
 from ..user_preferences import user_preferences
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
@@ -87,6 +88,7 @@ async def _sync_live_topic_names(bot: Bot, live_ids: set[str] | None = None) -> 
         all_windows = await tmux_manager.list_windows()
         live_ids = {w.window_id for w in all_windows}
 
+    client = PTBTelegramClient(bot)
     for user_id, thread_id, window_id in thread_router.iter_thread_bindings():
         if window_id not in live_ids:
             continue
@@ -94,7 +96,7 @@ async def _sync_live_topic_names(bot: Bot, live_ids: set[str] | None = None) -> 
         if chat_id == user_id:
             continue
         await sync_topic_name(
-            bot,
+            client,
             chat_id,
             thread_id,
             thread_router.get_display_name(window_id),
