@@ -548,13 +548,13 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/session.py` (constructs the store)
 - Modify: `tests/ccgram/test_window_state_store.py` (build store with stub callbacks)
 
-- [ ] change `WindowStateStore.__init__` signature to accept `schedule_save: Callable[[], None]` and `on_hookless_provider_switch: Callable[[str], None]`
-- [ ] remove `unwired_save` import + `__post_init__` defaults from `WindowStateStore`
-- [ ] update `SessionManager._wire_singletons` to construct `WindowStateStore(schedule_save=self._save_state, on_hookless_provider_switch=self._clear_session_map_entry)` — store on `self._window_store`
-- [ ] keep module-level `window_store` for the singleton bot, but make it lazy: a function `get_window_store()` returns the current SessionManager-owned store, raising if SessionManager not yet built
-- [ ] update tests to build a `WindowStateStore` directly with stub callbacks (no global reset)
-- [ ] verify `make check` passes; specifically check that all `from .window_state_store import window_store` sites still resolve — most should now use `get_window_store()` or the SessionManager-bound instance
-- [ ] commit "refactor(state): WindowStateStore takes callbacks via constructor"
+- [x] change `WindowStateStore.__init__` signature to accept `schedule_save: Callable[[], None]` and `on_hookless_provider_switch: Callable[[str], None]`
+- [x] remove `unwired_save` import + `__post_init__` defaults from `WindowStateStore`
+- [x] update `SessionManager.__post_init__` to construct `WindowStateStore(schedule_save=self._save_state, on_hookless_provider_switch=self._clear_session_map_entry)` — stored on `self._window_store` and installed via `install_window_store(...)`
+- [x] keep module-level `window_store` for the singleton bot, but make it lazy: a function `get_window_store()` returns the current SessionManager-owned store, raising if SessionManager not yet built. `window_store` is now a backward-compat proxy (`_WindowStoreProxy`) that forwards to the wired instance — preserves all `from .window_state_store import window_store` call sites without churn.
+- [x] update tests to build a `WindowStateStore` directly with stub callbacks (no global reset) — fixtures in `test_window_state_store.py` and `test_window_query.py` updated; new `TestWindowStateStoreRequiresCallbacks` class in `test_schedule_save_wiring.py` covers the new constructor contract; `test_singleton_starts_with_unwired_default` parametrize list trimmed to the three remaining unwired singletons (F2.2-F2.4 will move them too)
+- [x] verify `make check` passes; specifically check that all `from .window_state_store import window_store` sites still resolve — kept working via the proxy; no migration of consumer call sites required for this task
+- [x] commit "refactor(state): WindowStateStore takes callbacks via constructor"
 
 #### Task F2.2: ThreadRouter takes callbacks in `__init__`
 

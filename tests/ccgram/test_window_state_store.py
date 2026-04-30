@@ -18,9 +18,11 @@ from ccgram.window_state_store import (
 
 @pytest.fixture
 def store() -> WindowStateStore:
-    s = WindowStateStore()
     save_calls: list[int] = []
-    s._schedule_save = lambda: save_calls.append(1)
+    s = WindowStateStore(
+        schedule_save=lambda: save_calls.append(1),
+        on_hookless_provider_switch=lambda _wid: None,
+    )
     s._save_calls = save_calls  # type: ignore[attr-defined]
     return s
 
@@ -187,7 +189,10 @@ class TestStoreCRUD:
         store.upsert_pane("@1", "%6", state="idle")
         snapshot = store.to_dict()
 
-        new_store = WindowStateStore()
+        new_store = WindowStateStore(
+            schedule_save=lambda: None,
+            on_hookless_provider_switch=lambda _wid: None,
+        )
         new_store.from_dict(snapshot)
         assert "@1" in new_store.window_states
         panes = new_store.window_states["@1"].panes

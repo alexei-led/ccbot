@@ -5,7 +5,15 @@ Owns the WindowState dataclass and all window-scoped mode settings
 providers, handlers, and tests can import window state without pulling in
 the full session management stack.
 
-Key class: WindowStateStore (singleton instantiated as ``window_store``).
+Key class: WindowStateStore. Persistence and hookless-provider hooks are
+injected via the constructor — there is no ``unwired_save`` default and
+the store cannot be built without explicit callbacks.
+
+Module-level access: ``get_window_store()`` returns the
+SessionManager-owned instance (raises RuntimeError until SessionManager
+has constructed the store). The legacy module attribute ``window_store``
+is a thin proxy that delegates to the same instance for backward compat.
+
 Key types: WindowState, APPROVAL_MODES, BATCH_MODES, NOTIFICATION_MODES.
 """
 
@@ -14,9 +22,7 @@ from __future__ import annotations
 import structlog
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, Self
-
-from .state_persistence import unwired_save
+from typing import Any, Literal, Self, cast
 
 logger = structlog.get_logger()
 
@@ -201,7 +207,6 @@ class WindowState:
         )
 
 
-@dataclass
 class WindowStateStore:
     """Per-window mode and session metadata store.
 
@@ -209,19 +214,26 @@ class WindowStateStore:
     per-window settings: notification mode, approval mode, batch mode,
     provider name, and session/cwd association.
 
-    Persistence is delegated: the ``_schedule_save`` callback (set by
-    SessionManager) triggers a debounced save after mutations.
+    Persistence and hookless-provider hooks are injected via the
+    constructor:
 
-    The ``_on_hookless_provider_switch`` callback (also set by
-    SessionManager) is called when switching to a hookless provider so
-    session_map.json can be cleaned up without a circular dependency.
+    * ``schedule_save``: triggers a debounced save after mutations.
+    * ``on_hookless_provider_switch``: called when switching to a
+      hookless provider so session_map.json can be cleaned up without a
+      circular dependency.
     """
 
-    window_states: dict[str, WindowState] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        self._schedule_save: Callable[[], None] = unwired_save("WindowStateStore")
-        self._on_hookless_provider_switch: Callable[[str], None] = lambda _wid: None
+    def __init__(
+        self,
+        *,
+        schedule_save: Callable[[], None],
+        on_hookless_provider_switch: Callable[[str], None],
+    ) -> None:
+        self.window_states: dict[str, WindowState] = {}
+        self._schedule_save: Callable[[], None] = schedule_save
+        self._on_hookless_provider_switch: Callable[[str], None] = (
+            on_hookless_provider_switch
+        )
 
     def reset(self) -> None:
         """Clear all state. Used for test isolation."""
@@ -570,4 +582,58 @@ class WindowStateStore:
         return True
 
 
-window_store = WindowStateStore()
+_active_store: WindowStateStore | None = None
+
+
+def get_window_store() -> WindowStateStore:
+    """Return the SessionManager-owned WindowStateStore.
+
+    Raises:
+        RuntimeError: when called before SessionManager has constructed
+        and installed the store.
+    """
+    if _active_store is None:
+        raise RuntimeError(
+            "WindowStateStore not yet wired. "
+            "Instantiate SessionManager() before accessing window_store."
+        )
+    return _active_store
+
+
+def install_window_store(store: WindowStateStore) -> None:
+    """Install the SessionManager-owned store as the module-level singleton.
+
+    Called once by ``SessionManager.__post_init__``. Replaces any
+    previously installed store (used by tests that build a fresh
+    SessionManager).
+    """
+    global _active_store
+    _active_store = store
+
+
+class _WindowStoreProxy:
+    """Backward-compat module-level facade that resolves to the wired store.
+
+    All attribute access delegates to the SessionManager-owned
+    ``WindowStateStore``. Raises ``RuntimeError`` if accessed before
+    SessionManager has installed an instance.
+    """
+
+    __slots__ = ()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_window_store(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(get_window_store(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(get_window_store(), name)
+
+    def __repr__(self) -> str:
+        if _active_store is None:
+            return "<WindowStoreProxy unwired>"
+        return f"<WindowStoreProxy → {_active_store!r}>"
+
+
+window_store: WindowStateStore = cast("WindowStateStore", _WindowStoreProxy())

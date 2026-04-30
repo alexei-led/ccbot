@@ -37,6 +37,8 @@ from .window_state_store import (
     DEFAULT_BATCH_MODE,
     NOTIFICATION_MODES,
     WindowState,
+    WindowStateStore,
+    install_window_store,
     window_store,
 )
 
@@ -141,19 +143,24 @@ class SessionManager:
 
     def __post_init__(self) -> None:
         self._persistence = StatePersistence(config.state_file, self._serialize_state)
+        self._window_store = WindowStateStore(
+            schedule_save=self._save_state,
+            on_hookless_provider_switch=self._clear_session_map_entry,
+        )
+        install_window_store(self._window_store)
         self._wire_singletons()
         self._load_state()
 
     def _wire_singletons(self) -> None:
-        """Wire all module-level state singletons to this manager.
+        """Wire remaining module-level state singletons to this manager.
 
-        Centralized so adding a new singleton in the future is a one-line
-        change in one place. Singletons start with a fail-loud
-        ``unwired_save`` default that raises ``RuntimeError`` if mutated
-        before this method runs.
+        ``WindowStateStore`` is constructor-injected — see ``__post_init__``.
+        The other three singletons (thread_router, user_preferences,
+        session_map_sync) still start with a fail-loud ``unwired_save``
+        default that raises ``RuntimeError`` if mutated before this
+        method runs. Migration to constructor injection happens in
+        Phase F2 tasks F2.2-F2.4.
         """
-        window_store._schedule_save = self._save_state
-        window_store._on_hookless_provider_switch = self._clear_session_map_entry
         thread_router._schedule_save = self._save_state
         thread_router._has_window_state = lambda wid: wid in window_store.window_states
         user_preferences._schedule_save = self._save_state
