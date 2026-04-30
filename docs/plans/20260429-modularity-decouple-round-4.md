@@ -715,12 +715,12 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/handlers/messaging_pipeline/tool_batch.py`
 - Modify: tests for these modules
 
-- [ ] migrate `safe_reply`/`safe_edit`/`safe_send`/`rate_limit_send_message`/`edit_with_fallback` to take `client: TelegramClient` instead of `bot: Bot`
-- [ ] migrate `_message_queue_worker` to receive a `TelegramClient`
-- [ ] migrate `tool_batch` flush helpers similarly
-- [ ] update existing tests to inject `FakeTelegramClient` instead of mocking `Bot`
-- [ ] `make check` passes
-- [ ] commit "refactor(messaging_pipeline): depend on TelegramClient Protocol"
+- [x] migrate `safe_reply`/`safe_edit`/`safe_send`/`rate_limit_send_message`/`edit_with_fallback` to take `client: TelegramClient` instead of `bot: Bot` — landed in commit ee193a7 (preceding F5.2 work). All five helpers now type as `client: TelegramClient`; production callers wrap with `PTBTelegramClient(bot)`.
+- [x] migrate `_message_queue_worker` to receive a `TelegramClient` — `_message_queue_worker(client: TelegramClient, user_id: int)`; `get_or_create_queue` and the per-user queue plumbing all flow `client` through. `_dispatch`, `_handle_content_task`, `_process_content_task` all take `client: TelegramClient`.
+- [x] migrate `tool_batch` flush helpers similarly — `process_tool_event`, `flush_batch`, `flush_if_active`, `_send_or_edit_batch`, `_handle_tool_result`, `_handle_tool_use_event` all take `client: TelegramClient`. `DraftStream` (which needs `do_api_request`, not on the Protocol) gets the underlying `Bot` via the new `unwrap_bot(client)` helper in `telegram_client.py`. This replaces the type-only `cast("Bot", client)` placeholder from ee193a7 — that cast was a runtime bug because `PTBTelegramClient` doesn't expose `do_api_request`; production would have crashed on the first `_start_streaming` call with `_DRAFT_UNAVAILABLE=False`. Fix: `unwrap_bot` returns `client.bot` for `PTBTelegramClient` (escape hatch) and the client unchanged for `AsyncMock`-shaped fakes (test path). Note: `status_bubble.py` has the same `cast("Bot", client)` pattern; deferred to F5.3 where status migration lands per-plan.
+- [x] update existing tests to inject `FakeTelegramClient` instead of mocking `Bot` — `tests/ccgram/handlers/messaging_pipeline/test_message_sender.py` rewritten to use `FakeTelegramClient` for all 22 tests in `TestSendWithFallback`/`TestEditWithFallback`/`TestEmptyAndOverlongGuards`/`TestFallbackNoSentinelLeak`; `tests/ccgram/handlers/messaging_pipeline/test_message_queue.py` `bot` fixture switched from `MagicMock(spec_set=["_do_post"])` to `FakeTelegramClient()`. `tests/ccgram/handlers/messaging_pipeline/test_tool_batch.py` left on `AsyncMock(bot)` for `TestDraftStreamIntegration` — those tests verify the underlying PTB Bot surface (`bot.send_message.assert_awaited_once()`) and `unwrap_bot` returns the AsyncMock unchanged. New `set_side_effect()` helper added to `FakeTelegramClient` for sequence-of-results testing (mirrors `unittest.mock.Mock.side_effect`); covered by `TestSetSideEffect` in `test_telegram_client.py` along with `TestUnwrapBot`.
+- [x] `make check` passes — typecheck 0 errors / 0 warnings / 0 informations; lint clean; 4399 unit + 97 integration pass. Single pre-existing parallel-xdist flake (`test_pyte_fallback_in_update_status::test_uses_pyte_result_when_available`) passes standalone — same flake observed in F3.2/F4 (plan line 674), orthogonal to F5.2.
+- [x] commit "refactor(messaging_pipeline): depend on TelegramClient Protocol"
 
 #### Task F5.3: Migrate `status/` (bubble + bar actions + topic_emoji)
 

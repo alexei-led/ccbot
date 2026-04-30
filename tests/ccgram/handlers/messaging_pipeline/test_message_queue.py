@@ -2,7 +2,7 @@ import ast
 import asyncio
 import contextlib
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -22,11 +22,12 @@ from ccgram.handlers.messaging_pipeline.message_task import (
     StatusClearTask,
     StatusUpdateTask,
 )
+from ccgram.telegram_client import FakeTelegramClient
 
 
 @pytest.fixture
-def bot():
-    return MagicMock(spec_set=["_do_post"])
+def bot() -> FakeTelegramClient:
+    return FakeTelegramClient()
 
 
 @pytest.fixture

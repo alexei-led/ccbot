@@ -16,6 +16,7 @@ Public API:
   - ``TelegramClient``       — Protocol the handlers depend on
   - ``PTBTelegramClient``    — adapter wrapping ``telegram.Bot``
   - ``FakeTelegramClient``   — recording fake for tests
+  - ``unwrap_bot``           — escape hatch for PTB-only helpers (DraftStream)
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from telegram import Bot, BotCommand, ChatFullInfo, File, ForumTopic, Message
 from telegram._botcommandscope import BotCommandScope
@@ -360,6 +361,23 @@ class FakeTelegramClient:
                 return call
         return None
 
+    def set_side_effect(self, method: str, effects: Sequence[Any]) -> None:
+        """Configure ``method`` to return / raise the items of ``effects`` in order.
+
+        Any element that is a ``BaseException`` instance is raised; everything
+        else is returned as the call result. Mirrors ``unittest.mock.Mock.side_effect``
+        for the iterable case.
+        """
+        iterator = iter(effects)
+
+        def step(**_kwargs: Any) -> Any:
+            value = next(iterator)
+            if isinstance(value, BaseException):
+                raise value
+            return value
+
+        self.returns[method] = step
+
     async def send_message(
         self, chat_id: int | str, text: str, **kwargs: Any
     ) -> Message:
@@ -537,8 +555,22 @@ _DEFAULT_RETURNS: dict[str, Any] = {
 }
 
 
+def unwrap_bot(client: TelegramClient) -> Bot:
+    """Return the underlying PTB ``Bot`` from a ``TelegramClient``.
+
+    Escape hatch for PTB-only helpers (e.g. ``DraftStream`` uses
+    ``do_api_request``, which is not on the Protocol). Production passes
+    ``PTBTelegramClient(bot)``; tests pass an ``AsyncMock`` shaped like
+    ``Bot`` and get it back unchanged.
+    """
+    if isinstance(client, PTBTelegramClient):
+        return client.bot
+    return cast("Bot", client)
+
+
 __all__ = [
     "FakeTelegramClient",
     "PTBTelegramClient",
     "TelegramClient",
+    "unwrap_bot",
 ]

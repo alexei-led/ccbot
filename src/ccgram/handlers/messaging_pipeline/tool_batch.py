@@ -17,19 +17,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast
 
 import structlog
 
-from ...telegram_client import TelegramClient
+from ...telegram_client import TelegramClient, unwrap_bot
 from ...telegram_draft import DraftStream
 from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
 from ...window_query import get_batch_mode
 from .message_task import ContentTask, thread_key
-
-if TYPE_CHECKING:
-    from telegram import Bot
 
 logger = structlog.get_logger()
 
@@ -324,7 +320,7 @@ async def _send_or_edit_batch(
         await clear_status_message(client, user_id, thread_id_or_0)
         await _rate_limit_chat(chat_id)
         batch.draft = DraftStream(
-            cast("Bot", client),
+            unwrap_bot(client),
             chat_id,
             message_thread_id=raw_thread_id,
         )
@@ -514,7 +510,7 @@ async def flush_batch(
 
     # No prior message at all — open a fresh draft and finalize immediately.
     await _rate_limit_chat(chat_id)
-    draft = DraftStream(cast("Bot", client), chat_id, message_thread_id=thread_id)
+    draft = DraftStream(unwrap_bot(client), chat_id, message_thread_id=thread_id)
     try:
         await draft.start(batch_text)
         await draft.finalize()
