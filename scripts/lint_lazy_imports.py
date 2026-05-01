@@ -119,12 +119,14 @@ def _walk_class_body(
     source_lines: list[str],
     in_type_checking: bool,
 ) -> Iterator[tuple[int, str]]:
-    """Yield violations for every method directly defined on *cls*."""
+    """Yield violations for every method on *cls* and any nested class."""
     for child in cls.body:
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
             yield from _find_violations_in_function(
                 child, source_lines, in_type_checking
             )
+        elif isinstance(child, ast.ClassDef):
+            yield from _walk_class_body(child, source_lines, in_type_checking)
 
 
 def _walk_stmt(
@@ -195,11 +197,7 @@ def find_violations(path: Path) -> list[tuple[int, str]]:
             violations.extend(_find_violations_in_function(node, source_lines, False))
             continue
         if isinstance(node, ast.ClassDef):
-            for child in node.body:
-                if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                    violations.extend(
-                        _find_violations_in_function(child, source_lines, False)
-                    )
+            violations.extend(_walk_class_body(node, source_lines, False))
             continue
         if isinstance(node, ast.If) and _is_type_checking_test(node.test):
             continue

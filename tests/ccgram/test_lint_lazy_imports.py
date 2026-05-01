@@ -450,3 +450,57 @@ def test_method_inside_function_class_is_caught(lint_module, tmp_path: Path) -> 
     violations = lint_module.find_violations(path)
     assert len(violations) == 1
     assert "from .foo import bar" in violations[0][1]
+
+
+def test_method_inside_nested_class_is_caught(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "nested_class_method.py",
+        """
+        class Outer:
+            class Inner:
+                def method(self):
+                    from .foo import bar
+                    return bar
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_method_inside_doubly_nested_function_class_is_caught(
+    lint_module, tmp_path: Path
+) -> None:
+    path = _write(
+        tmp_path,
+        "doubly_nested.py",
+        """
+        def outer():
+            class Inner:
+                class InnerInner:
+                    def method(self):
+                        from .foo import bar
+                        return bar
+            return Inner
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_nested_class_lazy_import_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "nested_class_lazy.py",
+        """
+        class Outer:
+            class Inner:
+                def method(self):
+                    # Lazy: documented inside nested class
+                    from .foo import bar
+                    return bar
+        """,
+    )
+    assert lint_module.find_violations(path) == []
