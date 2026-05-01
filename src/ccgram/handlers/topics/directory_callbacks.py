@@ -645,6 +645,8 @@ async def _create_window_and_bind(
             # Lazy: telegram_client wraps PTB Bot; shell.shell_commands
             # ↔ topics cycle through approval callback wiring.
             from ...telegram_client import PTBTelegramClient
+
+            # Lazy: shell.shell_commands ↔ topics cycle through approval wiring.
             from ..shell.shell_commands import handle_shell_message
 
             await handle_shell_message(

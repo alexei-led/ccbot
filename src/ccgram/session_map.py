@@ -24,6 +24,7 @@ import asyncio
 import fcntl
 import json
 import os
+import shutil
 import time
 import structlog
 from collections.abc import Callable
@@ -489,8 +490,6 @@ class SessionMapSync:
                         except json.JSONDecodeError:
                             backup = map_file.with_suffix(".json.corrupt")
                             try:
-                                import shutil
-
                                 shutil.copy2(map_file, backup)
                                 logger.warning(
                                     "Corrupted session_map.json backed up to %s",

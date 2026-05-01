@@ -39,11 +39,27 @@ def _is_type_checking_test(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == "TYPE_CHECKING"
 
 
-def _previous_source_line(source_lines: list[str], lineno: int) -> str:
-    """Return the source line above *lineno* (1-based) or empty string."""
-    if lineno <= 1 or lineno - 2 >= len(source_lines):
-        return ""
-    return source_lines[lineno - 2]
+def _has_lazy_comment_above(source_lines: list[str], lineno: int) -> bool:
+    """Return True if a contiguous comment block above *lineno* contains ``# Lazy:``.
+
+    Multi-line ``# Lazy: <reason>`` annotations are common — the marker sits on
+    the first line of the block, the rest of the lines wrap the reason. Walking
+    back through contiguous ``#``-prefixed lines (and blank separators) lets
+    the lint accept that style without requiring the marker to be glued to the
+    import.
+    """
+    idx = lineno - 2
+    while idx >= 0:
+        stripped = source_lines[idx].strip()
+        if not stripped:
+            idx -= 1
+            continue
+        if not stripped.startswith("#"):
+            return False
+        if _LAZY_COMMENT.search(stripped):
+            return True
+        idx -= 1
+    return False
 
 
 def _find_violations_in_function(
@@ -55,6 +71,46 @@ def _find_violations_in_function(
     if _RESET_FN_NAME.match(fn.name):
         return
     yield from _walk_block(fn.body, source_lines, in_type_checking)
+
+
+def _sub_bodies(stmt: ast.stmt) -> Iterator[list[ast.stmt]]:
+    """Yield each statement-list body that *stmt* contains, if any.
+
+    Covers compound statements (``Try``, ``With``, ``For``, ``While``, plain
+    ``If``) so the lazy-import walker can recurse through control flow without
+    losing function scope. ``If(TYPE_CHECKING)`` is handled by the caller.
+    """
+    if isinstance(stmt, ast.Try):
+        yield stmt.body
+        for handler in stmt.handlers:
+            yield handler.body
+        yield stmt.orelse
+        yield stmt.finalbody
+        return
+    if isinstance(stmt, ast.If | ast.For | ast.AsyncFor | ast.While):
+        yield stmt.body
+        yield stmt.orelse
+        return
+    if isinstance(stmt, ast.With | ast.AsyncWith):
+        yield stmt.body
+
+
+def _check_import(
+    stmt: ast.Import | ast.ImportFrom,
+    source_lines: list[str],
+    in_type_checking: bool,
+) -> tuple[int, str] | None:
+    """Return a violation tuple for *stmt* unless it is excused."""
+    if in_type_checking:
+        return None
+    if _has_lazy_comment_above(source_lines, stmt.lineno):
+        return None
+    snippet = (
+        source_lines[stmt.lineno - 1].strip()
+        if stmt.lineno - 1 < len(source_lines)
+        else "<unknown>"
+    )
+    return (stmt.lineno, snippet)
 
 
 def _walk_block(
@@ -69,17 +125,14 @@ def _walk_block(
             yield from _walk_block(stmt.orelse, source_lines, in_type_checking)
             continue
         if isinstance(stmt, ast.Import | ast.ImportFrom):
-            if in_type_checking:
-                continue
-            prev = _previous_source_line(source_lines, stmt.lineno)
-            if _LAZY_COMMENT.search(prev):
-                continue
-            snippet = (
-                source_lines[stmt.lineno - 1].strip()
-                if stmt.lineno - 1 < len(source_lines)
-                else "<unknown>"
-            )
-            yield (stmt.lineno, snippet)
+            violation = _check_import(stmt, source_lines, in_type_checking)
+            if violation is not None:
+                yield violation
+            continue
+        sub = list(_sub_bodies(stmt))
+        if sub:
+            for sub_body in sub:
+                yield from _walk_block(sub_body, source_lines, in_type_checking)
             continue
         for child in ast.iter_child_nodes(stmt):
             yield from _walk_node(child, source_lines, in_type_checking)

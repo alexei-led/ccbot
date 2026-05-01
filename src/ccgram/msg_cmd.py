@@ -114,6 +114,7 @@ def _build_message_context(my_id: str) -> dict[str, str]:
         if ws.window_name:
             ctx["window_name"] = ws.window_name
         if ws.cwd:
+            # Lazy: msg_discovery ↔ msg_cmd cycle through CLI registration.
             from .msg_discovery import detect_branch
 
             branch = detect_branch(ws.cwd)

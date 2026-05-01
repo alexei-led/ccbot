@@ -312,6 +312,8 @@ class ClaudeProvider:
         if capture_fn is not None:
             _fn: Callable[[str], Awaitable[str | None]] = capture_fn
         else:
+            # Lazy: tmux_manager imports providers; lazy fallback avoids the
+            # cycle when tests inject capture_fn directly.
             from ccgram.tmux_manager import tmux_manager
 
             _fn = tmux_manager.capture_pane

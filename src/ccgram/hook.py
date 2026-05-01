@@ -629,6 +629,8 @@ def _update_session_map(
                         # instead of silently overwriting with near-empty data.
                         backup = map_file.with_suffix(".json.corrupt")
                         try:
+                            # Lazy: shutil only needed in the error path of
+                            # backing up a corrupted session_map.json.
                             import shutil
 
                             shutil.copy2(map_file, backup)

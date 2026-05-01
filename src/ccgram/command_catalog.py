@@ -106,6 +106,8 @@ def discover_user_defined_commands(
 ) -> list[DiscoveredCommand]:
     """Discover user-defined skills and custom commands from config dir."""
     if claude_dir is None:
+        # Lazy: config singleton is wired late at startup; importing at top
+        # would freeze test overrides that monkeypatch config attrs.
         from ccgram.config import config
 
         claude_dir = config.claude_config_dir

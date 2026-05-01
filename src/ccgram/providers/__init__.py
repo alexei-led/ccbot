@@ -85,6 +85,8 @@ def get_provider() -> AgentProvider:
     if _active is None:
         _ensure_registered()
 
+        # Lazy: config singleton is wired late at startup; importing at top
+        # would freeze test overrides that monkeypatch config attrs.
         from ccgram.config import config
 
         try:
@@ -271,6 +273,8 @@ def resolve_launch_command(
     # CCGRAM_GEMINI_COMMAND overrides stay fully user-controlled.
     # For ccgram-managed Gemini launches, force stable shell mode defaults.
     if provider == "gemini" and not override:
+        # Lazy: only the gemini launch path needs the hardener; importing at
+        # top would pull gemini provider code on every provider resolution.
         from ccgram.providers.gemini import build_hardened_gemini_launch_command
 
         command = build_hardened_gemini_launch_command(command)

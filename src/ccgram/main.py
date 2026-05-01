@@ -130,6 +130,8 @@ def run_bot() -> None:
     auto_detected = False
 
     if not explicit_session and os.environ.get("TMUX"):
+        # Lazy: utils import deferred to avoid loading config-aware helpers
+        # before TMUX_SESSION_NAME is set; check_duplicate_ccgram pings tmux.
         from .utils import check_duplicate_ccgram, detect_tmux_context
 
         detected, own_wid = detect_tmux_context()
@@ -145,8 +147,12 @@ def run_bot() -> None:
         own_wid = None
 
     try:
+        # Lazy: config validates env at import time; deferring lets us catch
+        # ValueError and emit a friendly error before the click subcommand layer.
         from .config import config
     except ValueError as e:
+        # Lazy: ccgram_dir resolves the config dir without instantiating
+        # `config` (which already failed); needed to print the .env path hint.
         from .utils import ccgram_dir
 
         config_dir = ccgram_dir()
@@ -225,6 +231,8 @@ async def start_miniapp_if_enabled() -> None:
 
     logger = structlog.get_logger()
     try:
+        # Lazy: miniapp depends on aiohttp; loading at module level would
+        # break deployments that disable the dashboard via miniapp_base_url=None.
         from .miniapp import start_server
 
         _miniapp_runner = await start_server(
@@ -252,6 +260,7 @@ async def stop_miniapp_if_enabled() -> None:
 
     logger = structlog.get_logger()
     try:
+        # Lazy: miniapp depends on aiohttp; symmetric with start_miniapp_if_enabled.
         from .miniapp import stop_server
 
         await stop_server(_miniapp_runner)

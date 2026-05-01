@@ -87,6 +87,8 @@ async def _detect_and_apply_provider(
         elif old_caps and old_caps.capabilities.chat_first_command_path:
             # Lazy: same shell ↔ recovery cycle as above.
             from ..shell.shell_capture import clear_shell_monitor_state
+
+            # Lazy: same shell ↔ recovery cycle as above.
             from ..shell.shell_prompt_orchestrator import (
                 clear_state as clear_orchestrator,
             )

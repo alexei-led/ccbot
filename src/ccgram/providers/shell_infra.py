@@ -20,6 +20,8 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+import structlog
+
 _DEFAULT_MARKER = "ccgram"
 
 
@@ -37,8 +39,6 @@ def _get_prompt_mode() -> str:
     if mode not in _VALID_PROMPT_MODES:
         if not _WARNED_INVALID_MODE:
             _WARNED_INVALID_MODE = True
-            import structlog
-
             structlog.get_logger().warning(
                 "Invalid CCGRAM_PROMPT_MODE=%r, defaulting to 'wrap'", mode
             )
@@ -126,6 +126,8 @@ async def has_prompt_marker(
     ``tmux_manager.capture_pane`` so production callers need no changes.
     """
     if capture_fn is None:
+        # Lazy: tmux_manager imports providers; lazy fallback when tests
+        # don't inject capture_fn keeps the providers ↔ tmux_manager cycle broken.
         from ccgram.tmux_manager import tmux_manager
 
         capture_fn = tmux_manager.capture_pane
@@ -286,6 +288,8 @@ async def setup_shell_prompt(
         return
 
     if send_keys_fn is None:
+        # Lazy: tmux_manager imports providers; lazy fallback for the same
+        # cycle-break reason as has_prompt_marker above.
         from ccgram.tmux_manager import tmux_manager
 
         send_keys_fn = tmux_manager.send_keys

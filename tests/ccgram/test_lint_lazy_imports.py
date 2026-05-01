@@ -177,3 +177,190 @@ def test_main_returns_one_when_violations(lint_module, tmp_path: Path) -> None:
     )
     rc = lint_module.main(["lint_lazy_imports.py", str(tmp_path)])
     assert rc == 1
+
+
+def test_undocumented_import_in_try_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "try_body.py",
+        """
+        def fn():
+            try:
+                from .foo import bar
+                return bar
+            except ImportError:
+                return None
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_documented_import_in_try_body_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "try_body_ok.py",
+        """
+        def fn():
+            try:
+                # Lazy: optional dep
+                from .foo import bar
+                return bar
+            except ImportError:
+                return None
+        """,
+    )
+    assert lint_module.find_violations(path) == []
+
+
+def test_undocumented_import_in_except_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "except_body.py",
+        """
+        def fn():
+            try:
+                pass
+            except ValueError:
+                from .foo import bar
+                return bar
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_undocumented_import_in_finally_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "finally_body.py",
+        """
+        def fn():
+            try:
+                pass
+            finally:
+                from .foo import bar
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_undocumented_import_in_if_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "if_body.py",
+        """
+        def fn(flag):
+            if flag:
+                from .foo import bar
+                return bar
+            return None
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_undocumented_import_in_with_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "with_body.py",
+        """
+        def fn(handle):
+            with handle:
+                from .foo import bar
+                return bar
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_undocumented_import_in_for_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "for_body.py",
+        """
+        def fn(items):
+            for item in items:
+                from .foo import bar
+                return bar
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_undocumented_import_in_while_body_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "while_body.py",
+        """
+        def fn(cond):
+            while cond:
+                from .foo import bar
+                return bar
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_undocumented_import_in_nested_try_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "nested.py",
+        """
+        def fn(x):
+            if x:
+                try:
+                    from .foo import bar
+                    return bar
+                except OSError:
+                    pass
+        """,
+    )
+    assert len(lint_module.find_violations(path)) == 1
+
+
+def test_multiline_lazy_comment_block_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "multi_comment.py",
+        """
+        def fn():
+            # Lazy: this annotation wraps over multiple lines because the
+            # cycle reason needs more than one line of explanation to be
+            # comprehensible to future readers.
+            from .foo import bar
+            return bar
+        """,
+    )
+    assert lint_module.find_violations(path) == []
+
+
+def test_lazy_above_blank_line_then_import_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "blank_separator.py",
+        """
+        def fn():
+            # Lazy: still applies despite blank separator below.
+
+            from .foo import bar
+            return bar
+        """,
+    )
+    assert lint_module.find_violations(path) == []
+
+
+def test_non_comment_line_breaks_lazy_walk(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "broken_walk.py",
+        """
+        def fn():
+            # Lazy: this annotation is for the FIRST import below.
+            from .foo import bar
+
+            from .baz import qux
+            return bar, qux
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .baz import qux" in violations[0][1]

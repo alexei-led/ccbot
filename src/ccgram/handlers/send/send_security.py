@@ -90,7 +90,10 @@ def matches_secret_pattern(path: Path) -> str | None:
 def _gitignored_by_pathspec(path: Path, cwd: Path) -> bool:
     """Pathspec fallback for is_gitignored — walk .gitignore files up to cwd."""
     try:
-        import pathspec  # noqa: PLC0415 — lazy import for optional fallback
+        # Lazy: pathspec is an optional fallback only used when git itself
+        # is unavailable; importing at top would force the dep on pure-tmux
+        # deployments that never run /send.
+        import pathspec  # noqa: PLC0415
 
         lines: list[str] = []
         current = path.parent

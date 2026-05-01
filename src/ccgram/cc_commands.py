@@ -112,6 +112,8 @@ def discover_cc_commands(claude_dir: Path | None = None) -> list[CCCommand]:
     Commands with empty sanitized names are skipped.
     """
     if claude_dir is None:
+        # Lazy: config singleton is wired late at startup; importing at top
+        # would freeze test overrides that monkeypatch config attrs.
         from ccgram.config import config
 
         claude_dir = config.claude_config_dir
