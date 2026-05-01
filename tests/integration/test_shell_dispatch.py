@@ -73,7 +73,7 @@ async def app():
         dispatch as callback_handler,
         load_handlers,
     )
-    from ccgram.handlers.command_orchestration import forward_command_handler
+    from ccgram.handlers.commands import forward_command_handler
     from ccgram.handlers.sessions_dashboard import sessions_command
     from ccgram.handlers.topics.topic_lifecycle import topic_closed_handler
 

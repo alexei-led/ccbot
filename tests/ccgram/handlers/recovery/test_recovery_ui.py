@@ -4,7 +4,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-import ccgram.handlers.command_orchestration as cmd_orch_mod
+import ccgram.handlers.commands.menu_sync as cmd_orch_mod
 from ccgram.handlers.text.text_handler import text_handler
 from ccgram.handlers.recovery.recovery_banner import (
     _recovery_help_text,
@@ -446,11 +446,11 @@ class TestBotTextHandlerScopedMenu:
         "ccgram.handlers.text.text_handler.handle_text_message", new_callable=AsyncMock
     )
     @patch(
-        "ccgram.handlers.command_orchestration.sync_scoped_provider_menu",
+        "ccgram.handlers.commands.menu_sync.sync_scoped_provider_menu",
         new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.command_orchestration.get_provider_for_window")
-    @patch("ccgram.handlers.command_orchestration.thread_router")
+    @patch("ccgram.handlers.commands.menu_sync.get_provider_for_window")
+    @patch("ccgram.handlers.commands.menu_sync.thread_router")
     async def test_syncs_scoped_menu_when_thread_is_bound(
         self,
         mock_tr: MagicMock,
@@ -475,10 +475,10 @@ class TestBotTextHandlerScopedMenu:
         "ccgram.handlers.text.text_handler.handle_text_message", new_callable=AsyncMock
     )
     @patch(
-        "ccgram.handlers.command_orchestration.sync_scoped_provider_menu",
+        "ccgram.handlers.commands.menu_sync.sync_scoped_provider_menu",
         new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.command_orchestration.thread_router")
+    @patch("ccgram.handlers.commands.menu_sync.thread_router")
     async def test_skips_scoped_menu_sync_when_thread_is_unbound(
         self,
         mock_tr: MagicMock,
@@ -500,11 +500,11 @@ class TestBotTextHandlerScopedMenu:
         "ccgram.handlers.text.text_handler.handle_text_message", new_callable=AsyncMock
     )
     @patch(
-        "ccgram.handlers.command_orchestration.sync_scoped_provider_menu",
+        "ccgram.handlers.commands.menu_sync.sync_scoped_provider_menu",
         new_callable=AsyncMock,
     )
-    @patch("ccgram.handlers.command_orchestration.get_provider_for_window")
-    @patch("ccgram.handlers.command_orchestration.thread_router")
+    @patch("ccgram.handlers.commands.menu_sync.get_provider_for_window")
+    @patch("ccgram.handlers.commands.menu_sync.thread_router")
     async def test_cached_chat_user_still_resolves_provider_context(
         self,
         mock_tr: MagicMock,

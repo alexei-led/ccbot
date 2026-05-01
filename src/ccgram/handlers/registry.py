@@ -26,7 +26,7 @@ from .callback_registry import dispatch as _dispatch_callback
 from .callback_registry import load_handlers as _load_callback_handlers
 from .cleanup import unbind_command
 from .command_history import recall_command
-from .command_orchestration import (
+from .commands import (
     commands_command,
     forward_command_handler,
     toolbar_command,

@@ -27,7 +27,7 @@ from telegram.error import TelegramError
 
 from .cc_commands import register_commands
 from .config import config
-from .handlers.command_orchestration import setup_menu_refresh_job
+from .handlers.commands import setup_menu_refresh_job
 from .handlers.hook_events import dispatch_hook_event, register_stop_callback
 from .handlers.messaging_pipeline.message_queue import shutdown_workers
 from .handlers.messaging_pipeline.message_routing import handle_new_message

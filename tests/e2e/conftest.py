@@ -125,7 +125,7 @@ def e2e_tmux(monkeypatch):
         "ccgram.handlers.recovery.resume_command",
         "ccgram.handlers.recovery.history_callbacks",
         "ccgram.handlers.sync_command",
-        "ccgram.handlers.command_orchestration",
+        "ccgram.handlers.commands.forward",
         "ccgram.handlers.topics.topic_orchestration",
         "ccgram.handlers.shell.shell_commands",
         "ccgram.handlers.cleanup",
@@ -267,7 +267,7 @@ async def e2e_app(e2e_state_dir, e2e_tmux, intercepted_calls, monkeypatch):
         "ccgram.handlers.recovery.restore_command",
         "ccgram.handlers.recovery.resume_command",
         "ccgram.handlers.sync_command",
-        "ccgram.handlers.command_orchestration",
+        "ccgram.handlers.commands.forward",
         "ccgram.handlers.topics.topic_orchestration",
         "ccgram.handlers.shell.shell_commands",
     ]

@@ -29,7 +29,7 @@ from telegram.ext import (
 from . import bootstrap
 from .config import config
 from .handlers.inline import inline_query_handler, unsupported_content_handler
-from .handlers.command_orchestration import commands_command, toolbar_command
+from .handlers.commands import commands_command, toolbar_command
 from .handlers.messaging_pipeline import toolcalls_command, verbose_command
 from .handlers.messaging_pipeline.message_sender import safe_reply
 from .handlers.recovery.history import history_command

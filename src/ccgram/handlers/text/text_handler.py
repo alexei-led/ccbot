@@ -19,7 +19,7 @@ from telegram.constants import ChatAction
 from ...config import config
 from ...telegram_client import PTBTelegramClient, TelegramClient
 from ..callback_helpers import get_thread_id as _get_thread_id
-from ..command_orchestration import sync_scoped_menu_for_text_context
+from ..commands import sync_scoped_menu_for_text_context
 from ..topics.directory_browser import (
     BROWSE_DIRS_KEY,
     BROWSE_PAGE_KEY,

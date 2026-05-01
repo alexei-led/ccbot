@@ -58,10 +58,10 @@ def _disable_send_rate_limit(monkeypatch):
 def _zero_command_orchestration_delays(monkeypatch):
     """Collapse command-orchestration probe / fallback delays."""
     monkeypatch.setattr(
-        "ccgram.handlers.command_orchestration._CODEX_STATUS_FALLBACK_DELAY_SECONDS",
+        "ccgram.handlers.commands.status_snapshot._CODEX_STATUS_FALLBACK_DELAY_SECONDS",
         0,
     )
     monkeypatch.setattr(
-        "ccgram.handlers.command_orchestration._COMMAND_ERROR_PROBE_DELAY_SECONDS",
+        "ccgram.handlers.commands.failure_probe._COMMAND_ERROR_PROBE_DELAY_SECONDS",
         0,
     )

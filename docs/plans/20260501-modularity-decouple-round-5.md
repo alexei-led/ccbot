@@ -282,16 +282,16 @@ def test_no_import_cycles(module):
 - Create: `tests/ccgram/handlers/commands/test_failure_probe.py`
 - Create: `tests/ccgram/handlers/commands/test_status_snapshot.py`
 
-- [ ] create `commands/forward.py` with `forward_command_handler`, `_normalize_slash_token`, `_handle_clear_command`, and any glue specific to forwarding
-- [ ] create `commands/menu_sync.py` with `_set_bounded_cache_entry`, `_get_lru_cache_entry`, `_short_supported_commands`, `_build_provider_command_metadata`, `sync_scoped_provider_menu`, `sync_scoped_menu_for_text_context`, `get_global_provider_menu`, `set_global_provider_menu`, `setup_menu_refresh_job`
-- [ ] create `commands/failure_probe.py` with `_extract_probe_error_line`, `_extract_pane_delta`, `_capture_command_probe_context`, `_probe_transcript_command_error`, `_maybe_send_command_failure_message`, `_spawn_command_failure_probe`, `_command_known_in_other_provider`
-- [ ] create `commands/status_snapshot.py` with `_status_snapshot_probe_offset`, `_maybe_send_status_snapshot`
-- [ ] create `commands/__init__.py` with `commands_command`, `toolbar_command`, and re-exports of `forward_command_handler`, `setup_menu_refresh_job`, `get_global_provider_menu`, `set_global_provider_menu`
-- [ ] delete `handlers/command_orchestration.py`; grep verify no caller lingers
-- [ ] update import paths in `bot.py`, `bootstrap.py`, `handlers/registry.py`
-- [ ] split the existing test file by responsibility into 4 new test files mirroring the new structure
-- [ ] add a structural test asserting all four `commands/*.py` modules **exist** as importable names and that `set(handlers.commands.__all__)` matches the pre-refactor public surface that `command_orchestration.py` exposed (capture the baseline at task start)
-- [ ] run `make check` — must pass before next task
+- [x] create `commands/forward.py` with `forward_command_handler`, `_normalize_slash_token`, `_handle_clear_command`, and any glue specific to forwarding
+- [x] create `commands/menu_sync.py` with `_set_bounded_cache_entry`, `_get_lru_cache_entry`, `_short_supported_commands`, `_build_provider_command_metadata`, `sync_scoped_provider_menu`, `sync_scoped_menu_for_text_context`, `get_global_provider_menu`, `set_global_provider_menu`, `setup_menu_refresh_job`
+- [x] create `commands/failure_probe.py` with `_extract_probe_error_line`, `_extract_pane_delta`, `_capture_command_probe_context`, `_probe_transcript_command_error`, `_maybe_send_command_failure_message`, `_spawn_command_failure_probe`, `_command_known_in_other_provider`
+- [x] create `commands/status_snapshot.py` with `_status_snapshot_probe_offset`, `_maybe_send_status_snapshot`
+- [x] create `commands/__init__.py` with `commands_command`, `toolbar_command`, and re-exports of `forward_command_handler`, `setup_menu_refresh_job`, `get_global_provider_menu`, `set_global_provider_menu`, `sync_scoped_menu_for_text_context`, `sync_scoped_provider_menu` (added the latter two as well — `text_handler` imports the for-text variant directly, and tests in the recovery package patch the scoped sync function via the menu_sync path)
+- [x] delete `handlers/command_orchestration.py`; grep verify no caller lingers — only docstring/historical-context references remain
+- [x] update import paths in `bot.py`, `bootstrap.py`, `handlers/registry.py`, `handlers/text/text_handler.py`
+- [x] split the existing test file by responsibility into 4 new test files mirroring the new structure — `tests/ccgram/handlers/commands/test_forward.py`, `test_menu_sync.py`, `test_failure_probe.py`, `test_status_snapshot.py`. Also updated `tests/ccgram/test_commands_command.py` to drop the `TestScopedProviderMenuSync` duplicates that now live in `test_menu_sync.py`, keeping only `TestCommandsCommand` (the public-surface entry-point test). Updated `tests/integration/test_message_dispatch.py`, `tests/integration/test_shell_dispatch.py`, `tests/e2e/conftest.py`, `tests/ccgram/handlers/conftest.py` patch targets, and the cross-module references in `tests/ccgram/handlers/recovery/test_recovery_ui.py`
+- [x] add a structural test asserting all four `commands/*.py` modules **exist** as importable names and that `set(handlers.commands.__all__)` matches the pre-refactor public surface that `command_orchestration.py` exposed — `tests/ccgram/handlers/commands/test_commands_subpackage_surface.py` (5 cases)
+- [x] run `make check` — must pass before next task — green: 4513 unit + 138 integration + 28 skipped, lint clean, typecheck 0 errors
 
 ### Task 5: Lazy-import lint check + audit + cycle-test expansion
 

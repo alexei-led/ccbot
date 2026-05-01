@@ -1,4 +1,4 @@
-"""Tests for /commands handler and scoped provider command menus."""
+"""Tests for /commands handler in handlers/commands/__init__.py."""
 
 from typing import TYPE_CHECKING, cast
 from types import SimpleNamespace
@@ -8,19 +8,12 @@ if TYPE_CHECKING:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import BotCommandScopeChat, BotCommandScopeChatMember
 
-import ccgram.handlers.command_orchestration as cmd_orch_mod
-from ccgram.handlers.command_orchestration import (
-    _scoped_provider_menu,
-    _chat_scoped_provider_menu,
-    commands_command,
-    sync_scoped_provider_menu as _sync_scoped_provider_menu,
-)
+from ccgram.handlers.commands import commands_command
 from ccgram.cc_commands import CCCommand
 
 
-_CO = "ccgram.handlers.command_orchestration"
+_CO = "ccgram.handlers.commands"
 
 
 def _make_update(
@@ -44,17 +37,6 @@ def _make_update(
 def _allow_user():
     with patch(f"{_CO}.config.is_user_allowed", return_value=True):
         yield
-
-
-@pytest.fixture(autouse=True)
-def _clean_scoped_caches():
-    _scoped_provider_menu.clear()
-    _chat_scoped_provider_menu.clear()
-    cmd_orch_mod._global_provider_menu = None
-    yield
-    _scoped_provider_menu.clear()
-    _chat_scoped_provider_menu.clear()
-    cmd_orch_mod._global_provider_menu = None
 
 
 class TestCommandsCommand:
@@ -150,183 +132,3 @@ class TestCommandsCommand:
         assert "`/spec_work`" in text and "`/spec:work`" in text
         assert "`/status`" in text
         assert "ignored" not in text
-
-
-class TestScopedProviderMenuSync:
-    async def test_caches_provider_menu_per_chat_user(self) -> None:
-        _scoped_provider_menu.clear()
-        _chat_scoped_provider_menu.clear()
-        cmd_orch_mod._global_provider_menu = None
-        try:
-            message = AsyncMock()
-            message.chat.id = -100999
-            message.get_bot.return_value = object()
-            provider = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="codex")),
-            )
-
-            with patch(
-                "ccgram.handlers.command_orchestration.register_commands",
-                new_callable=AsyncMock,
-            ) as mock_reg:
-                await _sync_scoped_provider_menu(message, 100, provider)
-                await _sync_scoped_provider_menu(message, 100, provider)
-
-            mock_reg.assert_called_once()
-            assert _scoped_provider_menu[(-100999, 100)] == "codex"
-        finally:
-            _scoped_provider_menu.clear()
-            _chat_scoped_provider_menu.clear()
-            cmd_orch_mod._global_provider_menu = None
-
-    async def test_cache_updates_when_provider_changes(self) -> None:
-        _scoped_provider_menu.clear()
-        _chat_scoped_provider_menu.clear()
-        cmd_orch_mod._global_provider_menu = None
-        try:
-            message = AsyncMock()
-            message.chat.id = -100999
-            message.get_bot.return_value = object()
-            codex = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="codex")),
-            )
-            claude = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="claude")),
-            )
-
-            with patch(
-                "ccgram.handlers.command_orchestration.register_commands",
-                new_callable=AsyncMock,
-            ) as mock_reg:
-                await _sync_scoped_provider_menu(message, 100, codex)
-                await _sync_scoped_provider_menu(message, 100, claude)
-
-            assert mock_reg.call_count == 2
-            assert _scoped_provider_menu[(-100999, 100)] == "claude"
-        finally:
-            _scoped_provider_menu.clear()
-            _chat_scoped_provider_menu.clear()
-            cmd_orch_mod._global_provider_menu = None
-
-    async def test_register_failure_does_not_update_cache(self) -> None:
-        _scoped_provider_menu.clear()
-        _chat_scoped_provider_menu.clear()
-        cmd_orch_mod._global_provider_menu = None
-        try:
-            message = AsyncMock()
-            message.chat.id = -100999
-            message.get_bot.return_value = object()
-            provider = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="codex")),
-            )
-
-            with patch(
-                "ccgram.handlers.command_orchestration.register_commands",
-                new_callable=AsyncMock,
-                side_effect=OSError("boom"),
-            ):
-                await _sync_scoped_provider_menu(message, 100, provider)
-
-            assert (-100999, 100) not in _scoped_provider_menu
-        finally:
-            _scoped_provider_menu.clear()
-            _chat_scoped_provider_menu.clear()
-            cmd_orch_mod._global_provider_menu = None
-
-    async def test_falls_back_to_chat_scope_when_member_scope_fails(self) -> None:
-        _scoped_provider_menu.clear()
-        _chat_scoped_provider_menu.clear()
-        cmd_orch_mod._global_provider_menu = None
-        try:
-            message = AsyncMock()
-            message.chat.id = -100999
-            message.get_bot.return_value = object()
-            provider = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="codex")),
-            )
-
-            with patch(
-                "ccgram.handlers.command_orchestration.register_commands",
-                new_callable=AsyncMock,
-                side_effect=[OSError("member"), None],
-            ) as mock_reg:
-                await _sync_scoped_provider_menu(message, 100, provider)
-
-            assert mock_reg.call_count == 2
-            first_scope = mock_reg.call_args_list[0].kwargs["scope"]
-            second_scope = mock_reg.call_args_list[1].kwargs["scope"]
-            assert isinstance(first_scope, BotCommandScopeChatMember)
-            assert isinstance(second_scope, BotCommandScopeChat)
-            assert _chat_scoped_provider_menu[-100999] == "codex"
-            assert _scoped_provider_menu[(-100999, 100)] == "codex"
-        finally:
-            _scoped_provider_menu.clear()
-            _chat_scoped_provider_menu.clear()
-            cmd_orch_mod._global_provider_menu = None
-
-    async def test_falls_back_to_global_when_member_and_chat_scope_fail(self) -> None:
-        _scoped_provider_menu.clear()
-        _chat_scoped_provider_menu.clear()
-        cmd_orch_mod._global_provider_menu = None
-        try:
-            message = AsyncMock()
-            message.chat.id = -100999
-            message.get_bot.return_value = object()
-            provider = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="codex")),
-            )
-
-            with patch(
-                "ccgram.handlers.command_orchestration.register_commands",
-                new_callable=AsyncMock,
-                side_effect=[OSError("member"), OSError("chat"), None],
-            ) as mock_reg:
-                await _sync_scoped_provider_menu(message, 100, provider)
-
-            assert mock_reg.call_count == 3
-            assert "scope" in mock_reg.call_args_list[0].kwargs
-            assert "scope" in mock_reg.call_args_list[1].kwargs
-            assert "scope" not in mock_reg.call_args_list[2].kwargs
-            assert _scoped_provider_menu[(-100999, 100)] == "codex"
-        finally:
-            _scoped_provider_menu.clear()
-            _chat_scoped_provider_menu.clear()
-            cmd_orch_mod._global_provider_menu = None
-
-    async def test_scoped_menu_cache_is_bounded(self) -> None:
-        _scoped_provider_menu.clear()
-        _chat_scoped_provider_menu.clear()
-        cmd_orch_mod._global_provider_menu = None
-        try:
-            message = AsyncMock()
-            message.chat.id = -100999
-            message.get_bot.return_value = object()
-            provider = cast(
-                "AgentProvider",
-                SimpleNamespace(capabilities=SimpleNamespace(name="codex")),
-            )
-
-            with (
-                patch(
-                    "ccgram.handlers.command_orchestration._MAX_SCOPED_PROVIDER_MENU_ENTRIES",
-                    1,
-                ),
-                patch(
-                    "ccgram.handlers.command_orchestration.register_commands",
-                    new_callable=AsyncMock,
-                ),
-            ):
-                await _sync_scoped_provider_menu(message, 100, provider)
-                await _sync_scoped_provider_menu(message, 101, provider)
-
-            assert len(_scoped_provider_menu) == 1
-        finally:
-            _scoped_provider_menu.clear()
-            _chat_scoped_provider_menu.clear()
-            cmd_orch_mod._global_provider_menu = None

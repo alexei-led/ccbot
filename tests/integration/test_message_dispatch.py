@@ -70,7 +70,7 @@ async def app():
         dispatch as callback_handler,
         load_handlers,
     )
-    from ccgram.handlers.command_orchestration import forward_command_handler
+    from ccgram.handlers.commands import forward_command_handler
     from ccgram.handlers.sessions_dashboard import sessions_command
     from ccgram.handlers.topics.topic_lifecycle import topic_closed_handler
 
@@ -183,30 +183,28 @@ async def test_unknown_command_forwarded(app) -> None:
 
     with (
         patch(
-            "ccgram.handlers.command_orchestration.config.is_user_allowed",
+            "ccgram.handlers.commands.forward.config.is_user_allowed",
             return_value=True,
         ),
         patch(
-            "ccgram.handlers.command_orchestration.thread_router.resolve_window_for_thread",
+            "ccgram.handlers.commands.forward.thread_router.resolve_window_for_thread",
             return_value="@0",
         ),
         patch(
-            "ccgram.handlers.command_orchestration.tmux_manager.find_window_by_id",
+            "ccgram.handlers.commands.forward.tmux_manager.find_window_by_id",
             new_callable=AsyncMock,
             return_value=MagicMock(window_id="@0"),
         ),
         patch(
-            "ccgram.handlers.command_orchestration.send_to_window",
+            "ccgram.handlers.commands.forward.send_to_window",
             new_callable=AsyncMock,
             return_value=(True, "Sent"),
         ),
         patch(
-            "ccgram.handlers.command_orchestration.thread_router.get_display_name",
+            "ccgram.handlers.commands.forward.thread_router.get_display_name",
             return_value="test-win",
         ),
-        patch(
-            "ccgram.handlers.command_orchestration.safe_reply", new_callable=AsyncMock
-        ),
+        patch("ccgram.handlers.commands.forward.safe_reply", new_callable=AsyncMock),
         patch.object(Chat, "send_action", new_callable=AsyncMock),
     ):
         await app.process_update(update)
