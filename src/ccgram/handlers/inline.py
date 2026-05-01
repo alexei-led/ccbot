@@ -10,16 +10,20 @@ no natural feature subpackage:
   not consume (stickers, video, etc.) with an actionable hint.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import structlog
 from telegram import (
     InlineQueryResultArticle,
     InputTextMessageContent,
     Update,
 )
-from telegram.ext import ContextTypes
-
 from ..config import config
 from .messaging_pipeline.message_sender import safe_reply
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

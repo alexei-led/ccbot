@@ -9,6 +9,9 @@ Key components:
   - clear_shell_pending: Cleanup for topic deletion
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 import os
 from collections.abc import AsyncIterator
@@ -25,7 +28,6 @@ from telegram import (
 )
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 from ...telegram_client import PTBTelegramClient, TelegramClient
 
 from ...llm import get_completer
@@ -50,6 +52,9 @@ from ..messaging_pipeline.message_sender import (
 from ..messaging_pipeline.message_queue import enqueue_status_update
 from ..polling.polling_strategies import lifecycle_strategy
 from ...topic_state_registry import topic_state
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

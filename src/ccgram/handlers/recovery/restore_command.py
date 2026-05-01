@@ -10,12 +10,13 @@ callbacks. The command is a thin re-render — see
 Key function: restore_command().
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from pathlib import Path
 
 import structlog
 from telegram import Update
-from telegram.ext import ContextTypes
-
 from ... import window_query
 from ...config import config
 from ...session import session_manager
@@ -24,6 +25,9 @@ from ...tmux_manager import tmux_manager
 from ..messaging_pipeline.message_sender import safe_reply
 from ..user_state import PENDING_THREAD_ID, RECOVERY_WINDOW_ID
 from .recovery_callbacks import RecoveryBanner, render_banner
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

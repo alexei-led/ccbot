@@ -7,12 +7,13 @@ Handles inline keyboard callbacks for AskUserQuestion/ExitPlanMode/Permission UI
 Key function: handle_interactive_callback (uniform callback handler signature).
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 import structlog
 
 from telegram import CallbackQuery, Update
-from telegram.ext import ContextTypes
-
 from ...telegram_client import PTBTelegramClient
 from ...tmux_manager import tmux_manager
 from ..callback_data import (
@@ -28,6 +29,9 @@ from ..callback_data import (
 )
 from ..callback_registry import register
 from .interactive_ui import clear_interactive_msg, handle_interactive_ui
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

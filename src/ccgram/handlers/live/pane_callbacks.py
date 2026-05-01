@@ -14,6 +14,8 @@ entry — the subscribed flag goes away with it.
 
 from __future__ import annotations
 
+
+from typing import TYPE_CHECKING
 import structlog
 from telegram import (
     CallbackQuery,
@@ -22,7 +24,6 @@ from telegram import (
     Message,
     Update,
 )
-from telegram.ext import ContextTypes
 
 from ...config import config
 from ...telegram_client import PTBTelegramClient
@@ -44,6 +45,9 @@ from ..user_state import (
     PANE_RENAME_THREAD_ID,
     PANE_RENAME_WINDOW_ID,
 )
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

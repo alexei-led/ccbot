@@ -7,11 +7,12 @@ Handles the inline keyboard callbacks triggered after voice message transcriptio
 Key function: handle_voice_callback
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import structlog
 from telegram import CallbackQuery, Message, Update
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
-
 from ...providers import get_provider_for_window
 from ...telegram_client import PTBTelegramClient
 from ...window_query import get_window_provider
@@ -27,6 +28,9 @@ from ..messaging_pipeline.message_sender import (
     react,
 )
 from ..user_state import VOICE_PENDING
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

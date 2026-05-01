@@ -9,6 +9,9 @@ built by status_bubble.py:
   - CB_STATUS_KEY: Quick key dispatch (arrow keys, enter, esc, etc.)
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 import contextlib
 import io
@@ -24,7 +27,6 @@ from telegram import (
     WebAppInfo,
 )
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 
 from ...config import config
 from ...miniapp.auth import sign_token
@@ -52,6 +54,9 @@ from ..live.screenshot_callbacks import (
     KEYS_SEND_MAP,
     build_screenshot_keyboard,
 )
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

@@ -23,7 +23,6 @@ from telegram import (
     InlineKeyboardMarkup,
     Update,
 )
-from telegram.ext import ContextTypes
 
 from ...telegram_client import TelegramClient
 from ...thread_router import thread_router
@@ -37,6 +36,8 @@ from ..messaging_pipeline.message_sender import (
 )
 
 if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
+
     from ...mailbox import Message
 
 logger = structlog.get_logger()

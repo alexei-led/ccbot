@@ -12,6 +12,9 @@ Key functions:
   - handle_sessions_kill_confirm(): second tap — kill and unbind
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import structlog
 
 from telegram import (
@@ -20,8 +23,6 @@ from telegram import (
     InlineKeyboardMarkup,
     Update,
 )
-from telegram.ext import ContextTypes
-
 from ..config import config
 from ..telegram_client import PTBTelegramClient, TelegramClient
 from ..thread_router import thread_router
@@ -39,6 +40,9 @@ from .callback_helpers import user_owns_window
 from .callback_registry import register
 from .cleanup import clear_topic_state
 from .messaging_pipeline.message_sender import safe_edit, safe_reply
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

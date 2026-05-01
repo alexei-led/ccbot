@@ -5,12 +5,16 @@ reply is sent. Any in-progress directory-browser state on the user is
 cleared so a stale picker does not interfere with the next interaction.
 """
 
-from telegram import Update
-from telegram.ext import ContextTypes
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
+from telegram import Update
 from ...config import config
 from ..messaging_pipeline.message_sender import safe_reply
 from .directory_browser import clear_browse_state
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 
 async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

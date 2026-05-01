@@ -17,16 +17,16 @@ calls for.
 Key function: handle_recovery_callback (uniform callback handler signature).
 """
 
+from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 
 from ...config import config
 from ...providers import get_provider, get_provider_for_window, resolve_launch_command
@@ -57,6 +57,9 @@ from ..user_state import (
     RECOVERY_SESSIONS,
     RECOVERY_WINDOW_ID,
 )
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

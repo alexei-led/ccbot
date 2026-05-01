@@ -8,13 +8,14 @@ Handles inline keyboard callbacks for the window picker UI:
 Key function: handle_window_callback (uniform callback handler signature).
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import structlog
 from pathlib import Path
 
 from telegram import CallbackQuery, Chat, Update
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
-
 from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...session import session_manager
 from ...thread_router import thread_router
@@ -35,6 +36,9 @@ from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_edit, safe_send
 from ..status.topic_emoji import format_topic_name_for_mode
 from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

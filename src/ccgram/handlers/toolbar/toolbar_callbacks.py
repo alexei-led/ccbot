@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 import structlog
 from telegram import (
@@ -23,7 +23,6 @@ from telegram import (
     Update,
 )
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 
 from ...window_query import view_window
 from ...thread_router import thread_router
@@ -33,6 +32,9 @@ from ..callback_data import CB_TOOLBAR
 from ..callback_helpers import get_thread_id, user_owns_window
 from ..callback_registry import register
 from .toolbar_keyboard import get_toolbar_config, refresh_button_label
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 
@@ -188,7 +190,7 @@ async def _builtin_dismiss(
     await query.answer()
 
 
-_BuiltinHandler = Callable[
+type _BuiltinHandler = Callable[
     [ToolbarAction, CallbackQuery, str, Update, ContextTypes.DEFAULT_TYPE],
     Awaitable[None],
 ]

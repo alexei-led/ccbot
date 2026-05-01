@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import contextlib
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 from telegram import Message, Update
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 
 from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...thread_router import thread_router
@@ -36,6 +36,9 @@ from ..callback_registry import register
 from ..messaging_pipeline.message_sender import REACT_DONE, react
 from .send_command import upload_file, build_file_browser
 from .send_security import is_path_contained, validate_sendable
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 from ..user_state import (
     SEND_CWD_KEY,
     SEND_ITEMS_KEY,

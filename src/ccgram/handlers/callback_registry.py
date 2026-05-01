@@ -12,15 +12,18 @@ Key components:
 
 from __future__ import annotations
 
+
+from typing import TYPE_CHECKING
 from collections.abc import Awaitable, Callable
 
 import structlog
 from telegram import Update
-from telegram.ext import ContextTypes
-
 from ..config import config
 from ..thread_router import thread_router
 from .callback_helpers import get_thread_id
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

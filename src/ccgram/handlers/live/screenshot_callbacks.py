@@ -12,6 +12,9 @@ status_bar_actions.py. Toolbar callbacks (CB_TOOLBAR_*) are in
 toolbar_callbacks.py.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import contextlib
 import io
 import time
@@ -27,8 +30,6 @@ from telegram import (
     Update,
 )
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
-
 from ...screenshot import text_to_image
 from ...telegram_client import PTBTelegramClient
 from ...thread_router import thread_router
@@ -43,6 +44,9 @@ from ..callback_data import (
 )
 from ..callback_helpers import get_thread_id, parse_target, user_owns_window
 from ..callback_registry import register
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

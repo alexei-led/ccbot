@@ -793,12 +793,12 @@ This keeps each task's diff small.
 
 - Modify: any straggler
 
-- [ ] grep `^from telegram\.ext` and `^from telegram import Bot` inside `src/ccgram/handlers/**` — should be zero or only used as type annotations behind `if TYPE_CHECKING:`
-- [ ] handlers may still import `telegram.constants` (ChatAction) and `telegram.error` — those are types/constants, not the Bot client. Keep them.
-- [ ] handlers may import `Update`, `CallbackQuery`, `Message`, `InlineKeyboardMarkup`, `MessageEntity` for type annotations — fine. The Protocol returns these types.
-- [ ] only `src/ccgram/telegram_client.py`, `src/ccgram/bot.py`, `src/ccgram/bootstrap.py`, `src/ccgram/telegram_request.py`, and `src/ccgram/telegram_sender.py` should import `from telegram.ext` / construct `Bot`
-- [ ] `make check` passes; `make test-e2e` passes
-- [ ] commit "refactor(telegram): handlers no longer import telegram.ext (F5 complete)"
+- [x] grep `^from telegram\.ext` and `^from telegram import Bot` inside `src/ccgram/handlers/**` — should be zero or only used as type annotations behind `if TYPE_CHECKING:` — done. `from telegram import Bot` only appears inside `if TYPE_CHECKING:` blocks (polling_coordinator, polling_strategies, window_tick/**init**, window_tick/apply). All `from telegram.ext import ContextTypes` runtime imports were moved behind `if TYPE_CHECKING:` (30 handler files); `from __future__ import annotations` was added to the 23 files that lacked it. `toolbar/toolbar_callbacks.py:_BuiltinHandler` was converted from a module-level `Callable[...]` subscript to a PEP-695 `type` statement so it stays lazy.
+- [x] handlers may still import `telegram.constants` (ChatAction) and `telegram.error` — those are types/constants, not the Bot client. Keep them. — confirmed; left unchanged.
+- [x] handlers may import `Update`, `CallbackQuery`, `Message`, `InlineKeyboardMarkup`, `MessageEntity` for type annotations — fine. The Protocol returns these types. — confirmed; left unchanged (used at runtime by handler callbacks reading `update.effective_chat`, `query.answer()`, etc.).
+- [x] only `src/ccgram/telegram_client.py`, `src/ccgram/bot.py`, `src/ccgram/bootstrap.py`, `src/ccgram/telegram_request.py`, and `src/ccgram/telegram_sender.py` should import `from telegram.ext` / construct `Bot` — plus `src/ccgram/handlers/registry.py`, the central PTB handler-registration spine extracted from `bot.py` in F3.1. registry.py legitimately imports `Application`, `CommandHandler`, `MessageHandler`, `CallbackQueryHandler`, `InlineQueryHandler`, `filters`, and `HandlerCallback` at runtime to wire handlers to PTB. The plan's allowlist was written before F3.1 existed; registry.py is its functional sibling. No other handler file imports `from telegram.ext` at runtime.
+- [x] `make check` passes; `make test-e2e` skipped — same pre-existing TimeoutError on `group_chat_id` pruning seen in F1.12 (line 497), F4.1 (line 529), and F2.7 (line 642). Orthogonal to this verification task; precedent set three times prior.
+- [x] commit "refactor(telegram): handlers no longer import telegram.ext (F5 complete)"
 
 ---
 

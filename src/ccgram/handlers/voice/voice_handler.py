@@ -8,12 +8,13 @@ Key handler:
   - handle_voice_message: main entry point for filters.VOICE
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
-
 from ...config import config
 from ...thread_router import thread_router
 from ...whisper import get_transcriber
@@ -21,6 +22,9 @@ from ...whisper.base import TranscriptionResult, WhisperTranscriber
 from ..callback_helpers import get_thread_id
 from ..messaging_pipeline.message_sender import safe_reply
 from ..user_state import VOICE_PENDING
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

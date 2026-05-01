@@ -15,12 +15,16 @@ Key components:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 
 from ... import window_query
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 from ...providers import resolve_launch_command
 from ...session import session_manager
 from ...spawn_request import (

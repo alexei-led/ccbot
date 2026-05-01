@@ -8,13 +8,12 @@ Provides history viewing functionality for Claude Code sessions:
 Supports both full history and unread message range views.
 """
 
+from __future__ import annotations
 import structlog
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
-
 from ...expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ... import session_query, window_query
 from ...config import config
@@ -26,6 +25,9 @@ from ...telegram_sender import split_message
 from ..callback_data import CB_HISTORY_NEXT, CB_HISTORY_PREV
 from ..callback_helpers import get_thread_id as _get_thread_id
 from ..messaging_pipeline.message_sender import safe_edit, safe_reply, safe_send
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

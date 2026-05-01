@@ -13,6 +13,9 @@ Key functions:
   - format_session_entry: shared label renderer for session pickers
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import json
 import time
 from dataclasses import dataclass
@@ -26,7 +29,6 @@ from telegram import (
     Update,
 )
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
 
 from ...config import config
 from ...providers import get_provider, get_provider_for_window, resolve_launch_command
@@ -44,6 +46,9 @@ from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_edit, safe_reply
 from ..status.topic_emoji import format_topic_name_for_mode
 from ..user_state import RESUME_SESSIONS
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

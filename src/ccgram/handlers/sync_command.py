@@ -10,6 +10,9 @@ Key functions:
   - handle_sync_dismiss(): dismiss button callback — remove keyboard
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 import contextlib
 import re
@@ -22,8 +25,6 @@ from telegram import (
     Update,
 )
 from telegram.error import BadRequest, TelegramError
-from telegram.ext import ContextTypes
-
 from .. import window_query
 from ..config import config
 from ..session import AuditIssue, AuditResult, session_manager
@@ -37,6 +38,9 @@ from .callback_registry import register
 from .cleanup import clear_topic_state
 from .messaging_pipeline.message_sender import is_thread_gone, safe_edit, safe_reply
 from .status.topic_emoji import sync_topic_name
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

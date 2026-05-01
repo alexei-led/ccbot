@@ -7,14 +7,13 @@ Periodic tasks that manage topic and window lifecycle:
   - State pruning: sync display names and remove stale entries
 """
 
+from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
 import structlog
 from telegram import Update
 from telegram.error import BadRequest, TelegramError
-from telegram.ext import ContextTypes
-
 from ...config import config
 from ...session import session_manager
 from ...telegram_client import PTBTelegramClient, TelegramClient
@@ -31,6 +30,7 @@ from ..polling.polling_strategies import (
 )
 
 if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
     from ...tmux_manager import TmuxWindow
 
 logger = structlog.get_logger()

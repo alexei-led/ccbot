@@ -14,6 +14,9 @@ Handles all inline keyboard callbacks for the directory browser UI:
 Key function: handle_directory_callback (uniform callback handler signature).
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 
 import structlog
@@ -21,8 +24,6 @@ from pathlib import Path
 
 from telegram import CallbackQuery, Update
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
-
 from ...providers import registry as provider_registry
 from ...session import session_manager
 from ...session_map import session_map_sync
@@ -57,6 +58,9 @@ from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_edit, safe_send
 from ..status.topic_emoji import format_topic_name_for_mode
 from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

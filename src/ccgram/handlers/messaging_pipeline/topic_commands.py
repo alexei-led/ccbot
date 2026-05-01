@@ -6,15 +6,19 @@ These commands flip per-window state held by ``SessionManager``: the
 worker when filtering tool messages).
 """
 
-from telegram import Update
-from telegram.ext import ContextTypes
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
+from telegram import Update
 from ...config import config
 from ...session import session_manager
 from ...thread_router import thread_router
 from ...utils import handle_general_topic_message, is_general_topic
 from ..callback_helpers import get_thread_id as _get_thread_id
 from .message_sender import safe_reply
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 
 async def verbose_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -13,6 +13,8 @@ Core responsibilities:
 
 from __future__ import annotations
 
+
+from typing import TYPE_CHECKING
 import asyncio
 from collections import OrderedDict
 from pathlib import Path
@@ -27,8 +29,6 @@ from telegram import (
 )
 from telegram.constants import ChatAction
 from telegram.error import TelegramError
-from telegram.ext import Application, ContextTypes
-
 from ..cc_commands import discover_provider_commands, register_commands
 from ..config import config
 from ..providers import (
@@ -45,6 +45,10 @@ from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import handle_general_topic_message, is_general_topic, task_done_callback
 from .callback_helpers import get_thread_id as _get_thread_id
 from .messaging_pipeline.message_sender import safe_reply
+
+if TYPE_CHECKING:
+    from telegram.ext import Application
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

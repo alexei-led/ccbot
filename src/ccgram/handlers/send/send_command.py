@@ -11,6 +11,9 @@ Provides utilities for the /send Telegram command:
   - send_command: handle the /send command
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import fnmatch
 import os
 
@@ -20,7 +23,7 @@ from pathlib import Path
 from telegram import Message, Update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
+
 from ...telegram_client import PTBTelegramClient, TelegramClient
 
 from ...config import config
@@ -43,6 +46,9 @@ from ..user_state import (
     SEND_PATH_KEY,
     SEND_WINDOW_ID_KEY,
 )
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

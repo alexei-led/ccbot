@@ -7,15 +7,19 @@ are untouched since only the bot process restarts.
 Key function: upgrade_command().
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 import structlog
 import re
 
 from telegram import Update
-from telegram.ext import ContextTypes
-
 from ..config import config
 from .messaging_pipeline.message_sender import safe_edit, safe_reply
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 

@@ -7,14 +7,15 @@ Each step returns True if it handled the request (stop) or False to continue.
 The orchestrator (handle_text_message) calls steps in sequence.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 import asyncio
 from pathlib import Path
 
 import structlog
 from telegram import Message, Update
 from telegram.constants import ChatAction
-from telegram.ext import ContextTypes
-
 from ...config import config
 from ...telegram_client import PTBTelegramClient, TelegramClient
 from ..callback_helpers import get_thread_id as _get_thread_id
@@ -50,6 +51,9 @@ from ...thread_router import thread_router
 from ...providers import get_provider_for_window
 from ...tmux_manager import send_to_window, tmux_manager
 from ...utils import handle_general_topic_message, is_general_topic, task_done_callback
+
+if TYPE_CHECKING:
+    from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
 
