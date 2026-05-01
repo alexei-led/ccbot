@@ -13,6 +13,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .utils import atomic_write_json
+
 logger = structlog.get_logger()
 
 
@@ -74,8 +76,6 @@ class MonitorState:
 
     def save(self) -> None:
         """Save state to file atomically."""
-        from .utils import atomic_write_json
-
         data = {
             "tracked_sessions": {
                 k: v.to_dict() for k, v in self.tracked_sessions.items()

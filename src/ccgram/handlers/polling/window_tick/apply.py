@@ -20,11 +20,18 @@ from telegram.constants import ChatAction
 from telegram.error import BadRequest, TelegramError
 
 from .... import window_query
-from ....claude_task_state import claude_task_state
+from ....claude_task_state import (
+    build_subagent_label,
+    claude_task_state,
+    get_subagent_names,
+)
+from ....config import config
 from ....providers import get_provider_for_window
 from ....telegram_client import PTBTelegramClient
 from ....thread_router import thread_router
 from ....tmux_manager import tmux_manager
+from ....window_state_store import window_store
+from ...callback_data import IDLE_STATUS_TEXT
 from ...cleanup import clear_topic_state
 from ...interactive import (
     clear_interactive_mode,
@@ -38,7 +45,7 @@ from ...messaging_pipeline.message_queue import (
     enqueue_status_update,
     get_message_queue,
 )
-from ...messaging_pipeline.message_sender import rate_limit_send_message
+from ...messaging_pipeline.message_sender import rate_limit_send_message, safe_send
 from ...recovery.recovery_callbacks import RecoveryBanner, render_banner
 from ...status.topic_emoji import update_topic_emoji
 from ..polling_strategies import (
@@ -104,8 +111,6 @@ async def _transition_to_idle(
     lifecycle_strategy.clear_autoclose_timer(user_id, thread_id)
     lifecycle_strategy.clear_typing_state(user_id, thread_id)
     if notif_mode not in ("muted", "errors_only"):
-        from ...callback_data import IDLE_STATUS_TEXT
-
         await enqueue_status_update(
             client, user_id, window_id, IDLE_STATUS_TEXT, thread_id=thread_id
         )
@@ -143,8 +148,6 @@ async def _forward_pane_output(
     the user sees the most-recent output, and labels the message with the
     pane's friendly name when one is set.
     """
-    from ....window_state_store import window_store
-    from ...messaging_pipeline.message_sender import safe_send
 
     pane = window_store.get_pane(window_id, pane_id)
     if pane is None or not pane.subscribed:
@@ -199,10 +202,6 @@ async def _notify_pane_lifecycle(
     transitions: list[PaneTransition],
 ) -> None:
     """Emit one-line "pane created"/"pane closed" notifications when enabled."""
-    from ....config import config
-    from ....window_state_store import window_store
-    from ...messaging_pipeline.message_sender import safe_send
-
     enabled = window_store.get_pane_lifecycle_notify(
         window_id, config.pane_lifecycle_notify
     )
@@ -383,8 +382,6 @@ async def _apply_active_transition(
         terminal_poll_state.mark_seen_status(window_id)
         await _send_typing_throttled(bot, user_id, thread_id)
         if notif_mode not in ("muted", "errors_only"):
-            from ....claude_task_state import build_subagent_label, get_subagent_names
-
             subagent_names = get_subagent_names(window_id)
             display_status = decision.status_text or ""
             if subagent_names:

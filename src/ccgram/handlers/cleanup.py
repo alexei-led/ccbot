@@ -19,9 +19,16 @@ if TYPE_CHECKING:
     from telegram import Update
     from telegram.ext import ContextTypes
 
-from ..utils import log_throttle_reset
+from ..config import config
+from ..mailbox import Mailbox
+from ..thread_router import thread_router
+from ..topic_state_registry import topic_state
+from ..utils import handle_general_topic_message, is_general_topic, log_throttle_reset
+from ..window_resolver import is_foreign_window
+from .callback_helpers import get_thread_id
 from .interactive import clear_interactive_msg
 from .messaging_pipeline.message_queue import enqueue_status_update
+from .messaging_pipeline.message_sender import safe_reply
 from .status.status_bubble import clear_status_msg_info
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, VOICE_PENDING
 
@@ -49,11 +56,6 @@ async def clear_topic_state(
             when the window is truly dead, to preserve skip/offer state for
             live sessions.
     """
-    from ..config import config
-    from ..thread_router import thread_router
-    from ..topic_state_registry import topic_state
-    from ..window_resolver import is_foreign_window
-
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
 
     qualified_id: str | None = None
@@ -89,6 +91,8 @@ async def clear_topic_state(
         chat_id=chat_id,
     )
     if window_id and window_dead:
+        # Lazy: cleanup → shell.shell_prompt_orchestrator → shell/__init__ →
+        # polling → window_tick → apply → cleanup forms a cycle. Keep lazy.
         from .shell.shell_prompt_orchestrator import clear_state as _clear_shell_prompt
 
         _clear_shell_prompt(window_id)
@@ -97,8 +101,6 @@ async def clear_topic_state(
     log_throttle_reset(f"status-update:{user_id}:{thread_id}")
     if window_id:
         log_throttle_reset(f"topic-probe:{window_id}")
-        from ..mailbox import Mailbox
-
         mb = Mailbox(config.mailbox_dir)
         if qualified_id is not None:
             mb.clear_inbox(qualified_id)
@@ -119,13 +121,6 @@ async def clear_topic_state(
 
 async def unbind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Disconnect a topic from its tmux window without killing the session."""
-    from ..config import config
-    from ..thread_router import thread_router
-    from ..utils import handle_general_topic_message, is_general_topic
-    from .callback_helpers import get_thread_id
-    from .messaging_pipeline.message_queue import enqueue_status_update
-    from .messaging_pipeline.message_sender import safe_reply
-
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
         return

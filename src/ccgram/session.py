@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import config
+from .mailbox import Mailbox
 from .session_map import (
     SessionMapSync,
     install_session_map_sync,
@@ -108,8 +109,6 @@ def _migrate_mailbox_ids(
             remap[f"{tmux_session}:{old_id}"] = f"{tmux_session}:{new_id}"
 
     if remap:
-        from .mailbox import Mailbox
-
         Mailbox(config.mailbox_dir).migrate_ids(remap)
 
 
@@ -348,7 +347,6 @@ class SessionManager:
                 qualified_live.add(wid)
             else:
                 qualified_live.add(f"{config.tmux_session_name}:{wid}")
-        from .mailbox import Mailbox
 
         Mailbox(config.mailbox_dir).prune_dead(qualified_live)
 

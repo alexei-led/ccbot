@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .config import config
 from .window_state_store import (
     APPROVAL_MODES,
     BATCH_MODES,
@@ -94,7 +95,6 @@ def is_tool_calls_hidden(window_id: str) -> bool:
     if visibility == "shown":
         return False
     # visibility == "default" — fall through to global config
-    from .config import config
 
     return config.hide_tool_calls
 

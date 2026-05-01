@@ -19,6 +19,8 @@ from typing import Any
 
 from ccgram.expandable_quote import EXPANDABLE_QUOTE_START, format_expandable_quote
 
+from .utils import shorten_path
+
 
 @dataclass
 class ParsedMessage:
@@ -194,8 +196,6 @@ class TranscriptParser:
         Returns:
             Formatted string like "**Read**(file.py)"
         """
-        from .utils import shorten_path
-
         if not isinstance(input_data, dict):
             emoji = cls.TOOL_EMOJI.get(name, "")
             prefix = f"{emoji} " if emoji else ""

@@ -16,8 +16,9 @@ from fnmatch import fnmatch
 from pathlib import Path
 import structlog
 
+from .config import config
 from .topic_state_registry import topic_state
-from .utils import atomic_write_json
+from .utils import atomic_write_json, ccgram_dir
 
 logger = structlog.get_logger()
 
@@ -53,10 +54,6 @@ def export_window_info() -> dict[str, WindowInfo]:
     SessionManager initialization. Used by ``ccgram msg`` CLI commands.
     Uses ccgram_dir() so callers can patch the directory for testing.
     """
-    import json
-
-    from .utils import ccgram_dir
-
     state_file = ccgram_dir() / "state.json"
     if not state_file.exists():
         return {}
@@ -77,8 +74,6 @@ def export_window_info() -> dict[str, WindowInfo]:
 
 
 def _default_declared_path() -> Path:
-    from .config import config
-
     return config.mailbox_dir / "declared.json"
 
 

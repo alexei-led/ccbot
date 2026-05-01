@@ -67,7 +67,7 @@ class TestMonitorStateSave:
         def fake_write(path, data, indent=2):
             calls.append((path, data))
 
-        monkeypatch.setattr("ccgram.utils.atomic_write_json", fake_write)
+        monkeypatch.setattr("ccgram.monitor_state.atomic_write_json", fake_write)
         state.save()
         assert len(calls) == 1
         path, data = calls[0]
@@ -127,7 +127,7 @@ class TestSaveIfDirty:
         def fake_write(*_args, **_kwargs):
             saved.append(True)
 
-        monkeypatch.setattr("ccgram.utils.atomic_write_json", fake_write)
+        monkeypatch.setattr("ccgram.monitor_state.atomic_write_json", fake_write)
         state.save_if_dirty()
         assert len(saved) == 1
 
@@ -138,6 +138,6 @@ class TestSaveIfDirty:
         def fake_write(*_args, **_kwargs):
             saved.append(True)
 
-        monkeypatch.setattr("ccgram.utils.atomic_write_json", fake_write)
+        monkeypatch.setattr("ccgram.monitor_state.atomic_write_json", fake_write)
         state.save_if_dirty()
         assert len(saved) == 0

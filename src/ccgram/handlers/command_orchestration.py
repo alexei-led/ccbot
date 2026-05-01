@@ -44,7 +44,11 @@ from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from ..utils import handle_general_topic_message, is_general_topic, task_done_callback
 from .callback_helpers import get_thread_id as _get_thread_id
+from .command_history import record_command
+from .messaging_pipeline.message_queue import enqueue_status_update
 from .messaging_pipeline.message_sender import safe_reply
+from .polling.polling_strategies import lifecycle_strategy, reset_window_polling_state
+from .toolbar import build_toolbar_keyboard, seed_button_states
 
 if TYPE_CHECKING:
     from telegram.ext import Application
@@ -543,8 +547,6 @@ async def _handle_clear_command(
         return
     logger.info("Clearing session for window %s after /clear", display)
     window_store.clear_window_session(window_id)
-    from .messaging_pipeline.message_queue import enqueue_status_update
-    from .polling.polling_strategies import reset_window_polling_state
 
     await enqueue_status_update(
         PTBTelegramClient(update.get_bot()),
@@ -636,7 +638,6 @@ async def forward_command_handler(
         probe_pane_before,
     ) = await _capture_command_probe_context(window_id, provider)
     status_probe_offset = _status_snapshot_probe_offset(window_id, cc_slash)
-    from .polling.polling_strategies import lifecycle_strategy
 
     lifecycle_strategy.clear_probe_failures(window_id)
     success, error_msg = await send_to_window(window_id, cc_slash)
@@ -645,8 +646,6 @@ async def forward_command_handler(
         return
 
     if thread_id is not None:
-        from .command_history import record_command
-
         record_command(user.id, thread_id, cc_slash)
     await safe_reply(update.message, f"\u26a1 [{display}] Sent: {cc_slash}")
     await _maybe_send_status_snapshot(
@@ -734,7 +733,6 @@ async def commands_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) 
 
 async def toolbar_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """``/toolbar`` — show the persistent action toolbar for the topic."""
-    from .toolbar import build_toolbar_keyboard, seed_button_states
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):

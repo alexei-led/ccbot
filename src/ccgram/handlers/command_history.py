@@ -15,7 +15,13 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+from ..config import config
 from ..topic_state_registry import topic_state
+from ..utils import handle_general_topic_message, is_general_topic
+from .callback_helpers import get_thread_id
+from .messaging_pipeline.message_sender import safe_reply
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -79,12 +85,6 @@ async def recall_command(
     _context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Show recent command history for the current topic."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-    from ..config import config
-    from ..utils import handle_general_topic_message, is_general_topic
-    from .callback_helpers import get_thread_id
-    from .messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):

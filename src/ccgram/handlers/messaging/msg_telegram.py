@@ -29,6 +29,7 @@ from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
 from ...utils import tmux_session_name
 from ..callback_registry import register
+from .msg_delivery import delivery_strategy
 from ..messaging_pipeline.message_sender import (
     REACT_INBOX,
     rate_limit_send_message,
@@ -359,7 +360,6 @@ async def _handle_loop_alert(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Handle [Pause Messaging] / [Allow 5 more] button presses."""
-    from .msg_delivery import delivery_strategy
 
     query = update.callback_query
     if not query or not query.data:

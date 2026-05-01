@@ -38,6 +38,7 @@ from ...tmux_manager import tmux_manager
 from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import rate_limit_send_message
+from .msg_telegram import resolve_topic
 
 logger = structlog.get_logger()
 
@@ -139,7 +140,6 @@ async def post_spawn_approval_keyboard(
 
     Returns True if the keyboard was successfully posted, False otherwise.
     """
-    from .msg_telegram import resolve_topic
 
     topic = resolve_topic(requester_window)
     if topic is None:
@@ -184,7 +184,6 @@ async def _create_topic_for_spawn(
     req: SpawnRequest,
 ) -> None:
     from ..topics.topic_orchestration import collect_target_chats, create_topic_in_chat
-    from .msg_telegram import resolve_topic
 
     target_chats = collect_target_chats(window_id)
     for chat_id in target_chats:

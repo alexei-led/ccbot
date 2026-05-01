@@ -19,6 +19,8 @@ from pathlib import Path
 
 import structlog
 
+from ...utils import assert_sendable
+
 logger = structlog.get_logger()
 
 _SECRET_PATTERNS: list[str] = [
@@ -232,8 +234,6 @@ def validate_sendable(path: Path, cwd: Path) -> str | None:
     size_error = _check_size_and_type(path)
     if size_error is not None:
         return size_error
-
-    from ...utils import assert_sendable  # noqa: PLC0415
 
     try:
         assert_sendable(path)

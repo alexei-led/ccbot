@@ -1068,7 +1068,7 @@ class TestExportWindowInfo:
                 }
             )
         )
-        monkeypatch.setattr("ccgram.utils.ccgram_dir", lambda: state_dir)
+        monkeypatch.setattr("ccgram.msg_discovery.ccgram_dir", lambda: state_dir)
         result = export_window_info()
         assert "@0" in result
         assert result["@0"].cwd == "/home/user/proj"
@@ -1081,7 +1081,7 @@ class TestExportWindowInfo:
 
         state_dir = tmp_path / "empty"
         state_dir.mkdir()
-        monkeypatch.setattr("ccgram.utils.ccgram_dir", lambda: state_dir)
+        monkeypatch.setattr("ccgram.msg_discovery.ccgram_dir", lambda: state_dir)
         assert export_window_info() == {}
 
     def test_malformed_json(self, tmp_path, monkeypatch) -> None:
@@ -1090,5 +1090,5 @@ class TestExportWindowInfo:
         state_dir = tmp_path / "ccgram"
         state_dir.mkdir()
         (state_dir / "state.json").write_text("{ invalid json")
-        monkeypatch.setattr("ccgram.utils.ccgram_dir", lambda: state_dir)
+        monkeypatch.setattr("ccgram.msg_discovery.ccgram_dir", lambda: state_dir)
         assert export_window_info() == {}

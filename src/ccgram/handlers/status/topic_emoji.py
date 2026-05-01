@@ -20,8 +20,11 @@ import time
 import structlog
 from telegram.error import BadRequest, TelegramError
 
+from ...config import config
 from ...telegram_client import TelegramClient
+from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
+from ...window_query import get_approval_mode
 
 logger = structlog.get_logger()
 
@@ -63,8 +66,6 @@ _STATE_EMOJI_USER: dict[str, str] = {
 
 def _state_emoji_map() -> dict[str, str]:
     """Return the active state→emoji table for the configured status mode."""
-    from ...config import config
-
     return _STATE_EMOJI_USER if config.status_mode == "user" else _STATE_EMOJI_SYSTEM
 
 
@@ -211,9 +212,6 @@ async def _edit_topic_name(
 
 def _resolve_approval_mode(chat_id: int, thread_id: int) -> str:
     """Resolve approval mode for a topic via session bindings."""
-    from ...window_query import get_approval_mode
-    from ...thread_router import thread_router
-
     window_id = thread_router.get_window_for_chat_thread(chat_id, thread_id)
     if not window_id:
         return "normal"
@@ -222,8 +220,6 @@ def _resolve_approval_mode(chat_id: int, thread_id: int) -> str:
 
 def _resolve_rc_mode(chat_id: int, thread_id: int) -> bool:
     """Resolve Remote Control active state for a topic via session bindings."""
-    from ...thread_router import thread_router
-
     window_id = thread_router.get_window_for_chat_thread(chat_id, thread_id)
     if not window_id:
         return False

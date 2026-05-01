@@ -16,6 +16,13 @@ from telegram.error import TelegramError
 
 from ...telegram_client import TelegramClient
 from .msg_delivery import delivery_strategy
+from .msg_telegram import (
+    notify_loop_detected,
+    notify_message_sent,
+    notify_messages_delivered,
+    notify_pending_shell,
+    notify_reply_received,
+)
 
 if TYPE_CHECKING:
     from ...mailbox import Mailbox, Message
@@ -267,7 +274,6 @@ async def _notify_delivered(
     """Send Telegram notification for delivered messages (if client available)."""
     if client is None:
         return
-    from .msg_telegram import notify_messages_delivered, notify_reply_received
 
     try:
         await notify_messages_delivered(client, to_window, messages)
@@ -293,7 +299,6 @@ async def _notify_senders(
     """Notify each sender's Telegram topic that their message was delivered."""
     if client is None:
         return
-    from .msg_telegram import notify_message_sent
 
     for msg in messages:
         try:
@@ -308,7 +313,6 @@ async def _notify_loop(
     """Send Telegram loop detection alert (if client available)."""
     if client is None:
         return
-    from .msg_telegram import notify_loop_detected
 
     try:
         await notify_loop_detected(client, window_a, window_b)
@@ -327,7 +331,6 @@ async def _deliver_to_shell_topic(
     """
     if client is None:
         return
-    from .msg_telegram import notify_pending_shell
 
     state = delivery_strategy.get_state(qualified_id)
     pending = mailbox.inbox(qualified_id)

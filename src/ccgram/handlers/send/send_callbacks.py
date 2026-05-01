@@ -22,6 +22,7 @@ import structlog
 from telegram import Message, Update
 from telegram.error import TelegramError
 
+from ...config import config
 from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...thread_router import thread_router
 from ..callback_data import (
@@ -77,7 +78,6 @@ def _clear_send_state(context: ContextTypes.DEFAULT_TYPE) -> None:
 @register(CB_SEND_FILE, CB_SEND_DIR, CB_SEND_PAGE, CB_SEND_UP, CB_SEND_CANCEL)
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route CB_SEND_* callbacks to the appropriate handler."""
-    from ...config import config
 
     query = update.callback_query
     user = update.effective_user

@@ -158,6 +158,8 @@ async def _handle_status_recall(
         await query.answer("Stale status button", show_alert=True)
         return
 
+    # Lazy: command_history → messaging_pipeline → status → status_bar_actions
+    # forms a cycle when imported at module top. Keep lazy.
     from ..command_history import get_history, record_command
 
     history = get_history(user_id, thread_id, limit=idx + 1)

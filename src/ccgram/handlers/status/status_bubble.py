@@ -31,6 +31,7 @@ from ..callback_data import (
     CB_STATUS_RECALL,
     CB_STATUS_REMOTE,
     CB_STATUS_SCREENSHOT,
+    IDLE_STATUS_TEXT,
     NOTIFY_MODE_ICONS,
 )
 from ..messaging_pipeline.message_sender import edit_with_fallback, rate_limit_send
@@ -111,6 +112,8 @@ def build_status_keyboard(
       Row 2: [Esc] [Screenshot] [Bell] [RC]
       Row 3 (optional): [🪟 Dashboard] when Mini App is enabled and user_id is set
     """
+    # Lazy: command_history → messaging_pipeline → status → status_bubble
+    # forms a cycle when imported at module top. Keep lazy.
     from ..command_history import truncate_for_display
     from .status_bar_actions import build_dashboard_button
 
@@ -167,7 +170,7 @@ def _get_idle_history(
     user_id: int, thread_id_or_0: int, status_text: str
 ) -> list[str] | None:
     """Return history list if the status is idle, else None."""
-    from ..callback_data import IDLE_STATUS_TEXT
+    # Lazy: command_history → messaging_pipeline → status forms a cycle.
     from ..command_history import get_history
 
     first_line = status_text.split("\n", 1)[0]

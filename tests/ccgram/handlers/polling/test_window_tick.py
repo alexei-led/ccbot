@@ -294,11 +294,11 @@ class TestUpdateStatusActiveLine:
             ) as mock_cts,
             patch("ccgram.handlers.polling.window_tick.apply.get_provider_for_window"),
             patch(
-                "ccgram.claude_task_state.get_subagent_names",
+                "ccgram.handlers.polling.window_tick.apply.get_subagent_names",
                 return_value=["subagent-1"],
             ),
             patch(
-                "ccgram.claude_task_state.build_subagent_label",
+                "ccgram.handlers.polling.window_tick.apply.build_subagent_label",
                 return_value="1 subagent",
             ),
         ):
@@ -665,11 +665,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -686,11 +686,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -712,11 +712,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=True),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -731,11 +731,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=True),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -757,11 +757,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -786,11 +786,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=False),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
                 side_effect=TelegramError("boom"),
             ),
@@ -808,11 +808,11 @@ class TestPaneLifecycleNotify:
         with (
             patch.object(window_tick.apply, "thread_router") as mock_tr,
             patch(
-                "ccgram.config.config",
+                "ccgram.handlers.polling.window_tick.apply.config",
                 MagicMock(pane_lifecycle_notify=True),
             ),
             patch(
-                "ccgram.handlers.messaging_pipeline.message_sender.safe_send",
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
