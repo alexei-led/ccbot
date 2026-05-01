@@ -28,7 +28,7 @@ def test_command_spec_is_frozen():
         spec.name = "bar"  # type: ignore[misc]
 
 
-def test_register_all_installs_expected_command_names_in_order():
+def test_register_all_installs_expected_command_names():
     app = _make_app()
     register_all(app, filters.ALL)
 
@@ -38,9 +38,8 @@ def test_register_all_installs_expected_command_names_in_order():
         if isinstance(handler, CommandHandler):
             command_names.extend(sorted(handler.commands))
 
-    assert tuple(command_names) == tuple(sorted(COMMAND_NAMES)) or set(
-        command_names
-    ) == set(COMMAND_NAMES)
+    assert set(command_names) == set(COMMAND_NAMES)
+    assert len(command_names) == len(COMMAND_NAMES)
 
 
 def test_register_all_registers_all_handler_kinds():

@@ -206,7 +206,7 @@ After Round 4 (F1), the flat 50+ peer modules are grouped into feature subpackag
 | `polling_strategies.py`   | Polling strategy classes: `TerminalScreenBuffer`, `TerminalPollState`, `InteractiveUIStrategy`, `TopicLifecycleStrategy`; pure types (`TickContext`, `TickDecision`, `STARTUP_TIMEOUT`) |
 | `periodic_tasks.py`       | Periodic task orchestration: broker delivery, mailbox sweep, spawn processing, lifecycle, live view                                                                                     |
 | `window_tick/__init__.py` | Per-window poll cycle (`tick_window`) — thin orchestrator that gathers transcript and dispatches to apply functions                                                                     |
-| `window_tick/decide.py`   | Pure decision kernel (`decide_tick`, `_build_status_line`, `is_shell_prompt`) — zero deps on tmux/PTB/singletons (F4)                                                                   |
+| `window_tick/decide.py`   | Pure decision kernel (`decide_tick`, `build_status_line`, `is_shell_prompt`) — zero deps on tmux/PTB/singletons (F4)                                                                    |
 | `window_tick/observe.py`  | Pure inputs in, `TickContext` out — pane-text capture, last-activity lookup, screen-buffer parsing, status resolve, vim-insert detection (F4)                                           |
 | `window_tick/apply.py`    | DI-heavy side effects — `_apply_*_transition`, `_update_status`, `_send_typing_throttled`, `_handle_dead_window_notification`, `_scan_window_panes`, pane forwarding (F4)               |
 

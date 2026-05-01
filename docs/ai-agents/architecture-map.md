@@ -65,7 +65,7 @@
 
 Inbound user message (Telegram -> tmux):
 
-1. PTB handler entry in `bot.py`.
+1. PTB dispatcher routes through handlers wired in `handlers/registry.py`.
 2. `handlers/text/text_handler.py` validates context and resolves topic binding.
 3. `session.py` maps `(user_id, thread_id)` -> `window_id`.
 4. `tmux_manager.py` sends keys to the mapped window/pane.
@@ -110,7 +110,7 @@ Recovery flow (dead/missing session):
 Commands menu flow (`/commands`):
 
 1. User invokes `/commands` in a topic.
-2. `handlers/` routes to command handler in `bot.py`.
+2. `handlers/registry.py` dispatches to `handlers/command_orchestration.py`.
 3. `command_catalog.py` discovers available commands for the window's provider (filesystem scan with 60s TTL cache).
 4. `cc_commands.py` renders the scoped command menu as inline keyboard.
 5. User selection sends the command text to the agent via `tmux_manager.py`.

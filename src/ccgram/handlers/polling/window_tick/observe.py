@@ -113,7 +113,6 @@ def build_context(
         is_dead_window=False,
         supports_hook=provider.capabilities.supports_hook,
         notification_mode=notification_mode,
-        queue_has_content=False,
     )
 
 

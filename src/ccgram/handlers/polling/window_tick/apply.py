@@ -43,7 +43,6 @@ from ...interactive import (
 from ...messaging_pipeline.message_queue import (
     clear_tool_msg_ids_for_topic,
     enqueue_status_update,
-    get_message_queue,
 )
 from ...messaging_pipeline.message_sender import rate_limit_send_message, safe_send
 from ...recovery.recovery_callbacks import RecoveryBanner, render_banner
@@ -85,8 +84,9 @@ async def _send_typing_throttled(
         return
     lifecycle_strategy.record_typing_sent(user_id, thread_id)
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    client = PTBTelegramClient(bot)
     with contextlib.suppress(TelegramError):
-        await bot.send_chat_action(
+        await client.send_chat_action(
             chat_id=chat_id,
             message_thread_id=thread_id,
             action=ChatAction.TYPING,
@@ -551,24 +551,4 @@ __all__ = [
     "_surface_pane_alert",
     "_transition_to_idle",
     "_update_status",
-    "asyncio",
-    "claude_task_state",
-    "clear_interactive_mode",
-    "clear_interactive_msg",
-    "clear_tool_msg_ids_for_topic",
-    "clear_topic_state",
-    "enqueue_status_update",
-    "get_interactive_window",
-    "get_message_queue",
-    "get_provider_for_window",
-    "handle_interactive_ui",
-    "lifecycle_strategy",
-    "pane_status_strategy",
-    "rate_limit_send_message",
-    "render_banner",
-    "set_interactive_mode",
-    "thread_router",
-    "tmux_manager",
-    "update_topic_emoji",
-    "window_query",
 ]

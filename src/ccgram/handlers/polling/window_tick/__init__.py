@@ -61,9 +61,6 @@ if TYPE_CHECKING:
 
     from ....tmux_manager import TmuxWindow
 
-# Backward-compatible top-level alias matching the pre-split helper name.
-_build_status_line = build_status_line
-
 
 async def tick_window(
     bot: "Bot",
@@ -109,7 +106,6 @@ __all__ = [
     "_apply_done_transition",
     "_apply_starting_transition",
     "_apply_tick_decision",
-    "_build_status_line",
     "_check_interactive_only",
     "_check_vim_insert",
     "_forward_pane_output",

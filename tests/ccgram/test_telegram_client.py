@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from telegram import BotCommand, Message
+from telegram import BotCommand, InputMedia, Message
 
 from telegram.error import TelegramError
 
@@ -118,6 +118,35 @@ class TestPTBTelegramClient:
         await client.unpin_all_forum_topic_messages(chat_id=1, message_thread_id=7)
         fake_bot.unpin_all_forum_topic_messages.assert_awaited_once_with(
             chat_id=1, message_thread_id=7
+        )
+
+    async def test_close_forum_topic_delegates(self, fake_bot: MagicMock):
+        client = PTBTelegramClient(fake_bot)
+        await client.close_forum_topic(chat_id=1, message_thread_id=7)
+        fake_bot.close_forum_topic.assert_awaited_once_with(
+            chat_id=1, message_thread_id=7
+        )
+
+    async def test_delete_forum_topic_delegates(self, fake_bot: MagicMock):
+        client = PTBTelegramClient(fake_bot)
+        await client.delete_forum_topic(chat_id=1, message_thread_id=7)
+        fake_bot.delete_forum_topic.assert_awaited_once_with(
+            chat_id=1, message_thread_id=7
+        )
+
+    async def test_edit_message_caption_delegates(self, fake_bot: MagicMock):
+        client = PTBTelegramClient(fake_bot)
+        await client.edit_message_caption(chat_id=1, message_id=2, caption="new")
+        fake_bot.edit_message_caption.assert_awaited_once_with(
+            chat_id=1, message_id=2, caption="new"
+        )
+
+    async def test_edit_message_media_delegates(self, fake_bot: MagicMock):
+        client = PTBTelegramClient(fake_bot)
+        media = MagicMock(spec=InputMedia)
+        await client.edit_message_media(chat_id=1, message_id=2, media=media)
+        fake_bot.edit_message_media.assert_awaited_once_with(
+            chat_id=1, message_id=2, media=media
         )
 
     async def test_set_message_reaction_delegates(self, fake_bot: MagicMock):

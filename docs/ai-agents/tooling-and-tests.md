@@ -49,18 +49,18 @@ Examples:
 
 - session/state changes -> `tests/ccgram/test_session.py`, `tests/ccgram/test_window_state_store.py`
 - monitor/parsing changes -> `tests/ccgram/test_session_monitor.py`, `tests/ccgram/test_transcript_parser.py`
-- handlers/UI changes -> `tests/ccgram/handlers/test_text_handler.py`, `tests/ccgram/handlers/test_polling_coordinator.py`, `tests/ccgram/handlers/test_polling_strategies.py`, `tests/ccgram/handlers/test_bot_callbacks.py`
+- handlers/UI changes -> `tests/ccgram/handlers/text/test_text_handler.py`, `tests/ccgram/handlers/polling/test_polling_coordinator.py`, `tests/ccgram/handlers/polling/test_polling_strategies.py`, `tests/ccgram/handlers/test_bot_callbacks.py`
 - command changes -> `tests/ccgram/test_command_catalog.py`, `tests/ccgram/test_commands_command.py`, `tests/ccgram/test_cc_commands.py`
 - hook/event changes -> `tests/ccgram/test_hook.py`, `tests/ccgram/handlers/test_hook_events.py`, `tests/ccgram/test_session_monitor_events.py`
-- cleanup/lifecycle changes -> `tests/ccgram/handlers/test_cleanup.py`, `tests/ccgram/handlers/test_topic_emoji.py`, `tests/ccgram/handlers/test_topic_lifecycle.py`
+- cleanup/lifecycle changes -> `tests/ccgram/handlers/test_cleanup.py`, `tests/ccgram/handlers/status/test_topic_emoji.py`, `tests/ccgram/handlers/topics/test_topic_lifecycle.py`
 - provider changes -> `tests/ccgram/providers/test_contracts.py`, `tests/ccgram/providers/test_jsonl_providers.py`, `tests/ccgram/providers/test_autodetect.py`
-- shell/LLM changes -> `tests/ccgram/providers/test_shell.py`, `tests/ccgram/test_shell_commands.py`, `tests/ccgram/handlers/test_shell_capture.py`, `tests/ccgram/handlers/test_shell_prompt_orchestrator.py`
-- voice changes -> `tests/ccgram/handlers/test_voice_handler.py`, `tests/ccgram/handlers/test_voice_callbacks.py`
-- live view changes -> `tests/ccgram/handlers/test_live_view.py`
-- polling/periodic changes -> `tests/ccgram/handlers/test_polling_coordinator.py`, `tests/ccgram/handlers/test_polling_strategies.py`, `tests/ccgram/handlers/test_status_polling.py`
-- topic lifecycle changes -> `tests/ccgram/handlers/test_topic_orchestration.py`, `tests/ccgram/handlers/test_topic_lifecycle.py`
-- tool-call visibility / `/toolcalls` -> `tests/ccgram/handlers/test_message_queue.py` (visibility gate), `tests/ccgram/test_window_state_store.py` (state field + cycle)
-- provider switching (claude↔shell↔gemini) -> `tests/ccgram/handlers/test_status_polling.py::TestProviderSwitchPromptSetup`, `TestProviderSwitchChain`
+- shell/LLM changes -> `tests/ccgram/providers/test_shell.py`, `tests/ccgram/handlers/shell/test_shell_commands.py`, `tests/ccgram/handlers/shell/test_shell_capture.py`, `tests/ccgram/handlers/shell/test_shell_prompt_orchestrator.py`
+- voice changes -> `tests/ccgram/handlers/voice/test_voice_handler.py`
+- live view changes -> `tests/ccgram/handlers/live/test_live_view.py`
+- polling/periodic changes -> `tests/ccgram/handlers/polling/test_polling_coordinator.py`, `tests/ccgram/handlers/polling/test_polling_strategies.py`, `tests/ccgram/handlers/polling/test_status_polling.py`
+- topic lifecycle changes -> `tests/ccgram/handlers/topics/test_topic_orchestration.py`, `tests/ccgram/handlers/topics/test_topic_lifecycle.py`
+- tool-call visibility / `/toolcalls` -> `tests/ccgram/handlers/messaging_pipeline/test_message_queue.py` (visibility gate), `tests/ccgram/test_window_state_store.py` (state field + cycle)
+- provider switching (claude↔shell↔gemini) -> `tests/ccgram/handlers/polling/test_status_polling.py::TestProviderSwitchPromptSetup`, `TestProviderSwitchChain`
 
 ## Quality Constraints
 

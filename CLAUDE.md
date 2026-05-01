@@ -269,14 +269,14 @@ No reliable Telegram Bot API mock server exists. The project uses a tiered appro
 
 The shell provider has dedicated tests for each layer:
 
-| Test File                                         | Coverage                                                                   |
-| ------------------------------------------------- | -------------------------------------------------------------------------- |
-| `tests/ccgram/providers/test_shell.py`            | Provider capabilities, shell detection, prompt setup                       |
-| `tests/ccgram/test_shell_commands.py`             | Command routing, LLM flow, approval keyboard, callbacks                    |
-| `tests/ccgram/test_shell_capture.py`              | Output extraction, passive monitoring, relay formatting, error suggestions |
-| `tests/integration/test_shell_flow.py`            | Complete Telegram → Shell → Telegram round-trip                            |
-| `tests/integration/test_shell_dispatch.py`        | PTB dispatch routing to shell handler                                      |
-| `tests/integration/test_shell_llm_integration.py` | Real LLM API round-trip with command execution                             |
+| Test File                                            | Coverage                                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| `tests/ccgram/providers/test_shell.py`               | Provider capabilities, shell detection, prompt setup                       |
+| `tests/ccgram/handlers/shell/test_shell_commands.py` | Command routing, LLM flow, approval keyboard, callbacks                    |
+| `tests/ccgram/handlers/shell/test_shell_capture.py`  | Output extraction, passive monitoring, relay formatting, error suggestions |
+| `tests/integration/test_shell_flow.py`               | Complete Telegram → Shell → Telegram round-trip                            |
+| `tests/integration/test_shell_dispatch.py`           | PTB dispatch routing to shell handler                                      |
+| `tests/integration/test_shell_llm_integration.py`    | Real LLM API round-trip with command execution                             |
 
 ## Emdash Integration
 

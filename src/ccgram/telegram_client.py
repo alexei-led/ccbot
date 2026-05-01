@@ -176,9 +176,11 @@ class PTBTelegramClient:
 
     @property
     def bot(self) -> Bot:
-        """Underlying PTB Bot — escape hatch for migration only.
+        """Underlying PTB Bot — escape hatch for PTB-only helpers.
 
-        Handlers must not reach for this; remove once F5 migration is done.
+        Used by ``unwrap_bot`` for ``DraftStream`` / ``do_api_request`` and a
+        handful of helpers that need PTB internals. Handlers should depend on
+        the ``TelegramClient`` Protocol instead.
         """
         return self._bot
 

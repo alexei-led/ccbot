@@ -51,7 +51,7 @@ def decide_tick(ctx: TickContext) -> TickDecision:
 
     if ctx.is_shell_prompt:
         if ctx.supports_hook:
-            return TickDecision(clear_status=True, transition="done")
+            return TickDecision(transition="done")
         return TickDecision(transition="idle")
 
     if ctx.has_seen_status:

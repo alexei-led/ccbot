@@ -16,7 +16,6 @@ def _ctx(
     is_dead_window: bool = False,
     supports_hook: bool = True,
     notification_mode: str = "normal",
-    queue_has_content: bool = False,
 ) -> TickContext:
     return TickContext(
         window_id=window_id,
@@ -28,7 +27,6 @@ def _ctx(
         is_dead_window=is_dead_window,
         supports_hook=supports_hook,
         notification_mode=notification_mode,
-        queue_has_content=queue_has_content,
     )
 
 
@@ -81,7 +79,6 @@ def test_shell_prompt_with_hook_transitions_done():
     ctx = _ctx(is_shell_prompt=True, supports_hook=True)
     decision = decide_tick(ctx)
     assert decision.transition == "done"
-    assert decision.clear_status is True
 
 
 def test_has_seen_status_transitions_idle():
@@ -130,4 +127,3 @@ def test_tick_decision_defaults_are_no_op():
     assert d.status_text is None
     assert d.transition is None
     assert d.show_recovery is False
-    assert d.clear_status is False

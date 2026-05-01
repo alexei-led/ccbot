@@ -603,9 +603,7 @@ class TickContext:
     """
 
     window_id: str
-    resolved_status_text: (
-        str | None
-    )  # output of _build_status_line; None when no status
+    resolved_status_text: str | None  # output of build_status_line; None when no status
     is_shell_prompt: bool  # pane_current_command is a bare shell (agent exited)
     has_seen_status: bool  # at least one status was previously sent for this window
     is_recently_active: bool  # transcript activity within ACTIVITY_THRESHOLD seconds
@@ -613,7 +611,6 @@ class TickContext:
     is_dead_window: bool  # tmux window no longer exists
     supports_hook: bool  # provider emits hook events (Claude)
     notification_mode: str  # "normal" | "muted" | "errors_only" | etc.
-    queue_has_content: bool  # message queue non-empty for this window's user
 
 
 @dataclass(frozen=True, slots=True)
@@ -627,7 +624,6 @@ class TickDecision:
     status_text: str | None = None
     transition: Literal["idle", "done", "active", "starting"] | None = None
     show_recovery: bool = False
-    clear_status: bool = False
 
 
 # ── PaneStatusStrategy ───────────────────────────────────────────────────

@@ -257,7 +257,6 @@ def _make_ctx(
     is_dead_window: bool = False,
     supports_hook: bool = True,
     notification_mode: str = "normal",
-    queue_has_content: bool = False,
 ) -> TickContext:
     return TickContext(
         window_id=window_id,
@@ -269,7 +268,6 @@ def _make_ctx(
         is_dead_window=is_dead_window,
         supports_hook=supports_hook,
         notification_mode=notification_mode,
-        queue_has_content=queue_has_content,
     )
 
 
@@ -673,13 +671,11 @@ class TestShellPromptClearsStatus:
         ctx = _make_ctx(is_shell_prompt=True, supports_hook=True)
         decision = decide_tick(ctx)
         assert decision.transition == "done"
-        assert decision.clear_status is True
 
     def test_hookless_shell_prompt_yields_idle(self) -> None:
         ctx = _make_ctx(is_shell_prompt=True, supports_hook=False)
         decision = decide_tick(ctx)
         assert decision.transition == "idle"
-        assert decision.clear_status is False
 
 
 class TestProbeFailures:
@@ -1851,7 +1847,7 @@ class TestDeadWindowNotification:
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_display_name.return_value = "test"
-            mock_sm.get_window_state.return_value = MagicMock(cwd="/proj")
+            mock_sm.view_window.return_value = MagicMock(cwd="/proj")
             await _handle_dead_window_notification(bot, 1, 42, "@5")
 
         assert (1, 42, "@5") in _dead_notified
@@ -1882,7 +1878,7 @@ class TestDeadWindowNotification:
         ):
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_display_name.return_value = "test"
-            mock_sm.get_window_state.return_value = MagicMock(cwd="/proj")
+            mock_sm.view_window.return_value = MagicMock(cwd="/proj")
             await _handle_dead_window_notification(bot, 1, 42, "@5")
             await _handle_dead_window_notification(bot, 1, 42, "@5")
 

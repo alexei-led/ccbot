@@ -128,8 +128,9 @@ class TestShutdownRuntime:
             return None
 
         bootstrap._status_poll_task = asyncio.create_task(_noop())  # type: ignore[assignment]
-        bootstrap.session_monitor = MagicMock()
-        bootstrap.session_monitor.stop = MagicMock()
+        monitor = MagicMock()
+        monitor.stop = MagicMock()
+        bootstrap.session_monitor = monitor
 
         with (
             patch(
@@ -144,6 +145,7 @@ class TestShutdownRuntime:
             mailbox_cls.return_value.sweep = MagicMock()
             await bootstrap.shutdown_runtime()
 
+        monitor.stop.assert_called_once()
         workers.assert_awaited_once()
         stop_mini.assert_awaited_once()
         sm.flush_state.assert_called_once()

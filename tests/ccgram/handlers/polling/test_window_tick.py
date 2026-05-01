@@ -366,7 +366,6 @@ def _make_ctx(
     is_dead_window: bool = False,
     supports_hook: bool = True,
     notification_mode: str = "all",
-    queue_has_content: bool = False,
 ) -> TickContext:
     return TickContext(
         window_id=window_id,
@@ -378,7 +377,6 @@ def _make_ctx(
         is_dead_window=is_dead_window,
         supports_hook=supports_hook,
         notification_mode=notification_mode,
-        queue_has_content=queue_has_content,
     )
 
 
@@ -395,7 +393,6 @@ class TestDecideTickShellPrompt:
         ctx = _make_ctx(is_shell_prompt=True, supports_hook=True)
         decision = decide_tick(ctx)
         assert decision.transition == "done"
-        assert decision.clear_status is True
 
     def test_shell_provider_yields_idle(self):
         ctx = _make_ctx(is_shell_prompt=True, supports_hook=False)
