@@ -522,6 +522,7 @@ def _try_install_messaging_skill(provider_name: str, cwd: str) -> None:
     """Install the messaging skill for Claude windows (no-op for other providers)."""
     if provider_name != "claude":
         return
+    # Lazy: msg_skill is only needed for Claude topics.
     from ...msg_skill import ensure_skill_installed
 
     try:
@@ -580,6 +581,7 @@ async def _create_window_and_bind(
 
     provider_caps = provider_registry.get(provider_name).capabilities
     if provider_caps.chat_first_command_path:
+        # Lazy: shell ↔ topics cycle via window_callbacks adoption flow.
         from ..shell.shell_prompt_orchestrator import ensure_setup
 
         await _wait_for_shell_ready(created_wid)
@@ -636,6 +638,8 @@ async def _create_window_and_bind(
 
         # Chat-first providers (shell): route through NL→command approval flow
         if provider_caps.chat_first_command_path:
+            # Lazy: telegram_client wraps PTB Bot; shell.shell_commands
+            # ↔ topics cycle through approval callback wiring.
             from ...telegram_client import PTBTelegramClient
             from ..shell.shell_commands import handle_shell_message
 
@@ -650,6 +654,7 @@ async def _create_window_and_bind(
             send_ok, send_msg = await send_to_window(created_wid, pending_text)
             if not send_ok:
                 logger.warning("Failed to forward pending text: %s", send_msg)
+                # Lazy: telegram_client wraps PTB Bot.
                 from ...telegram_client import PTBTelegramClient
 
                 await safe_send(

@@ -144,6 +144,8 @@ _LLM_SUMMARY_TIMEOUT = 3.0  # seconds to wait for LLM summary before falling bac
 async def _get_llm_summary(transcript_path: str) -> str | None:
     """Try to get an LLM summary, returning None on failure."""
     try:
+        # Lazy: llm package wires httpx + provider configs; only loaded
+        # when a Stop event actually wants a summary.
         from ..llm.summarizer import summarize_completion
 
         return await summarize_completion(transcript_path)
@@ -282,6 +284,8 @@ async def _handle_teammate_idle(event: HookEvent, client: TelegramClient) -> Non
 
 async def _handle_stop_failure(event: HookEvent, client: TelegramClient) -> None:
     """Handle a StopFailure event — alert on API error termination."""
+    # Lazy: messaging_pipeline.message_sender pulls in safe_reply wiring
+    # which transitively reaches hook_events for completion summaries.
     from .messaging_pipeline.message_sender import rate_limit_send_message
 
     users = _resolve_users_for_window_key(event.window_key)

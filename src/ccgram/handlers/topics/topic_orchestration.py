@@ -336,6 +336,8 @@ async def adopt_unbound_windows(client: TelegramClient) -> None:
     audit = session_manager.audit_state(live_ids, live_pairs)
     orphaned = [i for i in audit.issues if i.category == "orphaned_window"]
     if orphaned:
+        # Lazy: bidirectional cycle with sync_command (see
+        # sync_command._adopt_orphaned_windows for details).
         from ..sync_command import _adopt_orphaned_windows
 
         await _adopt_orphaned_windows(client, orphaned)

@@ -126,6 +126,7 @@ async def _handle_live_start(
         await query.answer("Use in a topic", show_alert=True)
         return
 
+    # Lazy: live_view ↔ screenshot_callbacks bidirectional cycle.
     from .live_view import (
         LiveViewState,
         build_live_keyboard,
@@ -201,6 +202,7 @@ async def _handle_live_stop(
         await query.answer("Use in a topic", show_alert=True)
         return
 
+    # Lazy: live_view ↔ screenshot_callbacks bidirectional cycle.
     from .live_view import stop_live_view
 
     stop_live_view(user_id, thread_id)
@@ -372,6 +374,9 @@ async def screenshot_command(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Capture and send a terminal screenshot for the current topic."""
+    # Lazy: command-handler entry; loaded by callback_registry.  Hoisting
+    # config / utils / message_sender pulls handler registration into
+    # this module's import graph and breaks reset-for-testing.
     from ...config import config
     from ...utils import handle_general_topic_message, is_general_topic
     from ..messaging_pipeline.message_sender import safe_reply
@@ -434,6 +439,8 @@ async def screenshot_command(
 
 async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open auto-refreshing live terminal view directly, skipping the screenshot step."""
+    # Lazy: same callback-registry contract as screenshot_command, plus
+    # the live_view ↔ screenshot_callbacks cycle.
     from ...config import config
     from ...utils import handle_general_topic_message, is_general_topic
     from ..messaging_pipeline.message_sender import safe_reply
@@ -516,6 +523,7 @@ async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:  # noqa: C901
     """List all panes in the current topic's window."""
+    # Lazy: same callback-registry contract as screenshot_command.
     from telegram import InlineKeyboardMarkup
 
     from ...config import config
@@ -559,6 +567,7 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
+    # Lazy: polling_strategies imports many handler symbols transitively.
     from ..polling.polling_strategies import interactive_strategy
 
     lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]

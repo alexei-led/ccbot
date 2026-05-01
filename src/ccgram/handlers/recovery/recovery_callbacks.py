@@ -190,6 +190,8 @@ def _build_resume_picker_keyboard(
     window_id: str,
 ) -> InlineKeyboardMarkup:
     """Build inline keyboard listing recent sessions for resume."""
+    # Lazy: sibling cycle — resume_command imports recovery_callbacks
+    # for shared helpers.
     from .resume_command import format_session_entry
 
     rows: list[list[InlineKeyboardButton]] = []
@@ -474,6 +476,8 @@ async def _create_and_bind_window(
     """
     # Unbind old dead window and clear dead-notification tracking
     thread_router.unbind_thread(user_id, thread_id)
+    # Lazy: polling_strategies → recovery_callbacks via callback_registry
+    # side effects.
     from ..polling.polling_strategies import lifecycle_strategy
 
     lifecycle_strategy.clear_dead_notification(user_id, thread_id)
@@ -739,6 +743,7 @@ async def _handle_browse(
     delegating to the /resume cross-project flow.
     """
 
+    # Lazy: sibling cycle \u2014 resume_command imports recovery_callbacks.
     from .resume_command import _build_resume_keyboard, scan_all_sessions
     from ..user_state import RESUME_SESSIONS
 

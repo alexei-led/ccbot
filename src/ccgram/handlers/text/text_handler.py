@@ -352,6 +352,7 @@ async def _forward_message(
 
     await ack_reaction(client, message.chat.id, message.message_id)
 
+    # Lazy: command_history cycle — same as status_bar_actions sites.
     from ..command_history import record_command
 
     record_command(user_id, thread_id, text)
@@ -453,6 +454,7 @@ async def handle_text_message(
         window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
+        # Lazy: shell.shell_commands ↔ text_handler via approval callback.
         from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(

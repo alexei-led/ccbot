@@ -7,6 +7,13 @@ Key functions:
   resolve_session_for_window: find ClaudeSession for a tmux window
   find_users_for_session: find users bound to a session
   get_recent_messages: read paginated message history
+
+Each wrapper imports ``session_resolver`` lazily on purpose: handlers
+that only need read-only resolution (the whole point of this module)
+must not pay the singleton's tmux + JSONL discovery costs at module
+load.  Hoisting the import would also re-establish the indirect
+session_resolver ↔ SessionManager dependency this projection exists
+to avoid.
 """
 
 from __future__ import annotations

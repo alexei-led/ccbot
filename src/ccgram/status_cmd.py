@@ -6,6 +6,9 @@ Reads state files and tmux directly to display:
   - Per-window status: bound/unbound, alive/dead
 
 No Config import needed — uses utils.ccgram_dir() and subprocess for tmux.
+``providers.resolve_capabilities`` and the package ``__version__`` are
+imported lazily inside the subcommand body to keep ``ccgram --help``
+free of provider-registry initialization.
 """
 
 import json

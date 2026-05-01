@@ -252,6 +252,9 @@ async def _adopt_orphaned_windows(
     client: TelegramClient, issues: list[AuditIssue]
 ) -> None:
     """Create Telegram topics for unbound tmux windows."""
+    # Lazy: bidirectional cycle — topic_orchestration.adopt_unbound_windows
+    # also lazy-imports _adopt_orphaned_windows from this module.  Either
+    # side must remain lazy until one is split into a third module.
     from ..session_monitor import NewWindowEvent
     from .topics.topic_orchestration import handle_new_window as _handle_new_window
 
@@ -341,6 +344,8 @@ async def _recreate_dead_topics(
 
     Returns count of successfully recreated topics.
     """
+    # Lazy: same sync_command ↔ topic_orchestration cycle as
+    # _adopt_orphaned_windows.
     from ..session_monitor import NewWindowEvent
     from .topics.topic_orchestration import handle_new_window as _handle_new_window
 

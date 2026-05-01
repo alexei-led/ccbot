@@ -36,13 +36,16 @@ _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 
 async def status_poll_loop(bot: "Bot") -> None:
     """Background task to poll terminal status for all thread-bound windows."""
+    # Lazy: status_poll_loop is launched once during bootstrap; keep the
+    # config + telegram_client imports tied to the call site so the
+    # polling package's cold path does not pull PTB.
     from ...config import config as _cfg
     from ...telegram_client import PTBTelegramClient
 
-    # Deferred import: periodic_tasks transitively imports topics.topic_lifecycle,
-    # which imports polling_strategies. Importing eagerly forms a cycle through
-    # polling/__init__.py whenever a module reaches polling_strategies before
-    # polling_coordinator finishes loading.
+    # Lazy: periodic_tasks transitively imports topics.topic_lifecycle,
+    # which imports polling_strategies. Hoisting forms a cycle through
+    # polling/__init__.py whenever a module reaches polling_strategies
+    # before polling_coordinator finishes loading.
     from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 
     poll_interval = _cfg.status_poll_interval

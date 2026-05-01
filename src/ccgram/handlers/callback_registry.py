@@ -111,7 +111,15 @@ def _find_handler(data: str) -> CallbackHandler | None:
 
 
 def load_handlers() -> None:
-    """Import handler modules to trigger @register and @topic_state.register decorators."""
+    """Import handler modules to trigger @register and @topic_state.register decorators.
+
+    The imports below are intentionally inside this function: their sole
+    purpose is the side effect of running the decorators at module-load
+    time.  Hoisting them to the top of ``callback_registry`` would
+    re-introduce import cycles back into the registry itself and defeat
+    the explicit ``bootstrap.bootstrap_application`` lifecycle contract
+    (callers control _when_ handler modules load).
+    """
     from . import (  # noqa: F401
         command_history,
         hook_events,

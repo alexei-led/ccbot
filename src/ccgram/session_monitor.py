@@ -91,6 +91,8 @@ class SessionMonitor:
         self._new_window_callback: (
             Callable[[NewWindowEvent], Awaitable[None]] | None
         ) = None
+        # Lazy: providers.base imports HookEvent and gets imported back
+        # through tmux_manager → providers; keep at call site.
         from .providers.base import HookEvent
 
         self._hook_event_callback: Callable[[HookEvent], Awaitable[None]] | None = None
@@ -283,6 +285,8 @@ class SessionMonitor:
             self.state.save_if_dirty()
 
         adoption_windows = dict(result.new_windows)
+        # Lazy: thread_router is wired into session_manager which imports
+        # session_monitor; hoisting forms a startup cycle.
         from .thread_router import thread_router
 
         for window_id, details in result.changed_windows.items():
@@ -290,6 +294,8 @@ class SessionMonitor:
                 adoption_windows[window_id] = details
 
         if adoption_windows:
+            # Lazy: session.py imports session_monitor at top; hoisting
+            # session_manager forms a hard cycle on bootstrap.
             from .session import session_manager as _sm
 
             for window_id, details in adoption_windows.items():
@@ -315,6 +321,8 @@ class SessionMonitor:
         """Background poll loop."""
         logger.info("Session monitor started, polling every %ss", self.poll_interval)
 
+        # Lazy: session_map imports session_monitor types via shared
+        # state cycle; keep at call site.
         from .session_map import session_map_sync
 
         await self._cleanup_all_stale_sessions()
@@ -338,6 +346,7 @@ class SessionMonitor:
                 for window in all_windows:
                     if window.window_id in known_window_ids:
                         continue
+                    # Lazy: same cycle as the earlier thread_router import.
                     from .thread_router import thread_router
 
                     already_bound = any(

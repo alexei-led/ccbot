@@ -208,6 +208,9 @@ async def broker_delivery_cycle(
     When *client* is provided, Telegram notifications are sent for
     delivered messages, shell-pending messages, and loop detection.
     """
+    # Lazy: msg_broker is registered as a periodic-task coroutine; these
+    # cross-package imports are kept at call site so the registry import
+    # path stays free of provider / window_resolver weight.
     from ...providers import get_provider_for_window
     from ...window_query import get_window_provider
     from ...window_resolver import is_foreign_window

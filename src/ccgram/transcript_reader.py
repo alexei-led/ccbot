@@ -42,6 +42,9 @@ def _resolve_provider_for_file(window_id: str, file_path: Path) -> Any:
     """Prefer transcript-path provider hints when a hookful state goes stale."""
     state_store = None
     try:
+        # Lazy: window_state_store may not yet be wired during early
+        # transcript-discovery paths; the ImportError fallback gates on
+        # that case explicitly.
         from .window_state_store import window_store
 
         state_store = window_store.window_states.get(window_id)
@@ -273,6 +276,8 @@ class TranscriptReader:
 
     async def _get_active_cwds(self) -> set[str]:
         """Get normalized cwds of all active tmux windows."""
+        # Lazy: tmux_manager imports providers which transitively imports
+        # transcript_reader through provider format modules.
         from .tmux_manager import tmux_manager
 
         cwds: set[str] = set()

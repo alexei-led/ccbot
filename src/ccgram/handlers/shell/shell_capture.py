@@ -378,6 +378,8 @@ async def _maybe_suggest_fix(
         await _update_error_message(client, chat_id, msg_id, exit_code, output)
 
     try:
+        # Lazy: llm wires httpx + provider configs; only loaded when an
+        # error suggestion is actually needed.
         from ...llm import get_completer
 
         completer = get_completer()
@@ -387,6 +389,8 @@ async def _maybe_suggest_fix(
     if not completer:
         return
 
+    # Lazy: sibling cycle — shell_context imports providers.shell which
+    # touches shell_capture state.
     from .shell_context import gather_llm_context, redact_for_llm
 
     ctx = await gather_llm_context(window_id)

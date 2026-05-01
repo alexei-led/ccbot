@@ -102,6 +102,7 @@ async def _handle_send(
         window_id, provider_name=get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery and thread_id is not None:
+        # Lazy: shell.shell_commands ↔ voice via approval callback wiring.
         from ..shell.shell_commands import handle_shell_message
 
         try:

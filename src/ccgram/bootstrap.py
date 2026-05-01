@@ -101,6 +101,9 @@ def verify_hooks_installed() -> None:
     if not provider.capabilities.supports_hook:
         return
 
+    # Lazy: hook module is the Claude-Code subprocess entry point;
+    # importing it eagerly drags `utils`/IO costs into bootstrap even
+    # when the active provider has no hooks.
     from .hook import _claude_settings_file, get_installed_events
 
     settings_file = _claude_settings_file()
@@ -160,6 +163,8 @@ async def start_session_monitor(application: Application) -> SessionMonitor:
     monitor = SessionMonitor()
     set_active_monitor(monitor)
 
+    # Lazy: telegram_client wraps PTB Bot; bootstrap is otherwise free of
+    # PTB types, so loading the adapter here keeps cold imports clean.
     from .telegram_client import PTBTelegramClient
 
     client = PTBTelegramClient(application.bot)
@@ -206,6 +211,8 @@ async def bootstrap_application(application: Application) -> None:
     await start_session_monitor(application)
     start_status_polling(application)
 
+    # Lazy: main imports bot at top, bot imports bootstrap; hoisting forms
+    # main → bot → bootstrap → main on cold import.
     from .main import start_miniapp_if_enabled
 
     await start_miniapp_if_enabled()
@@ -229,10 +236,13 @@ async def shutdown_runtime() -> None:
 
     await shutdown_workers()
 
+    # Lazy: mailbox is a leaf module; importing it lazily here avoids
+    # paying the cost on bootstrap when shutdown is the only caller.
     from .mailbox import Mailbox
 
     Mailbox(config.mailbox_dir).sweep()
 
+    # Lazy: main → bot → bootstrap cycle (same as start path).
     from .main import stop_miniapp_if_enabled
 
     await stop_miniapp_if_enabled()
@@ -250,6 +260,8 @@ def reset_for_testing() -> None:
     """
     global _callbacks_wired, session_monitor, _status_poll_task
 
+    # Lazy: each module's _reset_*_for_testing hook is only needed by the
+    # test harness; production callers never reach reset_for_testing().
     from .handlers import hook_events
     from .handlers.shell import shell_capture
     from .handlers.status import status_bubble

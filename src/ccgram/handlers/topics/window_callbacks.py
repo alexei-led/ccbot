@@ -94,6 +94,8 @@ async def _detect_and_setup_provider(
     falling back to basename-only matching.
     Returns the detected provider name (empty string if undetected).
     """
+    # Lazy: providers/__init__ loads process_detection (subprocess fork)
+    # eagerly; gate behind actual adoption.
     from ...providers import detect_provider_from_pane
 
     detected = (
@@ -105,10 +107,12 @@ async def _detect_and_setup_provider(
     )
     if detected:
         session_manager.set_window_provider(window_id, detected)
+        # Lazy: same providers cycle as detect_provider_from_pane.
         from ...providers import get_provider_for_window
 
         provider = get_provider_for_window(window_id, detected)
         if provider and provider.capabilities.chat_first_command_path:
+            # Lazy: shell ↔ topics cycle via prompt-marker callbacks.
             from ..shell.shell_prompt_orchestrator import ensure_setup
 
             await ensure_setup(
@@ -138,11 +142,13 @@ async def _forward_pending_text(
             one from directory browser).  For shell, skips handle_shell_message
             to avoid _ensure_prompt_marker racing with the offer keyboard.
     """
+    # Lazy: same providers cycle as _detect_and_setup_provider.
     from ...providers import get_provider_for_window
 
     provider = get_provider_for_window(window_id, provider_name)
     is_chat_first = bool(provider and provider.capabilities.chat_first_command_path)
     if is_chat_first and not is_existing_window:
+        # Lazy: shell ↔ topics cycle.
         from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(client, user_id, thread_id, window_id, text)

@@ -232,6 +232,8 @@ class SessionManager:
         Dead window bindings and states are preserved for /restore recovery.
         Also migrates mailbox directories when window IDs change.
         """
+        # Lazy: window_resolver imports session-state types; hoisting forms
+        # session → window_resolver → session.WindowState cycle.
         from .window_resolver import LiveWindow, resolve_stale_ids as _resolve
 
         windows = await tmux_manager.list_windows()
@@ -596,6 +598,8 @@ class SessionManager:
         """
         supports_hook = True
         if provider_name:
+            # Lazy: providers.registry imports concrete provider modules
+            # which transitively touch session state; keep lookup local.
             from .providers.registry import UnknownProviderError, registry
 
             try:

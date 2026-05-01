@@ -69,6 +69,9 @@ _POLL_INTERVAL_KEY = web.AppKey("terminal_poll_interval", float)
 
 async def _default_capture(window_id: str) -> str | None:
     """Capture the active pane via the global ``TmuxManager`` singleton."""
+    # Lazy: tests substitute alternate capture callables before any
+    # request arrives; resolving the singleton inside the default
+    # factory keeps the injection seam clean.
     from ...tmux_manager import tmux_manager
 
     return await tmux_manager.capture_pane(window_id, with_ansi=True)
@@ -76,6 +79,7 @@ async def _default_capture(window_id: str) -> str | None:
 
 async def _default_pane_capture(window_id: str, pane_id: str) -> str | None:
     """Capture a specific pane by ID, scoped to ``window_id``."""
+    # Lazy: same DI seam as ``_default_capture``.
     from ...tmux_manager import tmux_manager
 
     return await tmux_manager.capture_pane_by_id(
@@ -85,6 +89,7 @@ async def _default_pane_capture(window_id: str, pane_id: str) -> str | None:
 
 async def _default_pane_list(window_id: str) -> list[dict[str, Any]]:
     """Enumerate panes for a window, merging tmux state + ``WindowState.panes``."""
+    # Lazy: same DI seam as ``_default_capture``.
     from ...tmux_manager import tmux_manager
     from ...window_state_store import window_store
 

@@ -834,10 +834,10 @@ This keeps each task's diff small.
 
 - Modify: each file with category-(b) lazy import
 
-- [ ] add a one-line comment above each remaining in-function import explaining why it's lazy (e.g., `# Lazy: avoids Config dependency in CLI commands`)
-- [ ] verify the count is meaningfully smaller than the audit baseline
-- [ ] `make check` passes
-- [ ] commit "docs: explain remaining intentional lazy imports"
+- [x] add a one-line comment above each remaining in-function import explaining why it's lazy (e.g., `# Lazy: avoids Config dependency in CLI commands`) — 160 per-site `# Lazy: <reason>` comments added across 33 source files plus 7 module-docstring notes covering the 41 trivial CLI-dispatcher / callback-registry / session-query bulk sites (per F6.1 audit's "do not document individually" recommendation: `cli.py`, `main.py`, `msg_cmd.py`, `status_cmd.py`, `doctor_cmd.py`, `handlers/callback_registry.load_handlers`, `session_query.py`). Each comment cites the cycle path or singleton-wiring contract that requires the lazy load. F6.2's three reverted cycle sites (`cleanup.py`, `status_bubble.py`, `status_bar_actions.py`) already had the `# Lazy: <cycle path>. Keep lazy.` format and were left as-is.
+- [x] verify the count is meaningfully smaller than the audit baseline — 201 in-function relative imports remain vs. F6.1 audit baseline of 251 (a 50-site reduction: 25 from F6.2 hoists plus ~25 from F6.2's redundant-lazy-import cleanup in `window_tick/apply.py` and consolidations during the hoist sweep).
+- [x] `make check` passes — fmt + lint + typecheck (0 errors / 0 warnings) + deptry clean + 4401 unit tests + 126 integration tests (including all 29 cycle-detection tests added in F6.2). Full gate green.
+- [x] commit "docs: explain remaining intentional lazy imports"
 
 ---
 

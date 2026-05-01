@@ -287,6 +287,8 @@ async def _capture_interactive_content(
 
 def _lookup_pane_name(window_id: str, pane_id: str) -> str | None:
     """Return the user-supplied pane name if recorded, else None."""
+    # Lazy: window_state_store wiring is bootstrapped after this module
+    # is registered as a callback target; keep at call site.
     from ...window_state_store import window_store
 
     pane_info = window_store.get_pane(window_id, pane_id)

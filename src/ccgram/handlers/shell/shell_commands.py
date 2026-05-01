@@ -137,6 +137,8 @@ def _clear_shell_hint_seen(chat_id: int, thread_id: int) -> None:
 
 async def _ensure_prompt_marker(window_id: str) -> None:
     """Lazily restore prompt marker if lost (exec bash, profile reload)."""
+    # Lazy: sibling cycle — shell_prompt_orchestrator imports
+    # shell_commands.handle_shell_message via callback dispatch.
     from .shell_prompt_orchestrator import ensure_setup
 
     await ensure_setup(window_id, "lazy")
@@ -159,6 +161,8 @@ async def _cancel_stuck_input(window_id: str) -> None:
     LLM-generated malformed commands that leave the shell in multi-line
     input mode (e.g. unclosed ``begin`` block in fish).
     """
+    # Lazy: providers.shell pulls in shell_infra (prompt-marker
+    # machinery); load only when we actually need to inspect a prompt.
     from ...providers.shell import KNOWN_SHELLS, match_prompt
 
     # Step 1: check if the shell itself is the foreground process.
@@ -282,6 +286,8 @@ async def handle_shell_message(
     if _generation_counter.get(gen_key) != gen_id:
         return
 
+    # Lazy: command_history → messaging_pipeline → status → shell cycle
+    # (same shape as the status_bubble revert in F6.2).
     from ..command_history import record_command
 
     record_command(user_id, thread_id, text)
@@ -331,6 +337,8 @@ async def _execute_raw_command(
         )
         return
 
+    # Lazy: sibling cycle — shell_capture imports show_command_approval
+    # from this module via the approval callback wiring.
     from .shell_capture import mark_telegram_command
 
     mark_telegram_command(window_id, command, user_id, thread_id, message_id)

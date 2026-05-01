@@ -106,6 +106,8 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
         return
     new_mode = session_manager.cycle_notification_mode(window_id)
     label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
+    # Lazy: polling_strategies → status_bar_actions via callback registry,
+    # and status_bubble is a sibling — both kept lazy.
     from ..polling.polling_strategies import terminal_screen_buffer
     from .status_bubble import build_status_keyboard
 
@@ -169,12 +171,15 @@ async def _handle_status_recall(
 
     command = history[idx]
 
+    # Lazy: providers/__init__ pulls in process_detection / shell_infra.
     from ...providers import get_provider_for_window
 
     provider = get_provider_for_window(
         window_id, provider_name=window_query.get_window_provider(window_id)
     )
     if not provider.capabilities.supports_mailbox_delivery:
+        # Lazy: shell.shell_commands ↔ status via the approval callback
+        # wired in bootstrap.
         from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(
@@ -198,6 +203,7 @@ async def _handle_status_recall(
 
 async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) -> None:
     """Handle CB_STATUS_REMOTE: activate Remote Control or show status."""
+    # Lazy: polling_strategies cycle — same as _handle_notify_toggle.
     from ..polling.polling_strategies import terminal_screen_buffer
 
     window_id = data[len(CB_STATUS_REMOTE) :]
@@ -264,6 +270,8 @@ async def _handle_keys(
         )
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
+    # Lazy: live_view ↔ screenshot_callbacks ↔ status pair through the
+    # screenshot keyboard wiring.
     from ..live.live_view import get_live_view
 
     thread_id = get_thread_id(update)

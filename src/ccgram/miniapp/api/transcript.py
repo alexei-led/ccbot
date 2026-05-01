@@ -47,6 +47,8 @@ _READER_KEY: web.AppKey[Reader] = web.AppKey("transcript_reader")
 
 async def _default_reader(window_id: str) -> list[dict[str, Any]]:
     """Read all messages for ``window_id`` via the global session resolver."""
+    # Lazy: tests substitute alternate readers before any request
+    # arrives; the singleton lookup stays inside the default factory.
     from ...session_query import get_recent_messages
 
     messages, _ = await get_recent_messages(window_id)

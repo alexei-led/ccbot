@@ -179,6 +179,8 @@ class TerminalScreenBuffer:
         self, window_id: str, columns: int, rows: int
     ) -> "ScreenBuffer":
         """Get or create a ScreenBuffer for a window, resizing if needed."""
+        # Lazy: screen_buffer pulls in pyte; only the pyte-based strategy
+        # actually uses it, so leaf-level callers stay light.
         from ...screen_buffer import ScreenBuffer
 
         ws = self._poll_state.get_state(window_id)
@@ -204,6 +206,8 @@ class TerminalScreenBuffer:
         Content-hash optimization: unchanged pane content returns cached result
         without re-parsing.
         """
+        # Lazy: terminal_parser imports terminal_parser_v100 (pyte
+        # heavyweight) — match the get_screen_buffer pattern.
         from ...terminal_parser import (
             detect_remote_control,
             format_status_display,
@@ -689,6 +693,9 @@ class PaneStatusStrategy:
 
     def _clear_pane_content_state(self, window_id: str) -> None:
         """Drop cached pane content hashes for a window's panes (cleanup)."""
+        # Lazy: window_state_store wiring runs after polling_strategies is
+        # imported by the registry; keep at call site so the strategy can
+        # be unit-tested without a live store.
         from ...window_state_store import window_store
 
         state = window_store.window_states.get(window_id)
@@ -729,6 +736,7 @@ class PaneStatusStrategy:
         after the ``PaneInfo`` entry has been removed. Also purges any cached
         interactive alerts so they don't linger if the pane is later recreated.
         """
+        # Lazy: same wiring rationale as _clear_pane_content_state.
         from ...window_state_store import window_store
 
         state = window_store.window_states.get(window_id)
@@ -755,6 +763,7 @@ class PaneStatusStrategy:
         last_active_ts: float | None = None,
     ) -> PaneStateName | None:
         """Upsert ``WindowState.panes`` entry; return the prior state or None."""
+        # Lazy: same wiring rationale as _clear_pane_content_state.
         from ...window_state_store import window_store
 
         existing = window_store.get_pane(window_id, pane_id)
@@ -776,6 +785,9 @@ class PaneStatusStrategy:
         Tries the per-pane process basename first, falls back to the window's
         stored provider, then to the supplied fallback.
         """
+        # Lazy: providers/__init__.py reaches back into tmux_manager;
+        # keep this resolution at call site to avoid bringing the full
+        # provider registry into polling_strategies' import graph.
         from ...providers import detect_provider_from_command
         from ...window_query import get_window_provider
 
@@ -807,6 +819,7 @@ class PaneStatusStrategy:
         included so the caller can both surface an interactive alert and
         forward the text to subscribers.
         """
+        # Lazy: tmux_manager → providers → polling_strategies cycle.
         from ...tmux_manager import tmux_manager
 
         pane_text = await tmux_manager.capture_pane_by_id(
@@ -867,6 +880,8 @@ class PaneStatusStrategy:
         windows whose count is cached) returns an empty list without any
         tmux subprocess work.
         """
+        # Lazy: same tmux_manager ↔ providers cycle as
+        # _classify_non_active; also avoids registry-import side effects.
         from ...providers import get_provider_for_window
         from ...tmux_manager import tmux_manager
         from ...window_query import get_window_provider
@@ -1033,6 +1048,7 @@ class PaneStatusStrategy:
         on_pane_output: PaneOutputCallback,
     ) -> None:
         """Forward freshly-captured pane text to subscribers when content changed."""
+        # Lazy: same wiring rationale as _clear_pane_content_state.
         from ...window_state_store import window_store
 
         pane = window_store.get_pane(window_id, pane_id)

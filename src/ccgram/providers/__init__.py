@@ -132,6 +132,9 @@ def detect_provider_from_command(pane_current_command: str) -> str:
         if basename == name or basename.startswith(name + "-"):
             return name
 
+    # Lazy: providers.shell pulls in shell_infra (prompt-marker machinery
+    # + readline lookups) at import; only load when we have to fall
+    # through to shell-process detection.
     from .shell import KNOWN_SHELLS
 
     if basename in KNOWN_SHELLS or basename.lstrip("-") in KNOWN_SHELLS:
@@ -215,6 +218,8 @@ async def detect_provider_from_pane(
             return ""
         basename = os.path.basename(cmd.split()[0])
         if basename in JS_RUNTIMES:
+            # Lazy: process_detection forks `ps` subprocesses; only worth
+            # loading when the pane command is a JS runtime wrapper.
             from .process_detection import detect_provider_cached
 
             detected = await detect_provider_cached(window_id or "", pane_tty)

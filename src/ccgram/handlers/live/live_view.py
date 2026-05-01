@@ -191,6 +191,7 @@ async def _capture_pane(view: LiveViewState, window_id: str) -> str | None:
 
 async def _edit_caption(client: TelegramClient, view: LiveViewState, text: str) -> None:
     """Best-effort edit of the live view message caption on stop."""
+    # Lazy: live_view ↔ screenshot_callbacks bidirectional cycle.
     from .screenshot_callbacks import build_screenshot_keyboard
 
     keyboard = build_screenshot_keyboard(view.window_id, pane_id=view.pane_id)

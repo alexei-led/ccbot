@@ -565,6 +565,9 @@ async def forward_command_handler(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Forward any non-bot command as a slash command to the topic provider session."""
+    # Lazy: command_orchestration is loaded by callback_registry during
+    # post_init; importing config at module top dragged Config init
+    # into the import graph during hot-reload tests.  Keep at call site.
     from ..config import config
 
     user = update.effective_user

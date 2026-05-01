@@ -6,6 +6,10 @@ a bot token. With --fix, auto-repairs what it can (install hook, kill orphans).
 Provider-aware: reads CCGRAM_PROVIDER env to determine which checks apply
 (e.g. hook checks are skipped for providers without hook support).
 No Config import needed — uses utils.ccgram_dir() and subprocess.
+``hook`` helpers (``_claude_settings_file``, ``get_installed_events``,
+``_install_hook``) are imported lazily inside ``_check_hooks`` /
+``_fix_hooks`` so ``ccgram doctor`` startup avoids the hook subprocess
+machinery on providers that have no hooks.
 """
 
 import json

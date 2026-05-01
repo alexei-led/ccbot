@@ -78,6 +78,10 @@ def _prefer_existing_primary(
     window_id: str,
     incoming: dict[str, Any],
 ) -> dict[str, str] | None:
+    # Lazy: session.py imports both session_map and window_state_store at
+    # top; hoisting forms session → session_map → window_state_store →
+    # session cycle.  Lazy import also guarantees the store has been
+    # wired via install_window_store before access.
     from .window_state_store import window_store
 
     state = window_store.window_states.get(window_id)
@@ -251,6 +255,7 @@ class SessionMapSync:
 
         Returns True if any state changed.
         """
+        # Lazy: see _prefer_existing_primary — same cycle + wiring contract.
         from .window_state_store import window_store
 
         changed = self._sync_window_from_session_map(key, info, mark_external=True)
@@ -271,6 +276,8 @@ class SessionMapSync:
 
         Returns True if any states were removed.
         """
+        # Lazy: same session ↔ session_map ↔ stores cycle as
+        # _prefer_existing_primary; both stores must be installed.
         from .thread_router import thread_router
         from .window_state_store import window_store
 
@@ -355,6 +362,7 @@ class SessionMapSync:
         live_window_ids, and writes back only if changes were made.
         Also removes corresponding window_states.
         """
+        # Lazy: same cycle + wiring contract as _prefer_existing_primary.
         from .window_state_store import window_store
 
         if not config.session_map_file.exists():
@@ -430,6 +438,7 @@ class SessionMapSync:
         Pair with write_hookless_session_map() for the file-locked
         session_map.json write, which is safe to call from any thread.
         """
+        # Lazy: same cycle + wiring contract as _prefer_existing_primary.
         from .window_state_store import window_store
 
         state = window_store.get_window_state(window_id)
@@ -452,6 +461,7 @@ class SessionMapSync:
         Uses file locking consistent with hook.py. Safe to call from any
         thread (no asyncio handles touched).
         """
+        # Lazy: same cycle + wiring contract as _prefer_existing_primary.
         from .thread_router import thread_router
 
         map_file = config.session_map_file
@@ -547,6 +557,7 @@ class SessionMapSync:
 
         Returns True if any state was changed.
         """
+        # Lazy: same cycle + wiring contract as _prefer_existing_primary.
         from .thread_router import thread_router
         from .window_state_store import window_store
 

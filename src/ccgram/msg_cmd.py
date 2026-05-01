@@ -5,6 +5,10 @@ send/receive, broadcast, registration, and mailbox maintenance.
 Window self-identification via ``CCGRAM_WINDOW_ID`` env var or tmux fallback.
 
 Key entry point: msg_group (Click group registered in cli.py).
+
+Subcommand bodies lazy-load their workers (``msg_discovery``,
+``spawn_request``); ``ccgram msg --help`` only walks the Click tree
+and avoids materialising peer-discovery state.
 """
 
 from __future__ import annotations

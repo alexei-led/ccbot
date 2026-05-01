@@ -48,6 +48,9 @@ async def run_broker_cycle(
     idle_windows: frozenset[str] = frozenset(),
 ) -> None:
     """Run one broker delivery cycle (called from poll loop and hook_events)."""
+    # Lazy: msg_broker is registered as a callback target via the broker
+    # registry; importing it at top of periodic_tasks pulls the
+    # messaging subpackage into the polling package's cold path.
     from ...mailbox import Mailbox
     from ..messaging.msg_broker import broker_delivery_cycle
 
@@ -67,6 +70,8 @@ async def run_broker_cycle(
 
 async def _run_spawn_cycle(client: TelegramClient) -> None:
     """Scan for file-based spawn requests and post approval keyboards or auto-approve."""
+    # Lazy: msg_spawn pulls topic_orchestration which sits inside the
+    # sync_command cycle; keep at call site.
     from ...spawn_request import pop_pending, scan_spawn_requests
     from ..messaging.msg_spawn import (
         handle_spawn_approval,
@@ -93,6 +98,8 @@ async def _run_spawn_cycle(client: TelegramClient) -> None:
 
 def _run_mailbox_sweep() -> None:
     """Run periodic mailbox sweep."""
+    # Lazy: Mailbox is a leaf module; loading inside the sweep keeps
+    # the polling subpackage's import surface narrow.
     from ...mailbox import Mailbox
 
     mailbox = Mailbox(config.mailbox_dir)

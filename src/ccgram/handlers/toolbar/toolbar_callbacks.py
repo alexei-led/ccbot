@@ -91,6 +91,9 @@ async def _builtin_screenshot(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Builtin: trigger the screenshot handler."""
+    # Lazy: live.screenshot_callbacks is registered through the callback
+    # registry; importing at top forms toolbar ↔ live cycle via shared
+    # callback_data symbols.
     from ..callback_data import CB_STATUS_SCREENSHOT
     from ..live.screenshot_callbacks import handle_screenshot_callback
 
@@ -126,6 +129,7 @@ async def _builtin_live(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Builtin: start the live view via the existing screenshot dispatcher."""
+    # Lazy: same toolbar ↔ live cycle as _builtin_screenshot.
     from ..callback_data import CB_LIVE_START
     from ..live.screenshot_callbacks import handle_screenshot_callback
 
@@ -163,6 +167,8 @@ async def _builtin_send(
     if chat_id is None:
         await query.answer("Use in a topic", show_alert=True)
         return
+    # Lazy: telegram_client wraps PTB Bot; send subpackage in turn pulls
+    # the directory browser machinery.  Keep both at call site.
     from ...telegram_client import PTBTelegramClient
     from ..send import open_file_browser
 

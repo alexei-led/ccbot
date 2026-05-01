@@ -64,6 +64,8 @@ async def handle_spawn_approval(
         logger.info("Spawn request %s expired before approval", request_id)
         return None
 
+    # Lazy: handle_spawn_approval is reached only via the periodic spawn
+    # scan; keep config out of the cold import path.
     from ...config import config
 
     if window_query.window_count() >= config.msg_max_windows:
@@ -101,6 +103,7 @@ async def handle_spawn_approval(
         )
 
     if req.provider == "claude":
+        # Lazy: msg_skill is only needed for Claude spawns.
         from ...msg_skill import ensure_skill_installed
 
         ensure_skill_installed(req.cwd)
@@ -183,6 +186,8 @@ async def _create_topic_for_spawn(
     window_name: str,
     req: SpawnRequest,
 ) -> None:
+    # Lazy: topic_orchestration participates in the sync_command ↔
+    # topic_orchestration cycle (see topic_orchestration.py for context).
     from ..topics.topic_orchestration import collect_target_chats, create_topic_in_chat
 
     target_chats = collect_target_chats(window_id)
@@ -223,6 +228,8 @@ async def _handle_spawn_callback(
         request_id = data[len(CB_SPAWN_APPROVE) :]
         client = PTBTelegramClient(update.get_bot())
         try:
+            # Lazy: callback handler — config import deferred for the
+            # same reason as handle_spawn_approval above.
             from ...config import config as _cfg
 
             result = await handle_spawn_approval(

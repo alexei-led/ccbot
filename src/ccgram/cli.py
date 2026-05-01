@@ -4,6 +4,11 @@ Defines the top-level command group and the ``run`` subcommand with all
 bot-configuration flags.  Precedence: CLI flag > env var > .env > default.
 ``apply_args_to_env()`` sets os.environ for explicitly provided flags so
 Config reads the overridden values.
+
+Every subcommand body lazy-loads its workers (``run_bot``, ``hook_main``,
+``status_main``, ``msg_group``, ``doctor_main``).  ``ccgram --help`` and
+``ccgram --version`` stay snappy and avoid pulling PTB / aiohttp /
+provider chains; only the invoked subcommand pays its import cost.
 """
 
 import os

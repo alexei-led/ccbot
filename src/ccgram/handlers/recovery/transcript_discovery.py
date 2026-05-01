@@ -62,6 +62,8 @@ async def _detect_and_apply_provider(
     if detected and detected != state.provider_name:
         old_provider = state.provider_name
         session_manager.set_window_provider(window_id, detected, cwd=w.cwd or None)
+        # Lazy: providers/__init__.py reaches back into transcript code
+        # via provider format modules.
         from ...providers import get_provider_for_window
 
         new_caps = get_provider_for_window(window_id, detected)
@@ -70,6 +72,8 @@ async def _detect_and_apply_provider(
         )
         if new_caps and new_caps.capabilities.chat_first_command_path:
             state.transcript_path = ""
+            # Lazy: shell.shell_prompt_orchestrator hits the recovery
+            # subpackage's discovery code via send-keys callbacks.
             from ..shell.shell_prompt_orchestrator import ensure_setup
 
             await ensure_setup(
@@ -80,6 +84,7 @@ async def _detect_and_apply_provider(
                 thread_id=thread_id,
             )
         elif old_caps and old_caps.capabilities.chat_first_command_path:
+            # Lazy: same shell ↔ recovery cycle as above.
             from ..shell.shell_capture import clear_shell_monitor_state
             from ..shell.shell_prompt_orchestrator import (
                 clear_state as clear_orchestrator,
@@ -101,6 +106,9 @@ def _resolve_providers_to_try(
     Returns a list of (name, provider) pairs, or ``None`` to signal the
     caller should set up a shell provider.
     """
+    # Lazy: hoisting forms polling/__init__ → window_tick →
+    # recovery.transcript_discovery → polling_strategies partial-init
+    # cycle (worker-order-dependent; verified during F6.2).
     from ..polling.polling_strategies import is_shell_prompt
     from ...providers import registry
 
@@ -182,6 +190,7 @@ async def discover_and_register_transcript(
     Also handles provider auto-detection from pane process name
     and shell ↔ agent transitions with prompt marker setup.
     """
+    # Lazy: same polling/__init__ cycle as _resolve_providers_to_try.
     from ..polling.polling_strategies import is_shell_prompt
     from ...thread_router import thread_router
 
@@ -214,6 +223,7 @@ async def discover_and_register_transcript(
     if providers_to_try is None:
         session_manager.set_window_provider(window_id, "shell")
         state.transcript_path = ""
+        # Lazy: same shell ↔ recovery cycle as _detect_and_apply_provider.
         from ..shell.shell_prompt_orchestrator import ensure_setup
 
         await ensure_setup(

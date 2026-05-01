@@ -228,6 +228,8 @@ async def _is_interactive_shell(window_id: str) -> bool:
     if not w or not w.pane_tty:
         return False
 
+    # Lazy: process_detection runs `ps` subprocesses; only loaded when an
+    # interactive-shell pane is being verified.
     from .process_detection import get_foreground_args
 
     args, _ = await get_foreground_args(w.pane_tty)

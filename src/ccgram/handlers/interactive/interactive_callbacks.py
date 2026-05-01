@@ -95,6 +95,8 @@ async def handle_interactive_callback(
         return
 
     cb_prefix, window_id, pane_id = matched
+    # Lazy: callback_helpers ↔ callback_registry ↔ interactive_callbacks
+    # cycle through registration side effects.
     from ..callback_helpers import get_thread_id, user_owns_window
 
     if not user_owns_window(user_id, window_id):

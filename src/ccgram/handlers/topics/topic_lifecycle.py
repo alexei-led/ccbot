@@ -148,6 +148,9 @@ async def _kill_expired_unbound(now: float, timeout: float) -> None:
     for wid in expired:
         await tmux_manager.kill_window(wid)
 
+        # Lazy: topic_state_registry is wired during bootstrap; importing
+        # at top dragged registration side effects into the polling
+        # subpackage's import path.
         from ...topic_state_registry import topic_state
 
         topic_state.clear_window(wid)
@@ -241,6 +244,7 @@ async def topic_closed_handler(
     if not user or not config.is_user_allowed(user.id):
         return
 
+    # Lazy: callback_helpers ↔ topic_lifecycle through bootstrap wiring.
     from ..callback_helpers import get_thread_id
 
     thread_id = get_thread_id(update)
@@ -289,6 +293,8 @@ async def topic_edited_handler(
     if not new_name:
         return
 
+    # Lazy: same callback_helpers cycle plus status.topic_emoji ↔ topics
+    # cycle through emoji refresh callbacks.
     from ..callback_helpers import get_thread_id
     from ..status.topic_emoji import strip_emoji_prefix, update_stored_topic_name
 

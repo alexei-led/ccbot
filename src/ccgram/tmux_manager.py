@@ -857,9 +857,12 @@ class TmuxManager:
         if proc.returncode != 0:
             return []
 
+        # Lazy: providers/__init__.py reaches back into tmux_manager via
+        # process_detection; tmux_manager (infra) must not import domain
+        # (providers) at module level.
         from .providers import (
             detect_provider_from_command,
-        )  # local: infra must not import domain at module level
+        )
 
         results: list[TmuxWindow] = []
         for line in win_stdout.decode().strip().split("\n"):
