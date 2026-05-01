@@ -104,16 +104,16 @@ Live view flow (terminal -> auto-refresh screenshots):
 Recovery flow (dead/missing session):
 
 1. `handlers/polling/polling_coordinator.py` detects stale/dead bindings via `handlers/polling/window_tick/`.
-2. Recovery UI callbacks route through `handlers/recovery/recovery_callbacks.py`.
+2. Recovery UI callbacks route through `handlers/recovery/recovery_callbacks.py` (thin dispatcher, Round 5 F3) which dispatches to `recovery_banner.py` (dead-window banner UX) or `resume_picker.py` (resume picker UX + transcript scan).
 3. Session/window state is updated in `session.py` and persisted to `state.json`.
 
 Commands menu flow (`/commands`):
 
 1. User invokes `/commands` in a topic.
-2. `handlers/registry.py` dispatches to `handlers/command_orchestration.py`.
+2. `handlers/registry.py` dispatches to `handlers/commands/__init__.py:commands_command` (Round 5 F4 subpackage).
 3. `command_catalog.py` discovers available commands for the window's provider (filesystem scan with 60s TTL cache).
 4. `cc_commands.py` renders the scoped command menu as inline keyboard.
-5. User selection sends the command text to the agent via `tmux_manager.py`.
+5. User selection sends the command text to the agent via `tmux_manager.py`; failure-probe path lives in `handlers/commands/failure_probe.py`, status-snapshot delegation in `handlers/commands/status_snapshot.py`, menu sync/cache in `handlers/commands/menu_sync.py`.
 
 ## Data Model and State Files
 
@@ -153,3 +153,6 @@ Outbound (agent -> Telegram):
 - state mutations route through `session.py` + persistence helpers, not ad-hoc JSON writes.
 - handlers depend on the `TelegramClient` Protocol (`src/ccgram/telegram_client.py`), not `telegram.Bot`. Only `bot.py`, `bootstrap.py`, `handlers/registry.py`, `telegram_client.py`, `telegram_request.py`, and `telegram_sender.py` import from `telegram.ext` at runtime; everything else uses `if TYPE_CHECKING:` for types.
 - `SessionManager` constructs and owns `WindowStateStore`, `ThreadRouter`, `UserPreferences`, and `SessionMapSync` via constructor DI — do not reintroduce `_wire_singletons` or `unwired_save`.
+- handler reads of window/session state go through `window_query` / `session_query` (Round 5 F2). Direct `session_manager.<attr>` access in `handlers/**` is restricted to the documented write/admin allow-list (`set_window_provider`, `set_window_origin`, `set_window_approval_mode`, `cycle_*`, `audit_state`, `prune_*`, `sync_display_names`); `tests/ccgram/test_query_layer_only_for_handlers.py` enforces the rule via AST walk.
+- `handlers/polling/polling_types.py` is pure (stdlib + `providers.base.StatusUpdate` only) — do not reintroduce stateful imports there. `polling_state.py` owns the strategies and module-level singletons. `decide.py` imports only from `polling_types`. Pinned by `tests/ccgram/handlers/polling/test_polling_types_purity.py` (subprocess load + AST static check).
+- in-function imports must carry `# Lazy: <reason>` (or live inside `if TYPE_CHECKING:` / `_reset_*_for_testing`) — `make lint` runs `lint-lazy` (Round 5 F5) which fails on undocumented late imports.

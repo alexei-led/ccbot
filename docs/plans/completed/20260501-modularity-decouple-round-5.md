@@ -324,12 +324,12 @@ def test_no_import_cycles(module):
 
 ### Task N: Update documentation
 
-- [ ] update `CLAUDE.md` Round-5-outcomes section (mirror the existing Round-4 section): list the 5 fixes, the new modules, the new structural tests, any new env vars or commands (none expected)
-- [ ] update `docs/architecture.md` module inventory: add `polling_types.py`, `polling_state.py`, `recovery_banner.py`, `resume_picker.py`, `commands/forward.py`, `commands/menu_sync.py`, `commands/failure_probe.py`, `commands/status_snapshot.py`; remove deleted entries
-- [ ] update `.claude/rules/architecture.md` if it duplicates module inventory
-- [ ] update `docs/ai-agents/architecture-map.md` and `docs/ai-agents/codebase-index.md` for the new layout
-- [ ] cross-link the new review at `docs/modularity-review/2026-05-01/` from `CLAUDE.md` history if useful
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update `CLAUDE.md` Round-5-outcomes section (mirror the existing Round-4 section): list the 5 fixes, the new modules, the new structural tests, any new env vars or commands (none expected) — appended a "Round 5 Outcomes (modularity decouple)" section right after the Round 4 one
+- [x] update `docs/architecture.md` module inventory: add `polling_types.py`, `polling_state.py`, `recovery_banner.py`, `resume_picker.py`, `commands/forward.py`, `commands/menu_sync.py`, `commands/failure_probe.py`, `commands/status_snapshot.py`; remove deleted entries — Module Layers Mermaid diagram updated (commands/ subgraph node added; polling/ + recovery/ entries reflect the splits); 5 Round-5 design-decision rows appended to the table; date stamp bumped to 2026-05-02
+- [x] update `.claude/rules/architecture.md` if it duplicates module inventory — `command_orchestration.py` row removed; new `handlers/commands/` subpackage table inserted; `polling_strategies.py` row replaced with `polling_types.py` + `polling_state.py`; `recovery_callbacks.py` description rewritten + `recovery_banner.py` + `resume_picker.py` rows added; 5 Round-5 design-decision bullets appended
+- [x] update `docs/ai-agents/architecture-map.md` and `docs/ai-agents/codebase-index.md` for the new layout — recovery flow + commands menu flow rewritten to reference dispatcher → banner/picker and `handlers/commands/__init__.py:commands_command`; 5 design-constraint bullets added; codebase-index now lists `polling_types`/`polling_state`/`recovery_banner`/`resume_picker`/`commands/*`, adds Decision Map sections for the new locations, and adds Debug Index entries for the new structural tests + `lint-lazy`
+- [x] cross-link the new review at `docs/modularity-review/2026-05-01/` from `CLAUDE.md` history if useful — Round 5 Outcomes section in `CLAUDE.md` cites `docs/modularity-review/2026-05-01/modularity-review.md` directly
+- [x] move this plan to `docs/plans/completed/` — `git mv`'d to `docs/plans/completed/20260501-modularity-decouple-round-5.md`
 
 ## Post-Completion
 

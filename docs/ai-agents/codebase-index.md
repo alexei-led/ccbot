@@ -32,7 +32,8 @@ Telegram handler surface (post Round 4 F1 — feature subpackages):
 - `src/ccgram/handlers/messaging_pipeline/tool_batch.py`: Claude tool-use batching; uses `unwrap_bot(client)` for `DraftStream`.
 - `src/ccgram/handlers/polling/polling_coordinator.py`: background status and stale-session cleanup.
 - `src/ccgram/handlers/polling/window_tick/`: per-window poll cycle split into `decide.py` (pure), `observe.py` (pure inputs in, `TickContext` out), `apply.py` (DI-heavy side effects).
-- `src/ccgram/handlers/polling/polling_strategies.py`: polling strategy classes + pure types (`TickContext`, `TickDecision`).
+- `src/ccgram/handlers/polling/polling_types.py`: pure types module (Round 5 F1) — `TickContext`, `TickDecision`, `PaneTransition`, `WindowPollState`, `TopicPollState`, constants, pure `is_shell_prompt`. Stdlib + `providers.base.StatusUpdate` only.
+- `src/ccgram/handlers/polling/polling_state.py`: stateful strategies + module-level singletons (Round 5 F1) — `TerminalPollState`, `TerminalScreenBuffer`, `InteractiveUIStrategy`, `TopicLifecycleStrategy`, `PaneStatusStrategy`, `terminal_poll_state`, `terminal_screen_buffer`, `interactive_strategy`, `lifecycle_strategy`, `pane_status_strategy`.
 - `src/ccgram/handlers/polling/periodic_tasks.py`: periodic task orchestration (broker, sweep, lifecycle, live view).
 - `src/ccgram/handlers/topics/directory_browser.py` + `directory_callbacks.py`: new-session UX.
 - `src/ccgram/handlers/topics/topic_lifecycle.py`: autoclose timers for done/dead topics, unbound window TTL.
@@ -41,7 +42,9 @@ Telegram handler surface (post Round 4 F1 — feature subpackages):
 - `src/ccgram/handlers/topics/new_command.py`: `/new` (and `/start` alias) handler.
 - `src/ccgram/handlers/interactive/interactive_ui.py` + `interactive_callbacks.py`: interactive prompt UX.
 - `src/ccgram/handlers/sessions_dashboard.py`: `/sessions` dashboard behavior.
-- `src/ccgram/handlers/recovery/recovery_callbacks.py`: dead window recovery flow (fresh/continue/resume).
+- `src/ccgram/handlers/recovery/recovery_callbacks.py`: thin dispatcher (Round 5 F3) — `_dispatch`, `handle_recovery_callback`, recovery-state validate/clear.
+- `src/ccgram/handlers/recovery/recovery_banner.py`: dead-window banner UX (Round 5 F3) — `RecoveryBanner`, `render_banner`, `build_recovery_keyboard`, fresh/continue/resume/back/browse/cancel handlers.
+- `src/ccgram/handlers/recovery/resume_picker.py`: resume picker UX + transcript scan (Round 5 F3) — `_SessionEntry`, `scan_sessions_for_cwd`, picker keyboard builders, `_handle_resume_pick`.
 - `src/ccgram/handlers/recovery/restore_command.py`: `/restore` command for dead topic recovery.
 - `src/ccgram/handlers/recovery/resume_command.py`: `/resume` scan past sessions + inline picker.
 - `src/ccgram/handlers/recovery/transcript_discovery.py`: hookless transcript discovery for Codex/Gemini.
@@ -69,6 +72,11 @@ Provider and command surface:
 - `src/ccgram/providers/`: provider contract and implementations.
 - `src/ccgram/command_catalog.py`: provider-agnostic command discovery + 60s TTL caching.
 - `src/ccgram/cc_commands.py`: Telegram menu registration from discovered commands.
+- `src/ccgram/handlers/commands/__init__.py`: `/commands` + `/toolbar` entry points (Round 5 F4) — re-exports `forward_command_handler`, `setup_menu_refresh_job`, `get_global_provider_menu`, `set_global_provider_menu`, `sync_scoped_*`.
+- `src/ccgram/handlers/commands/forward.py`: forward command handler (Round 5 F4) — `forward_command_handler`, `_normalize_slash_token`, `_handle_clear_command`.
+- `src/ccgram/handlers/commands/menu_sync.py`: provider menu cache + scoped sync (Round 5 F4) — `sync_scoped_provider_menu`, `setup_menu_refresh_job`, `_build_provider_command_metadata`, LRU helpers.
+- `src/ccgram/handlers/commands/failure_probe.py`: command failure probing (Round 5 F4) — `_capture_command_probe_context`, `_probe_transcript_command_error`, `_spawn_command_failure_probe`.
+- `src/ccgram/handlers/commands/status_snapshot.py`: status snapshot delegation (Round 5 F4).
 - `src/ccgram/hook.py`: Claude hook install/status/uninstall and event writes.
 - `src/ccgram/llm/`: LLM command generation (CommandGenerator protocol, httpx completers for OpenAI-compatible and Anthropic APIs, provider registry).
 - `src/ccgram/handlers/shell/shell_commands.py`: shell NL→command approval flow; routes NL text through LLM, renders approval keyboard, handles raw `!` prefix execution.
@@ -129,6 +137,23 @@ Change command discovery:
 
 - `src/ccgram/command_catalog.py` for filesystem scanning and caching.
 - `src/ccgram/cc_commands.py` for Telegram menu registration.
+- `src/ccgram/handlers/commands/menu_sync.py` for scoped per-window menu sync and provider menu cache (Round 5 F4).
+
+Change `/commands` failure probe / status snapshot:
+
+- `src/ccgram/handlers/commands/failure_probe.py` for transcript-based failure detection.
+- `src/ccgram/handlers/commands/status_snapshot.py` for status snapshot delegation.
+
+Change recovery UX (dead window banner / resume picker):
+
+- `src/ccgram/handlers/recovery/recovery_banner.py` for the dead-window banner UX (Round 5 F3).
+- `src/ccgram/handlers/recovery/resume_picker.py` for the resume picker UX + transcript scan (Round 5 F3).
+- `src/ccgram/handlers/recovery/recovery_callbacks.py` is now a thin dispatcher only — do not add UX logic here.
+
+Change polling pure types vs strategies:
+
+- `src/ccgram/handlers/polling/polling_types.py` for contracts (`TickContext`, `TickDecision`, constants, `is_shell_prompt`) — keep imports stdlib + `providers.base.StatusUpdate` only (Round 5 F1).
+- `src/ccgram/handlers/polling/polling_state.py` for strategies and module-level singletons.
 
 Change tool-call visibility (hide/show `tool_use`/`tool_result`):
 
@@ -238,5 +263,17 @@ Symptom: `RuntimeError("... not wired")` or `RuntimeError("... already registere
 
 Symptom: `import` cycle / `partial-init` error from a clean interpreter
 
-- run `make test-integration` and watch `tests/integration/test_import_no_cycles.py` — it parametrizes `python -c "import {module}"` over 29 modules and surfaces the offending path.
-- the F6.3 audit captured legitimate cycles with `# Lazy: <cycle path>` comments at the in-function import; do not blindly hoist those.
+- run `make test-integration` and watch `tests/integration/test_import_no_cycles.py` — it parametrizes `python -c "import {module}"` over all 162 modules under `src/ccgram/` (Round 5 F5 expansion) and surfaces the offending path.
+- the F6.3 audit + Round 5 F5 captured legitimate cycles with `# Lazy: <cycle path>` comments at the in-function import; do not blindly hoist those — `make lint` runs `lint-lazy` which fails on undocumented late imports.
+
+Symptom: `lint-lazy` fails with "undocumented in-function import"
+
+- the in-function import lacks a `# Lazy: <reason>` comment on the line immediately preceding it. Either hoist it (verify with `python -c "import {module}"`) or add the annotation citing the cycle path or wiring contract that requires lateness. See `scripts/lint_lazy_imports.py`.
+
+Symptom: `test_query_layer_only_for_handlers` fails
+
+- a handler file added a new `session_manager.<attr>` access that is not on the documented write/admin allow-list (Round 5 F2). Either route the read through `window_query` / `session_query`, or add the new method name to the allow-list constant in the test if it is genuinely a write/admin call.
+
+Symptom: `test_polling_types_purity` fails (subprocess or AST check)
+
+- `polling_types.py` imported a stateful module (likely `polling_state.py` or another non-stdlib module besides `ccgram.providers.base`). The pure-types invariant requires `polling_types.py` to load without pulling in any singletons. Move the offending import to `polling_state.py` or to the call site instead.
