@@ -118,12 +118,12 @@ class TestCheckUnboundWindowTtl:
             patch(
                 "ccgram.handlers.topics.topic_lifecycle.thread_router"
             ) as mock_router,
-            patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.topic_lifecycle.window_query") as mock_wq,
             patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tmux,
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.iter_thread_bindings.return_value = []
-            mock_sm.view_window.return_value = _window_view("manual_discovered")
+            mock_wq.view_window.return_value = _window_view("manual_discovered")
             mock_tmux.kill_window = AsyncMock()
             await check_unbound_window_ttl([mock_window])
         assert ws.unbound_timer is None
@@ -138,12 +138,12 @@ class TestCheckUnboundWindowTtl:
             patch(
                 "ccgram.handlers.topics.topic_lifecycle.thread_router"
             ) as mock_router,
-            patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.topic_lifecycle.window_query") as mock_wq,
             patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tmux,
         ):
             mock_config.autoclose_done_minutes = 1
             mock_router.iter_thread_bindings.return_value = []
-            mock_sm.view_window.return_value = _window_view("ccgram_created")
+            mock_wq.view_window.return_value = _window_view("ccgram_created")
             mock_tmux.kill_window = AsyncMock()
             await check_unbound_window_ttl([mock_window])
         mock_tmux.kill_window.assert_called_once_with("@0")
@@ -169,7 +169,7 @@ class TestProbeTopicExistence:
                 "ccgram.handlers.topics.topic_lifecycle.thread_router"
             ) as mock_router,
             patch("ccgram.handlers.topics.topic_lifecycle.tmux_manager") as mock_tmux,
-            patch("ccgram.handlers.topics.topic_lifecycle.session_manager") as mock_sm,
+            patch("ccgram.handlers.topics.topic_lifecycle.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.topics.topic_lifecycle.clear_topic_state",
                 new_callable=AsyncMock,
@@ -180,7 +180,7 @@ class TestProbeTopicExistence:
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(window_id="@0")
             )
-            mock_sm.view_window.return_value = _window_view("manual_discovered")
+            mock_wq.view_window.return_value = _window_view("manual_discovered")
             mock_tmux.kill_window = AsyncMock()
             await probe_topic_existence(bot)
             mock_router.unbind_thread.assert_called_once_with(1, 100)

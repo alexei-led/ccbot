@@ -441,7 +441,7 @@ def _validate_recovery_state(
             context.user_data[PENDING_THREAD_ID] = thread_id
             context.user_data[RECOVERY_WINDOW_ID] = data_suffix
 
-    view = session_manager.view_window(data_suffix)
+    view = window_query.view_window(data_suffix)
     cwd = view.cwd if view else ""
     return thread_id, data_suffix, cwd
 
@@ -484,7 +484,7 @@ async def _create_and_bind_window(
 
     # Resolve provider from old window (falls back to global default)
     if old_window_id:
-        old_view = session_manager.view_window(old_window_id)
+        old_view = window_query.view_window(old_window_id)
         provider = get_provider_for_window(
             old_window_id, provider_name=old_view.provider_name if old_view else None
         )
@@ -825,7 +825,7 @@ async def _handle_resume_pick(
         await query.answer("Recovery menu expired", show_alert=True)
         return
 
-    view = session_manager.view_window(old_wid)
+    view = window_query.view_window(old_wid)
     if view is None or not view.cwd or not Path(view.cwd).is_dir():
         await safe_edit(query, "\u274c Directory no longer exists.")
         _clear_recovery_state(context.user_data)

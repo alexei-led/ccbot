@@ -13,7 +13,6 @@ from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from ...config import config
 from ...providers import get_provider_for_window
 from ... import window_query
-from ...session import session_manager
 from ...topic_state_registry import topic_state
 from ...toolbar_config import (
     ToolbarAction,
@@ -142,7 +141,7 @@ async def refresh_button_label(
     logger = structlog.get_logger()
 
     await asyncio.sleep(delay)
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     provider_name = view.provider_name if view else "claude"
     provider = get_provider_for_window(window_id, provider_name=provider_name)
     short_label = await provider.scrape_current_mode(window_id)

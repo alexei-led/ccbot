@@ -32,6 +32,13 @@ from ccgram.handlers.user_state import (
 _RC = "ccgram.handlers.recovery.recovery_callbacks"
 
 
+@pytest.fixture(autouse=True)
+def _patch_recovery_session_manager():
+    """Mock session_manager writes (set_window_*) so tests don't hit real state."""
+    with patch(f"{_RC}.session_manager"):
+        yield
+
+
 def _make_update(
     *,
     chat_id: int = -100999,
@@ -523,7 +530,7 @@ class TestBotTextHandlerScopedMenu:
 class TestRecoveryFreshCallback:
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_fresh_creates_window_and_rebinds(
         self,
@@ -563,7 +570,7 @@ class TestRecoveryFreshCallback:
     @patch(f"{_RC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     @patch(f"{_RC}.safe_send", new_callable=AsyncMock)
     async def test_fresh_forwards_pending_message(
@@ -599,7 +606,7 @@ class TestRecoveryFreshCallback:
 
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_fresh_fails_when_cwd_gone(
         self,
@@ -663,7 +670,7 @@ class TestRecoveryContinueCallback:
     @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[_SessionEntry("s1", "x")])
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_continue_creates_window_with_continue_flag(
         self,
@@ -703,7 +710,7 @@ class TestRecoveryContinueCallback:
     @patch(f"{_RC}.send_to_window", new_callable=AsyncMock)
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     @patch(f"{_RC}.safe_send", new_callable=AsyncMock)
     async def test_continue_forwards_pending_message(
@@ -737,7 +744,7 @@ class TestRecoveryContinueCallback:
         assert PENDING_THREAD_TEXT not in user_data
 
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_continue_fails_when_cwd_gone(
         self,
@@ -773,7 +780,7 @@ class TestRecoveryContinueCallback:
 
 class TestRecoveryResumeCallback:
     @patch(f"{_RC}.scan_sessions_for_cwd")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_resume_shows_session_picker(
         self,
@@ -803,7 +810,7 @@ class TestRecoveryResumeCallback:
         assert user_data[RECOVERY_SESSIONS][0]["session_id"] == "sess-1"
 
     @patch(f"{_RC}.scan_sessions_for_cwd")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_resume_no_sessions_shows_empty_state(
         self,
@@ -846,7 +853,7 @@ class TestRecoveryResumeCallback:
 class TestRecoveryResumePickCallback:
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_pick_creates_window_with_resume_flag(
         self,
@@ -893,7 +900,7 @@ class TestRecoveryResumePickCallback:
 
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_pick_second_session(
         self,
@@ -978,7 +985,7 @@ class TestRecoveryResumePickCallback:
 
 
 class TestRecoveryBackCallback:
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_back_shows_recovery_menu(
         self,
@@ -998,7 +1005,7 @@ class TestRecoveryBackCallback:
         query.answer.assert_called_once()
 
     @patch(f"{_RC}.get_provider_for_window")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_back_includes_help_text(
         self,
@@ -1410,7 +1417,7 @@ class TestScanSessionsForCwd:
 
 class TestRecoveryResumePickerLabels:
     @patch(f"{_RC}.scan_sessions_for_cwd")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_picker_labels_use_formatter(
         self,
@@ -1442,7 +1449,7 @@ class TestRecoveryResumePickerLabels:
         assert button_text.endswith(" · beef")
 
     @patch(f"{_RC}.scan_sessions_for_cwd")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_picker_labels_fall_back_to_never(
         self,
@@ -1469,7 +1476,7 @@ class TestRecoveryResumePickerLabels:
         assert button_text.startswith("never · ")
 
     @patch(f"{_RC}.scan_sessions_for_cwd")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_picker_stores_mtime_for_pick_callback(
         self,
@@ -1498,7 +1505,7 @@ class TestRecoveryPerWindowProvider:
     @patch(f"{_RC}.get_provider_for_window")
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_continue_uses_per_window_provider(
         self,
@@ -1535,7 +1542,7 @@ class TestRecoveryPerWindowProvider:
     @patch(f"{_RC}.get_provider_for_window")
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_resume_pick_uses_per_window_provider(
         self,
@@ -1574,7 +1581,7 @@ class TestRecoveryPerWindowProvider:
 
 class TestRecoveryEmptyStateAndBrowseFallback:
     @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[])
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_continue_with_no_sessions_shows_empty_state(
         self,
@@ -1602,7 +1609,7 @@ class TestRecoveryEmptyStateAndBrowseFallback:
         assert any("fresh" in t.lower() for t in button_texts)
 
     @patch(f"{_RC}.scan_sessions_for_cwd", return_value=[])
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_empty_state_buttons_target_fresh_and_browse(
         self,
@@ -1633,7 +1640,7 @@ class TestRecoveryEmptyStateAndBrowseFallback:
         assert CB_RECOVERY_CANCEL in datas
 
     @patch("ccgram.handlers.recovery.resume_command.scan_all_sessions")
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_browse_loads_cross_project_picker(
         self,
@@ -1724,7 +1731,7 @@ class TestEmptyStateKeyboardBuilder:
 
 
 class TestUpdatedToastWordings:
-    @patch(f"{_RC}.session_manager")
+    @patch(f"{_RC}.window_query")
     @patch(f"{_RC}.safe_edit", new_callable=AsyncMock)
     async def test_pick_says_no_longer_in_list(
         self,

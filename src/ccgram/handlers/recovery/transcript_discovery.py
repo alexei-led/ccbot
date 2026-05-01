@@ -28,6 +28,7 @@ from ...session_map import session_map_sync
 from ...telegram_client import TelegramClient
 from ...tmux_manager import tmux_manager
 from ...window_resolver import is_foreign_window
+from ...window_state_store import window_store
 
 if TYPE_CHECKING:
     from ...providers.base import AgentProvider
@@ -195,7 +196,7 @@ async def discover_and_register_transcript(
     from ..polling.polling_types import is_shell_prompt
     from ...thread_router import thread_router
 
-    state = session_manager.window_states.get(window_id)
+    state = window_store.window_states.get(window_id)
     if not state:
         return
 

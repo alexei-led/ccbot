@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import structlog
 from telegram import Update
 from telegram.error import BadRequest, TelegramError
+from ... import window_query
 from ...config import config
 from ...session import session_manager
 from ...telegram_client import PTBTelegramClient, TelegramClient
@@ -130,7 +131,7 @@ async def check_unbound_window_ttl(
     for w in live_windows:
         if w.window_id in bound_ids or is_foreign_window(w.window_id):
             continue
-        view = session_manager.view_window(w.window_id)
+        view = window_query.view_window(w.window_id)
         if view is None or view.origin != CCGRAM_CREATED_WINDOW_ORIGIN:
             terminal_poll_state.clear_unbound_timer(w.window_id)
             continue
@@ -198,7 +199,7 @@ async def probe_topic_existence(client: TelegramClient) -> None:
                 or "thread not found" in e.message.lower()
             ):
                 w = await tmux_manager.find_window_by_id(wid)
-                view = session_manager.view_window(wid)
+                view = window_query.view_window(wid)
                 killed = False
                 if w and view and view.origin == CCGRAM_CREATED_WINDOW_ORIGIN:
                     await tmux_manager.kill_window(w.window_id)

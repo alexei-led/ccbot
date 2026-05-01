@@ -8,7 +8,6 @@ from ccgram.handlers.recovery.restore_command import restore_command
 @pytest.fixture(autouse=True)
 def _patch_deps():
     with (
-        patch("ccgram.handlers.recovery.restore_command.session_manager") as mock_sm,
         patch("ccgram.handlers.recovery.restore_command.thread_router") as mock_tr,
         patch("ccgram.handlers.recovery.restore_command.tmux_manager") as mock_tm,
         patch("ccgram.handlers.recovery.restore_command.config") as mock_cfg,
@@ -22,7 +21,7 @@ def _patch_deps():
         mock_wq.get_window_provider.return_value = "claude"
         mock_render.return_value = ("⚠ Banner text", MagicMock())
 
-        yield mock_sm, mock_tr, mock_tm, mock_cfg, mock_wq, mock_render
+        yield mock_tr, mock_tm, mock_cfg, mock_wq, mock_render
 
 
 def _make_update(*, user_id: int = 100, thread_id: int | None = 42):
@@ -62,7 +61,7 @@ class TestRestoreCommand:
             mock_reply.assert_not_called()
 
     async def test_unauthorized_user_rejected(self, _patch_deps) -> None:
-        _, _, _, mock_cfg, _, _ = _patch_deps
+        _, _, mock_cfg, _, _ = _patch_deps
         mock_cfg.is_user_allowed.return_value = False
         update = _make_update()
 
@@ -79,7 +78,7 @@ class TestRestoreCommand:
             assert "inside a topic" in mock_reply.call_args[0][1]
 
     async def test_unbound_topic(self, _patch_deps) -> None:
-        _, mock_tr, _, _, _, _ = _patch_deps
+        mock_tr, _, _, _, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = None
         update = _make_update()
 
@@ -88,7 +87,7 @@ class TestRestoreCommand:
             assert "No session bound" in mock_reply.call_args[0][1]
 
     async def test_alive_window(self, _patch_deps) -> None:
-        _, mock_tr, mock_tm, _, _, _ = _patch_deps
+        mock_tr, mock_tm, _, _, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
         mock_tm.find_window_by_id = AsyncMock(return_value=MagicMock())
         update = _make_update()
@@ -98,9 +97,9 @@ class TestRestoreCommand:
             assert "still running" in mock_reply.call_args[0][1]
 
     async def test_dead_window_no_cwd(self, _patch_deps) -> None:
-        mock_sm, mock_tr, _, _, _, _ = _patch_deps
+        mock_tr, _, _, mock_wq, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
-        mock_sm.view_window.return_value = MagicMock(cwd="")
+        mock_wq.view_window.return_value = MagicMock(cwd="")
         update = _make_update()
 
         with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
@@ -108,9 +107,9 @@ class TestRestoreCommand:
             assert "Directory no longer exists" in mock_reply.call_args[0][1]
 
     async def test_dead_window_nonexistent_cwd(self, _patch_deps) -> None:
-        mock_sm, mock_tr, _, _, _, _ = _patch_deps
+        mock_tr, _, _, mock_wq, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
-        mock_sm.view_window.return_value = MagicMock(cwd="/nonexistent/path")
+        mock_wq.view_window.return_value = MagicMock(cwd="/nonexistent/path")
         update = _make_update()
 
         with patch("ccgram.handlers.recovery.restore_command.safe_reply") as mock_reply:
@@ -118,9 +117,9 @@ class TestRestoreCommand:
             assert "Directory no longer exists" in mock_reply.call_args[0][1]
 
     async def test_dead_window_renders_banner(self, _patch_deps, tmp_path) -> None:
-        mock_sm, mock_tr, _, _, _, mock_render = _patch_deps
+        mock_tr, _, _, mock_wq, mock_render = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
-        mock_sm.view_window.return_value = MagicMock(cwd=str(tmp_path))
+        mock_wq.view_window.return_value = MagicMock(cwd=str(tmp_path))
         update = _make_update()
         ctx = _make_context()
 
@@ -147,9 +146,9 @@ class TestRestoreCommand:
             RECOVERY_WINDOW_ID,
         )
 
-        mock_sm, mock_tr, _, _, _, _ = _patch_deps
+        mock_tr, _, _, mock_wq, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
-        mock_sm.view_window.return_value = MagicMock(cwd=str(tmp_path))
+        mock_wq.view_window.return_value = MagicMock(cwd=str(tmp_path))
         update = _make_update()
         ctx = _make_context()
 
@@ -162,9 +161,9 @@ class TestRestoreCommand:
     async def test_dead_window_does_not_create_window(
         self, _patch_deps, tmp_path
     ) -> None:
-        mock_sm, mock_tr, mock_tm, _, _, _ = _patch_deps
+        mock_tr, mock_tm, _, mock_wq, _ = _patch_deps
         mock_tr.resolve_window_for_thread.return_value = "@5"
-        mock_sm.view_window.return_value = MagicMock(cwd=str(tmp_path))
+        mock_wq.view_window.return_value = MagicMock(cwd=str(tmp_path))
         update = _make_update()
         ctx = _make_context()
 

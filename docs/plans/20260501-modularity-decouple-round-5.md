@@ -208,16 +208,16 @@ def test_no_import_cycles(module):
 - Create: `tests/ccgram/handlers/polling/test_polling_types_purity.py`
 - Modify: existing tests under `tests/ccgram/handlers/polling/` referencing `polling_strategies` paths.
 
-- [ ] create `polling_types.py` with `TickContext`, `TickDecision`, `PaneTransition`, `WindowPollState`, `TopicPollState`, `STARTUP_TIMEOUT`, `RC_DEBOUNCE_SECONDS`, `MAX_PROBE_FAILURES`, `TYPING_INTERVAL`, `PANE_COUNT_TTL`, `ACTIVITY_THRESHOLD`, `SHELL_COMMANDS`, `is_shell_prompt`. Imports: stdlib + `ccgram.providers.base.StatusUpdate` only
-- [ ] create `polling_state.py` with `TerminalPollState`, `TerminalScreenBuffer`, `InteractiveUIStrategy`, `TopicLifecycleStrategy`, `PaneStatusStrategy`, the five module-level singletons, and `reset_window_polling_state`
-- [ ] update every call site listed in Files (12+ modules); `decide.py` imports only from `polling_types`
-- [ ] remove the `from . import polling as _polling  # noqa: F401` workaround from `handlers/registry.py` and confirm imports still resolve in the right order
-- [ ] delete `polling_strategies.py`; verify no caller still references it via grep
-- [ ] write `tests/ccgram/handlers/polling/test_polling_types_purity.py` with two checks: (a) **subprocess load-time assertion** — `subprocess.run([sys.executable, "-c", "import ccgram.handlers.polling.polling_types; import sys; assert 'ccgram.handlers.polling.polling_state' not in sys.modules"], check=True)`. This is the F4 invariant. (b) **AST-based static check** — parse `polling_types.py`, walk top-level `Import`/`ImportFrom` nodes, assert allowed sources are stdlib + `ccgram.providers.base` only
-- [ ] extend `tests/integration/test_import_no_cycles.py` with `ccgram.handlers.polling.polling_types` and `ccgram.handlers.polling.polling_state`
-- [ ] **rollback contingency**: if removing the `from . import polling as _polling` workaround re-introduces a cycle, document the smallest viable `# Lazy:` import that breaks it and defer the workaround removal to Task 5; do not block Task 1 on it
-- [ ] update existing polling tests to import from the new modules
-- [ ] run `make check` — must pass before next task
+- [x] create `polling_types.py` with `TickContext`, `TickDecision`, `PaneTransition`, `WindowPollState`, `TopicPollState`, `STARTUP_TIMEOUT`, `RC_DEBOUNCE_SECONDS`, `MAX_PROBE_FAILURES`, `TYPING_INTERVAL`, `PANE_COUNT_TTL`, `ACTIVITY_THRESHOLD`, `SHELL_COMMANDS`, `is_shell_prompt`. Imports: stdlib + `ccgram.providers.base.StatusUpdate` only
+- [x] create `polling_state.py` with `TerminalPollState`, `TerminalScreenBuffer`, `InteractiveUIStrategy`, `TopicLifecycleStrategy`, `PaneStatusStrategy`, the five module-level singletons, and `reset_window_polling_state`
+- [x] update every call site listed in Files (12+ modules); `decide.py` imports only from `polling_types`
+- [x] remove the `from . import polling as _polling  # noqa: F401` workaround from `handlers/registry.py` and confirm imports still resolve in the right order
+- [x] delete `polling_strategies.py`; verify no caller still references it via grep
+- [x] write `tests/ccgram/handlers/polling/test_polling_types_purity.py` with two checks: (a) **subprocess load-time assertion** — `subprocess.run([sys.executable, "-c", "import ccgram.handlers.polling.polling_types; import sys; assert 'ccgram.handlers.polling.polling_state' not in sys.modules"], check=True)`. This is the F4 invariant. (b) **AST-based static check** — parse `polling_types.py`, walk top-level `Import`/`ImportFrom` nodes, assert allowed sources are stdlib + `ccgram.providers.base` only
+- [x] extend `tests/integration/test_import_no_cycles.py` with `ccgram.handlers.polling.polling_types` and `ccgram.handlers.polling.polling_state`
+- [x] **rollback contingency**: if removing the `from . import polling as _polling` workaround re-introduces a cycle, document the smallest viable `# Lazy:` import that breaks it and defer the workaround removal to Task 5; do not block Task 1 on it — workaround was successfully removed without re-introducing any cycle (cycle test green)
+- [x] update existing polling tests to import from the new modules
+- [x] run `make check` — must pass before next task — green: 4407 unit + 134 integration + 28 skipped
 
 ### Task 2: Migrate handlers' read-only `session_manager.*` access to `window_query` / `session_query`
 
@@ -229,14 +229,14 @@ def test_no_import_cycles(module):
 - Create: `tests/ccgram/test_query_layer_only_for_handlers.py` (structural assertion)
 - Modify: existing handler tests where `session_manager` was patched for read-only mocking — switch to `window_query`/`session_query` patches.
 
-- [ ] enumerate the 44 sites: `grep -rn 'session_manager\.' src/ccgram/handlers --include='*.py'` and classify each as read-ish or write/admin against the verified breakdown above
-- [ ] **before starting**: `grep -rn 'mock.patch.*session_manager' tests/ --include='*.py'` to size the test-mock churn. If > 20 hits, budget extra time
-- [ ] migrate each read-ish site (~14, mostly `view_window` path renames) to `window_query` / `session_query` — add new query functions only when ≥2 sites need them
-- [ ] document the write/admin allow-list (~30 sites enumerated by method name, e.g. `set_window_provider`, `audit_state`) at the top of the new structural test as a module-level constant
-- [ ] add `tests/ccgram/test_query_layer_only_for_handlers.py` — uses `ast` (not regex) to walk every `.py` under `src/ccgram/handlers/`, find `Attribute` nodes with `.value` == `Name("session_manager")`, and assert the attribute name is in the write/admin allow-list. A read access slipping back in fails the build
-- [ ] update handler tests that previously patched `session_manager.*` for read-only data to patch the query layer instead (look for `mock.patch.object(session_manager, 'window_states', ...)` and `session_manager.view_window` patterns)
-- [ ] write tests for any new `window_query` / `session_query` functions added (success + missing-window case)
-- [ ] run `make check` — must pass before next task
+- [x] enumerate the 44 sites: `grep -rn 'session_manager\.' src/ccgram/handlers --include='*.py'` and classify each as read-ish or write/admin against the verified breakdown above — 14 read-ish + 30 write/admin confirmed
+- [x] **before starting**: `grep -rn 'mock.patch.*session_manager' tests/ --include='*.py'` to size the test-mock churn — 142 hits, mostly auto-fixed by patch-target rename
+- [x] migrate each read-ish site (~14, mostly `view_window` path renames) to `window_query` / `session_query` — no new query functions needed; existing `view_window`, `iter_window_ids`, `get_approval_mode`, `get_window_provider` covered everything. The two `session_manager.window_states` dict accesses were handled differently: periodic_tasks → `window_query.iter_window_ids()` (broker API tightened to take `window_ids: Iterable[str]` instead of mutable dict); transcript_discovery → direct `window_store.window_states.get(...)` because that site mutates `state.transcript_path` directly (admin path that has no SessionManager setter)
+- [x] document the write/admin allow-list (~30 sites enumerated by method name, e.g. `set_window_provider`, `audit_state`) at the top of the new structural test as a module-level constant
+- [x] add `tests/ccgram/test_query_layer_only_for_handlers.py` — uses `ast` (not regex) to walk every `.py` under `src/ccgram/handlers/`, find `Attribute` nodes with `.value` == `Name("session_manager")`, and assert the attribute name is in the write/admin allow-list. A read access slipping back in fails the build (81 parametrized cases, all green)
+- [x] update handler tests that previously patched `session_manager.*` for read-only data to patch the query layer instead — `test_restore_command.py`, `test_recovery_ui.py` (autouse fixture for shared session_manager mocking), `test_status_polling.py` (added window_store patch alongside session_manager), `test_toolbar.py`, `test_topic_lifecycle.py`, `test_msg_broker.py` (broker API change)
+- [x] write tests for any new `window_query` / `session_query` functions added — none added; existing surface sufficient
+- [x] run `make check` — must pass before next task — green: 4635 unit + 134 integration
 
 ### Task 3: Split `recovery_callbacks.py` into `recovery_banner.py` + `resume_picker.py` + a thin dispatcher
 

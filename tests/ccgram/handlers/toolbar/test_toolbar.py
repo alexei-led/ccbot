@@ -396,9 +396,7 @@ class TestRefreshButtonLabel:
                 "ccgram.handlers.toolbar.toolbar_keyboard.get_provider_for_window",
                 return_value=mock_provider,
             ),
-            patch(
-                "ccgram.handlers.toolbar.toolbar_keyboard.session_manager"
-            ) as mock_sm,
+            patch("ccgram.handlers.toolbar.toolbar_keyboard.window_query") as mock_sm,
         ):
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
             result = await refresh_button_label(mode_action, query, "@5", delay=0)
@@ -453,9 +451,7 @@ class TestRefreshButtonLabel:
                 "ccgram.handlers.toolbar.toolbar_keyboard.get_provider_for_window",
                 return_value=mock_provider,
             ),
-            patch(
-                "ccgram.handlers.toolbar.toolbar_keyboard.session_manager"
-            ) as mock_sm,
+            patch("ccgram.handlers.toolbar.toolbar_keyboard.window_query") as mock_sm,
         ):
             mock_sm.view_window.return_value = MagicMock(provider_name="claude")
             result = await refresh_button_label(

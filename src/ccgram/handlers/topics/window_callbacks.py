@@ -16,6 +16,7 @@ from pathlib import Path
 
 from telegram import CallbackQuery, Chat, Update
 from telegram.error import TelegramError
+from ... import window_query
 from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...session import session_manager
 from ...thread_router import thread_router
@@ -226,7 +227,7 @@ async def _handle_bind(
             chat_id=thread_router.resolve_chat_id(user_id, thread_id),
             message_thread_id=thread_id,
             name=format_topic_name_for_mode(
-                display, session_manager.get_approval_mode(selected_wid)
+                display, window_query.get_approval_mode(selected_wid)
             ),
         )
     except TelegramError as e:

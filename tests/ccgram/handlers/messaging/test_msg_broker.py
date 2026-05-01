@@ -310,7 +310,7 @@ class TestBrokerDeliveryCycle:
 
     async def test_delivers_pending_message(self, mailbox, mock_tmux, mock_provider):
         mailbox.send("ccgram:@0", "ccgram:@5", "hello", msg_type="request")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -319,7 +319,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -332,14 +332,14 @@ class TestBrokerDeliveryCycle:
 
     async def test_skips_shell_windows(self, mailbox, mock_tmux, shell_provider):
         mailbox.send("ccgram:@0", "ccgram:@5", "hello", msg_type="request")
-        window_states = {"@5": MagicMock(provider_name="shell")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
             return_value=shell_provider,
         ):
             count = await broker_delivery_cycle(
-                mailbox, mock_tmux, window_states, "ccgram", 10
+                mailbox, mock_tmux, window_ids, "ccgram", 10
             )
 
         assert count == 0
@@ -347,7 +347,7 @@ class TestBrokerDeliveryCycle:
 
     async def test_skips_broadcast_messages(self, mailbox, mock_tmux, mock_provider):
         mailbox.send("ccgram:@0", "ccgram:@5", "broadcast", msg_type="broadcast")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -356,7 +356,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -367,7 +367,7 @@ class TestBrokerDeliveryCycle:
 
     async def test_sets_delivered_at(self, mailbox, mock_tmux, mock_provider):
         msg = mailbox.send("ccgram:@0", "ccgram:@5", "hello", msg_type="request")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -376,7 +376,7 @@ class TestBrokerDeliveryCycle:
             await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -390,7 +390,7 @@ class TestBrokerDeliveryCycle:
 
     async def test_rate_limiting_enforcement(self, mailbox, mock_tmux, mock_provider):
         mailbox.send("ccgram:@0", "ccgram:@5", "hello", msg_type="request")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
         for _ in range(10):
             delivery_strategy.record_delivery("ccgram:@5")
 
@@ -401,7 +401,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -412,7 +412,7 @@ class TestBrokerDeliveryCycle:
     async def test_merges_multiple_messages(self, mailbox, mock_tmux, mock_provider):
         mailbox.send("ccgram:@0", "ccgram:@5", "msg1", msg_type="request")
         mailbox.send("ccgram:@0", "ccgram:@5", "msg2", msg_type="notify")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -421,7 +421,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -437,7 +437,7 @@ class TestBrokerDeliveryCycle:
     ):
         long_body = "x" * 600
         mailbox.send("ccgram:@0", "ccgram:@5", long_body, msg_type="notify")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -446,7 +446,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -462,7 +462,7 @@ class TestBrokerDeliveryCycle:
         mailbox.send("ccgram:@0", "ccgram:@5", "hello", msg_type="request")
         for _ in range(_LOOP_THRESHOLD):
             delivery_strategy.record_exchange("ccgram:@5", "ccgram:@0")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -471,7 +471,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),
@@ -483,7 +483,7 @@ class TestBrokerDeliveryCycle:
         mock_tmux = AsyncMock()
         mock_tmux.send_keys = AsyncMock(return_value=False)
         mailbox.send("ccgram:@0", "ccgram:@5", "hello", msg_type="request")
-        window_states = {"@5": MagicMock(provider_name="claude")}
+        window_ids = ["@5"]
 
         with patch(
             "ccgram.providers.get_provider_for_window",
@@ -492,7 +492,7 @@ class TestBrokerDeliveryCycle:
             count = await broker_delivery_cycle(
                 mailbox,
                 mock_tmux,
-                window_states,
+                window_ids,
                 "ccgram",
                 10,
                 idle_windows=frozenset({"ccgram:@5"}),

@@ -17,7 +17,6 @@ import structlog
 from telegram.error import TelegramError
 
 from ...config import config
-from ...session import session_manager
 from ...telegram_client import TelegramClient
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttle_sweep
@@ -51,6 +50,7 @@ async def run_broker_cycle(
     # Lazy: msg_broker is registered as a callback target via the broker
     # registry; importing it at top of periodic_tasks pulls the
     # messaging subpackage into the polling package's cold path.
+    from ... import window_query
     from ...mailbox import Mailbox
     from ..messaging.msg_broker import broker_delivery_cycle
 
@@ -58,7 +58,7 @@ async def run_broker_cycle(
     await broker_delivery_cycle(
         mailbox=mailbox,
         tmux_mgr=tmux_manager,
-        window_states=session_manager.window_states,
+        window_ids=window_query.iter_window_ids(),
         tmux_session=config.tmux_session_name,
         msg_rate_limit=config.msg_rate_limit,
         client=client,

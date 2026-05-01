@@ -19,7 +19,6 @@ import structlog
 from telegram import Update
 from ... import window_query
 from ...config import config
-from ...session import session_manager
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ..messaging_pipeline.message_sender import safe_reply
@@ -65,7 +64,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     if view is None or not view.cwd or not Path(view.cwd).is_dir():
         await safe_reply(update.message, "Directory no longer exists.")
         return

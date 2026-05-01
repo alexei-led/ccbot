@@ -25,6 +25,8 @@ from .msg_telegram import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from ...mailbox import Mailbox, Message
     from ...tmux_manager import TmuxManager
 
@@ -194,7 +196,7 @@ def _recover_stale_pending(mailbox: "Mailbox") -> None:
 async def broker_delivery_cycle(
     mailbox: "Mailbox",
     tmux_mgr: "TmuxManager",
-    window_states: dict,
+    window_ids: "Iterable[str]",
     tmux_session: str,
     msg_rate_limit: int,
     client: "TelegramClient | None" = None,
@@ -219,7 +221,7 @@ async def broker_delivery_cycle(
 
     delivered_count = 0
 
-    for window_id in list(window_states):
+    for window_id in list(window_ids):
         # Foreign windows (emdash) are already fully qualified
         if is_foreign_window(window_id):
             qualified_id = window_id

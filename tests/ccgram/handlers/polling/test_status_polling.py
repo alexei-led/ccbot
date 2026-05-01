@@ -799,7 +799,10 @@ class TestProviderSwitchPromptSetup:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
@@ -813,7 +816,7 @@ class TestProviderSwitchPromptSetup:
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(
                     session_id="",
                     cwd="/proj",
@@ -844,7 +847,10 @@ class TestProviderSwitchPromptSetup:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
@@ -862,7 +868,7 @@ class TestProviderSwitchPromptSetup:
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(
                     session_id="",
                     cwd="/proj",
@@ -888,7 +894,10 @@ class TestProviderSwitchPromptSetup:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
@@ -905,7 +914,7 @@ class TestProviderSwitchPromptSetup:
                 new_callable=AsyncMock,
             ) as mock_ensure,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(
                     session_id="",
                     cwd="/proj",
@@ -934,7 +943,10 @@ class TestProviderSwitchPromptSetup:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
@@ -955,7 +967,7 @@ class TestProviderSwitchPromptSetup:
                 return_value=False,
             ),
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(
                     session_id="",
                     cwd="/proj",
@@ -1017,7 +1029,10 @@ class TestProviderSwitchChain:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
@@ -1043,7 +1058,7 @@ class TestProviderSwitchChain:
                 "ccgram.handlers.shell.shell_prompt_orchestrator.clear_state"
             ) as mock_clear_orch,
         ):
-            mock_sm.window_states = {"@7": state}
+            mock_ws.window_states = {"@7": state}
             mock_sm.set_window_provider.side_effect = _set_provider
             mock_config.tmux_session_name = "ccgram"
 
@@ -1118,7 +1133,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1130,7 +1148,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.config"
             ) as mock_config,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(
                     session_id="existing-id",
                     cwd="/proj",
@@ -1156,12 +1174,15 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {"@7": MagicMock(session_id="", cwd="")}
+            mock_ws.window_states = {"@7": MagicMock(session_id="", cwd="")}
             mock_tmux.find_window_by_id = AsyncMock(return_value=None)
             await discover_and_register_transcript("@7")
         mock_sm.register_hookless_session.assert_not_called()
@@ -1189,7 +1210,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1204,7 +1228,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.config"
             ) as mock_config,
         ):
-            mock_sm.window_states = {"@7": mock_state}
+            mock_ws.window_states = {"@7": mock_state}
             mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tmux.get_pane_title = AsyncMock(return_value="")
             mock_config.tmux_session_name = "ccgram"
@@ -1225,13 +1249,16 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
             ),
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/proj", provider_name="claude")
             }
             await discover_and_register_transcript("@7")
@@ -1242,10 +1269,15 @@ class TestMaybeDiscoverTranscript:
             discover_and_register_transcript,
         )
 
-        with patch(
-            "ccgram.handlers.recovery.transcript_discovery.session_manager"
-        ) as mock_sm:
-            mock_sm.window_states = {}
+        with (
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_manager"
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
+        ):
+            mock_ws.window_states = {}
             await discover_and_register_transcript("@7")
         mock_sm.register_hookless_session.assert_not_called()
 
@@ -1269,7 +1301,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1284,7 +1319,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/my/project", provider_name="codex")
             }
             mock_config.tmux_session_name = "ccgram"
@@ -1328,7 +1363,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1343,7 +1381,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(
                     session_id="uuid-old",
                     cwd="/my/project",
@@ -1378,7 +1416,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1390,7 +1431,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/proj", provider_name="codex")
             }
             mock_config.tmux_session_name = "ccgram"
@@ -1423,7 +1464,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1441,7 +1485,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/my/project", provider_name="codex")
             }
             mock_config.tmux_session_name = "ccgram"
@@ -1500,7 +1544,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1512,7 +1559,7 @@ class TestMaybeDiscoverTranscript:
             ) as mock_config,
             patch("ccgram.providers.registry", mock_registry),
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/proj", provider_name="")
             }
             mock_config.tmux_session_name = "ccgram"
@@ -1538,12 +1585,15 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/proj", provider_name="")
             }
             mock_tmux.find_window_by_id = AsyncMock(return_value=mock_window)
@@ -1564,7 +1614,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1579,7 +1632,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.asyncio"
             ) as mock_asyncio,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/proj", provider_name="codex")
             }
             mock_config.tmux_session_name = "ccgram"
@@ -1607,7 +1660,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
                 return_value=mock_provider,
@@ -1622,7 +1678,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.asyncio"
             ) as mock_asyncio,
         ):
-            mock_sm.window_states = {
+            mock_ws.window_states = {
                 "@7": MagicMock(session_id="", cwd="/proj", provider_name="codex")
             }
             mock_config.tmux_session_name = "ccgram"
@@ -1679,7 +1735,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1699,7 +1758,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {"@7": mock_state}
+            mock_ws.window_states = {"@7": mock_state}
             mock_sm.set_window_provider.side_effect = _set_window_provider
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(
@@ -1772,7 +1831,10 @@ class TestMaybeDiscoverTranscript:
         with (
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_manager"
-            ) as mock_sm,
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
             patch(
                 "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
             ) as mock_sms,
@@ -1796,7 +1858,7 @@ class TestMaybeDiscoverTranscript:
                 "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
             ) as mock_tmux,
         ):
-            mock_sm.window_states = {"@7": mock_state}
+            mock_ws.window_states = {"@7": mock_state}
             mock_sm.set_window_provider.side_effect = _set_window_provider
             mock_tmux.find_window_by_id = AsyncMock(
                 return_value=MagicMock(

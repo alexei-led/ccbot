@@ -19,6 +19,7 @@ from pathlib import Path
 import structlog
 from telegram.error import NetworkError, RetryAfter, TelegramError, TimedOut
 
+from ... import window_query
 from ...config import config
 from ...providers import (
     detect_provider_from_pane,
@@ -88,7 +89,7 @@ async def _auto_detect_provider(window_id: str) -> None:
     detect_provider_from_command returns "" for unrecognized commands (shells),
     so we only persist when a known CLI is confidently identified.
     """
-    view = session_manager.view_window(window_id)
+    view = window_query.view_window(window_id)
     if view and view.provider_name:
         return
 

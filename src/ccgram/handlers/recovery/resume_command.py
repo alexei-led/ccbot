@@ -398,7 +398,7 @@ async def _create_resume_window(
         lifecycle_strategy.clear_dead_notification(user_id, thread_id)
 
     if old_window_id:
-        old_view = session_manager.view_window(old_window_id)
+        old_view = window_query.view_window(old_window_id)
         provider = get_provider_for_window(
             old_window_id, provider_name=old_view.provider_name if old_view else None
         )
@@ -483,7 +483,7 @@ async def _handle_pick(
             chat_id=thread_router.resolve_chat_id(user_id, thread_id),
             message_thread_id=thread_id,
             name=format_topic_name_for_mode(
-                created_wname, session_manager.get_approval_mode(created_wid)
+                created_wname, window_query.get_approval_mode(created_wid)
             ),
         )
     except TelegramError as e:
