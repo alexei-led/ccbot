@@ -44,6 +44,7 @@ from .handlers.topics.topic_orchestration import (
 )
 from .providers import get_provider
 from .session import session_manager
+from .telegram_client import PTBTelegramClient
 from .session_monitor import (
     NewMessage,
     NewWindowEvent,
@@ -165,7 +166,6 @@ async def start_session_monitor(application: Application) -> SessionMonitor:
 
     # Lazy: telegram_client wraps PTB Bot; bootstrap is otherwise free of
     # PTB types, so loading the adapter here keeps cold imports clean.
-    from .telegram_client import PTBTelegramClient
 
     client = PTBTelegramClient(application.bot)
 
@@ -205,7 +205,7 @@ async def bootstrap_application(application: Application) -> None:
     install_global_exception_handler()
     await register_provider_commands(application)
     await session_manager.resolve_stale_ids()
-    await _adopt_unbound_windows(application.bot)
+    await _adopt_unbound_windows(PTBTelegramClient(application.bot))
     verify_hooks_installed()
     wire_runtime_callbacks()
     await start_session_monitor(application)
