@@ -810,11 +810,11 @@ This keeps each task's diff small.
 
 - Create: `docs/plans/20260429-modularity-decouple-round-4-import-audit.md` (working notes — moved to completed at end)
 
-- [ ] grep `^[ ]+from \.` inside function bodies under `src/ccgram/` (skipping `if TYPE_CHECKING:` blocks)
-- [ ] for each match, classify: (a) circular cycle now resolved by F1/F2 → hoist to top; (b) intentional lazy load (e.g. provider registration) → keep + document with one-line comment; (c) Config-avoidance for CLI commands → check whether F2 made it redundant
-- [ ] write the inventory to the working-notes file
-- [ ] no code changes in this task — pure audit
-- [ ] commit "docs: in-function import audit for round 4"
+- [x] grep `^[ ]+from \.` inside function bodies under `src/ccgram/` (skipping `if TYPE_CHECKING:` blocks) — used `ast.walk` over every `.py` and matched `ImportFrom` nodes whose parent is `FunctionDef`/`AsyncFunctionDef` with `level > 0`. 251 sites identified across ~50 files.
+- [x] for each match, classify: (a) circular cycle now resolved by F1/F2 → hoist to top; (b) intentional lazy load (e.g. provider registration) → keep + document with one-line comment; (c) Config-avoidance for CLI commands → check whether F2 made it redundant — produced detailed classification in the working-notes file. Headline numbers: ~145 sites under (b) split across CLI dispatchers (B1, 35), callback registry side-effect loader (B2, 12), provider auto-detection (B3, 3), hook subprocess (B4, 2), miniapp factory injection seams (B5, 5), genuine bidirectional cycles (B6, ~30), and cross-subpackage cycle-likely cases (B7, ~95 — F6.2 will probe). ~30 confirmed-leaf trivial hoist candidates earmarked for (a) batches. **Zero category (c) sites**: F1–F5 didn't touch the Config singleton's init model, and every `from ..config import config` lazy site is co-located with an unrelated lazy reason (CLI startup or cycle-breaking).
+- [x] write the inventory to the working-notes file — `docs/plans/20260429-modularity-decouple-round-4-import-audit.md` (~250 lines). Includes methodology, summary stats, full per-cluster inventory, F6.2 batching recommendations, and F6.3 documentation conventions.
+- [x] no code changes in this task — pure audit — verified: only the new working-notes file added; no `src/` or `tests/` modifications; `make check` passes (4372 unit + 97 integration; typecheck 0 errors / 0 warnings; lint clean — green state preserved purely as a control for the audit).
+- [x] commit "docs: in-function import audit for round 4"
 
 #### Task F6.2: Hoist resolvable in-function imports
 
