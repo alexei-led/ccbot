@@ -364,3 +364,89 @@ def test_non_comment_line_breaks_lazy_walk(lint_module, tmp_path: Path) -> None:
     violations = lint_module.find_violations(path)
     assert len(violations) == 1
     assert "from .baz import qux" in violations[0][1]
+
+
+def test_nested_function_import_is_caught(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "nested_fn.py",
+        """
+        def outer():
+            def inner():
+                from .foo import bar
+                return bar
+            return inner
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_nested_function_lazy_import_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "nested_fn_lazy.py",
+        """
+        def outer():
+            def inner():
+                # Lazy: documented inside nested function
+                from .foo import bar
+                return bar
+            return inner
+        """,
+    )
+    assert lint_module.find_violations(path) == []
+
+
+def test_try_star_import_is_caught(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "try_star.py",
+        """
+        def fn():
+            try:
+                x = 1
+            except* ValueError:
+                from .foo import bar
+                return bar
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_try_star_lazy_import_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "try_star_lazy.py",
+        """
+        def fn():
+            try:
+                x = 1
+            except* ValueError:
+                # Lazy: documented inside except* handler
+                from .foo import bar
+                return bar
+        """,
+    )
+    assert lint_module.find_violations(path) == []
+
+
+def test_method_inside_function_class_is_caught(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "fn_class_method.py",
+        """
+        def outer():
+            class Inner:
+                def method(self):
+                    from .foo import bar
+                    return bar
+            return Inner
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]

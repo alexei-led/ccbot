@@ -76,11 +76,12 @@ def _find_violations_in_function(
 def _sub_bodies(stmt: ast.stmt) -> Iterator[list[ast.stmt]]:
     """Yield each statement-list body that *stmt* contains, if any.
 
-    Covers compound statements (``Try``, ``With``, ``For``, ``While``, plain
-    ``If``) so the lazy-import walker can recurse through control flow without
-    losing function scope. ``If(TYPE_CHECKING)`` is handled by the caller.
+    Covers compound statements (``Try``, ``TryStar``, ``With``, ``For``,
+    ``While``, plain ``If``) so the lazy-import walker can recurse through
+    control flow without losing function scope. ``If(TYPE_CHECKING)`` is
+    handled by the caller.
     """
-    if isinstance(stmt, ast.Try):
+    if isinstance(stmt, ast.Try | ast.TryStar):
         yield stmt.body
         for handler in stmt.handlers:
             yield handler.body
@@ -113,6 +114,49 @@ def _check_import(
     return (stmt.lineno, snippet)
 
 
+def _walk_class_body(
+    cls: ast.ClassDef,
+    source_lines: list[str],
+    in_type_checking: bool,
+) -> Iterator[tuple[int, str]]:
+    """Yield violations for every method directly defined on *cls*."""
+    for child in cls.body:
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            yield from _find_violations_in_function(
+                child, source_lines, in_type_checking
+            )
+
+
+def _walk_stmt(
+    stmt: ast.stmt,
+    source_lines: list[str],
+    in_type_checking: bool,
+) -> Iterator[tuple[int, str]]:
+    """Yield violations for a single statement inside a function body."""
+    if isinstance(stmt, ast.If) and _is_type_checking_test(stmt.test):
+        yield from _walk_block(stmt.body, source_lines, in_type_checking=True)
+        yield from _walk_block(stmt.orelse, source_lines, in_type_checking)
+        return
+    if isinstance(stmt, ast.Import | ast.ImportFrom):
+        violation = _check_import(stmt, source_lines, in_type_checking)
+        if violation is not None:
+            yield violation
+        return
+    if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+        yield from _find_violations_in_function(stmt, source_lines, in_type_checking)
+        return
+    if isinstance(stmt, ast.ClassDef):
+        yield from _walk_class_body(stmt, source_lines, in_type_checking)
+        return
+    sub = list(_sub_bodies(stmt))
+    if sub:
+        for sub_body in sub:
+            yield from _walk_block(sub_body, source_lines, in_type_checking)
+        return
+    for child in ast.iter_child_nodes(stmt):
+        yield from _walk_node(child, source_lines, in_type_checking)
+
+
 def _walk_block(
     body: Iterable[ast.stmt],
     source_lines: list[str],
@@ -120,22 +164,7 @@ def _walk_block(
 ) -> Iterator[tuple[int, str]]:
     """Yield ``(lineno, snippet)`` for every undocumented in-function import."""
     for stmt in body:
-        if isinstance(stmt, ast.If) and _is_type_checking_test(stmt.test):
-            yield from _walk_block(stmt.body, source_lines, in_type_checking=True)
-            yield from _walk_block(stmt.orelse, source_lines, in_type_checking)
-            continue
-        if isinstance(stmt, ast.Import | ast.ImportFrom):
-            violation = _check_import(stmt, source_lines, in_type_checking)
-            if violation is not None:
-                yield violation
-            continue
-        sub = list(_sub_bodies(stmt))
-        if sub:
-            for sub_body in sub:
-                yield from _walk_block(sub_body, source_lines, in_type_checking)
-            continue
-        for child in ast.iter_child_nodes(stmt):
-            yield from _walk_node(child, source_lines, in_type_checking)
+        yield from _walk_stmt(stmt, source_lines, in_type_checking)
 
 
 def _walk_node(
