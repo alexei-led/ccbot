@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --max-width: 820px;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eef1f5;
+    --text: #1a1a1a;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --accent: #2b6cb0;
+    --accent-light: #ebf4ff;
+    --severity-critical: #c53030;
+    --severity-critical-bg: #fff5f5;
+    --severity-significant: #c05621;
+    --severity-significant-bg: #fffaf0;
+    --severity-minor: #2b6cb0;
+    --severity-minor-bg: #ebf8ff;
+    --table-stripe: #f7fafc;
+    --link: #2b6cb0;
+    --link-hover: #1a4971;
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2e2e2e;
+    --text: #e2e2e2;
+    --text-secondary: #a0a0a0;
+    --text-muted: #717171;
+    --border: #333333;
+    --accent: #b0b0b0;
+    --accent-light: #2a2a2a;
+    --severity-critical: #fc8181;
+    --severity-critical-bg: #2d1b1b;
+    --severity-significant: #f6ad55;
+    --severity-significant-bg: #2d2415;
+    --severity-minor: #a0a0a0;
+    --severity-minor-bg: #282828;
+    --table-stripe: #222222;
+    --link: #e0c97f;
+    --link-hover: #f0dca0;
+    --shadow: rgba(0, 0, 0, 0.2);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 2rem 1.5rem;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  .theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem 0;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.6rem 0;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link-hover);
+  }
+
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta strong {
+    color: var(--text-secondary);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--table-stripe);
+  }
+
+  .severity {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .severity-critical {
+    color: var(--severity-critical);
+    background: var(--severity-critical-bg);
+  }
+
+  .severity-significant {
+    color: var(--severity-significant);
+    background: var(--severity-significant-bg);
+  }
+
+  .severity-minor {
+    color: var(--severity-minor);
+    background: var(--severity-minor-bg);
+  }
+
+  .issue {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .issue h2 {
+    margin-top: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .issue h3 {
+    font-size: 1rem;
+  }
+
+  .issue-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  ul, ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .footer a {
+    color: var(--text-muted);
+    border-bottom-color: var(--border);
+  }
+
+  .footer a:hover {
+    color: var(--link);
+  }
+
+  @media print {
+    .theme-toggle { display: none; }
+    body { padding: 0; }
+    .issue { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <span id="theme-icon"></span>
+</button>
+
+<div class="container">
+<h1>Modularity Review</h1>
+<div class="meta">
+  <strong>Scope</strong>: ccgram (<code>src/ccgram/</code>) — post-Round-4 design audit. Branch <code>modularity-decouple-round-4</code>. ~42 KLOC, 14 handler subpackages, 5 agent providers, 2 LLM providers, optional Mini App.<br>
+  <strong>Date</strong>: 2026-05-01
+</div>
+
+<p>ccgram is a Telegram bot that drives AI coding agents (Claude Code, Codex, Gemini, Pi, plain shell) inside tmux windows; each Forum topic binds to one window and one agent session. Round 4 (the 6-phase refactor that just landed on this branch) addressed every finding from the 2026-04-29 review (F1–F6: handler subpackages, constructor DI for stores, <code>bot.py</code> split, <code>window_tick</code> decide/observe/apply, <code>TelegramClient</code> Protocol, lazy-import audit). The result is <strong>good bones, narrower context per task, but four residual hot spots</strong> that account for most of the remaining cross-module churn: a stateful "polling strategies" hub that doubles as the canonical home for pure decision types, two oversized handler files (<code>command_orchestration.py</code> 775 LOC, <code>recovery_callbacks.py</code> 890 LOC), the surviving module-level singleton pattern (now wrapped in proxies but still global), and a residual lazy-import gap (~89 in-function imports without the Round-4 documentation comment).</p>
+
+<h2>What Round 4 Already Bought You</h2>
+<p>These are no longer issues; do not re-litigate them.</p>
+<ul>
+  <li><code>bot.py</code> is 172 lines (factory + lifecycle delegates). Command/message/callback registration moved to <code>handlers/registry.py</code>. Post-init wiring lives in <code>bootstrap.py</code> with named, individually testable steps and an explicit ordering invariant (<code>wire_runtime_callbacks</code> must precede <code>start_session_monitor</code>).</li>
+  <li>The 50+ flat <code>handlers/</code> peers became 14 cohesive feature subpackages (interactive, live, messaging, messaging_pipeline, polling, recovery, send, shell, status, text, toolbar, topics, voice) plus 17 documented top-level handlers. Each subpackage <code>__init__.py</code> is a small re-export surface (19–104 lines).</li>
+  <li><code>WindowStateStore</code>, <code>ThreadRouter</code>, <code>UserPreferences</code>, and <code>SessionMapSync</code> are constructed by <code>SessionManager</code> with explicit <code>schedule_save</code> callbacks. The <code>_wire_singletons</code> monkey-patch is gone; unwired callee defaults raise <code>RuntimeError("not wired")</code>; <code>register_*_callback</code> helpers fail loud on double registration.</li>
+  <li><code>window_tick</code> is now a four-file subpackage: <code>decide.py</code> (70 LOC, pure kernel, zero deps on tmux/PTB/singletons), <code>observe.py</code> (126 LOC, pure inputs in / <code>TickContext</code> out), <code>apply.py</code> (554 LOC, the only side-effect file), <code>__init__.py</code> (133 LOC orchestration shim).</li>
+  <li><code>TelegramClient</code> Protocol covers exactly the 18 grep-verified bot API methods used by handlers. <code>PTBTelegramClient(bot)</code> adapts a real PTB Bot in production; <code>FakeTelegramClient</code> records calls as <code>(method, kwargs)</code> tuples for tests; <code>unwrap_bot(client)</code> is the documented escape hatch for PTB-only helpers.</li>
+  <li>A new integration test (<code>tests/integration/test_import_no_cycles.py</code>) parametrizes <code>python -c "import {module}"</code> over 29 modules from a clean interpreter, catching circular-import regressions before they break runtime.</li>
+</ul>
+
+<h2>Domain Classification</h2>
+<p>Largely unchanged from the prior review; the deltas worth noting are that messaging and Mini App have settled into supporting/core respectively, and that polling has emerged as a <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">core subdomain</a> in its own right (every UX iteration touches it).</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Subsystem</th>
+      <th>Type</th>
+      <th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+      <th>Comment</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Telegram UX (<code>handlers/</code>)</td><td>Core</td><td>High</td><td>Where competitive value lives. Topic emoji, status bubble, recovery, voice still moving.</td></tr>
+    <tr><td>Provider abstraction (<code>providers/</code>)</td><td>Core</td><td>High</td><td>5 providers in 6 months; capability matrix continues to grow.</td></tr>
+    <tr><td>Polling / status detection</td><td>Core</td><td>High</td><td>Hook + scrape + lifecycle interleaved; touched by every recent UX overhaul.</td></tr>
+    <tr><td>Inter-agent messaging (<code>mailbox/</code>)</td><td>Core</td><td>Medium</td><td>Stabilising; new spawn flow + idle detection.</td></tr>
+    <tr><td>Mini App (<code>miniapp/</code>)</td><td>Core</td><td>High</td><td>New in v3.0; HTTP/WS surfaces still expanding.</td></tr>
+    <tr><td>Session monitoring</td><td>Supporting</td><td>Medium</td><td>Hooks vs hookless variants; events.jsonl surface stable.</td></tr>
+    <tr><td>State persistence</td><td>Supporting</td><td>Low</td><td><code>state.json</code> schema is stable; forward-compat by design.</td></tr>
+    <tr><td>tmux integration (<code>tmux_manager.py</code>)</td><td>Generic</td><td>Low</td><td>tmux + libtmux APIs are static.</td></tr>
+    <tr><td>Telegram client (PTB)</td><td>Generic</td><td>Low</td><td>API stable; F5 reduced exposure to outbound surface only.</td></tr>
+    <tr><td>LLM / Whisper</td><td>Generic</td><td>Low (functional)</td><td>OpenAI-compatible HTTP shape; pluggable via Protocol.</td></tr>
+  </tbody>
+</table>
+
+<h2>Coupling Overview</h2>
+<p>The integrations below are the hot edges in the post-Round-4 graph — pairs where a change in one component is likeliest to ripple. <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a> levels in the cells are linked to the relevant chapter.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Integration</th>
+      <th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th>
+      <th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th>
+      <th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+      <th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>polling_strategies.py</code> 5 module-level singletons → 12+ call sites</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+      <td>sibling (mostly via lazy import)</td>
+      <td>medium</td>
+      <td>❌ singleton hub</td>
+    </tr>
+    <tr>
+      <td><code>decide.py</code> (pure) → <code>polling_strategies.py</code> for <code>TickContext</code>/<code>STARTUP_TIMEOUT</code>/<code>is_shell_prompt</code></td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+      <td>sibling</td>
+      <td>low</td>
+      <td>⚠ pure kernel still drags 1 073-line stateful module</td>
+    </tr>
+    <tr>
+      <td><code>command_orchestration.py</code> — 4 jobs in one 775-LOC file (forward + menu sync + failure probe + status snapshot)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+      <td>same module</td>
+      <td>medium</td>
+      <td>❌ low cohesion</td>
+    </tr>
+    <tr>
+      <td><code>recovery_callbacks.py</code> — dispatcher + 6 handlers + 3 keyboard builders + 2 scan helpers (890 LOC)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+      <td>same module</td>
+      <td>medium</td>
+      <td>❌ low cohesion</td>
+    </tr>
+    <tr>
+      <td>handlers/* → <code>session_manager</code> (44 sites) vs <code>window_query</code>/<code>session_query</code> (30 sites)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (mixed)</td>
+      <td>sibling</td>
+      <td>medium</td>
+      <td>⚠ two access patterns coexist</td>
+    </tr>
+    <tr>
+      <td>handlers/* → <code>window_store</code>/<code>thread_router</code>/<code>user_preferences</code> (proxy globals)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+      <td>sibling</td>
+      <td>medium</td>
+      <td>⚠ proxy hides "wired vs unwired" failure mode</td>
+    </tr>
+    <tr>
+      <td>Tests → <code>bootstrap.reset_for_testing()</code> + 3 separate <code>_reset_*_for_testing</code> hooks</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a></td>
+      <td>external (test → src)</td>
+      <td>medium</td>
+      <td>❌ singleton-reset ceremony</td>
+    </tr>
+    <tr>
+      <td>Lazy-import sites (~89 undocumented out of 222 total)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a> (latent)</td>
+      <td>sibling</td>
+      <td>medium</td>
+      <td>❌ hidden cycles</td>
+    </tr>
+    <tr>
+      <td><code>bot.py</code> <code>__all__</code> re-exports of 19 moved symbols (test-patch targets)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+      <td>same module</td>
+      <td>medium</td>
+      <td>⚠ load-bearing for legacy <code>unittest.mock.patch</code></td>
+    </tr>
+    <tr>
+      <td>Handlers → <code>telegram.{Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, MessageEntity}</code> (inbound + UI)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+      <td>3rd-party</td>
+      <td>low</td>
+      <td>✅ tolerable per balance rule</td>
+    </tr>
+    <tr>
+      <td><code>TelegramClient</code> Protocol → 18 outbound bot API methods</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td>
+      <td>sub-package</td>
+      <td>low</td>
+      <td>✅ exemplary</td>
+    </tr>
+    <tr>
+      <td><code>miniapp/</code> → rest of ccgram (only via its own <code>auth</code> module)</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td>
+      <td>sub-package</td>
+      <td>high</td>
+      <td>✅ best-isolated subsystem in the codebase</td>
+    </tr>
+    <tr>
+      <td><code>AgentProvider</code> Protocol → 5 implementations + capability flags</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td>
+      <td>sub-package</td>
+      <td>high</td>
+      <td>✅ unchanged from prior review; remains the gold standard</td>
+    </tr>
+    <tr>
+      <td><code>bootstrap.py</code> post_init → 7 wiring steps with ordering invariant</td>
+      <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Intrusive</a> (necessary)</td>
+      <td>sibling</td>
+      <td>high</td>
+      <td>✅ now named + asserted (<code>_callbacks_wired</code> flag)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Issues</h2>
+<p>The four critical ones below are unbalanced <strong>and</strong> sit in volatile parts of the codebase. The two significant ones are unbalanced in medium-volatility areas. The minors are tolerable per the <a href="https://coupling.dev/posts/core-concepts/balance/">balance rule</a> — listed for completeness, not for immediate work.</p>
+
+<div class="issue">
+<h2>Issue: <code>polling_strategies.py</code> is a hidden singleton hub</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: <code>handlers/polling/polling_strategies.py</code> → 12+ lazy importers across <code>recovery/</code>, <code>shell/</code>, <code>topics/</code>, <code>status/</code>, <code>live/</code>, <code>text/</code>, <code>window_tick/decide.py</code><br>
+  <strong>Severity</strong>: <span class="severity severity-critical">Critical</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p><code>polling_strategies.py</code> is 1 073 lines and contains <strong>two unrelated kinds of thing in one module</strong>: (a) the pure data types <code>TickContext</code>, <code>TickDecision</code>, <code>PaneTransition</code>, the constant <code>STARTUP_TIMEOUT</code>, and the pure function <code>is_shell_prompt</code> — i.e. the contract that the F4 decision kernel was meant to be pure with respect to — and (b) five stateful module-level singletons: <code>terminal_poll_state</code>, <code>terminal_screen_buffer</code>, <code>interactive_strategy</code>, <code>lifecycle_strategy</code>, <code>pane_status_strategy</code>.</p>
+<p>The F4 win in <code>window_tick/decide.py</code> ("zero deps on tmux/PTB/singletons") is accurate at the <em>decision-function</em> level — <code>decide_tick(ctx) -&gt; TickDecision</code> is a deterministic mapping. But the import graph tells a different story: <code>decide.py</code> does <code>from ..polling_strategies import STARTUP_TIMEOUT, TickContext, TickDecision, is_shell_prompt</code>, which <em>executes</em> <code>polling_strategies.py</code> top-level at import time — instantiating all five singletons (pyte screen, RC debounce dict, pane-count cache, autoclose-timer dict, dead-notification set). The pure kernel is only pure once it's loaded; loading it is not.</p>
+<p>This is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">model coupling</a> where it should be <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract coupling</a>. Twelve other call sites compound the problem: most of them use <code>from ..polling.polling_strategies import lifecycle_strategy</code> (or <code>terminal_screen_buffer</code>, or <code>interactive_strategy</code>) <strong>inside function bodies</strong> as the documented workaround for the cycle this would otherwise create. That's eight <code># Lazy:</code> comments admitting the same architectural fact.</p>
+
+<h3>Complexity Impact</h3>
+<p>Any change inside <code>polling_strategies.py</code> — adding a debounce field, renaming a method on <code>TerminalScreenBuffer</code>, tweaking <code>STARTUP_TIMEOUT</code> — has potential ripple into ≥12 sibling modules, most of which discovered the dependency <em>late at import time</em>. Cognitive load on a developer reading <code>decide.py</code>: small ✓. Cognitive load on a developer reading <code>polling_strategies.py</code>: 8 classes, 5 instances, 2 distinct-concept clusters, 1 073 lines — well past the 4 ± 1 working-memory budget.</p>
+<p>The "lazy import everywhere" pattern means the static module graph lies: tooling sees <code>decide.py → polling_strategies</code> only, while the runtime graph fans out through every consumer of the singletons. That's the "hidden cycles" half of the problem the F6 audit was supposed to surface; it's still there, just better-commented.</p>
+
+<h3>Cascading Changes</h3>
+<p>Concrete recent triggers (from <code>git log</code> of this file):</p>
+<ul>
+  <li>"Pane lifecycle transition notifications distinguish creation from state changes" — a UX tweak that touched <code>PaneStatusStrategy</code> <em>and</em> <code>recovery_callbacks.py</code> <em>and</em> <code>live/screenshot_callbacks.py</code> because all three lazy-import a singleton from this file.</li>
+  <li>The F4 split itself documented two cycle paths through <code>polling_strategies</code> (<code>window_tick → recovery → polling_strategies → window_tick</code> and a sibling); they were "fixed" by <em>forcing</em> the import order in <code>handlers/registry.py</code> (the <code>from . import polling as _polling  # noqa: F401</code> line). That comment-bound import-ordering invariant is unbalanced coupling: a refactor of <code>polling/__init__.py</code> can break recovery loading without any local edit.</li>
+</ul>
+
+<h3>Recommended Improvement</h3>
+<p>Split the file into two siblings inside <code>handlers/polling/</code>:</p>
+<ul>
+  <li><code>polling_types.py</code> — pure types and constants only: <code>TickContext</code>, <code>TickDecision</code>, <code>PaneTransition</code>, <code>STARTUP_TIMEOUT</code>, <code>RC_DEBOUNCE_SECONDS</code>, <code>MAX_PROBE_FAILURES</code>, <code>TYPING_INTERVAL</code>, <code>PANE_COUNT_TTL</code>, <code>ACTIVITY_THRESHOLD</code>, <code>SHELL_COMMANDS</code>, <code>is_shell_prompt</code>, <code>WindowPollState</code> and <code>TopicPollState</code> dataclasses. Total target: ~150 LOC.</li>
+  <li><code>polling_state.py</code> — the five stateful classes (<code>TerminalPollState</code>, <code>TerminalScreenBuffer</code>, <code>InteractiveUIStrategy</code>, <code>TopicLifecycleStrategy</code>, <code>PaneStatusStrategy</code>) and the five singletons. Constructor-inject the dependencies they share.</li>
+</ul>
+<p>Then <code>decide.py</code> imports only from <code>polling_types.py</code>, eliminating the load-side effect for the pure kernel and making the F4 purity claim true at the import level too. The 12 lazy-import sites for the singletons stay lazy if they still need to (or, better, pass the strategy in via <code>apply.py</code>-style DI), but they no longer share a file with the contract.</p>
+<p><strong>Trade-off</strong>: ~1 day of mechanical work, ~30 import sites updated, no behaviour change. Risk is low; cycle-detection test will catch regressions. The payoff is that the F4 architecture finally pays its full dividend — <code>decide.py</code> becomes truly leaf-level and unit-testable without instantiating pyte buffers.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: <code>command_orchestration.py</code> packs four unrelated jobs into 775 LOC</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: internal cohesion of <code>handlers/command_orchestration.py</code><br>
+  <strong>Severity</strong>: <span class="severity severity-critical">Critical</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The module name suggests one job (orchestrating slash-command forwarding); the file does four:</p>
+<ol>
+  <li><strong>Forward unknown <code>/commands</code> to the agent session</strong> (<code>forward_command_handler</code>, ~110 LOC). The actual orchestration.</li>
+  <li><strong>Per-user / per-chat / global menu sync</strong> (<code>sync_scoped_provider_menu</code>, <code>sync_scoped_menu_for_text_context</code>, <code>get_global_provider_menu</code>, <code>set_global_provider_menu</code>, <code>setup_menu_refresh_job</code>). State management for <code>BotCommandScope*</code>.</li>
+  <li><strong>Post-send command-failure probing</strong> (<code>_capture_command_probe_context</code>, <code>_probe_transcript_command_error</code>, <code>_maybe_send_command_failure_message</code>, <code>_spawn_command_failure_probe</code>, <code>_extract_pane_delta</code>, <code>_extract_probe_error_line</code>, <code>_command_known_in_other_provider</code>). A separate concern — verifying that the agent actually accepted the command — that runs <em>after</em> forwarding.</li>
+  <li><strong>Status / stats snapshot fallback</strong> (<code>_status_snapshot_probe_offset</code>, <code>_maybe_send_status_snapshot</code>). A different feature entirely (showing <code>/status</code> output even when the agent doesn't understand the command).</li>
+</ol>
+<p>These four jobs share file scope but not domain knowledge: changing menu-scope cache keys does not affect failure-probe extraction logic, and vice versa. This is low cohesion in the <a href="https://coupling.dev/posts/related-topics/module-coupling/">classic-coupling</a> sense — coincidental grouping by surface ("things that involve <code>/commands</code>") rather than by reason-to-change.</p>
+
+<h3>Complexity Impact</h3>
+<ul>
+  <li>The bounded-cache helpers <code>_set_bounded_cache_entry</code> and <code>_get_lru_cache_entry</code> were added at the top of the file <em>for menu sync</em>, but anyone reading the file top-to-bottom encounters 200 LOC of generic OrderedDict utilities before reaching the actual command-forwarding logic at line 564.</li>
+  <li>The probe-spawn pattern (<code>_spawn_command_failure_probe</code> + <code>_status_snapshot_probe_offset</code>) creates <code>asyncio.Task</code>s inside the forward path. Cancellation, ordering, and status-bubble-edit interactions are non-obvious and require the reader to hold all four jobs in working memory simultaneously.</li>
+</ul>
+
+<h3>Cascading Changes</h3>
+<ul>
+  <li>A change to "what counts as a failed command" (e.g. detecting Codex's "command not recognized" string vs Claude's silent ignore) currently touches the probe code, the menu-sync code (because the menu may need to be re-fetched), and forward_command_handler (to orchestrate). Three concerns, one file.</li>
+  <li>Adding a new provider whose menu requires a different scope mechanism forces the menu-sync code to grow — but the menu-sync helpers live next to the probe code, so the diff is wider than the change deserves.</li>
+</ul>
+
+<h3>Recommended Improvement</h3>
+<p>Split into a sibling subpackage <code>handlers/commands/</code>:</p>
+<ul>
+  <li><code>commands/forward.py</code> — <code>forward_command_handler</code> and its small helpers. ~150 LOC.</li>
+  <li><code>commands/menu_sync.py</code> — <code>sync_scoped_provider_menu</code>, scope cache, <code>setup_menu_refresh_job</code>. ~250 LOC.</li>
+  <li><code>commands/failure_probe.py</code> — pane-delta and transcript-based failure detection. ~200 LOC.</li>
+  <li><code>commands/status_snapshot.py</code> — <code>/status</code> and <code>/stats</code> snapshot fallback. ~120 LOC.</li>
+  <li><code>commands/__init__.py</code> — re-export public symbols (<code>forward_command_handler</code>, <code>commands_command</code>, <code>toolbar_command</code>, <code>setup_menu_refresh_job</code>, <code>get_global_provider_menu</code>, <code>set_global_provider_menu</code>).</li>
+</ul>
+<p>This is the same shape as the existing <code>shell/</code> subpackage (<code>shell_commands</code> + <code>shell_capture</code> + <code>shell_context</code> + <code>shell_prompt_orchestrator</code>), where the cohesion-by-feature pattern already works.</p>
+<p><strong>Trade-off</strong>: ~half a day of mechanical work; one git-history-aware reviewer to make sure each split file's docstring is accurate. Behaviour unchanged. Payoff: the menu-sync logic and failure-probe logic become independently reviewable, and the next provider that demands a different command surface only touches <code>forward.py</code>.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: <code>recovery_callbacks.py</code> is the largest handler at 890 LOC and conflates two unrelated UX flows</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: internal cohesion of <code>handlers/recovery/recovery_callbacks.py</code><br>
+  <strong>Severity</strong>: <span class="severity severity-critical">Critical</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>The file pairs two distinct UX surfaces:</p>
+<ol>
+  <li><strong>Dead-window recovery banner</strong> — <code>RecoveryBanner</code> dataclass, <code>render_banner</code>, <code>_recovery_help_text</code>, <code>build_recovery_keyboard</code>, <code>_handle_back</code>, <code>_handle_fresh</code>, <code>_handle_continue</code>, <code>_handle_resume</code>, <code>_handle_browse</code>, <code>_handle_cancel</code>. Triggered when a window dies and the topic is orphaned.</li>
+  <li><strong>Resume picker</strong> — <code>_SessionEntry</code>, <code>scan_sessions_for_cwd</code>, <code>_scan_index_for_cwd</code>, <code>_scan_bare_jsonl_for_cwd</code>, <code>_build_resume_picker_keyboard</code>, <code>_build_empty_resume_keyboard</code>, <code>_send_empty_state</code>, <code>_handle_resume_pick</code>. Triggered from <code>/resume</code> <em>or</em> from the recovery banner's "Resume" button.</li>
+</ol>
+<p>The two share a callback-data namespace and a <code>_validate_recovery_state</code> helper, but they have different state machines, different keyboard layouts, and different test surfaces. The shared dispatcher (<code>_dispatch</code>, <code>handle_recovery_callback</code>) is what justifies co-location, and it's ~50 LOC. The remaining ~840 LOC are the two flows.</p>
+<p>This is <a href="https://coupling.dev/posts/related-topics/module-coupling/">low-cohesion / model coupling</a> — the file groups by callback-prefix (<code>rc:</code>) rather than by reason-to-change. A change to how the resume picker paginates does not affect the banner; a change to what the banner offers when no transcript exists does not affect the picker.</p>
+
+<h3>Complexity Impact</h3>
+<ul>
+  <li>New contributors lose ~5 minutes finding which <code>_handle_*</code> belongs to which flow. Reviewer cognitive load is roughly doubled vs two ~450-LOC files.</li>
+  <li>Test files are correspondingly large; mocking <code>scan_sessions_for_cwd</code> in a banner test is non-obviously unnecessary (banner code never calls it).</li>
+</ul>
+
+<h3>Cascading Changes</h3>
+<ul>
+  <li>The Round-4 follow-up that added the empty-state UX to the resume picker (<code>_send_empty_state</code>, <code>_build_empty_resume_keyboard</code>) was a banner-side innovation that bled into picker code because the two share <code>_dispatch</code>. Three call sites needed adjustment when the banner gained the "Browse" affordance — none of which were in resume-picker code, but all of which had to be edited in the same file.</li>
+</ul>
+
+<h3>Recommended Improvement</h3>
+<p>Split into two siblings inside <code>handlers/recovery/</code>:</p>
+<ul>
+  <li><code>recovery_banner.py</code> — <code>RecoveryBanner</code>, <code>render_banner</code>, <code>build_recovery_keyboard</code>, <code>_handle_back/_fresh/_continue/_resume/_browse/_cancel</code>. ~450 LOC.</li>
+  <li><code>resume_picker.py</code> — <code>_SessionEntry</code>, scan helpers, <code>_build_resume_picker_keyboard</code>, <code>_send_empty_state</code>, <code>_handle_resume_pick</code>. ~400 LOC.</li>
+  <li><code>recovery_callbacks.py</code> shrinks to ~80 LOC: the dispatcher (<code>_dispatch</code>, <code>handle_recovery_callback</code>), <code>_validate_recovery_state</code>, and <code>_clear_recovery_state</code> — the genuinely shared state machine.</li>
+</ul>
+<p>The <code>recovery/</code> <code>__init__.py</code> re-exports stay the same, so external call sites are unaffected.</p>
+<p><strong>Trade-off</strong>: ~half a day. The picker scan helpers (<code>scan_sessions_for_cwd</code>, <code>_scan_index_for_cwd</code>, <code>_scan_bare_jsonl_for_cwd</code>) are imported by <code>resume_command.py</code> already — moving them into <code>resume_picker.py</code> keeps the import path inside the subpackage. Behaviour unchanged. Payoff: the resume-picker pagination work that's already on the backlog (per CLAUDE.md UX overhaul history) lands in one ~400-LOC file instead of touching the largest handler in the codebase.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: Module-level singletons survived as proxies, with a 3-step test-reset ceremony</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: <code>WindowStateStore</code> / <code>ThreadRouter</code> / <code>UserPreferences</code> / <code>SessionMapSync</code> (proxies) ↔ <code>bootstrap.reset_for_testing()</code> + 3 separate <code>_reset_*_for_testing</code> hooks<br>
+  <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>F2 successfully replaced <code>_wire_singletons()</code> monkey-patching with constructor injection inside <code>SessionManager</code>, and it added the loud-failing <code>register_*_callback</code> helpers. But the module-level globals <code>window_store</code>, <code>thread_router</code>, <code>user_preferences</code>, and <code>session_map_sync</code> did not go away — they became proxy objects (<code>_WindowStoreProxy</code>, <code>_ThreadRouterProxy</code>, etc.) that forward attribute access to the wired instance:</p>
+<pre><code>_active_store: WindowStateStore | None = None
+window_store: WindowStateStore = cast("WindowStateStore", _WindowStoreProxy())</code></pre>
+<p>Every handler that previously did <code>from .session import session_manager</code> and then accessed <code>session_manager.window_states</code> continues to work because the proxy intercepts attribute access and re-routes to <code>_active_store</code>. This is <em>better</em> than monkey-patching — the failure mode is now an explicit <code>RuntimeError("not wired")</code> from the proxy — but it still expresses dependency injection as <strong>lookup of a global variable</strong>, not as parameter passing.</p>
+<p>Concretely:</p>
+<ul>
+  <li>27 modules import <code>window_store</code> directly.</li>
+  <li>46 import <code>thread_router</code>.</li>
+  <li>16 import <code>session_manager</code> directly.</li>
+  <li>44 handler call sites use <code>session_manager.*</code> directly; 30 use the read-only <code>window_query</code> / <code>session_query</code> free-function layer. The two patterns coexist without enforcement of which to use when.</li>
+  <li>Tests need <code>bootstrap.reset_for_testing()</code>, which itself calls <em>three more</em> <code>_reset_*_for_testing</code> hooks (<code>hook_events._reset_stop_callback_for_testing</code>, <code>status_bubble._reset_rc_active_provider_for_testing</code>, <code>shell_capture._reset_approval_callback_for_testing</code>). Twelve test files import these.</li>
+</ul>
+
+<h3>Complexity Impact</h3>
+<p>The proxy preserves call sites at the cost of:</p>
+<ol>
+  <li><strong>Lookup-time failure</strong>: a handler that touches <code>window_store</code> before <code>SessionManager</code> is constructed gets <code>RuntimeError("not wired")</code> at the call site, not at import time. Tests that import handlers and then forget to install a <code>WindowStateStore</code> get a misleading stack trace pointing at the handler, not at the test setup.</li>
+  <li><strong>Test parallelism is brittle</strong>: any test that mutates <code>window_store</code> mutates a process-wide global. <code>pytest-xdist</code> would require per-worker isolation that doesn't exist.</li>
+  <li><strong>Two overlapping APIs</strong>: a handler that needs to read window state can use either the <code>window_query</code> free functions or <code>session_manager.window_states[...]</code> directly. The query layer was meant to be the only read path; ~44 sites disagree.</li>
+</ol>
+<p>This is the <a href="https://coupling.dev/posts/core-concepts/balance/">tight-coupling smell</a> at the singleton boundary — strength is high (handlers know the singleton's name and method shape), distance is low (sibling), and volatility is medium (every UX feature touches at least one of these stores).</p>
+
+<h3>Cascading Changes</h3>
+<ul>
+  <li>Splitting <code>WindowStateStore</code> into per-feature views forces every one of the 27 importers to update — even the 22 that only need read access.</li>
+  <li>Adding a fifth wired store requires: declare proxy → install function → wire in <code>SessionManager.__post_init__</code> → remember to add it to <code>bootstrap.reset_for_testing()</code>. Four edits, none of them caught by the type checker if forgotten.</li>
+</ul>
+
+<h3>Recommended Improvement</h3>
+<p>Two-step migration, in order:</p>
+<p><strong>Step 1 — enforce one read path.</strong> Adopt a project rule: handlers read window/session state through <code>window_query</code> and <code>session_query</code> only. Migrate the 44 direct-<code>session_manager.*</code> call sites in handlers to the query layer. Leave bootstrap-time and admin paths (e.g. <code>sync_command.py</code>, <code>sessions_dashboard.py</code>) on the direct API. ~1 day.</p>
+<p><strong>Step 2 — pass the wired SessionManager into handlers that need write access.</strong> The handlers that genuinely need to mutate stores (topic creation, dead-window cleanup, provider switch) should receive the manager as a parameter — either through <code>context.bot_data["session_manager"]</code> (PTB-native) or via a small request-scoped context object. Once writes go through a passed dependency, the proxies become read-only re-exports, and <code>reset_for_testing</code> collapses to one call (or disappears entirely if tests use a fresh <code>SessionManager()</code> per test). ~3–5 days.</p>
+<p><strong>Trade-off</strong>: Step 1 is pure mechanical refactor with measurable benefit (one access pattern, fewer importers). Step 2 is the bigger commitment but is what actually retires the singleton-as-proxy pattern. Skip Step 2 if the test friction is tolerable; do Step 1 either way.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: Lazy-import gap — 222 in-function imports vs 124 documented <code># Lazy:</code> comments</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: latent cycles in <code>src/ccgram/</code><br>
+  <strong>Severity</strong>: <span class="severity severity-significant">Significant</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>Round 4's F6 phase claimed "160 intentional lazy imports documented" out of 251 originally inventoried. Reality, post-Round-4, on this branch:</p>
+<ul>
+  <li><strong>222</strong> in-function relative imports (<code>grep -rn '^[[:space:]]\+from \.' src/ccgram --include='*.py'</code>).</li>
+  <li><strong>124</strong> lines marked <code># Lazy:</code>.</li>
+  <li><strong>9</strong> in-function relative imports inside <code>if TYPE_CHECKING:</code> blocks (legitimately not concerning).</li>
+</ul>
+<p>That leaves <strong>~89 in-function imports without an explicit reason comment</strong>. Some are inside test-reset hooks (legitimate; test-only) and inside functions that take a <code>provider_name</code> parameter (legitimate; they import per-provider format modules). But the F6 invariant — "every remaining lazy import is documented with <code># Lazy: &lt;reason&gt;</code> citing the cycle path or wiring contract" — does not hold across the whole tree.</p>
+<p>This is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">intrusive coupling</a> of the latent kind: a deferred import is a runtime-only dependency edge that the static module graph misses. Each undocumented one is a place where a future refactor can change behaviour silently — the graph won't break, but cold-import timing or test-order dependence might.</p>
+
+<h3>Complexity Impact</h3>
+<ol>
+  <li>The <code>test_import_no_cycles.py</code> integration test parametrizes 29 modules. The remaining 90+ modules with lazy imports are not covered. A new cycle introduced through a deferred import will only show up if a test happens to be the first caller.</li>
+  <li>Reviewers cannot tell, at a glance, whether a deferred import is intentional (cycle break) or accidental (someone forgot to hoist). The F6 comments were a contract; an undocumented deferred import silently breaks that contract.</li>
+</ol>
+
+<h3>Cascading Changes</h3>
+<ul>
+  <li>A future "extract a shared utility" refactor reads the explicit imports to see the dependency graph, then makes a decision that doesn't account for the lazy edges. Re-introducing a cycle is the most likely class of regression here.</li>
+</ul>
+
+<h3>Recommended Improvement</h3>
+<p>One mechanical pass:</p>
+<ol>
+  <li>Add a CI check (<code>make lint</code> or a pre-commit hook) that greps for <code>^[[:space:]]+from \.</code> and asserts each match is preceded by <code># Lazy:</code>, <code>if TYPE_CHECKING</code>, or appears inside a <code>_reset_*_for_testing</code> function. The first prototype is ~40 lines of Python.</li>
+  <li>Walk the 89 currently-undocumented sites: hoist the ones that don't actually break a cycle, and add <code># Lazy:</code> to the rest with the cycle path or contract reason.</li>
+  <li>Expand <code>test_import_no_cycles.py</code> to cover the full set of 50 top-level modules + the 14 handler subpackages. Currently 29; the other ~35 are equally likely to host a regression.</li>
+</ol>
+<p><strong>Trade-off</strong>: 2–3 hours for the lint check; ~1 day for the audit + test expansion. Behaviour unchanged. Payoff: the F6 contract becomes self-enforcing, and the cycle test becomes a real safety net rather than a sample.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: <code>bot.py</code> <code>__all__</code> re-exports 19 moved symbols for <code>unittest.mock.patch</code> compatibility</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: legacy tests → <code>ccgram.bot</code><br>
+  <strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p><code>bot.py</code> declares an <code>__all__</code> list of 19 symbols (handler callables and singletons) that have all been moved to feature subpackages. The accompanying comment is candid: "Re-export the moved handler callables and supporting singletons so existing tests and integration suites that import them from <code>ccgram.bot</code> keep working without churn. Canonical homes are the feature subpackages — these names are retained for <code>patch</code> targets."</p>
+<p>This is a compatibility shim for <code>unittest.mock.patch("ccgram.bot.session_manager", ...)</code>-style test code. It's working as designed and the prior review didn't flag it. But it's <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">model coupling</a> on the <em>test</em> side: the tests know that <code>session_manager</code> lives at <code>ccgram.bot.session_manager</code> — which it doesn't anymore.</p>
+
+<h3>Complexity Impact</h3>
+<p>Low. The shim is documented; new code uses canonical paths; the symbols listed are stable.</p>
+
+<h3>Cascading Changes</h3>
+<p>If <code>session_manager</code> ever moves out of <code>ccgram.session</code> (Step 2 of the singleton-retirement work above), the <code>bot.py</code> re-export silently keeps working, masking what should be a noisy test-update prompt.</p>
+
+<h3>Recommended Improvement</h3>
+<ul>
+  <li>When migrating tests to <code>FakeTelegramClient</code> and direct <code>SessionManager</code> construction, update each test's <code>patch</code> target to the canonical module. When <code>__all__</code> shrinks to zero, delete the re-export block.</li>
+  <li>Until then: leave it. The cost of churning 50+ test files for an aesthetic win is not justified.</li>
+</ul>
+<p><strong>Trade-off</strong>: zero risk; defer until the tests get touched for other reasons.</p>
+</div>
+
+<div class="issue">
+<h2>Issue: Inbound PTB types still pervade handler signatures</h2>
+<div class="issue-meta">
+  <strong>Integration</strong>: 38+ handler modules → <code>telegram.{Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, MessageEntity}</code> and <code>telegram.ext.ContextTypes</code><br>
+  <strong>Severity</strong>: <span class="severity severity-minor">Minor</span>
+</div>
+
+<h3>Knowledge Leakage</h3>
+<p>F5 isolated the <em>outbound</em> bot API behind a 18-method <code>TelegramClient</code> Protocol — that work is done and excellent. But the <em>inbound</em> surface is essentially unchanged: PTB calls handlers with <code>Update</code> and <code>ContextTypes.DEFAULT_TYPE</code> as positional arguments, so every handler signature still spells those types. Inline-keyboard construction also uses <code>InlineKeyboardButton</code> / <code>InlineKeyboardMarkup</code> directly — there's no facade.</p>
+<p>Per the <a href="https://coupling.dev/posts/core-concepts/balance/">balance rule</a>, this is tolerable: PTB's inbound API is a stable, low-volatility 3rd-party contract, so high-strength coupling against a low-distance-but-low-volatility external is balanced. The previous review acknowledged this trade-off explicitly.</p>
+
+<h3>Complexity Impact</h3>
+<p>Cognitive load for new contributors: medium. A new contributor reading any handler still has to know what <code>Update</code>, <code>CallbackQuery</code>, and <code>ContextTypes</code> look like. Because the outbound API is now hidden, the <em>asymmetry</em> is jarring: the handler reads <code>Update.callback_query.data</code> (PTB) and then calls <code>client.edit_message_text(...)</code> (the Protocol). Half the file uses one mental model, half uses another.</p>
+
+<h3>Cascading Changes</h3>
+<p>Effectively zero. PTB has not had a breaking change to the inbound types in the lifetime of this project.</p>
+
+<h3>Recommended Improvement</h3>
+<p>Do not invest. The cost is high (30+ files, custom <code>IncomingUpdate</code> / <code>Keyboard</code> types, factory functions) and the volatility is genuinely low. If the project ever migrates to a different Telegram framework, this becomes a real cost — but that's a hypothetical that doesn't justify pre-paying.</p>
+<p>The one cheap win available: a <code>ccgram.handlers.telegram_types</code> re-export module that aliases the PTB types under project-local names (<code>Update as IncomingUpdate</code>, etc.). It costs nothing, makes the framework boundary visible in one file, and gives a single edit point if the situation ever changes. Worth doing during the next routine PTB upgrade.</p>
+</div>
+
+<h2>Scoring (0–10)</h2>
+<p>The previous review scored 6.3 weighted; this review scores <strong>7.1</strong>. The deltas are concentrated where Round 4 invested: subsystem locality, lifecycle clarity, abstraction quality, testability of pure logic. The two new entries (#21, #22) reflect what Round 4 didn't reach.</p>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Design POV</th><th>04-29</th><th>05-01</th><th>Comment</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Module cohesion (single-responsibility)</td><td>6</td><td>7</td><td>Subpackages cohesive; <code>command_orchestration</code>, <code>recovery_callbacks</code>, <code>polling_strategies</code> outliers</td></tr>
+    <tr><td>2</td><td>Coupling — overall (<a href="https://coupling.dev/posts/core-concepts/balance/">Balanced Coupling</a>)</td><td>6</td><td>7</td><td>F2/F5 reduced strength; singleton hub remains</td></tr>
+    <tr><td>3</td><td>Separation of concerns (UI vs domain)</td><td>5</td><td>7</td><td><code>decide.py</code> pure; <code>TelegramClient</code> Protocol; UI primitives still inline</td></tr>
+    <tr><td>4</td><td>Abstraction quality</td><td>7</td><td>8</td><td>+ <code>TelegramClient</code> Protocol; <code>WindowView</code> / <code>decide_tick</code> / <code>CommandResult</code> strong</td></tr>
+    <tr><td>5</td><td>Dependency direction (acyclic)</td><td>6</td><td>7</td><td>Cycle-detection test added; lazy-import gap of ~89 sites remains</td></tr>
+    <tr><td>6</td><td>Testability of pure logic</td><td>7</td><td>8</td><td><code>decide_tick</code> unit-tested without mocks; <code>FakeTelegramClient</code> enables cheap handler tests</td></tr>
+    <tr><td>7</td><td>Testability of integration logic</td><td>5</td><td>7</td><td><code>FakeTelegramClient</code> is a real win; <code>reset_for_testing</code> ceremony still hurts</td></tr>
+    <tr><td>8</td><td>Boundary discipline (3rd-party isolation)</td><td>4</td><td>6</td><td>Outbound PTB hidden behind Protocol; inbound types still leak (acknowledged trade-off)</td></tr>
+    <tr><td>9</td><td>Provider extension cost</td><td>9</td><td>9</td><td>Unchanged — gold standard</td></tr>
+    <tr><td>10</td><td>New Telegram command extension cost</td><td>6</td><td>8</td><td><code>handlers/registry.py</code> <code>CommandSpec</code> table is the one edit point</td></tr>
+    <tr><td>11</td><td>Lifecycle clarity</td><td>6</td><td>8</td><td><code>bootstrap.py</code> named steps + ordering invariant + <code>_callbacks_wired</code> guard</td></tr>
+    <tr><td>12</td><td>Configuration coupling</td><td>5</td><td>5</td><td><code>config</code> singleton imported by 58 modules; no narrow <code>Settings</code> injection</td></tr>
+    <tr><td>13</td><td>State management</td><td>7</td><td>7</td><td><code>window_query</code> / <code>session_query</code> still mixed with direct <code>session_manager.*</code> (44 vs 30)</td></tr>
+    <tr><td>14</td><td>Implicit-coupling risk (singletons)</td><td>4</td><td>5</td><td>Proxy pattern formalises the global; not eliminated</td></tr>
+    <tr><td>15</td><td>Code duplication</td><td>8</td><td>8</td><td>Unchanged — <code>_jsonl</code>, <code>expandable_quote</code>, <code>message_task</code> continue to factor</td></tr>
+    <tr><td>16</td><td>Subsystem locality (AI-agent context)</td><td>5</td><td>8</td><td>Big win — 14 cohesive subpackages, ~5–8× fewer files per task</td></tr>
+    <tr><td>17</td><td>Documentation density</td><td>9</td><td>9</td><td>+ 124 <code># Lazy:</code> comments document deferred imports</td></tr>
+    <tr><td>18</td><td>Domain model purity</td><td>6</td><td>7</td><td><code>WindowView</code> + <code>decide.py</code> + <code>TelegramClient</code> raise the bar; UI primitives still inline</td></tr>
+    <tr><td>19</td><td>Cyclic risk</td><td>6</td><td>7</td><td><code>test_import_no_cycles.py</code> covers 29 modules; needs to cover the rest</td></tr>
+    <tr><td>20</td><td>Build / refactor velocity</td><td>7</td><td>8</td><td>Round 4 demonstrated capacity to ship a 6-phase refactor + 2 review iterations</td></tr>
+    <tr><td>21</td><td>Test-infra debt (NEW)</td><td>—</td><td>6</td><td><code>reset_for_testing</code> + 3 <code>_reset_*_for_testing</code> hooks + 12 test-files import them</td></tr>
+    <tr><td>22</td><td>Hidden coupling hubs (NEW)</td><td>—</td><td>5</td><td><code>polling_strategies</code> (5 singletons + pure types in 1 073 LOC); <code>command_orchestration</code> (4 jobs)</td></tr>
+    <tr><td></td><td><strong>Weighted average</strong></td><td>6.3</td><td><strong>7.1</strong></td><td></td></tr>
+  </tbody>
+</table>
+
+<p>7.1 reads as "good architecture, four hot spots left." The four critical findings (<code>polling_strategies</code> split, <code>command_orchestration</code> split, <code>recovery_callbacks</code> split, singleton-retirement Step 1) account for almost all the residual friction; together they are 2.5–3 days of mechanical work.</p>
+
+<h2>Recommended Order of Work</h2>
+<p>Pick by leverage. All five preserve behaviour.</p>
+<ol>
+  <li><strong><code>polling_strategies.py</code> → <code>polling_types.py</code> + <code>polling_state.py</code>.</strong> ~1 day. Eliminates the singleton-hub problem and finally makes the F4 pure-kernel claim true at the import level.</li>
+  <li><strong>Single read path for window/session state — migrate 44 handler <code>session_manager.*</code> sites to <code>window_query</code> / <code>session_query</code>.</strong> ~1 day. Removes "two ways to do it" before any further DI work.</li>
+  <li><strong>Split <code>recovery_callbacks.py</code> into <code>recovery_banner.py</code> + <code>resume_picker.py</code>.</strong> ~half a day.</li>
+  <li><strong>Split <code>command_orchestration.py</code> into <code>handlers/commands/</code> subpackage</strong> (forward / menu_sync / failure_probe / status_snapshot). ~half a day.</li>
+  <li><strong>Lazy-import lint check + audit pass.</strong> ~half a day for the lint script + 1 day for the audit.</li>
+  <li><strong>(Optional, multi-day) Singleton-retirement Step 2</strong> — pass <code>SessionManager</code> through <code>context.bot_data</code>. Defer until test-friction warrants it.</li>
+</ol>
+
+<p>What <em>not</em> to do:</p>
+<ul>
+  <li>Do not abstract inbound PTB types unless you're migrating frameworks — the cost is high and PTB's inbound API is genuinely stable.</li>
+  <li>Do not split <code>tmux_manager.py</code> — it's the I/O boundary; bigness is correct.</li>
+  <li>Do not redesign <code>providers/</code> — it's the gold-standard pattern in the codebase; replicate it elsewhere instead.</li>
+  <li>Do not collapse the proxy globals to plain instances without first migrating the read path (item 2 above) — you'll just re-introduce the failure mode F2 designed away.</li>
+</ul>
+
+<h2>Why these moves match the model</h2>
+<ul>
+  <li>The <code>polling_strategies</code> split lowers <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">strength</a> (the pure-types module becomes contract-coupled; the stateful module stays model-coupled but only to its real callers) without changing distance — pure win, balanced both halves.</li>
+  <li>The handler splits (<code>recovery_callbacks</code>, <code>command_orchestration</code>) are pure cohesion improvements at zero distance change — they reduce the cognitive footprint per change and shrink reviewer working memory.</li>
+  <li>The single-read-path migration is a strength reduction (handlers depend on a small read-only contract, not on <code>SessionManager</code>'s full API) with zero distance change.</li>
+  <li>The lazy-import lint check makes the existing F6 contract self-enforcing — nothing new is being coupled, but a latent regression channel is closed.</li>
+</ul>
+<p>These moves are aligned with what the maintainer asked for: smaller focused contexts, faster execution, lower AI-agent cost — without touching the parts (provider abstraction, Mini App boundary, lifecycle wiring, pure decision kernel, <code>TelegramClient</code> Protocol) that already work.</p>
+
+<div class="footer">
+This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.
+</div>
+
+</div>
+
+<script>
+  function getDefaultTheme() {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('modularity-review-theme', theme);
+    document.getElementById('theme-icon').textContent = theme === 'light' ? '☾' : '☀';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  const saved = localStorage.getItem('modularity-review-theme');
+  setTheme(saved || getDefaultTheme());
+</script>
+</body>
+</html>
