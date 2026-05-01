@@ -1,6 +1,6 @@
 # ccgram Architecture
 
-Generated from code state 2026-04-29 (v3.0.x).
+Generated from code state 2026-05-01 (post Round 4 modularity decouple).
 
 ## System Overview
 
@@ -9,8 +9,11 @@ ccgram maps each Telegram Forum topic to one tmux window running one agent CLI (
 ```mermaid
 graph TB
     Telegram["Telegram<br>(Forum topics)"]
-    Bot["bot.py<br>PTB application"]
-    Handlers["handlers/<br>50+ modules"]
+    Bot["bot.py<br>(172 lines: factory + lifecycle)"]
+    Bootstrap["bootstrap.py<br>post_init + post_shutdown"]
+    Registry["handlers/registry.py<br>PTB handler wiring"]
+    TC["telegram_client.py<br>TelegramClient Protocol<br>+ PTBTelegramClient adapter"]
+    Handlers["handlers/<br>14 feature subpackages"]
     TmuxMgr["tmux_manager.py <br> libtmux + subprocess"]
     Windows["tmux windows <br> (Claude, Codex, Gemini, Pi, Shell)"]
     Hook["hook.py<br>Claude Code hooks"]
@@ -18,7 +21,11 @@ graph TB
     State["State files<br>~/.ccgram/"]
 
     Telegram -- "updates" --> Bot
-    Bot -- "dispatch" --> Handlers
+    Bot -- "post_init" --> Bootstrap
+    Bot -- "register_all" --> Registry
+    Registry -- "dispatch" --> Handlers
+    Handlers -- "depend on Protocol" --> TC
+    TC -- "PTBTelegramClient" --> Bot
     Handlers -- "send_keys / capture_pane" --> TmuxMgr
     TmuxMgr --> Windows
     Windows -- "hook events" --> Hook
@@ -31,22 +38,33 @@ graph TB
 
 ```mermaid
 graph TD
-    subgraph entry["Entry Points"]
+    subgraph entry["Entry Points + Bootstrap"]
         CLI["cli.py / main.py"]
-        BotPy["bot.py"]
+        BotPy["bot.py<br>(factory + lifecycle, 172 lines)"]
+        BootstrapPy["bootstrap.py<br>post_init + post_shutdown"]
+        RegistryPy["handlers/registry.py<br>PTB handler wiring"]
         HookPy["hook.py"]
     end
 
-    subgraph handlers["Handler Layer (handlers/)"]
-        TextH["text_handler"]
-        CmdOrch["command_orchestration"]
-        PollCoord["polling_coordinator"]
-        WindowTick["window_tick"]
-        MsgQueue["message_queue"]
-        MsgRouting["message_routing"]
-        ShellH["shell_commands<br>shell_capture<br>shell_context<br>shell_prompt_orchestrator"]
-        DirH["directory_browser<br>directory_callbacks"]
-        MsgBroker["msg_broker<br>msg_delivery<br>msg_telegram<br>msg_spawn"]
+    subgraph protocol["Telegram Seam"]
+        TCProto["telegram_client.py<br>TelegramClient Protocol<br>+ PTBTelegramClient adapter<br>+ FakeTelegramClient (tests)"]
+    end
+
+    subgraph handlers["Handler Layer — handlers/"]
+        TopLevel["Top-level: callback_*, cleanup,<br>command_*, file_handler, hook_events,<br>inline, reactions, registry, response_builder,<br>sessions_dashboard, sync_command, upgrade, user_state"]
+        TopicsPkg["topics/<br>topic_orchestration, topic_lifecycle,<br>directory_browser, directory_callbacks,<br>window_callbacks, new_command"]
+        TextPkg["text/<br>text_handler"]
+        InteractivePkg["interactive/<br>interactive_ui, interactive_callbacks"]
+        StatusPkg["status/<br>status_bubble, status_bar_actions, topic_emoji"]
+        LivePkg["live/<br>live_view, screenshot_callbacks, pane_callbacks"]
+        SendPkg["send/<br>send_command, send_callbacks, send_security"]
+        ToolbarPkg["toolbar/<br>toolbar_keyboard, toolbar_callbacks"]
+        VoicePkg["voice/<br>voice_handler, voice_callbacks"]
+        ShellPkg["shell/<br>shell_commands, shell_capture,<br>shell_context, shell_prompt_orchestrator"]
+        MsgPipePkg["messaging_pipeline/<br>message_queue, message_routing,<br>message_sender, message_task,<br>tool_batch, topic_commands"]
+        MessagingPkg["messaging/<br>msg_broker, msg_delivery,<br>msg_telegram, msg_spawn"]
+        RecoveryPkg["recovery/<br>recovery_callbacks, restore_command,<br>resume_command, transcript_discovery,<br>history, history_callbacks"]
+        PollingPkg["polling/<br>polling_coordinator, polling_strategies,<br>periodic_tasks,<br>window_tick/{decide, observe, apply}"]
     end
 
     subgraph query["Read-Only Query Layer"]
@@ -54,12 +72,12 @@ graph TD
         SQ["session_query.py<br>read session data"]
     end
 
-    subgraph state["State Management"]
-        SM["session.py<br>SessionManager<br>(write + startup)"]
-        TR["thread_router.py"]
-        WS["window_state_store.py"]
-        UP["user_preferences.py"]
-        SMS["session_map.py<br>session_map_sync"]
+    subgraph state["State Management (constructor DI — F2)"]
+        SM["session.py<br>SessionManager<br>(constructs + owns stores)"]
+        TR["thread_router.py<br>(callbacks via __init__)"]
+        WS["window_state_store.py<br>(callbacks via __init__)"]
+        UP["user_preferences.py<br>(callback via __init__)"]
+        SMS["session_map.py<br>SessionMapSync<br>(callback via __init__)"]
         SR["session_resolver.py"]
     end
 
@@ -84,7 +102,11 @@ graph TD
         IdleT["idle_tracker.py"]
     end
 
-    BotPy --> handlers
+    BotPy --> BootstrapPy
+    BotPy --> RegistryPy
+    RegistryPy --> handlers
+    handlers --> protocol
+    protocol --> BotPy
     handlers --> query
     query --> WS
     query --> SR
@@ -290,17 +312,23 @@ graph LR
 
 ## Key Design Decisions
 
-| Decision                                | Rationale                                                                                                                                  |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Window ID-centric routing (`@0`, `@12`) | Unique within tmux server; window names are display-only                                                                                   |
-| Hook-based event system                 | Instant stop/done detection without terminal polling                                                                                       |
-| `window_query.py` decoupling layer      | Handlers read window state without importing `SessionManager`                                                                              |
-| `session_query.py` decoupling layer     | Handlers resolve sessions without importing `SessionManager`                                                                               |
-| Provider protocol with capability flags | Gate UX features without `if provider == "claude"` checks                                                                                  |
-| `supports_task_tracking` capability     | `transcript_reader` is provider-agnostic; Claude implements task state                                                                     |
-| Session map direct imports              | Lifecycle handlers use `session_map_sync` directly; no facade needed                                                                       |
-| File-based mailbox                      | Agents exchange messages via `~/.ccgram/mailbox/`; broker injects via `send_keys`                                                          |
-| Shell leak accepted                     | `match_prompt`, `KNOWN_SHELLS` imports in shell handlers are low-volatility supporting domain — balance rule satisfied by `NOT VOLATILITY` |
-| Tool-call visibility on `WindowState`   | Per-window `tool_call_visibility` (`default`/`shown`/`hidden`) gates `_handle_content_task` before batch eligibility; hook events bypass   |
-| Status-mode color schemes               | `CCGRAM_STATUS_MODE` selects `system` (green=working) or `user` (green=ready) — affects only emoji rendering, not internal state names     |
-| Gemini JSONL incremental reads          | Gemini CLI v0.40+ uses append-only JSONL; provider inherits `JsonlProvider` byte-offset reader, dedups by message id and pending tool_use  |
+| Decision                                | Rationale                                                                                                                                                                                                                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Window ID-centric routing (`@0`, `@12`) | Unique within tmux server; window names are display-only                                                                                                                                                                                                                                                |
+| Hook-based event system                 | Instant stop/done detection without terminal polling                                                                                                                                                                                                                                                    |
+| `window_query.py` decoupling layer      | Handlers read window state without importing `SessionManager`                                                                                                                                                                                                                                           |
+| `session_query.py` decoupling layer     | Handlers resolve sessions without importing `SessionManager`                                                                                                                                                                                                                                            |
+| Provider protocol with capability flags | Gate UX features without `if provider == "claude"` checks                                                                                                                                                                                                                                               |
+| `supports_task_tracking` capability     | `transcript_reader` is provider-agnostic; Claude implements task state                                                                                                                                                                                                                                  |
+| Session map direct imports              | Lifecycle handlers use `session_map_sync` directly; no facade needed                                                                                                                                                                                                                                    |
+| File-based mailbox                      | Agents exchange messages via `~/.ccgram/mailbox/`; broker injects via `send_keys`                                                                                                                                                                                                                       |
+| Shell leak accepted                     | `match_prompt`, `KNOWN_SHELLS` imports in shell handlers are low-volatility supporting domain — balance rule satisfied by `NOT VOLATILITY`                                                                                                                                                              |
+| Tool-call visibility on `WindowState`   | Per-window `tool_call_visibility` (`default`/`shown`/`hidden`) gates `_handle_content_task` before batch eligibility; hook events bypass                                                                                                                                                                |
+| Status-mode color schemes               | `CCGRAM_STATUS_MODE` selects `system` (green=working) or `user` (green=ready) — affects only emoji rendering, not internal state names                                                                                                                                                                  |
+| Gemini JSONL incremental reads          | Gemini CLI v0.40+ uses append-only JSONL; provider inherits `JsonlProvider` byte-offset reader, dedups by message id and pending tool_use                                                                                                                                                               |
+| `handlers/` feature subpackages (F1)    | 14 subpackages + documented top-level files instead of 50+ flat peers; each subpackage `__init__.py` re-exports the public surface                                                                                                                                                                      |
+| Constructor DI for stores (F2)          | `SessionManager` constructs `WindowStateStore`/`ThreadRouter`/`UserPreferences`/`SessionMapSync` with explicit callbacks; no `_wire_singletons` monkey-patch, no `unwired_save` silent default; `register_*_callback` fails loud                                                                        |
+| `bot.py` factory + lifecycle only (F3)  | 172-line `bot.py`; `handlers/registry.py` owns command/message handler wiring; `bootstrap.py` owns `post_init`/`post_shutdown`                                                                                                                                                                          |
+| `window_tick/decide,observe,apply` (F4) | Pure decision kernel + pure observer + side-effect applier; `decide_tick` unit-testable without mocks                                                                                                                                                                                                   |
+| `TelegramClient` Protocol (F5)          | Handlers depend on `TelegramClient` not `telegram.Bot`; `PTBTelegramClient` adapts in production, `FakeTelegramClient` records in tests; only `bot.py`, `bootstrap.py`, `handlers/registry.py`, `telegram_client.py`, `telegram_request.py`, `telegram_sender.py` import from `telegram.ext` at runtime |
+| Lazy-import audit (F6)                  | 251 in-function imports → 201; remaining sites carry `# Lazy: <reason>` documenting the cycle path or wiring contract; cycle regressions caught by `tests/integration/test_import_no_cycles.py`                                                                                                         |

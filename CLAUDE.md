@@ -255,13 +255,15 @@ Tests mirror the source layout: `tests/ccgram/` for unit tests (with `handlers/`
 
 No reliable Telegram Bot API mock server exists. The project uses a tiered approach:
 
-| Tier            | Pattern                                   | When to use                                       |
-| --------------- | ----------------------------------------- | ------------------------------------------------- |
-| **Unit**        | `MagicMock`/`AsyncMock` for PTB objects   | Testing handler logic in isolation                |
-| **Integration** | Real PTB `Application` + `_do_post` patch | Testing handler registration and dispatch routing |
-| **E2E**         | Real agent CLIs + real tmux (no Telegram) | Testing full agent lifecycle                      |
+| Tier            | Pattern                                                                          | When to use                                       |
+| --------------- | -------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Unit**        | `FakeTelegramClient` (or `AsyncMock`) injected via the `TelegramClient` Protocol | Testing handler logic in isolation                |
+| **Integration** | Real PTB `Application` + `_do_post` patch                                        | Testing handler registration and dispatch routing |
+| **E2E**         | Real agent CLIs + real tmux (no Telegram)                                        | Testing full agent lifecycle                      |
 
-**Integration test pattern** (`_do_post` patch): Instantiate a real PTB Application, register real handlers, patch `type(application.bot)._do_post` to intercept all outbound HTTP calls. Dispatch real `Update`/`Message` objects via `application.process_update()`. This exercises PTB's filter evaluation, handler matching, and Forum topic routing (`message_thread_id`) without any network calls. See `tests/integration/test_message_dispatch.py` for the base pattern.
+**Unit test pattern** (`FakeTelegramClient`): Handlers depend on the `TelegramClient` Protocol (`src/ccgram/telegram_client.py`), not `telegram.Bot`. Tests construct a `FakeTelegramClient()` from `ccgram.telegram_client`, pass it as the `client=` argument, and assert against `fake.calls` (a list of `(method, kwargs)` tuples) or use `fake.last_call` / `fake.call_count` helpers. Per-method return values can be configured via `fake.returns[method] = value` (or a `lambda **kw:` for dynamic responses); `fake.set_side_effect(method, [v1, v2, ...])` mirrors `unittest.mock.Mock.side_effect`. Production wraps the real bot with `PTBTelegramClient(bot)` at the call site (typically inside `bootstrap.py` or at the top of a callback handler that has `context.bot` in scope).
+
+**Integration test pattern** (`_do_post` patch): Instantiate a real PTB Application, register real handlers, patch `type(application.bot)._do_post` to intercept all outbound HTTP calls. Dispatch real `Update`/`Message` objects via `application.process_update()`. This exercises PTB's filter evaluation, handler matching, and Forum topic routing (`message_thread_id`) without any network calls. The `PTBTelegramClient` adapter is real PTB internally, so integration tests still cover the adapter end to end. See `tests/integration/test_message_dispatch.py` for the base pattern.
 
 ### Shell Provider Tests
 
@@ -471,3 +473,19 @@ Optional aiohttp web surface that runs alongside the bot when `CCGRAM_MINIAPP_BA
 See @.claude/rules/architecture.md for full system diagram and module inventory.
 See @.claude/rules/topic-architecture.md for topic→window→session mapping details.
 See @.claude/rules/message-handling.md for message queue, merging, and rate limiting.
+
+`bot.py` is a 172-line factory + lifecycle delegate. Command/message/callback registration lives in `src/ccgram/handlers/registry.py` (`register_all`); post_init wiring lives in `src/ccgram/bootstrap.py` (`bootstrap_application` + `shutdown_runtime`). Handlers depend on the `TelegramClient` Protocol (`src/ccgram/telegram_client.py`), with `PTBTelegramClient` adapting a real PTB `Bot` in production and `FakeTelegramClient` injected by unit tests.
+
+## Round 4 Outcomes (modularity decouple)
+
+Round 4 (May 2026, branch `modularity-decouple-round-4`) reshaped the codebase to lower per-task context size and raise testability without changing user-visible behavior:
+
+- **F1 — handler subpackages.** `src/ccgram/handlers/` was 50+ flat peer modules; now grouped into 14 feature subpackages (`interactive/`, `live/`, `messaging/`, `messaging_pipeline/`, `polling/`, `recovery/`, `send/`, `shell/`, `status/`, `text/`, `toolbar/`, `topics/`, `voice/`) plus the documented top-level handlers (`callback_*`, `cleanup`, `command_*`, `file_handler`, `hook_events`, `inline`, `reactions`, `registry`, `response_builder`, `sessions_dashboard`, `sync_command`, `upgrade`, `user_state`). Hard cut — no compat shims; subpackage `__init__.py` re-exports the public surface.
+- **F2 — constructor DI for stores.** `SessionManager` constructs `WindowStateStore`, `ThreadRouter`, `UserPreferences`, and `SessionMapSync` with explicit `schedule_save` (and store-specific) callbacks. The `_wire_singletons` monkey-patch and the silent `unwired_save` default are gone. `register_*_callback` helpers fail loud on double-registration; unwired callee defaults raise `RuntimeError("not wired")`. Module-level singletons survive as proxy objects forwarding to the wired instance.
+- **F3 — bootstrap split.** `bot.py` shrank from ~720 to 172 lines. `handlers/registry.py` owns PTB handler registration; `bootstrap.py` owns `post_init` (named functions: `register_provider_commands`, `verify_hooks_installed`, `wire_runtime_callbacks`, `start_session_monitor`, `start_status_polling`, `start_miniapp_if_enabled`) and `post_shutdown` teardown. Ordering invariant: `wire_runtime_callbacks` must run before `start_session_monitor`.
+- **F4 — `window_tick` decide/observe/apply.** The 694-line god module became `handlers/polling/window_tick/` with `decide.py` (pure, zero deps on tmux/PTB/singletons), `observe.py` (pure inputs in, `TickContext` out), and `apply.py` (the only side-effect file). `decide_tick` is unit-tested without mocks.
+- **F5 — `TelegramClient` Protocol.** A grep-verified Protocol covering exactly the 18 bot API methods used by handlers. `PTBTelegramClient(bot)` in production, `FakeTelegramClient` in tests, `unwrap_bot(client)` as the escape hatch for PTB-only helpers (`do_api_request`/`DraftStream`). All `from telegram.ext` imports inside `handlers/` are now `if TYPE_CHECKING:` (only `handlers/registry.py` keeps a runtime import, as the documented PTB wiring spine).
+- **F6 — lazy-import audit.** 251 in-function imports inventoried, 25 hoisted to module level, ~25 redundant ones removed during the sweep, 160 remaining sites documented with `# Lazy: <reason>` comments citing the cycle path or wiring contract that requires lateness. Net: 251 → 201 with the rest justified inline.
+- **Cycle detection.** New integration test `tests/integration/test_import_no_cycles.py` parametrizes `python -c "import {module}"` over 29 modules from a clean interpreter, catching circular-import regressions before they break runtime.
+
+State files (`state.json`, `session_map.json`, `events.jsonl`, `monitor_state.json`, `mailbox/`), CLI flags, env vars, bot commands, and hook configuration are unchanged. `make check` (fmt + lint + typecheck + 4401 unit + 126 integration) is green; `make test-e2e` has pre-existing unrelated failures (group-chat-id pruning) tracked separately.

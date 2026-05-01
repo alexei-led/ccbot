@@ -6,7 +6,10 @@ Entry points:
 
 - `src/ccgram/main.py`: process bootstrap.
 - `src/ccgram/cli.py`: CLI command surface and config override rules.
-- `src/ccgram/bot.py`: handler registration and main user flows.
+- `src/ccgram/bot.py`: 172-line PTB Application factory + lifecycle delegate (post Round 4 F3).
+- `src/ccgram/bootstrap.py`: `bootstrap_application` (post_init wiring) + `shutdown_runtime` (post_shutdown teardown). Named steps (`register_provider_commands`, `verify_hooks_installed`, `wire_runtime_callbacks`, `start_session_monitor`, `start_status_polling`, `start_miniapp_if_enabled`) are independently testable.
+- `src/ccgram/handlers/registry.py`: central PTB command/message/callback/inline handler registration (`register_all`).
+- `src/ccgram/telegram_client.py`: `TelegramClient` Protocol that handlers depend on; `PTBTelegramClient(bot)` adapter; `FakeTelegramClient` for tests; `unwrap_bot(client)` escape hatch.
 
 State and routing:
 
@@ -21,31 +24,45 @@ Monitoring and parsing:
 - `src/ccgram/terminal_parser.py`: terminal status/UI detection.
 - `src/ccgram/claude_task_state.py`: Claude task tracking from transcripts for live status bubble.
 
-Telegram handler surface:
+Telegram handler surface (post Round 4 F1 — feature subpackages):
 
-- `src/ccgram/handlers/text_handler.py`: text-path orchestrator.
-- `src/ccgram/handlers/message_queue.py`: ordering, merge rules, status conversion.
-- `src/ccgram/handlers/polling_coordinator.py`: background status and stale-session cleanup.
-- `src/ccgram/handlers/directory_browser.py` + `directory_callbacks.py`: new-session UX.
-- `src/ccgram/handlers/interactive_ui.py` + `interactive_callbacks.py`: interactive prompt UX.
+- `src/ccgram/handlers/text/text_handler.py`: text-path orchestrator.
+- `src/ccgram/handlers/messaging_pipeline/message_queue.py`: ordering, merge rules, status conversion. Worker takes `client: TelegramClient`.
+- `src/ccgram/handlers/messaging_pipeline/message_sender.py`: `safe_reply`/`safe_edit`/`safe_send` + `rate_limit_send_message` + `edit_with_fallback` — depend on `TelegramClient`.
+- `src/ccgram/handlers/messaging_pipeline/tool_batch.py`: Claude tool-use batching; uses `unwrap_bot(client)` for `DraftStream`.
+- `src/ccgram/handlers/polling/polling_coordinator.py`: background status and stale-session cleanup.
+- `src/ccgram/handlers/polling/window_tick/`: per-window poll cycle split into `decide.py` (pure), `observe.py` (pure inputs in, `TickContext` out), `apply.py` (DI-heavy side effects).
+- `src/ccgram/handlers/polling/polling_strategies.py`: polling strategy classes + pure types (`TickContext`, `TickDecision`).
+- `src/ccgram/handlers/polling/periodic_tasks.py`: periodic task orchestration (broker, sweep, lifecycle, live view).
+- `src/ccgram/handlers/topics/directory_browser.py` + `directory_callbacks.py`: new-session UX.
+- `src/ccgram/handlers/topics/topic_lifecycle.py`: autoclose timers for done/dead topics, unbound window TTL.
+- `src/ccgram/handlers/topics/topic_orchestration.py`: new window/topic creation, unbound window adoption.
+- `src/ccgram/handlers/topics/window_callbacks.py`: window picker callbacks (bind, new, cancel).
+- `src/ccgram/handlers/topics/new_command.py`: `/new` (and `/start` alias) handler.
+- `src/ccgram/handlers/interactive/interactive_ui.py` + `interactive_callbacks.py`: interactive prompt UX.
 - `src/ccgram/handlers/sessions_dashboard.py`: `/sessions` dashboard behavior.
-- `src/ccgram/handlers/recovery_callbacks.py`: dead window recovery flow (fresh/continue/resume).
-- `src/ccgram/handlers/screenshot_callbacks.py`: screenshot refresh, Esc, quick-key, pane screenshots.
-- `src/ccgram/handlers/history_callbacks.py`: history pagination callbacks (prev/next).
+- `src/ccgram/handlers/recovery/recovery_callbacks.py`: dead window recovery flow (fresh/continue/resume).
+- `src/ccgram/handlers/recovery/restore_command.py`: `/restore` command for dead topic recovery.
+- `src/ccgram/handlers/recovery/resume_command.py`: `/resume` scan past sessions + inline picker.
+- `src/ccgram/handlers/recovery/transcript_discovery.py`: hookless transcript discovery for Codex/Gemini.
+- `src/ccgram/handlers/recovery/history.py` + `history_callbacks.py`: `/history` command + pagination callbacks.
+- `src/ccgram/handlers/live/screenshot_callbacks.py`: screenshot refresh, Esc, quick-key, pane screenshots.
+- `src/ccgram/handlers/live/live_view.py`: auto-refreshing terminal screenshots via editMessageMedia.
+- `src/ccgram/handlers/live/pane_callbacks.py`: per-pane callbacks (rename, screenshot select).
 - `src/ccgram/handlers/hook_events.py`: hook event dispatcher (Notification, Stop, Subagent*, Team*).
 - `src/ccgram/handlers/cleanup.py`: centralized topic state teardown on close/delete.
-- `src/ccgram/handlers/topic_emoji.py`: debounced topic name emoji updates (active/idle/done/dead). Color scheme is configurable via `CCGRAM_STATUS_MODE` (`system`: green=working; `user`: green=ready).
+- `src/ccgram/handlers/status/topic_emoji.py`: debounced topic name emoji updates (active/idle/done/dead). Color scheme is configurable via `CCGRAM_STATUS_MODE` (`system`: green=working; `user`: green=ready).
+- `src/ccgram/handlers/status/status_bubble.py`: status-bubble keyboard + status message lifecycle.
+- `src/ccgram/handlers/status/status_bar_actions.py`: status-bubble button callbacks.
 - `src/ccgram/handlers/file_handler.py`: photo/document upload → `.ccgram-uploads/` → agent notification.
-- `src/ccgram/handlers/resume_command.py`: `/resume` scan past sessions + inline picker.
 - `src/ccgram/handlers/upgrade.py`: `/upgrade` uv tool upgrade + `os.execv()` restart.
 - `src/ccgram/handlers/sync_command.py`: `/sync` state audit + fix button.
 - `src/ccgram/handlers/command_history.py`: per-user/per-topic command recall (in-memory, max 20).
-- `src/ccgram/handlers/voice_handler.py`: voice message download, Whisper transcription, confirm/discard keyboard.
-- `src/ccgram/handlers/voice_callbacks.py`: voice callback routing (vc:send/vc:drop); shell provider transcriptions route through LLM.
-- `src/ccgram/handlers/live_view.py`: auto-refreshing terminal screenshots via editMessageMedia.
-- `src/ccgram/handlers/periodic_tasks.py`: periodic task orchestration (broker, sweep, lifecycle, live view).
-- `src/ccgram/handlers/topic_lifecycle.py`: autoclose timers for done/dead topics, unbound window TTL.
-- `src/ccgram/handlers/transcript_discovery.py`: hookless transcript discovery for Codex/Gemini.
+- `src/ccgram/handlers/voice/voice_handler.py`: voice message download, Whisper transcription, confirm/discard keyboard.
+- `src/ccgram/handlers/voice/voice_callbacks.py`: voice callback routing (vc:send/vc:drop); shell provider transcriptions route through LLM.
+- `src/ccgram/handlers/messaging/msg_broker.py` + `msg_delivery.py` + `msg_telegram.py` + `msg_spawn.py`: inter-agent message broker, delivery state, Telegram notifications, spawn approval flow.
+- `src/ccgram/handlers/inline.py`: top-level `inline_query_handler` and `unsupported_content_handler`.
+- `src/ccgram/handlers/reactions.py`: Telegram message reactions helper (Bot API 7.0+).
 
 Provider and command surface:
 
@@ -54,8 +71,10 @@ Provider and command surface:
 - `src/ccgram/cc_commands.py`: Telegram menu registration from discovered commands.
 - `src/ccgram/hook.py`: Claude hook install/status/uninstall and event writes.
 - `src/ccgram/llm/`: LLM command generation (CommandGenerator protocol, httpx completers for OpenAI-compatible and Anthropic APIs, provider registry).
-- `src/ccgram/handlers/shell_commands.py`: shell NL→command approval flow; routes NL text through LLM, renders approval keyboard, handles raw `!` prefix execution.
-- `src/ccgram/handlers/shell_capture.py`: shell terminal output capture and relay; polls tmux pane output and streams updates to Telegram via in-place message editing.
+- `src/ccgram/handlers/shell/shell_commands.py`: shell NL→command approval flow; routes NL text through LLM, renders approval keyboard, handles raw `!` prefix execution.
+- `src/ccgram/handlers/shell/shell_capture.py`: shell terminal output capture and relay; polls tmux pane output and streams updates to Telegram via in-place message editing.
+- `src/ccgram/handlers/shell/shell_context.py`: shared shell helpers (`gather_llm_context`, `redact_for_llm`).
+- `src/ccgram/handlers/shell/shell_prompt_orchestrator.py`: prompt marker setup orchestrator (`ensure_setup`).
 - `src/ccgram/whisper/`: voice transcription (WhisperTranscriber protocol, httpx transcriber for OpenAI-compatible APIs, provider factory).
 
 Supporting modules:
@@ -93,7 +112,7 @@ Change provider behavior (commands, parsing, capabilities):
 Change shell command generation behavior:
 
 - `src/ccgram/llm/` for LLM backend selection, prompt construction, and result parsing.
-- `src/ccgram/handlers/shell_commands.py` for approval keyboard flow and raw command execution.
+- `src/ccgram/handlers/shell/shell_commands.py` for approval keyboard flow and raw command execution.
 
 Add new LLM provider:
 
@@ -101,10 +120,10 @@ Add new LLM provider:
 
 Change Telegram interactive UX:
 
-- `src/ccgram/handlers/interactive_ui.py` and `interactive_callbacks.py`.
+- `src/ccgram/handlers/interactive/interactive_ui.py` and `interactive_callbacks.py`.
 - `src/ccgram/handlers/callback_data.py` for callback key contracts.
-- `src/ccgram/handlers/message_queue.py` for ordering/merge side effects.
-- `src/ccgram/handlers/live_view.py` for terminal live view sessions.
+- `src/ccgram/handlers/messaging_pipeline/message_queue.py` for ordering/merge side effects.
+- `src/ccgram/handlers/live/live_view.py` for terminal live view sessions.
 
 Change command discovery:
 
@@ -114,12 +133,22 @@ Change command discovery:
 Change tool-call visibility (hide/show `tool_use`/`tool_result`):
 
 - `src/ccgram/window_state_store.py`: `tool_call_visibility` field on `WindowState` (`default`/`shown`/`hidden`).
-- `src/ccgram/handlers/message_queue.py` (`_handle_content_task`): visibility gate sits before batch eligibility; hidden entries are dropped before `_tool_msg_ids` registration. Hook events bypass the gate via `StatusUpdateTask`.
-- `/toolcalls` command: cycles per-window mode via `WindowStateStore` cycle method.
+- `src/ccgram/handlers/messaging_pipeline/message_queue.py` (`_handle_content_task`): visibility gate sits before batch eligibility; hidden entries are dropped before `_tool_msg_ids` registration. Hook events bypass the gate via `StatusUpdateTask`.
+- `/toolcalls` command (in `src/ccgram/handlers/messaging_pipeline/topic_commands.py`): cycles per-window mode via `WindowStateStore` cycle method.
 
 Change topic emoji color scheme:
 
-- `src/ccgram/handlers/topic_emoji.py`: maps internal status (`active`/`idle`/`done`/`dead`) to Telegram emoji color via `CCGRAM_STATUS_MODE`. Add new modes by extending the mode→colorname dispatch.
+- `src/ccgram/handlers/status/topic_emoji.py`: maps internal status (`active`/`idle`/`done`/`dead`) to Telegram emoji color via `CCGRAM_STATUS_MODE`. Add new modes by extending the mode→colorname dispatch.
+
+Change PTB handler registration / lifecycle:
+
+- `src/ccgram/handlers/registry.py` for command/message/callback/inline handler wiring (`register_all`, `command_specs`).
+- `src/ccgram/bootstrap.py` for `post_init` (provider commands, hook verification, runtime callback wiring, session monitor + status polling start, mini-app start) and `post_shutdown` teardown. Respect the ordering invariant: `wire_runtime_callbacks` before `start_session_monitor`.
+- `src/ccgram/bot.py` is the factory + lifecycle delegate only; do not push wiring back into it.
+
+Change Telegram bot API surface used by handlers:
+
+- `src/ccgram/telegram_client.py`: add new methods to the `TelegramClient` Protocol only when a handler genuinely needs them; mirror the addition in `PTBTelegramClient` (delegation) and `FakeTelegramClient` (recording + default return). Do not import `telegram.Bot` from inside `src/ccgram/handlers/**`; depend on the Protocol instead.
 
 Change screenshot rendering:
 
@@ -133,9 +162,10 @@ Change tmux behavior:
 
 Add or change a Telegram command:
 
-- Start in `src/ccgram/bot.py` command wiring.
-- Implement behavior in `src/ccgram/handlers/` module.
+- Wire the command in `src/ccgram/handlers/registry.py` (`command_specs` list).
+- Implement the handler in the appropriate `src/ccgram/handlers/<subpackage>/` module (or a top-level handler file for cross-cutting commands).
 - Add callback constants in `handlers/callback_data.py` when needed.
+- Take the `client: TelegramClient` argument (not `bot: Bot`).
 
 Change session binding logic:
 
@@ -153,9 +183,9 @@ Touch tmux behavior:
 
 Add or change live view behavior:
 
-- `src/ccgram/handlers/live_view.py` for view sessions and ticking logic.
-- `src/ccgram/handlers/periodic_tasks.py` for tick scheduling.
-- `src/ccgram/handlers/screenshot_callbacks.py` for Live button callback.
+- `src/ccgram/handlers/live/live_view.py` for view sessions and ticking logic.
+- `src/ccgram/handlers/polling/periodic_tasks.py` for tick scheduling.
+- `src/ccgram/handlers/live/screenshot_callbacks.py` for Live button callback.
 
 ## Contracts You Must Not Break
 
@@ -164,6 +194,9 @@ Add or change live view behavior:
 - Keep provider logic behind provider interfaces/capabilities.
 - Keep parsing full-fidelity; split only in Telegram send path.
 - Use `handlers/user_state.py` keys for `context.user_data`; avoid new raw string keys.
+- Handlers depend on the `TelegramClient` Protocol, not `telegram.Bot`. Only `bot.py`, `bootstrap.py`, `handlers/registry.py`, `telegram_client.py`, `telegram_request.py`, and `telegram_sender.py` import from `telegram.ext` at runtime; everything else uses `if TYPE_CHECKING:` for types.
+- `SessionManager` constructs its stores via constructor DI (`schedule_save` callbacks). Do not reintroduce `_wire_singletons` or `unwired_save` defaults.
+- `bot.py` stays a factory + lifecycle delegate. Wiring belongs in `bootstrap.py`; PTB handler registration belongs in `handlers/registry.py`.
 
 ## Debug Index
 
@@ -179,12 +212,12 @@ Symptom: no new assistant messages
 
 Symptom: interactive keyboard not shown
 
-- inspect `handlers/interactive_ui.py` and provider `parse_terminal_status` output.
+- inspect `handlers/interactive/interactive_ui.py` and provider `parse_terminal_status` output.
 - check hook events path (`hook.py` -> `handlers/hook_events.py`) for Claude.
 
 Symptom: duplicated or out-of-order status/content messages
 
-- inspect merge/send behavior in `handlers/message_queue.py`.
+- inspect merge/send behavior in `handlers/messaging_pipeline/message_queue.py`.
 
 Symptom: commands menu missing/wrong
 
@@ -193,6 +226,17 @@ Symptom: commands menu missing/wrong
 
 Symptom: live view not refreshing
 
-- inspect `handlers/live_view.py` active views dict and tick interval.
-- check `handlers/periodic_tasks.py` for live view tick scheduling.
+- inspect `handlers/live/live_view.py` active views dict and tick interval.
+- check `handlers/polling/periodic_tasks.py` for live view tick scheduling.
 - verify screenshot capture in `screenshot.py` and tmux pane availability.
+
+Symptom: `RuntimeError("... not wired")` or `RuntimeError("... already registered")` at startup
+
+- check `handlers/hook_events.register_stop_callback`, `handlers/status/status_bubble.register_rc_active_provider`, or `handlers/shell/shell_capture.register_approval_callback` — the wire-once / fail-loud contract from F2.6 raises if the callee is invoked before registration or if registration is attempted twice.
+- verify `bootstrap.wire_runtime_callbacks` runs before `bootstrap.start_session_monitor` (ordering invariant; the monitor checks the `_callbacks_wired` flag and raises if violated).
+- in tests, the autouse fixture `_reset_runtime_callbacks` (in `tests/ccgram/handlers/conftest.py` and `tests/e2e/conftest.py`) resets these between tests; missing fixture is a test-setup bug.
+
+Symptom: `import` cycle / `partial-init` error from a clean interpreter
+
+- run `make test-integration` and watch `tests/integration/test_import_no_cycles.py` — it parametrizes `python -c "import {module}"` over 29 modules and surfaces the offending path.
+- the F6.3 audit captured legitimate cycles with `# Lazy: <cycle path>` comments at the in-function import; do not blindly hoist those.
