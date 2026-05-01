@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from ccgram.handlers.polling.polling_strategies import (
+from ccgram.handlers.polling.polling_types import (
     STARTUP_TIMEOUT,
     TickContext,
 )

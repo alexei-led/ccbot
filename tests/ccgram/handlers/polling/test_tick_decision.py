@@ -2,7 +2,7 @@
 
 import time
 
-from ccgram.handlers.polling.polling_strategies import TickContext, TickDecision
+from ccgram.handlers.polling.polling_types import TickContext, TickDecision
 from ccgram.handlers.polling.window_tick import decide_tick
 
 

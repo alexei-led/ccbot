@@ -38,7 +38,7 @@ def _debounce_for(state: str) -> float:
 
 @pytest.fixture(autouse=True)
 def _reset():
-    from ccgram.handlers.polling.polling_strategies import terminal_poll_state
+    from ccgram.handlers.polling.polling_state import terminal_poll_state
 
     reset_all_state()
     terminal_poll_state.reset_all_seen_status()
@@ -461,7 +461,7 @@ class TestStatusPollingIntegration:
             from ccgram.handlers.polling.window_tick import (
                 _update_status as update_status_message,
             )
-            from ccgram.handlers.polling.polling_strategies import terminal_poll_state
+            from ccgram.handlers.polling.polling_state import terminal_poll_state
 
             terminal_poll_state.get_state("@0").has_seen_status = True
 
@@ -498,7 +498,7 @@ class TestStatusPollingIntegration:
             from ccgram.handlers.polling.window_tick import (
                 _update_status as update_status_message,
             )
-            from ccgram.handlers.polling.polling_strategies import terminal_poll_state
+            from ccgram.handlers.polling.polling_state import terminal_poll_state
 
             terminal_poll_state._states.pop("@99", None)
 

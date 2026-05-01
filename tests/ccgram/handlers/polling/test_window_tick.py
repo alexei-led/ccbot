@@ -6,13 +6,13 @@ import pytest
 from telegram import Bot
 
 from ccgram.handlers.polling import window_tick
-from ccgram.handlers.polling.polling_strategies import (
-    TickContext,
+from ccgram.handlers.polling.polling_state import (
     interactive_strategy,
     lifecycle_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
 )
+from ccgram.handlers.polling.polling_types import TickContext
 from ccgram.handlers.polling.window_tick import (
     _check_interactive_only,
     _handle_dead_window_notification,
@@ -575,7 +575,7 @@ class TestContractTests:
             "recovery_callbacks",
             "topic_emoji",
             "transcript_discovery",
-            "polling_strategies",
+            "polling_state",
         }
         imported_modules = set()
         for node in ast.walk(tree):
@@ -647,7 +647,7 @@ class TestPaneLifecycleNotify:
 
     @pytest.fixture
     def transitions(self):
-        from ccgram.handlers.polling.polling_strategies import PaneTransition
+        from ccgram.handlers.polling.polling_types import PaneTransition
 
         return [
             PaneTransition(pane_id="%5", prev_state=None, new_state="active"),
@@ -742,7 +742,7 @@ class TestPaneLifecycleNotify:
 
     async def test_named_pane_used_in_label(self):
         from ccgram.handlers.polling import window_tick
-        from ccgram.handlers.polling.polling_strategies import PaneTransition
+        from ccgram.handlers.polling.polling_types import PaneTransition
         from ccgram.window_state_store import window_store
 
         window_store.set_pane_lifecycle_notify("@0", True)
@@ -772,7 +772,7 @@ class TestPaneLifecycleNotify:
         from telegram.error import TelegramError
 
         from ccgram.handlers.polling import window_tick
-        from ccgram.handlers.polling.polling_strategies import PaneTransition
+        from ccgram.handlers.polling.polling_types import PaneTransition
         from ccgram.window_state_store import window_store
 
         window_store.set_pane_lifecycle_notify("@0", True)
@@ -819,7 +819,7 @@ class TestPaneLifecycleNotify:
 
     async def test_scan_panes_invokes_lifecycle(self):
         from ccgram.handlers.polling import window_tick
-        from ccgram.handlers.polling.polling_strategies import PaneTransition
+        from ccgram.handlers.polling.polling_types import PaneTransition
 
         bot = AsyncMock(spec=Bot)
         scan_transitions = [

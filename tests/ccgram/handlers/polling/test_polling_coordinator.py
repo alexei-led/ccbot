@@ -321,7 +321,7 @@ class TestDoesNotImportPerWindowModules:
             "recovery_callbacks",
             "claude_task_state",
             "session_monitor",
-            "polling_strategies",
+            "polling_state",
             "cleanup",
         }
         tree = ast.parse(source)

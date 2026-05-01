@@ -26,7 +26,7 @@ from .interactive import (
     set_interactive_mode,
 )
 from .messaging_pipeline.message_queue import enqueue_status_update
-from .polling.polling_strategies import reset_window_polling_state
+from .polling.polling_state import reset_window_polling_state
 from .status.topic_emoji import update_topic_emoji
 
 

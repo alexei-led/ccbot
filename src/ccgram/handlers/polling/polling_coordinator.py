@@ -43,8 +43,8 @@ async def status_poll_loop(bot: "Bot") -> None:
     from ...telegram_client import PTBTelegramClient
 
     # Lazy: periodic_tasks transitively imports topics.topic_lifecycle,
-    # which imports polling_strategies. Hoisting forms a cycle through
-    # polling/__init__.py whenever a module reaches polling_strategies
+    # which imports polling_state. Hoisting forms a cycle through
+    # polling/__init__.py whenever a module reaches polling_state
     # before polling_coordinator finishes loading.
     from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 

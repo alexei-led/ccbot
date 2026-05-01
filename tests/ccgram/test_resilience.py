@@ -225,7 +225,7 @@ class TestCallbackErrorWidened:
 
 class TestProbeFailureClearing:
     def test_clear_probe_failures_resets_counter(self):
-        from ccgram.handlers.polling.polling_strategies import (
+        from ccgram.handlers.polling.polling_state import (
             lifecycle_strategy,
             terminal_poll_state,
         )
@@ -245,7 +245,7 @@ class TestProbeFailureClearing:
 
 class TestPollStateCleanup:
     def test_clear_window_poll_state_removes_entry(self):
-        from ccgram.handlers.polling.polling_strategies import terminal_poll_state
+        from ccgram.handlers.polling.polling_state import terminal_poll_state
 
         _window_poll_state = terminal_poll_state._states
         terminal_poll_state.get_state("@cleanup-test")

@@ -47,13 +47,12 @@ from ...messaging_pipeline.message_queue import (
 from ...messaging_pipeline.message_sender import rate_limit_send_message, safe_send
 from ...recovery.recovery_callbacks import RecoveryBanner, render_banner
 from ...status.topic_emoji import update_topic_emoji
-from ..polling_strategies import (
-    PaneTransition,
-    TickDecision,
+from ..polling_state import (
     lifecycle_strategy,
     pane_status_strategy,
     terminal_poll_state,
 )
+from ..polling_types import PaneTransition, TickDecision
 from .decide import decide_tick
 from .observe import _check_vim_insert, _resolve_status, build_context
 

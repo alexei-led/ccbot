@@ -567,8 +567,8 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    # Lazy: polling_strategies imports many handler symbols transitively.
-    from ..polling.polling_strategies import interactive_strategy
+    # Lazy: polling_state imports many handler symbols transitively.
+    from ..polling.polling_state import interactive_strategy
 
     lines = [f"\U0001f4d0 {len(panes)} panes in window\n"]
     rows: list[list] = []

@@ -21,15 +21,13 @@ from typing import TYPE_CHECKING
 from ....telegram_client import PTBTelegramClient
 from ...messaging_pipeline.message_queue import get_message_queue
 from ...recovery.transcript_discovery import discover_and_register_transcript
-from ..polling_strategies import (
-    TickContext,
-    TickDecision,
-    is_shell_prompt,
+from ..polling_state import (
     lifecycle_strategy,
     pane_status_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
 )
+from ..polling_types import TickContext, TickDecision, is_shell_prompt
 from .apply import (
     _apply_active_transition,
     _apply_done_transition,

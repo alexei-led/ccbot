@@ -222,7 +222,7 @@ class TestForwardCommandResolution:
         self.mock_ws.clear_window_session.assert_called_once_with("@1")
 
     async def test_clear_enqueues_status_clear_and_resets_idle(self) -> None:
-        from ccgram.handlers.polling.polling_strategies import terminal_poll_state
+        from ccgram.handlers.polling.polling_state import terminal_poll_state
 
         _window_poll_state = terminal_poll_state._states
 

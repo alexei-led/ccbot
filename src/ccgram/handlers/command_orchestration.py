@@ -47,7 +47,7 @@ from .callback_helpers import get_thread_id as _get_thread_id
 from .command_history import record_command
 from .messaging_pipeline.message_queue import enqueue_status_update
 from .messaging_pipeline.message_sender import safe_reply
-from .polling.polling_strategies import lifecycle_strategy, reset_window_polling_state
+from .polling.polling_state import lifecycle_strategy, reset_window_polling_state
 from .toolbar import build_toolbar_keyboard, seed_button_states
 
 if TYPE_CHECKING:

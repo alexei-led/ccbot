@@ -33,7 +33,7 @@ from .handlers.messaging_pipeline.message_queue import shutdown_workers
 from .handlers.messaging_pipeline.message_routing import handle_new_message
 from .handlers.polling.periodic_tasks import run_broker_cycle
 from .handlers.polling.polling_coordinator import status_poll_loop
-from .handlers.polling.polling_strategies import terminal_screen_buffer
+from .handlers.polling.polling_state import terminal_screen_buffer
 from .handlers.shell import register_approval_callback, show_command_approval
 from .handlers.status import register_rc_active_provider
 from .handlers.topics.topic_orchestration import (

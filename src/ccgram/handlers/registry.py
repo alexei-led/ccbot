@@ -35,14 +35,6 @@ from .file_handler import handle_document_message, handle_photo_message
 from .inline import inline_query_handler, unsupported_content_handler
 from .live import live_command, panes_command, screenshot_command
 from .messaging_pipeline import toolcalls_command, verbose_command
-
-# `polling` must load before `recovery`: window_tick eagerly imports
-# recovery.transcript_discovery, and recovery.transcript_discovery in turn
-# imports polling.polling_strategies. If recovery starts loading first,
-# polling/__init__ runs in the middle of recovery/__init__ and the
-# window_tick → recovery edge becomes a partial-init cycle. Importing
-# polling here forces the full chain to complete via window_tick first.
-from . import polling as _polling  # noqa: F401
 from .recovery import restore_command, resume_command
 from .recovery.history import history_command
 from .send import send_command

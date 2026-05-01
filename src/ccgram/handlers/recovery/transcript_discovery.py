@@ -107,9 +107,10 @@ def _resolve_providers_to_try(
     caller should set up a shell provider.
     """
     # Lazy: hoisting forms polling/__init__ → window_tick →
-    # recovery.transcript_discovery → polling_strategies partial-init
-    # cycle (worker-order-dependent; verified during F6.2).
-    from ..polling.polling_strategies import is_shell_prompt
+    # recovery.transcript_discovery → polling_state partial-init
+    # cycle (worker-order-dependent; verified during F6.2). polling_types
+    # is leaf-level — Task 5 of Round 5 may hoist this once cycle test covers it.
+    from ..polling.polling_types import is_shell_prompt
     from ...providers import registry
 
     if state.provider_name:
@@ -191,7 +192,7 @@ async def discover_and_register_transcript(
     and shell ↔ agent transitions with prompt marker setup.
     """
     # Lazy: same polling/__init__ cycle as _resolve_providers_to_try.
-    from ..polling.polling_strategies import is_shell_prompt
+    from ..polling.polling_types import is_shell_prompt
     from ...thread_router import thread_router
 
     state = session_manager.window_states.get(window_id)

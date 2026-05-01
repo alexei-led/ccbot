@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram import Bot
 
-from ccgram.handlers.polling.polling_strategies import (
+from ccgram.handlers.polling.polling_state import (
     InteractiveUIStrategy,
     PaneStatusStrategy,
-    PaneTransition,
     TerminalPollState,
     TerminalScreenBuffer,
 )
+from ccgram.handlers.polling.polling_types import PaneTransition
 from ccgram.providers.base import StatusUpdate
 from ccgram.tmux_manager import PaneInfo as TmuxPaneInfo
 from ccgram.window_state_store import PaneInfo, window_store

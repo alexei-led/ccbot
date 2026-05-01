@@ -1,35 +1,46 @@
-"""Polling strategy classes for terminal status monitoring.
+"""Stateful strategy classes + module-level singletons for the polling subsystem.
 
-Decomposes the polling subsystem state into focused, independently testable
-strategy classes:
-  - TerminalScreenBuffer: pyte screen buffer, RC debounce, pane count cache
-  - TerminalPollState: per-window poll state (seen-status, startup, probes, unbound timers)
-  - InteractiveUIStrategy: pane alert hash state for deduplication
-  - TopicLifecycleStrategy: autoclose timers, dead notification tracking, probe failures
-  - PaneStatusStrategy: multi-pane enumeration, classification, transitions, alerts
+Pure types and constants live in ``polling_types``; this module owns the
+classes that maintain mutable state across poll cycles and the five
+module-level instances that wire them together. Importing this module
+executes those instantiations as a side effect — that is intentional
+(production callers want the singletons), but it is exactly why
+``window_tick.decide`` must NOT import from here. Use ``polling_types``
+for the contract; reach into ``polling_state`` only when stateful
+behaviour is required.
 
-Also defines pure data types for the observe→decide→act pattern:
-  - TickContext: all inputs to the tick decision (pure data, no I/O)
-  - TickDecision: what effects to apply (returned by decide_tick in window_tick.py)
-
-Each strategy owns its state and state management methods. Domain-specific
-async functions (which depend on tmux, Telegram, providers, etc.) live in
-window_tick.py (per-window logic) and topic_lifecycle.py (lifecycle checks).
-This separation enables independent testing of state logic without mocking external deps.
+The five singletons (``terminal_poll_state``, ``terminal_screen_buffer``,
+``interactive_strategy``, ``lifecycle_strategy``, ``pane_status_strategy``)
+live here. Pure types (``TickContext``, ``TickDecision``, ``PaneTransition``,
+constants, ``is_shell_prompt``) live in ``polling_types`` — depend on that
+module instead when stateful behaviour is not required.
 """
 
 from __future__ import annotations
 
 import time
 import zlib
-from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 import structlog
 
 from ...providers.base import StatusUpdate
 from ...topic_state_registry import topic_state
+from .polling_types import (
+    MAX_PROBE_FAILURES,
+    PANE_COUNT_TTL,
+    RC_DEBOUNCE_SECONDS,
+    STARTUP_TIMEOUT,
+    TYPING_INTERVAL,
+    BlockedAlertCallback,
+    PaneOutputCallback,
+    PaneStateName,
+    PaneTransition,
+    TopicPollState,
+    WindowPollState,
+)
+from .polling_types import ACTIVITY_THRESHOLD as _ACTIVITY_THRESHOLD
 
 if TYPE_CHECKING:
     from telegram import Bot
@@ -39,65 +50,6 @@ if TYPE_CHECKING:
     from ...tmux_manager import PaneInfo as TmuxPaneInfo
 
 logger = structlog.get_logger()
-
-# ── Constants ───────────────────────────────────────────────────────────
-
-# Transcript activity heuristic threshold (seconds).
-ACTIVITY_THRESHOLD = 10.0
-
-# Startup timeout before transitioning to idle (seconds).
-STARTUP_TIMEOUT = 30.0
-
-# RC debounce: require RC absent for this long before clearing badge.
-RC_DEBOUNCE_SECONDS = 3.0
-
-# Consecutive topic probe failure threshold.
-MAX_PROBE_FAILURES = 3
-
-# Typing indicator throttle interval (seconds).
-TYPING_INTERVAL = 4.0
-
-# Pane count cache TTL for multi-pane scanning (seconds).
-PANE_COUNT_TTL = 5.0
-
-# Shell commands indicating agent has exited.
-SHELL_COMMANDS = frozenset({"bash", "zsh", "fish", "sh", "dash", "tcsh", "csh", "ksh"})
-
-
-def is_shell_prompt(pane_current_command: str) -> bool:
-    """Check if the pane is running a shell (agent has exited)."""
-    cmd = pane_current_command.strip().rsplit("/", 1)[-1]
-    return cmd in SHELL_COMMANDS
-
-
-# ── Per-window / per-topic state ────────────────────────────────────────
-
-
-@dataclass
-class WindowPollState:
-    """Per-window polling state, keyed by window_id."""
-
-    has_seen_status: bool = False
-    startup_time: float | None = None
-    probe_failures: int = 0
-    screen_buffer: "ScreenBuffer | None" = field(default=None, repr=False)
-    pane_count_cache: tuple[int, float] | None = None
-    unbound_timer: float | None = None
-    last_pane_hash: int | None = None
-    last_pyte_result: StatusUpdate | None = field(default=None, repr=False)
-    last_rendered_text: str | None = None
-    rc_active: bool = False
-    rc_off_since: float | None = None
-    last_rc_detected: bool = False
-
-
-@dataclass
-class TopicPollState:
-    """Per-topic polling state, keyed by (user_id, thread_id)."""
-
-    autoclose: tuple[str, float] | None = None
-    last_typing_sent: float | None = None
-
 
 # ── TerminalScreenBuffer ───────────────────────────────────────────────
 
@@ -110,7 +62,7 @@ class TerminalScreenBuffer:
     window_tick.py.
     """
 
-    def __init__(self, poll_state: "TerminalPollState") -> None:
+    def __init__(self, poll_state: TerminalPollState) -> None:
         self._poll_state = poll_state
         topic_state.register_bound("window", self.clear_screen_buffer)
 
@@ -177,7 +129,7 @@ class TerminalScreenBuffer:
 
     def get_screen_buffer(
         self, window_id: str, columns: int, rows: int
-    ) -> "ScreenBuffer":
+    ) -> ScreenBuffer:
         """Get or create a ScreenBuffer for a window, resizing if needed."""
         # Lazy: screen_buffer pulls in pyte; only the pyte-based strategy
         # actually uses it, so leaf-level callers stay light.
@@ -385,7 +337,7 @@ class TerminalPollState:
         """
         if not last_activity:
             return False
-        if (time.monotonic() - last_activity) < ACTIVITY_THRESHOLD:
+        if (time.monotonic() - last_activity) < _ACTIVITY_THRESHOLD:
             self.mark_seen_status(window_id)
             return True
         return False
@@ -571,85 +523,7 @@ class TopicLifecycleStrategy:
         return count
 
 
-# ── Module-level strategy singletons ────────────────────────────────────
-
-terminal_poll_state = TerminalPollState()
-terminal_screen_buffer = TerminalScreenBuffer(terminal_poll_state)
-interactive_strategy = InteractiveUIStrategy()
-lifecycle_strategy = TopicLifecycleStrategy(terminal_poll_state)
-
-
-def reset_window_polling_state(window_id: str) -> None:
-    """Reset all per-window polling state in one call.
-
-    Use after /clear, window restart, or any event that requires a clean
-    slate for the next poll cycle. Callers should not call the individual
-    strategy methods directly — this is the single reset contract.
-    """
-    terminal_poll_state.clear_seen_status(window_id)
-    terminal_screen_buffer.clear_screen_buffer(window_id)
-
-
-# ── Observe→Decide→Act types ─────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class TickContext:
-    """All inputs to the tick decision — pure data, no I/O.
-
-    Coordinator computes all inputs (including those with side effects like
-    is_recently_active) before constructing this context, then passes it to
-    the pure decide_tick function.
-    """
-
-    window_id: str
-    resolved_status_text: str | None  # output of build_status_line; None when no status
-    is_shell_prompt: bool  # pane_current_command is a bare shell (agent exited)
-    has_seen_status: bool  # at least one status was previously sent for this window
-    is_recently_active: bool  # transcript activity within ACTIVITY_THRESHOLD seconds
-    startup_time: float | None  # None if no startup grace period is running
-    is_dead_window: bool  # tmux window no longer exists
-    supports_hook: bool  # provider emits hook events (Claude)
-    notification_mode: str  # "normal" | "muted" | "errors_only" | etc.
-
-
-@dataclass(frozen=True, slots=True)
-class TickDecision:
-    """Output of decide_tick — what effects to apply.
-
-    All fields default to no-op so callers only need to set what they care about.
-    """
-
-    send_status: bool = False
-    status_text: str | None = None
-    transition: Literal["idle", "done", "active", "starting"] | None = None
-    show_recovery: bool = False
-
-
 # ── PaneStatusStrategy ───────────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class PaneTransition:
-    """Per-pane state transition emitted during a scan."""
-
-    pane_id: str
-    prev_state: "PaneStateName | None"
-    new_state: "PaneStateName"
-    # Captured at transition time so a dead pane's name is preserved for
-    # downstream notifications even after the PaneInfo entry is removed.
-    name: str | None = None
-
-
-PaneStateName = Literal["active", "idle", "blocked", "dead"]
-
-# Surfaces an interactive prompt to the user. Wired by window_tick.
-BlockedAlertCallback = Callable[["Bot", int, str, int, str], Awaitable[None]]
-
-# Forwards subscribed pane output. Wired by window_tick when a pane is marked
-# ``subscribed`` in WindowState.panes; arguments mirror BlockedAlertCallback
-# with the freshly-captured pane text appended.
-PaneOutputCallback = Callable[["Bot", int, str, int, str, str], Awaitable[None]]
 
 
 class PaneStatusStrategy:
@@ -671,6 +545,10 @@ class PaneStatusStrategy:
     independently testable without tmux/Telegram.
     """
 
+    # Minimum seconds between Telegram forwards for the same pane. Prevents
+    # flooding when a subscribed pane streams continuously-changing output.
+    PANE_FORWARD_MIN_INTERVAL = 5.0
+
     def __init__(
         self,
         screen_buffer: TerminalScreenBuffer,
@@ -689,7 +567,7 @@ class PaneStatusStrategy:
 
     def _clear_pane_content_state(self, window_id: str) -> None:
         """Drop cached pane content hashes for a window's panes (cleanup)."""
-        # Lazy: window_state_store wiring runs after polling_strategies is
+        # Lazy: window_state_store wiring runs after polling_state is
         # imported by the registry; keep at call site so the strategy can
         # be unit-tested without a live store.
         from ...window_state_store import window_store
@@ -783,7 +661,7 @@ class PaneStatusStrategy:
         """
         # Lazy: providers/__init__.py reaches back into tmux_manager;
         # keep this resolution at call site to avoid bringing the full
-        # provider registry into polling_strategies' import graph.
+        # provider registry into polling_state's import graph.
         from ...providers import detect_provider_from_command
         from ...window_query import get_window_provider
 
@@ -815,7 +693,7 @@ class PaneStatusStrategy:
         included so the caller can both surface an interactive alert and
         forward the text to subscribers.
         """
-        # Lazy: tmux_manager → providers → polling_strategies cycle.
+        # Lazy: tmux_manager → providers → polling_state cycle.
         from ...tmux_manager import tmux_manager
 
         pane_text = await tmux_manager.capture_pane_by_id(
@@ -828,7 +706,7 @@ class PaneStatusStrategy:
 
     async def _maybe_surface_alert(
         self,
-        bot: "Bot",
+        bot: Bot,
         user_id: int,
         window_id: str,
         thread_id: int,
@@ -850,7 +728,7 @@ class PaneStatusStrategy:
 
     async def scan_window(
         self,
-        bot: "Bot",
+        bot: Bot,
         user_id: int,
         window_id: str,
         thread_id: int,
@@ -970,7 +848,7 @@ class PaneStatusStrategy:
 
     async def _scan_one_pane(
         self,
-        bot: "Bot",
+        bot: Bot,
         user_id: int,
         thread_id: int,
         window_id: str,
@@ -1029,13 +907,9 @@ class PaneStatusStrategy:
             on_blocked,
         )
 
-    # Minimum seconds between Telegram forwards for the same pane. Prevents
-    # flooding when a subscribed pane streams continuously-changing output.
-    PANE_FORWARD_MIN_INTERVAL = 5.0
-
     async def _maybe_forward_subscribed(
         self,
-        bot: "Bot",
+        bot: Bot,
         user_id: int,
         window_id: str,
         thread_id: int,
@@ -1070,4 +944,21 @@ class PaneStatusStrategy:
         await on_pane_output(bot, user_id, window_id, thread_id, pane_id, pane_text)
 
 
+# ── Module-level strategy singletons ────────────────────────────────────
+
+terminal_poll_state = TerminalPollState()
+terminal_screen_buffer = TerminalScreenBuffer(terminal_poll_state)
+interactive_strategy = InteractiveUIStrategy()
+lifecycle_strategy = TopicLifecycleStrategy(terminal_poll_state)
 pane_status_strategy = PaneStatusStrategy(terminal_screen_buffer, interactive_strategy)
+
+
+def reset_window_polling_state(window_id: str) -> None:
+    """Reset all per-window polling state in one call.
+
+    Use after /clear, window restart, or any event that requires a clean
+    slate for the next poll cycle. Callers should not call the individual
+    strategy methods directly — this is the single reset contract.
+    """
+    terminal_poll_state.clear_seen_status(window_id)
+    terminal_screen_buffer.clear_screen_buffer(window_id)

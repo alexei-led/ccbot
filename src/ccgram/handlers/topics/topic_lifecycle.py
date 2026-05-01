@@ -24,7 +24,7 @@ from ...window_resolver import is_foreign_window
 from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from ..cleanup import clear_topic_state
 from ..messaging_pipeline.message_sender import is_thread_gone
-from ..polling.polling_strategies import (
+from ..polling.polling_state import (
     lifecycle_strategy,
     terminal_poll_state,
 )

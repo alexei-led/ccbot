@@ -36,6 +36,8 @@ _MODULES = [
     "ccgram.handlers.messaging",
     "ccgram.handlers.messaging_pipeline",
     "ccgram.handlers.polling",
+    "ccgram.handlers.polling.polling_types",
+    "ccgram.handlers.polling.polling_state",
     "ccgram.handlers.polling.window_tick",
     "ccgram.handlers.polling.window_tick.decide",
     "ccgram.handlers.polling.window_tick.observe",

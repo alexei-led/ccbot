@@ -11,7 +11,7 @@ import time
 
 from ....providers.base import StatusUpdate
 from ....terminal_parser import status_emoji_prefix
-from ..polling_strategies import (
+from ..polling_types import (
     STARTUP_TIMEOUT,
     TickContext,
     TickDecision,

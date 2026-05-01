@@ -6,13 +6,15 @@ from unittest.mock import patch
 
 import pytest
 
-from ccgram.handlers.polling.polling_strategies import (
+from ccgram.handlers.polling.polling_state import (
     InteractiveUIStrategy,
-    MAX_PROBE_FAILURES,
-    RC_DEBOUNCE_SECONDS,
     TerminalPollState,
     TerminalScreenBuffer,
     TopicLifecycleStrategy,
+)
+from ccgram.handlers.polling.polling_types import (
+    MAX_PROBE_FAILURES,
+    RC_DEBOUNCE_SECONDS,
     TopicPollState,
     WindowPollState,
     is_shell_prompt,
@@ -92,7 +94,7 @@ class TestTerminalScreenBuffer:
 
     def test_parse_with_pyte_invalid_dimensions_defaults(self):
         with patch(
-            "ccgram.handlers.polling.polling_strategies.TerminalScreenBuffer.get_screen_buffer"
+            "ccgram.handlers.polling.polling_state.TerminalScreenBuffer.get_screen_buffer"
         ) as mock_buf:
             mock_buf.return_value.rendered_text = ""
             mock_buf.return_value.display = []
@@ -240,7 +242,7 @@ class TestTerminalPollState:
         assert not self.strategy.is_recently_active("@0", None)
 
     def test_is_startup_expired_true(self):
-        from ccgram.handlers.polling.polling_strategies import STARTUP_TIMEOUT
+        from ccgram.handlers.polling.polling_types import STARTUP_TIMEOUT
 
         ws = self.strategy.get_state("@0")
         ws.startup_time = time.monotonic() - STARTUP_TIMEOUT - 1.0
@@ -351,7 +353,7 @@ class TestTopicLifecycleStrategy:
     def test_record_probe_failure_logs_at_threshold(self):
         for _ in range(MAX_PROBE_FAILURES - 1):
             self.strategy.record_probe_failure("@0")
-        with patch("ccgram.handlers.polling.polling_strategies.logger") as mock_logger:
+        with patch("ccgram.handlers.polling.polling_state.logger") as mock_logger:
             self.strategy.record_probe_failure("@0")
             mock_logger.info.assert_called_once()
 
@@ -377,7 +379,7 @@ class TestTopicLifecycleStrategy:
         assert self.strategy.is_typing_throttled(1, 42)
 
     def test_is_typing_throttled_false_past_interval(self):
-        from ccgram.handlers.polling.polling_strategies import TYPING_INTERVAL
+        from ccgram.handlers.polling.polling_types import TYPING_INTERVAL
 
         ts = self.strategy.get_state(1, 42)
         ts.last_typing_sent = time.monotonic() - TYPING_INTERVAL - 1.0

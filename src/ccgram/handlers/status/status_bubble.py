@@ -45,7 +45,7 @@ logger = structlog.get_logger()
 
 
 # ---------------------------------------------------------------------------
-# RC-active provider (dependency injection — severs polling_strategies import)
+# RC-active provider (dependency injection — severs polling_state import)
 # ---------------------------------------------------------------------------
 
 
@@ -62,7 +62,7 @@ _rc_active_fn_registered: bool = False
 def register_rc_active_provider(fn: Callable[[str], bool]) -> None:
     """Wire the polling-layer RC-active lookup (called once from client.py setup).
 
-    Avoids a direct status_bubble → polling_strategies import by accepting
+    Avoids a direct status_bubble → polling_state import by accepting
     a callable rather than importing terminal_screen_buffer directly.
 
     Raises RuntimeError if called more than once — wiring should happen exactly

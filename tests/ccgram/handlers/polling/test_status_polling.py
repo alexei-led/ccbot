@@ -19,14 +19,16 @@ from ccgram.handlers.polling.window_tick import (
     _scan_window_panes,
     decide_tick,
 )
-from ccgram.handlers.polling.polling_strategies import TickContext
-from ccgram.handlers.polling.polling_strategies import (
-    MAX_PROBE_FAILURES,
+from ccgram.handlers.polling.polling_state import (
     interactive_strategy,
-    is_shell_prompt,
     lifecycle_strategy,
     terminal_poll_state,
     terminal_screen_buffer,
+)
+from ccgram.handlers.polling.polling_types import (
+    MAX_PROBE_FAILURES,
+    TickContext,
+    is_shell_prompt,
 )
 from ccgram.telegram_client import PTBTelegramClient
 from ccgram.tmux_manager import PaneInfo
