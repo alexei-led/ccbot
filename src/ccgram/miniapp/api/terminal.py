@@ -72,6 +72,7 @@ async def _default_capture(window_id: str) -> str | None:
     # Lazy: tests substitute alternate capture callables before any
     # request arrives; resolving the singleton inside the default
     # factory keeps the injection seam clean.
+    # Lazy: miniapp routes resolve singletons per-request so tests can stub them
     from ...tmux_manager import tmux_manager
 
     return await tmux_manager.capture_pane(window_id, with_ansi=True)
@@ -91,6 +92,8 @@ async def _default_pane_list(window_id: str) -> list[dict[str, Any]]:
     """Enumerate panes for a window, merging tmux state + ``WindowState.panes``."""
     # Lazy: same DI seam as ``_default_capture``.
     from ...tmux_manager import tmux_manager
+
+    # Lazy: miniapp routes resolve singletons per-request so tests can stub them
     from ...window_state_store import window_store
 
     panes = await tmux_manager.list_panes(window_id)

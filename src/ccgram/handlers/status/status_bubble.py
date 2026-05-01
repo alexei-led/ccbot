@@ -114,7 +114,10 @@ def build_status_keyboard(
     """
     # Lazy: command_history → messaging_pipeline → status → status_bubble
     # forms a cycle when imported at module top. Keep lazy.
+    # Lazy: command_history ↔ status cycle
     from ..command_history import truncate_for_display
+
+    # Lazy: status_bubble ↔ status_bar_actions sibling cycle
     from .status_bar_actions import build_dashboard_button
 
     rows: list[list[InlineKeyboardButton]] = []

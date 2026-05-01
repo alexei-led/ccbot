@@ -218,6 +218,7 @@ def run_cmd(**kwargs: object) -> None:
     """Start the bot with optional overrides."""
     apply_args_to_env(**kwargs)
 
+    # Lazy: defer subcommand import until that command is invoked, keeping `ccgram --help` fast
     from .main import run_bot
 
     run_bot()
@@ -236,6 +237,7 @@ def run_cmd(**kwargs: object) -> None:
 @click.option("--status", is_flag=True, help="Check if hook is installed.")
 def hook_cmd(install: bool, uninstall: bool, status: bool) -> None:
     """Claude Code session tracking hook."""
+    # Lazy: defer subcommand import until that command is invoked, keeping `ccgram --help` fast
     from .hook import hook_main
 
     hook_main(install=install, uninstall=uninstall, status=status)
@@ -247,6 +249,7 @@ def hook_cmd(install: bool, uninstall: bool, status: bool) -> None:
 @cli.command("status")
 def status_cmd() -> None:
     """Show running state."""
+    # Lazy: defer subcommand import until that command is invoked, keeping `ccgram --help` fast
     from .status_cmd import status_main
 
     status_main()
@@ -259,6 +262,7 @@ def status_cmd() -> None:
 
 
 def _register_msg_group() -> None:
+    # Lazy: defer subcommand import until that command is invoked, keeping `ccgram --help` fast
     from .msg_cmd import msg_group
 
     cli.add_command(msg_group, "msg")
@@ -274,6 +278,7 @@ _register_msg_group()
 @click.option("--fix", is_flag=True, help="Auto-fix issues where possible.")
 def doctor_cmd(fix: bool) -> None:
     """Validate setup and diagnose issues."""
+    # Lazy: defer subcommand import until that command is invoked, keeping `ccgram --help` fast
     from .doctor_cmd import doctor_main
 
     doctor_main(fix=fix)

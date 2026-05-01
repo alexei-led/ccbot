@@ -860,6 +860,7 @@ class TmuxManager:
         # Lazy: providers/__init__.py reaches back into tmux_manager via
         # process_detection; tmux_manager (infra) must not import domain
         # (providers) at module level.
+        # Lazy: providers reach back into tmux_manager during process detection
         from .providers import (
             detect_provider_from_command,
         )

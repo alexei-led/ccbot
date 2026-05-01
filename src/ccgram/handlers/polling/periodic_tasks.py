@@ -50,8 +50,13 @@ async def run_broker_cycle(
     # Lazy: msg_broker is registered as a callback target via the broker
     # registry; importing it at top of periodic_tasks pulls the
     # messaging subpackage into the polling package's cold path.
+    # Lazy: imports resolved per-tick so tests can swap singletons
     from ... import window_query
+
+    # Lazy: imports resolved per-tick so tests can swap singletons
     from ...mailbox import Mailbox
+
+    # Lazy: messaging ↔ polling cycle through msg_telegram
     from ..messaging.msg_broker import broker_delivery_cycle
 
     mailbox = Mailbox(config.mailbox_dir)
@@ -72,7 +77,10 @@ async def _run_spawn_cycle(client: TelegramClient) -> None:
     """Scan for file-based spawn requests and post approval keyboards or auto-approve."""
     # Lazy: msg_spawn pulls topic_orchestration which sits inside the
     # sync_command cycle; keep at call site.
+    # Lazy: spawn pipeline reaches back into polling
     from ...spawn_request import pop_pending, scan_spawn_requests
+
+    # Lazy: spawn pipeline reaches back into polling
     from ..messaging.msg_spawn import (
         handle_spawn_approval,
         post_spawn_approval_keyboard,
@@ -100,6 +108,7 @@ def _run_mailbox_sweep() -> None:
     """Run periodic mailbox sweep."""
     # Lazy: Mailbox is a leaf module; loading inside the sweep keeps
     # the polling subpackage's import surface narrow.
+    # Lazy: imports resolved per-tick so tests can swap singletons
     from ...mailbox import Mailbox
 
     mailbox = Mailbox(config.mailbox_dir)

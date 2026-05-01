@@ -299,6 +299,7 @@ async def notify_loop_detected(
     Posts in the topic of window_a with [Pause Messaging] [Allow 5 more].
     Uses a short hash in callback_data to stay within Telegram's 64-byte limit.
     """
+    # Lazy: only used by the message-id helper
     import hashlib
 
     topic = resolve_topic(window_a)
@@ -384,8 +385,10 @@ async def _handle_loop_alert(
 
 async def _safe_edit_text(query: CallbackQuery, text: str) -> None:
     """Edit callback query message text, ignoring errors."""
+    # Lazy: only used inside the suppression branch
     import contextlib
 
+    # Lazy: only used inside the BadRequest handler
     from telegram.error import TelegramError
 
     with contextlib.suppress(TelegramError):

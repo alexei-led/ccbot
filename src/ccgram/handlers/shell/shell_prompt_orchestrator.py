@@ -61,6 +61,7 @@ async def ensure_setup(
     """Apply prompt-marker setup policy for the given trigger type."""
     # Lazy: shell_infra runs `ps` subprocess detection on import-relevant
     # paths; only loaded when an orchestrator trigger fires.
+    # Lazy: provider infra reaches back through shell pkg
     from ...providers.shell_infra import has_prompt_marker, setup_shell_prompt
 
     st = _get_state(window_id)
@@ -159,6 +160,7 @@ async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle Set up / Skip button presses."""
     # Lazy: callback_helpers ↔ callback_registry ↔ this module via the
     # registration side effect that triggered _dispatch.
+    # Lazy: callback_helpers ↔ shell cycle
     from ..callback_helpers import user_owns_window
 
     query = update.callback_query

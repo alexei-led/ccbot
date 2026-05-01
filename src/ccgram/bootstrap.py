@@ -105,6 +105,7 @@ def verify_hooks_installed() -> None:
     # Lazy: hook module is the Claude-Code subprocess entry point;
     # importing it eagerly drags `utils`/IO costs into bootstrap even
     # when the active provider has no hooks.
+    # Lazy: hook helpers used only during the hook-verify step
     from .hook import _claude_settings_file, get_installed_events
 
     settings_file = _claude_settings_file()
@@ -213,6 +214,7 @@ async def bootstrap_application(application: Application) -> None:
 
     # Lazy: main imports bot at top, bot imports bootstrap; hoisting forms
     # main → bot → bootstrap → main on cold import.
+    # Lazy: bootstrap ↔ main cycle
     from .main import start_miniapp_if_enabled
 
     await start_miniapp_if_enabled()
@@ -238,6 +240,7 @@ async def shutdown_runtime() -> None:
 
     # Lazy: mailbox is a leaf module; importing it lazily here avoids
     # paying the cost on bootstrap when shutdown is the only caller.
+    # Lazy: mailbox sweep helper used only by the periodic-task wire-up
     from .mailbox import Mailbox
 
     Mailbox(config.mailbox_dir).sweep()

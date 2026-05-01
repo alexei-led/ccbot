@@ -152,6 +152,7 @@ _name_map: dict[str, str] = {}
 
 def _provider_base_dir(claude_dir: Path | None = None) -> str:
     """Resolve base dir for provider command discovery."""
+    # Lazy: config singleton accessed only when this helper actually runs
     from ccgram.config import config as _cfg
 
     return str(claude_dir) if claude_dir else str(_cfg.claude_config_dir)
@@ -287,8 +288,10 @@ async def register_commands(
         bot_commands.append(BotCommand(cmd.telegram_name, desc))
         cc_count += 1
 
+    # Lazy: only needed when scheduling the menu-refresh task
     import asyncio
 
+    # Lazy: only used inside the rate-limit retry path
     from telegram.error import RetryAfter
 
     max_startup_wait = 120  # Don't block startup longer than this

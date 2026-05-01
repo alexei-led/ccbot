@@ -49,6 +49,7 @@ async def _default_reader(window_id: str) -> list[dict[str, Any]]:
     """Read all messages for ``window_id`` via the global session resolver."""
     # Lazy: tests substitute alternate readers before any request
     # arrives; the singleton lookup stays inside the default factory.
+    # Lazy: miniapp routes resolve singletons per-request so tests can stub them
     from ...session_query import get_recent_messages
 
     messages, _ = await get_recent_messages(window_id)

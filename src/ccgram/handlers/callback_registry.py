@@ -120,21 +120,43 @@ def load_handlers() -> None:
     the explicit ``bootstrap.bootstrap_application`` lifecycle contract
     (callers control _when_ handler modules load).
     """
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from . import (  # noqa: F401
         command_history,
         hook_events,
         sessions_dashboard,
         sync_command,
     )
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .interactive import interactive_callbacks  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .voice import voice_callbacks  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .live import pane_callbacks, screenshot_callbacks  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .messaging import msg_spawn, msg_telegram  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .recovery import history_callbacks, recovery_callbacks, resume_command  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .send import send_callbacks  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .shell import shell_capture, shell_commands, shell_prompt_orchestrator  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .status import status_bar_actions  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .toolbar import toolbar_callbacks  # noqa: F401
+
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .topics import directory_callbacks, window_callbacks  # noqa: F401
 
+    # Lazy: handler subpackage modules import callback_registry for the @register_callback decorator; importing them here at module load would cycle
     from .. import msg_discovery  # noqa: F401

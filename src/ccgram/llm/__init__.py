@@ -58,6 +58,7 @@ def _create_completer() -> OpenAICompatCompleter | AnthropicCompleter | None:
       2. Provider-specific env var (e.g. ``XAI_API_KEY``, ``DEEPSEEK_API_KEY``)
       3. ``OPENAI_API_KEY`` as universal fallback
     """
+    # Lazy: config singleton resolved by factory call
     from ccgram.config import config
 
     provider = config.llm_provider

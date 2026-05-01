@@ -234,6 +234,7 @@ class SessionManager:
         """
         # Lazy: window_resolver imports session-state types; hoisting forms
         # session → window_resolver → session.WindowState cycle.
+        # Lazy: window_resolver pulls back into session manager
         from .window_resolver import LiveWindow, resolve_stale_ids as _resolve
 
         windows = await tmux_manager.list_windows()

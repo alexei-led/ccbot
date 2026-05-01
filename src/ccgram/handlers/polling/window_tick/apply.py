@@ -282,6 +282,7 @@ async def _maybe_check_passive_shell(
     # Lazy: shell_capture is registered via callback_registry; importing
     # at top forms apply → shell_capture → polling cycle through the
     # shell prompt approval keyboard.
+    # Lazy: shell.shell_capture imports apply indirectly through the broker
     from ...shell.shell_capture import check_passive_shell_output
 
     await check_passive_shell_output(

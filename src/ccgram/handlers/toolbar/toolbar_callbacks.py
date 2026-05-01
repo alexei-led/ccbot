@@ -94,7 +94,10 @@ async def _builtin_screenshot(
     # Lazy: live.screenshot_callbacks is registered through the callback
     # registry; importing at top forms toolbar ↔ live cycle via shared
     # callback_data symbols.
+    # Lazy: avoid pulling the full handlers.callback_data tree at module load
     from ..callback_data import CB_STATUS_SCREENSHOT
+
+    # Lazy: live ↔ toolbar cycle
     from ..live.screenshot_callbacks import handle_screenshot_callback
 
     user = update.effective_user
@@ -131,6 +134,8 @@ async def _builtin_live(
     """Builtin: start the live view via the existing screenshot dispatcher."""
     # Lazy: same toolbar ↔ live cycle as _builtin_screenshot.
     from ..callback_data import CB_LIVE_START
+
+    # Lazy: live ↔ toolbar cycle
     from ..live.screenshot_callbacks import handle_screenshot_callback
 
     user = update.effective_user
@@ -169,7 +174,10 @@ async def _builtin_send(
         return
     # Lazy: telegram_client wraps PTB Bot; send subpackage in turn pulls
     # the directory browser machinery.  Keep both at call site.
+    # Lazy: PTBTelegramClient resolved per-call
     from ...telegram_client import PTBTelegramClient
+
+    # Lazy: handlers.send subpackage cycle
     from ..send import open_file_browser
 
     await open_file_browser(

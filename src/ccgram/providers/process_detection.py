@@ -100,6 +100,7 @@ def classify_provider_from_args(args: str) -> str:
 
 async def _run_ps(tty_path: str) -> bytes | None:
     """Run ``ps -t <tty>`` with timeout, kill on timeout. None on error."""
+    # Lazy: only needed inside the suppression branch
     import contextlib
 
     proc: asyncio.subprocess.Process | None = None

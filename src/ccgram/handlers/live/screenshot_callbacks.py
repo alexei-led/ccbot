@@ -377,8 +377,13 @@ async def screenshot_command(
     # Lazy: command-handler entry; loaded by callback_registry.  Hoisting
     # config / utils / message_sender pulls handler registration into
     # this module's import graph and breaks reset-for-testing.
+    # Lazy: config singleton resolved at call time so tests can swap it
     from ...config import config
+
+    # Lazy: utils pulls in chat-id helpers that reach back into handlers
     from ...utils import handle_general_topic_message, is_general_topic
+
+    # Lazy: messaging_pipeline ↔ live cycle through status_bubble
     from ..messaging_pipeline.message_sender import safe_reply
 
     user = update.effective_user
@@ -418,6 +423,7 @@ async def screenshot_command(
         await safe_reply(update.message, "\u274c Failed to capture terminal.")
         return
 
+    # Lazy: only needed when rendering the screenshot payload
     import io
 
     png_bytes = await text_to_image(pane_text, with_ansi=True)
@@ -441,9 +447,16 @@ async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
     """Open auto-refreshing live terminal view directly, skipping the screenshot step."""
     # Lazy: same callback-registry contract as screenshot_command, plus
     # the live_view ↔ screenshot_callbacks cycle.
+    # Lazy: config singleton resolved at call time so tests can swap it
     from ...config import config
+
+    # Lazy: utils pulls in chat-id helpers that reach back into handlers
     from ...utils import handle_general_topic_message, is_general_topic
+
+    # Lazy: messaging_pipeline ↔ live cycle through status_bubble
     from ..messaging_pipeline.message_sender import safe_reply
+
+    # Lazy: live_view registers callbacks against this module on import
     from .live_view import (
         LiveViewState,
         build_live_keyboard,
@@ -526,10 +539,19 @@ async def panes_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     # Lazy: same callback-registry contract as screenshot_command.
     from telegram import InlineKeyboardMarkup
 
+    # Lazy: config singleton resolved at call time so tests can swap it
     from ...config import config
+
+    # Lazy: utils pulls in chat-id helpers that reach back into handlers
     from ...utils import handle_general_topic_message, is_general_topic
+
+    # Lazy: window_state_store proxy not yet wired at module load
     from ...window_state_store import window_store
+
+    # Lazy: messaging_pipeline ↔ live cycle through status_bubble
     from ..messaging_pipeline.message_sender import safe_reply
+
+    # Lazy: pane_callbacks ↔ screenshot_callbacks cycle through the toolbar
     from .pane_callbacks import build_pane_buttons, build_pane_lifecycle_button
 
     user = update.effective_user

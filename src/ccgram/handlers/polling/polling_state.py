@@ -133,6 +133,7 @@ class TerminalScreenBuffer:
         """Get or create a ScreenBuffer for a window, resizing if needed."""
         # Lazy: screen_buffer pulls in pyte; only the pyte-based strategy
         # actually uses it, so leaf-level callers stay light.
+        # Lazy: ScreenBuffer constructed lazily so tests can stub it
         from ...screen_buffer import ScreenBuffer
 
         ws = self._poll_state.get_state(window_id)
@@ -160,6 +161,7 @@ class TerminalScreenBuffer:
         """
         # Lazy: terminal_parser imports terminal_parser_v100 (pyte
         # heavyweight) — match the get_screen_buffer pattern.
+        # Lazy: terminal_parser pulls pyte; defer until first parse
         from ...terminal_parser import (
             detect_remote_control,
             format_status_display,
@@ -570,6 +572,7 @@ class PaneStatusStrategy:
         # Lazy: window_state_store wiring runs after polling_state is
         # imported by the registry; keep at call site so the strategy can
         # be unit-tested without a live store.
+        # Lazy: window_state_store proxy not yet wired at module load
         from ...window_state_store import window_store
 
         state = window_store.window_states.get(window_id)
@@ -662,7 +665,10 @@ class PaneStatusStrategy:
         # Lazy: providers/__init__.py reaches back into tmux_manager;
         # keep this resolution at call site to avoid bringing the full
         # provider registry into polling_state's import graph.
+        # Lazy: providers package pulls PTB; defer per-call resolution
         from ...providers import detect_provider_from_command
+
+        # Lazy: window_query proxy resolved per-call
         from ...window_query import get_window_provider
 
         return (
@@ -756,8 +762,13 @@ class PaneStatusStrategy:
         """
         # Lazy: same tmux_manager ↔ providers cycle as
         # _classify_non_active; also avoids registry-import side effects.
+        # Lazy: providers package pulls PTB; defer per-call resolution
         from ...providers import get_provider_for_window
+
+        # Lazy: tmux_manager imports providers eagerly; resolved per-call
         from ...tmux_manager import tmux_manager
+
+        # Lazy: window_query proxy resolved per-call
         from ...window_query import get_window_provider
 
         if self._screen_buffer.is_single_pane_cached(window_id):

@@ -729,6 +729,7 @@ class CodexProvider(JsonlProvider):
         if not sessions_dir.is_dir():
             return None
 
+        # Lazy: only used inside the polling branch below
         import time
 
         age_limit = _TRANSCRIPT_MAX_AGE_SECS if max_age is None else max_age
@@ -766,6 +767,7 @@ class CodexProvider(JsonlProvider):
         session_id: str = "",
         cwd: str = "",
     ) -> str | None:
+        # Lazy: codex_status pulls transcript parsers; defer until polling tick
         from ccgram.providers.codex_status import build_codex_status_snapshot
 
         return build_codex_status_snapshot(
@@ -776,6 +778,7 @@ class CodexProvider(JsonlProvider):
         )
 
     def has_output_since(self, transcript_path: str, offset: int) -> bool:
+        # Lazy: codex_status pulls transcript parsers; defer until polling tick
         from ccgram.providers.codex_status import has_codex_assistant_output_since
 
         return has_codex_assistant_output_since(transcript_path, offset)

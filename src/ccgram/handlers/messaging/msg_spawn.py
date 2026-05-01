@@ -66,6 +66,7 @@ async def handle_spawn_approval(
 
     # Lazy: handle_spawn_approval is reached only via the periodic spawn
     # scan; keep config out of the cold import path.
+    # Lazy: config singleton accessed when the spawn request is handled
     from ...config import config
 
     if window_query.window_count() >= config.msg_max_windows:
@@ -188,6 +189,7 @@ async def _create_topic_for_spawn(
 ) -> None:
     # Lazy: topic_orchestration participates in the sync_command ↔
     # topic_orchestration cycle (see topic_orchestration.py for context).
+    # Lazy: msg_spawn ↔ topic_orchestration cycle through topic creation
     from ..topics.topic_orchestration import collect_target_chats, create_topic_in_chat
 
     target_chats = collect_target_chats(window_id)
@@ -215,6 +217,7 @@ async def _handle_spawn_callback(
     update: Update,
     _context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
+    # Lazy: only used inside the suppression branch below
     import contextlib as _contextlib
 
     query = update.callback_query

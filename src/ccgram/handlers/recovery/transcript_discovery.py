@@ -111,7 +111,10 @@ def _resolve_providers_to_try(
     # recovery.transcript_discovery → polling_state partial-init
     # cycle (worker-order-dependent; verified during F6.2). polling_types
     # is leaf-level — Task 5 of Round 5 may hoist this once cycle test covers it.
+    # Lazy: polling_types is leaf-pure; importing here at module load would touch the polling subpackage __init__
     from ..polling.polling_types import is_shell_prompt
+
+    # Lazy: providers registry reaches back through transcripts
     from ...providers import registry
 
     if state.provider_name:
@@ -194,6 +197,8 @@ async def discover_and_register_transcript(
     """
     # Lazy: same polling/__init__ cycle as _resolve_providers_to_try.
     from ..polling.polling_types import is_shell_prompt
+
+    # Lazy: thread_router proxy resolved when transcript discovery is invoked
     from ...thread_router import thread_router
 
     state = window_store.window_states.get(window_id)

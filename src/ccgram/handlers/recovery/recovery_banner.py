@@ -193,6 +193,7 @@ async def _create_and_bind_window(
     thread_router.unbind_thread(user_id, thread_id)
     # Lazy: polling_state → recovery_banner via callback_registry
     # side effects.
+    # Lazy: polling.polling_state pulls heavy strategy stack; defer per-call
     from ..polling.polling_state import lifecycle_strategy
 
     lifecycle_strategy.clear_dead_notification(user_id, thread_id)
@@ -458,6 +459,8 @@ async def _handle_browse(
 
     # Lazy: sibling cycle — resume_command imports from this package.
     from ..user_state import RESUME_SESSIONS
+
+    # Lazy: recovery_banner ↔ resume_command cycle through the picker
     from .resume_command import _build_resume_keyboard, scan_all_sessions
 
     old_wid = data[len(CB_RECOVERY_BROWSE) :]
@@ -500,6 +503,7 @@ async def _handle_cancel(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_RECOVERY_CANCEL: cancel recovery."""
+    # Lazy: callback_helpers ↔ recovery cycle
     from ..callback_helpers import get_thread_id
 
     thread_id = get_thread_id(update)

@@ -296,7 +296,10 @@ async def topic_edited_handler(
 
     # Lazy: same callback_helpers cycle plus status.topic_emoji ↔ topics
     # cycle through emoji refresh callbacks.
+    # Lazy: handlers.callback_helpers / handlers.status cycle
     from ..callback_helpers import get_thread_id
+
+    # Lazy: handlers.callback_helpers / handlers.status cycle
     from ..status.topic_emoji import strip_emoji_prefix, update_stored_topic_name
 
     thread_id = get_thread_id(update)

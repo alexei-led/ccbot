@@ -30,6 +30,7 @@ _WARNED_INVALID_MODE = False
 def _get_prompt_mode() -> str:
     """Return the configured prompt mode (``wrap`` or ``replace``)."""
     global _WARNED_INVALID_MODE  # noqa: PLW0603
+    # Lazy: config singleton resolved at call time
     from ccgram.config import config
 
     mode = getattr(config, "prompt_mode", "wrap") or "wrap"
@@ -47,6 +48,7 @@ def _get_prompt_mode() -> str:
 
 def _get_marker_prefix() -> str:
     """Return the configured prompt marker prefix (used in ``replace`` mode)."""
+    # Lazy: config singleton resolved at call time
     from ccgram.config import config
 
     return getattr(config, "prompt_marker", _DEFAULT_MARKER) or _DEFAULT_MARKER
@@ -147,6 +149,7 @@ async def detect_pane_shell(window_id: str) -> str:
     Falls back to ``get_shell_name()`` when the pane is unavailable or
     its command is not a recognized shell.
     """
+    # Lazy: tmux_manager pulls providers; resolved per-call
     from ccgram.tmux_manager import tmux_manager
 
     window = await tmux_manager.find_window_by_id(window_id)
@@ -222,6 +225,7 @@ async def _is_interactive_shell(window_id: str) -> bool:
     Returns True if the shell looks interactive, False if it's running a script
     or if detection fails (fail-safe: don't send C-c to unknown targets).
     """
+    # Lazy: tmux_manager pulls providers; resolved per-call
     from ccgram.tmux_manager import tmux_manager
 
     w = await tmux_manager.find_window_by_id(window_id)
@@ -230,6 +234,7 @@ async def _is_interactive_shell(window_id: str) -> bool:
 
     # Lazy: process_detection runs `ps` subprocesses; only loaded when an
     # interactive-shell pane is being verified.
+    # Lazy: only needed when reading TTY foreground processes
     from .process_detection import get_foreground_args
 
     args, _ = await get_foreground_args(w.pane_tty)
@@ -266,6 +271,7 @@ async def setup_shell_prompt(
     tests — default to ``tmux_manager.capture_pane`` and
     ``tmux_manager.send_keys`` so production callers need no changes.
     """
+    # Lazy: config singleton resolved at call time
     from ccgram.config import config
 
     # Never send prompt setup to ccgram's own window — the C-c would kill the bot

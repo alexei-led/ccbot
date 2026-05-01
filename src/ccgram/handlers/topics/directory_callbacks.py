@@ -433,6 +433,7 @@ async def _handle_provider_select(
     Providers without a YOLO flag (e.g. shell) skip the mode picker
     and go directly to window creation with approval_mode="normal".
     """
+    # Lazy: providers package heavy bootstrap
     from ccgram.providers import has_yolo_mode
 
     provider_name = data[len(CB_PROV_SELECT) :]
@@ -478,8 +479,10 @@ def _parse_mode_select(data: str) -> tuple[str, str] | None:
 
 async def _wait_for_shell_ready(window_id: str, *, attempts: int = 5) -> None:
     """Wait for a freshly created tmux window to show a shell prompt."""
+    # Lazy: only needed inside the shell-detection branch
     import os
 
+    # Lazy: providers package heavy bootstrap
     from ccgram.providers.shell import KNOWN_SHELLS
 
     for _ in range(attempts):
@@ -544,6 +547,7 @@ async def _create_window_and_bind(
     Shared by _handle_mode_select (after mode picker) and _handle_provider_select
     (when mode picker is skipped for providers without YOLO flags).
     """
+    # Lazy: providers package heavy bootstrap
     from ccgram.providers import resolve_launch_command
 
     pending_thread_id: int | None = (

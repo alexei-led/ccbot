@@ -257,6 +257,7 @@ async def _handle_resume_pick(
     # Lazy: sibling cycle — recovery_banner imports from this module
     # for scan_sessions_for_cwd; the picker only needs banner's window
     # creation helper at the moment of selection.
+    # Lazy: resume_picker ↔ recovery_banner cycle
     from .recovery_banner import _create_and_bind_window
 
     idx_str = data[len(CB_RECOVERY_PICK) :]

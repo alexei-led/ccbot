@@ -93,6 +93,7 @@ class SessionMonitor:
         ) = None
         # Lazy: providers.base imports HookEvent and gets imported back
         # through tmux_manager → providers; keep at call site.
+        # Lazy: HookEvent pulled by hook dispatch path; defer until that path runs
         from .providers.base import HookEvent
 
         self._hook_event_callback: Callable[[HookEvent], Awaitable[None]] | None = None
@@ -287,6 +288,7 @@ class SessionMonitor:
         adoption_windows = dict(result.new_windows)
         # Lazy: thread_router is wired into session_manager which imports
         # session_monitor; hoisting forms a startup cycle.
+        # Lazy: proxies wired by SessionManager constructor
         from .thread_router import thread_router
 
         for window_id, details in result.changed_windows.items():
@@ -323,6 +325,7 @@ class SessionMonitor:
 
         # Lazy: session_map imports session_monitor types via shared
         # state cycle; keep at call site.
+        # Lazy: proxies wired by SessionManager constructor
         from .session_map import session_map_sync
 
         await self._cleanup_all_stale_sessions()

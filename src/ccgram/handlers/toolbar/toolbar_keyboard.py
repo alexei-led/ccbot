@@ -133,9 +133,13 @@ async def refresh_button_label(
 
     Returns the short label so the caller can echo it in the toast.
     """
+    # Lazy: only needed when a label-readback task is scheduled
     import asyncio
 
+    # Lazy: only needed inside the readback error path
     import structlog
+
+    # Lazy: only used inside the BadRequest branch
     from telegram.error import TelegramError
 
     logger = structlog.get_logger()

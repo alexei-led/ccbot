@@ -97,6 +97,7 @@ async def _detect_and_setup_provider(
     """
     # Lazy: providers/__init__ loads process_detection (subprocess fork)
     # eagerly; gate behind actual adoption.
+    # Lazy: providers package heavy bootstrap
     from ...providers import detect_provider_from_pane
 
     detected = (

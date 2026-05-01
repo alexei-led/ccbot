@@ -172,6 +172,7 @@ async def summarize_completion(transcript_path: str) -> str | None:
     # Lazy: llm/__init__.py wires httpx + provider configs; loading it
     # only when a summary is actually requested keeps the monitor's
     # import path light.
+    # Lazy: get_text_completer factory; cycle with provider registration
     from . import get_text_completer
 
     completer = get_text_completer()

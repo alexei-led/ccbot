@@ -39,13 +39,17 @@ async def status_poll_loop(bot: "Bot") -> None:
     # Lazy: status_poll_loop is launched once during bootstrap; keep the
     # config + telegram_client imports tied to the call site so the
     # polling package's cold path does not pull PTB.
+    # Lazy: config singleton resolved at call time
     from ...config import config as _cfg
+
+    # Lazy: PTBTelegramClient wraps the live PTB bot — resolved per-tick
     from ...telegram_client import PTBTelegramClient
 
     # Lazy: periodic_tasks transitively imports topics.topic_lifecycle,
     # which imports polling_state. Hoisting forms a cycle through
     # polling/__init__.py whenever a module reaches polling_state
     # before polling_coordinator finishes loading.
+    # Lazy: periodic_tasks ↔ coordinator cycle
     from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 
     poll_interval = _cfg.status_poll_interval

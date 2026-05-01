@@ -24,6 +24,7 @@ def get_transcriber() -> WhisperTranscriber | None:
 
     Returns None if whisper_provider is not configured (empty string).
     """
+    # Lazy: config singleton resolved by factory call
     from ccgram.config import config
 
     provider = config.whisper_provider

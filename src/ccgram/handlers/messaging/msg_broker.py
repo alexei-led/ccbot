@@ -213,8 +213,13 @@ async def broker_delivery_cycle(
     # Lazy: msg_broker is registered as a periodic-task coroutine; these
     # cross-package imports are kept at call site so the registry import
     # path stays free of provider / window_resolver weight.
+    # Lazy: providers / window_query proxies wired by SessionManager constructor
     from ...providers import get_provider_for_window
+
+    # Lazy: providers / window_query proxies wired by SessionManager constructor
     from ...window_query import get_window_provider
+
+    # Lazy: providers / window_query proxies wired by SessionManager constructor
     from ...window_resolver import is_foreign_window
 
     _recover_stale_pending(mailbox)

@@ -165,6 +165,7 @@ def run_bot() -> None:
 
     logger = structlog.get_logger()
 
+    # Lazy: main runs `ccgram` startup; defer imports until the relevant subcommand executes
     from .tmux_manager import tmux_manager
 
     logger.info("Allowed users: %s", config.allowed_users)
@@ -182,10 +183,12 @@ def run_bot() -> None:
 
     logger.info("Tmux session '%s' ready", session.session_name)
 
+    # Lazy: main runs `ccgram` startup; defer imports until the relevant subcommand executes
     from . import __version__
 
     dev = "+dev" if "+unknown" in __version__ or ".dev" in __version__ else ""
     logger.info("Starting ccgram %s%s", __version__, dev)
+    # Lazy: main runs `ccgram` startup; defer imports until the relevant subcommand executes
     from .bot import create_bot
 
     application = create_bot()
@@ -214,6 +217,7 @@ async def start_miniapp_if_enabled() -> None:
     if _miniapp_runner is not None:
         return
 
+    # Lazy: main runs `ccgram` startup; defer imports until the relevant subcommand executes
     from .config import config
 
     if not config.miniapp_base_url:
@@ -259,6 +263,7 @@ async def stop_miniapp_if_enabled() -> None:
 
 def main() -> None:
     """Main entry point — dispatches via Click CLI group."""
+    # Lazy: main runs `ccgram` startup; defer imports until the relevant subcommand executes
     from .cli import cli
 
     cli()

@@ -4,59 +4,44 @@ Regression guard for round-4 modularity decouple (F6.2): hoisting in-function
 imports to module level can introduce import cycles that don't surface in the
 in-process test suite (other tests warm caches first). A fresh subprocess
 catches a cycle that the in-process suite would miss.
+
+Round 5 expands the parametrize list from a hand-maintained set of 29 modules
+to a programmatic walk that yields every top-level ``src/ccgram/*.py`` file
+plus every package under ``src/ccgram/`` (one entry per ``__init__``).
 """
+
+from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.integration
 
 
-_MODULES = [
-    "ccgram",
-    "ccgram.bot",
-    "ccgram.bootstrap",
-    "ccgram.telegram_client",
-    "ccgram.session",
-    "ccgram.session_map",
-    "ccgram.session_monitor",
-    "ccgram.tmux_manager",
-    "ccgram.handlers",
-    "ccgram.handlers.callback_registry",
-    "ccgram.handlers.registry",
-    "ccgram.handlers.cleanup",
-    "ccgram.handlers.command_history",
-    "ccgram.handlers.commands",
-    "ccgram.handlers.commands.failure_probe",
-    "ccgram.handlers.commands.forward",
-    "ccgram.handlers.commands.menu_sync",
-    "ccgram.handlers.commands.status_snapshot",
-    "ccgram.handlers.hook_events",
-    "ccgram.handlers.inline",
-    "ccgram.handlers.interactive",
-    "ccgram.handlers.live",
-    "ccgram.handlers.messaging",
-    "ccgram.handlers.messaging_pipeline",
-    "ccgram.handlers.polling",
-    "ccgram.handlers.polling.polling_types",
-    "ccgram.handlers.polling.polling_state",
-    "ccgram.handlers.polling.window_tick",
-    "ccgram.handlers.polling.window_tick.decide",
-    "ccgram.handlers.polling.window_tick.observe",
-    "ccgram.handlers.polling.window_tick.apply",
-    "ccgram.handlers.recovery",
-    "ccgram.handlers.send",
-    "ccgram.handlers.shell",
-    "ccgram.handlers.status",
-    "ccgram.handlers.text",
-    "ccgram.handlers.toolbar",
-    "ccgram.handlers.topics",
-    "ccgram.handlers.voice",
-    "ccgram.providers",
-    "ccgram.miniapp",
-]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SRC = _REPO_ROOT / "src" / "ccgram"
+
+
+def _walk_package(pkg_path: Path, dotted: str) -> Iterator[str]:
+    yield dotted
+    for entry in sorted(pkg_path.iterdir()):
+        if entry.name.startswith("_"):
+            continue
+        if entry.is_file() and entry.suffix == ".py":
+            yield f"{dotted}.{entry.stem}"
+        elif entry.is_dir() and (entry / "__init__.py").exists():
+            yield from _walk_package(entry, f"{dotted}.{entry.name}")
+
+
+def _enumerate_modules() -> Iterator[str]:
+    yield from _walk_package(_SRC, "ccgram")
+
+
+_MODULES = sorted(set(_enumerate_modules()))
 
 
 @pytest.mark.parametrize("module", _MODULES)

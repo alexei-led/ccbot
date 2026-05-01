@@ -82,6 +82,7 @@ def _prefer_existing_primary(
     # top; hoisting forms session → session_map → window_state_store →
     # session cycle.  Lazy import also guarantees the store has been
     # wired via install_window_store before access.
+    # Lazy: window_state_store / thread_router proxies wired by SessionManager constructor
     from .window_state_store import window_store
 
     state = window_store.window_states.get(window_id)
@@ -278,7 +279,10 @@ class SessionMapSync:
         """
         # Lazy: same session ↔ session_map ↔ stores cycle as
         # _prefer_existing_primary; both stores must be installed.
+        # Lazy: window_state_store / thread_router proxies wired by SessionManager constructor
         from .thread_router import thread_router
+
+        # Lazy: window_state_store / thread_router proxies wired by SessionManager constructor
         from .window_state_store import window_store
 
         bound_wids = {
@@ -559,6 +563,8 @@ class SessionMapSync:
         """
         # Lazy: same cycle + wiring contract as _prefer_existing_primary.
         from .thread_router import thread_router
+
+        # Lazy: window_state_store / thread_router proxies wired by SessionManager constructor
         from .window_state_store import window_store
 
         effective = effective_session_map_info(window_id, info)

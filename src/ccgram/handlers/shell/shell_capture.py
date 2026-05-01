@@ -391,6 +391,7 @@ async def _maybe_suggest_fix(
 
     # Lazy: sibling cycle — shell_context imports providers.shell which
     # touches shell_capture state.
+    # Lazy: shell_capture ↔ shell_context cycle
     from .shell_context import gather_llm_context, redact_for_llm
 
     ctx = await gather_llm_context(window_id)

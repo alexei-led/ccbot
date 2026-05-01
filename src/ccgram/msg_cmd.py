@@ -125,6 +125,7 @@ def _build_message_context(my_id: str) -> dict[str, str]:
 
 def _load_window_states() -> dict[str, WindowInfo]:
     """Load window states from state.json."""
+    # Lazy: msg_discovery ↔ msg_cmd cycle through CLI registration
     from .msg_discovery import export_window_info
 
     return export_window_info()
@@ -225,6 +226,7 @@ def msg_group() -> None:
 )
 def list_peers_cmd(as_json: bool) -> None:
     """List all known peer agent windows."""
+    # Lazy: msg_discovery ↔ msg_cmd cycle through CLI registration
     from .msg_discovery import list_peers
 
     window_states = _load_window_states()
@@ -252,6 +254,7 @@ def find_cmd(
     provider: str | None, team: str | None, cwd: str | None, as_json: bool
 ) -> None:
     """Find peers matching filters."""
+    # Lazy: msg_discovery ↔ msg_cmd cycle through CLI registration
     from .msg_discovery import list_peers
 
     window_states = _load_window_states()
@@ -412,6 +415,7 @@ def broadcast_cmd(
     ttl: int | None,
 ) -> None:
     """Broadcast a message to all matching peers."""
+    # Lazy: msg_discovery ↔ msg_cmd cycle through CLI registration
     from .msg_discovery import list_peers
 
     my_id = _get_my_window_id()
@@ -459,6 +463,7 @@ def broadcast_cmd(
 @click.option("--team", default=None, help="Team name.")
 def register_cmd(task: str | None, team: str | None) -> None:
     """Register self-declared metadata (task, team)."""
+    # Lazy: msg_discovery ↔ msg_cmd cycle through CLI registration
     from .msg_discovery import register_declared
 
     if task is None and team is None:
@@ -495,6 +500,7 @@ def spawn_cmd(
     auto: bool,
 ) -> None:
     """Request spawning a new agent window."""
+    # Lazy: spawn request module pulls PTB indirectly
     from .spawn_request import (
         check_max_windows,
         check_spawn_rate,

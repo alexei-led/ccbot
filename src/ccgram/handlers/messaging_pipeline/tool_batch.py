@@ -313,7 +313,10 @@ async def _send_or_edit_batch(
     # Lazy: status_bubble is registered as a callback target via the
     # registry; importing it at top forms tool_batch ↔ status_bubble
     # through the messaging_pipeline subpackage's __init__ chain.
+    # Lazy: claude_task_state import is provider-specific; resolved per-call
     from ...claude_task_state import build_subagent_label, get_subagent_names
+
+    # Lazy: status ↔ messaging_pipeline cycle
     from ..status.status_bubble import clear_status_message
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))
@@ -340,6 +343,7 @@ async def _rate_limit_chat(chat_id: int) -> None:
     """Acquire the per-chat rate-limit slot before opening a new draft."""
     # Lazy: sibling import — message_sender ↔ tool_batch via
     # messaging_pipeline/__init__.
+    # Lazy: avoids tool_batch ↔ message_sender cycle through the queue worker
     from .message_sender import rate_limit_send
 
     await rate_limit_send(chat_id)
@@ -478,6 +482,7 @@ async def flush_batch(
     client: TelegramClient, user_id: int, thread_id_or_0: int
 ) -> None:
     """Finalize the active batch: do a final edit and clear state."""
+    # Lazy: only used inside the API error branch
     from telegram.error import TelegramError
 
     bkey = (user_id, thread_id_or_0)
@@ -490,6 +495,7 @@ async def flush_batch(
 
     # Lazy: claude_task_state imports session readers; deferring keeps
     # this module's cold path tied only to the queue.
+    # Lazy: claude_task_state import is provider-specific; resolved per-call
     from ...claude_task_state import build_subagent_label, get_subagent_names
 
     subagent_label = build_subagent_label(get_subagent_names(batch.window_id))

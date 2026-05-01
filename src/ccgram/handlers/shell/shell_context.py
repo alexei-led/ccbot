@@ -58,6 +58,7 @@ async def gather_llm_context(window_id: str) -> dict[str, str]:
     """Gather cwd, shell type, and available tools for LLM calls."""
     # Lazy: providers.shell pulls in shell_infra; load only when context
     # is actually requested (LLM-enabled topics).
+    # Lazy: providers.shell heavy bootstrap
     from ...providers.shell import detect_pane_shell
 
     shell = await detect_pane_shell(window_id)

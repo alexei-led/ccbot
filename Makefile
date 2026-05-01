@@ -1,10 +1,13 @@
-.PHONY: fmt lint test test-integration test-integration-llm test-e2e test-all typecheck deptry check install dev build clean
+.PHONY: fmt lint lint-lazy test test-integration test-integration-llm test-e2e test-all typecheck deptry check install dev build clean
 
 fmt:
 	uv run ruff format src/ tests/
 
-lint:
+lint: lint-lazy
 	uv run ruff check src/ tests/
+
+lint-lazy:
+	uv run python scripts/lint_lazy_imports.py
 
 typecheck:
 	uv run pyright src/ccgram/ tests/

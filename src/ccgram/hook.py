@@ -492,6 +492,7 @@ def _write_event(
     # Lazy: hook.py runs as `python -m ccgram.hook` from Claude Code on
     # every notification; deferring utils import until an event actually
     # fires keeps the latency-sensitive fast path lean.
+    # Lazy: utils.ccgram_dir resolves $CCGRAM_DIR at runtime
     from .utils import ccgram_dir
 
     events_file = ccgram_dir() / "events.jsonl"

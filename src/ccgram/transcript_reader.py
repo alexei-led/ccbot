@@ -278,6 +278,7 @@ class TranscriptReader:
         """Get normalized cwds of all active tmux windows."""
         # Lazy: tmux_manager imports providers which transitively imports
         # transcript_reader through provider format modules.
+        # Lazy: tmux_manager pulls providers eagerly; defer until pane lookup runs
         from .tmux_manager import tmux_manager
 
         cwds: set[str] = set()

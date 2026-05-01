@@ -108,7 +108,10 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
     label = NOTIFY_MODE_LABELS.get(new_mode, new_mode)
     # Lazy: polling_state → status_bar_actions via callback registry,
     # and status_bubble is a sibling — both kept lazy.
+    # Lazy: polling subpackage pulls strategies; defer per-call
     from ..polling.polling_state import terminal_screen_buffer
+
+    # Lazy: status_bar_actions ↔ status_bubble sibling cycle
     from .status_bubble import build_status_keyboard
 
     keyboard = build_status_keyboard(
@@ -162,6 +165,7 @@ async def _handle_status_recall(
 
     # Lazy: command_history → messaging_pipeline → status → status_bar_actions
     # forms a cycle when imported at module top. Keep lazy.
+    # Lazy: command_history ↔ status cycle
     from ..command_history import get_history, record_command
 
     history = get_history(user_id, thread_id, limit=idx + 1)
@@ -272,6 +276,7 @@ async def _handle_keys(
 
     # Lazy: live_view ↔ screenshot_callbacks ↔ status pair through the
     # screenshot keyboard wiring.
+    # Lazy: live ↔ status cycle
     from ..live.live_view import get_live_view
 
     thread_id = get_thread_id(update)

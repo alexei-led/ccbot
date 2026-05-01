@@ -125,6 +125,7 @@ async def handle_recovery_callback(
     # Lazy: sibling cycle — recovery_banner / resume_picker import the
     # validators above, so importing them at module load would create a
     # cycle.
+    # Lazy: dispatcher → handler-module cycle (siblings register on import)
     from .recovery_banner import (
         _handle_back,
         _handle_browse,
@@ -133,6 +134,8 @@ async def handle_recovery_callback(
         _handle_fresh,
         _handle_resume,
     )
+
+    # Lazy: dispatcher → handler-module cycle (siblings register on import)
     from .resume_picker import _handle_resume_pick
 
     # Order matters: CB_RECOVERY_BROWSE ("rec:br:") shares its prefix with

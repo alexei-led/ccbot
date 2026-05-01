@@ -286,6 +286,7 @@ async def _handle_stop_failure(event: HookEvent, client: TelegramClient) -> None
     """Handle a StopFailure event — alert on API error termination."""
     # Lazy: messaging_pipeline.message_sender pulls in safe_reply wiring
     # which transitively reaches hook_events for completion summaries.
+    # Lazy: messaging_pipeline imports hook_events indirectly via the dispatch chain
     from .messaging_pipeline.message_sender import rate_limit_send_message
 
     users = _resolve_users_for_window_key(event.window_key)
