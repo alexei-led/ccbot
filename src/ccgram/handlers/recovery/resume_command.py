@@ -33,6 +33,7 @@ from ...providers import get_provider, get_provider_for_window, resolve_launch_c
 from ... import window_query
 from ...session import session_manager
 from ...session_map import session_map_sync
+from ...telegram_client import PTBTelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
@@ -470,8 +471,9 @@ async def _handle_pick(
         thread_router.set_group_chat_id(user_id, thread_id, chat.id)
 
     # Rename topic to match the window
+    client = PTBTelegramClient(context.bot)
     try:
-        await context.bot.edit_forum_topic(
+        await client.edit_forum_topic(
             chat_id=thread_router.resolve_chat_id(user_id, thread_id),
             message_thread_id=thread_id,
             name=format_topic_name_for_mode(

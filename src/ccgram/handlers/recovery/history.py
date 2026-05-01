@@ -12,14 +12,14 @@ import structlog
 from datetime import datetime
 from typing import Any
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-from ...telegram_client import PTBTelegramClient
 
 from ...expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from ... import session_query, window_query
 from ...config import config
 from ...providers import get_provider_for_window
+from ...telegram_client import TelegramClient
 from ...user_preferences import user_preferences
 from ...thread_router import thread_router
 from ...telegram_sender import split_message
@@ -94,7 +94,7 @@ async def send_history(
     start_byte: int = 0,
     end_byte: int = 0,
     user_id: int | None = None,
-    bot: Bot | None = None,
+    client: TelegramClient | None = None,
     message_thread_id: int | None = None,
 ) -> None:
     """Send or edit message history for a window's session.
@@ -108,7 +108,8 @@ async def send_history(
         start_byte: Start byte offset (0 = from beginning).
         end_byte: End byte offset (0 = to end of file).
         user_id: User ID for updating read offset (required for unread mode).
-        bot: Bot instance for direct send mode (when edit=False and bot is provided).
+        client: Telegram client for direct send mode (when edit=False and
+            client is provided).
         message_thread_id: Telegram topic thread_id for targeted send.
     """
     display_name = thread_router.get_display_name(window_id)
@@ -192,10 +193,10 @@ async def send_history(
 
     if edit:
         await safe_edit(target, text, reply_markup=keyboard)
-    elif bot is not None and user_id is not None:
+    elif client is not None and user_id is not None:
         # Direct send mode (for unread catch-up after window switch)
         await safe_send(
-            PTBTelegramClient(bot),
+            client,
             thread_router.resolve_chat_id(user_id, message_thread_id),
             text,
             message_thread_id=message_thread_id,

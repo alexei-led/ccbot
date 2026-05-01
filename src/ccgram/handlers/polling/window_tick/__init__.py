@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ....telegram_client import PTBTelegramClient
 from ...messaging_pipeline.message_queue import get_message_queue
 from ...recovery.transcript_discovery import discover_and_register_transcript
 from ..polling_strategies import (
@@ -82,7 +83,7 @@ async def tick_window(
     await discover_and_register_transcript(
         window_id,
         _window=window,
-        bot=bot,
+        client=PTBTelegramClient(bot),
         user_id=user_id,
         thread_id=thread_id,
     )

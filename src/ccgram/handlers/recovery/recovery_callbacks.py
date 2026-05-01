@@ -33,6 +33,7 @@ from ...providers import get_provider, get_provider_for_window, resolve_launch_c
 from ... import window_query
 from ...session import session_manager
 from ...session_map import session_map_sync
+from ...telegram_client import PTBTelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import send_to_window, tmux_manager
 from ...utils import read_session_metadata_from_jsonl
@@ -513,8 +514,9 @@ async def _create_and_bind_window(
     if chat and chat.type in ("group", "supergroup"):
         thread_router.set_group_chat_id(user_id, thread_id, chat.id)
 
+    client = PTBTelegramClient(context.bot)
     try:
-        await context.bot.edit_forum_topic(
+        await client.edit_forum_topic(
             chat_id=thread_router.resolve_chat_id(user_id, thread_id),
             message_thread_id=thread_id,
             name=format_topic_name_for_mode(created_wname, approval_mode),
@@ -533,10 +535,8 @@ async def _create_and_bind_window(
         send_ok, send_msg = await send_to_window(created_wid, pending_text)
         if not send_ok:
             logger.warning("Failed to forward pending text: %s", send_msg)
-            from ...telegram_client import PTBTelegramClient
-
             await safe_send(
-                PTBTelegramClient(context.bot),
+                client,
                 thread_router.resolve_chat_id(user_id, thread_id),
                 f"\u274c Failed to send pending message: {send_msg}",
                 message_thread_id=thread_id,

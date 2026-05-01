@@ -25,13 +25,11 @@ from ...providers import (
 )
 from ...session import session_manager
 from ...session_map import session_map_sync
+from ...telegram_client import TelegramClient, unwrap_bot
 from ...tmux_manager import tmux_manager
 from ...window_resolver import is_foreign_window
-from ..polling.polling_strategies import is_shell_prompt
 
 if TYPE_CHECKING:
-    from telegram import Bot
-
     from ...providers.base import AgentProvider
     from ...session import WindowState
     from ...tmux_manager import TmuxWindow
@@ -44,7 +42,7 @@ async def _detect_and_apply_provider(
     state: "WindowState",
     w: "TmuxWindow",
     *,
-    bot: "Bot | None" = None,
+    client: TelegramClient | None = None,
     chat_id: int = 0,
     thread_id: int = 0,
 ) -> None:
@@ -77,7 +75,7 @@ async def _detect_and_apply_provider(
             await ensure_setup(
                 window_id,
                 "provider_switch",
-                bot=bot,
+                bot=unwrap_bot(client) if client else None,
                 chat_id=chat_id,
                 thread_id=thread_id,
             )
@@ -103,6 +101,7 @@ def _resolve_providers_to_try(
     Returns a list of (name, provider) pairs, or ``None`` to signal the
     caller should set up a shell provider.
     """
+    from ..polling.polling_strategies import is_shell_prompt
     from ...providers import registry
 
     if state.provider_name:
@@ -174,7 +173,7 @@ async def discover_and_register_transcript(
     window_id: str,
     *,
     _window: "TmuxWindow | None" = None,
-    bot: "Bot | None" = None,
+    client: TelegramClient | None = None,
     user_id: int = 0,
     thread_id: int = 0,
 ) -> None:
@@ -183,6 +182,7 @@ async def discover_and_register_transcript(
     Also handles provider auto-detection from pane process name
     and shell ↔ agent transitions with prompt marker setup.
     """
+    from ..polling.polling_strategies import is_shell_prompt
     from ...thread_router import thread_router
 
     state = session_manager.window_states.get(window_id)
@@ -195,7 +195,7 @@ async def discover_and_register_transcript(
 
     if w and w.pane_current_command:
         await _detect_and_apply_provider(
-            window_id, state, w, bot=bot, chat_id=chat_id, thread_id=thread_id
+            window_id, state, w, client=client, chat_id=chat_id, thread_id=thread_id
         )
 
     if state.provider_name:
@@ -217,7 +217,11 @@ async def discover_and_register_transcript(
         from ..shell.shell_prompt_orchestrator import ensure_setup
 
         await ensure_setup(
-            window_id, "provider_switch", bot=bot, chat_id=chat_id, thread_id=thread_id
+            window_id,
+            "provider_switch",
+            bot=unwrap_bot(client) if client else None,
+            chat_id=chat_id,
+            thread_id=thread_id,
         )
         return
     if not providers_to_try:

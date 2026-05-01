@@ -807,7 +807,7 @@ class TestProviderSwitchPromptSetup:
                 return_value=MagicMock(pane_current_command="fish", cwd="/proj")
             )
             await discover_and_register_transcript(
-                "@7", bot=bot, user_id=1, thread_id=42
+                "@7", client=bot, user_id=1, thread_id=42
             )
 
         mock_sm.set_window_provider.assert_called_once_with("@7", "shell", cwd="/proj")
@@ -856,7 +856,7 @@ class TestProviderSwitchPromptSetup:
                 return_value=MagicMock(pane_current_command="claude", cwd="/proj")
             )
             await discover_and_register_transcript(
-                "@7", bot=bot, user_id=1, thread_id=42
+                "@7", client=bot, user_id=1, thread_id=42
             )
 
         mock_ensure.assert_not_awaited()
@@ -901,7 +901,7 @@ class TestProviderSwitchPromptSetup:
             mock_tmux.get_pane_title = AsyncMock(return_value="")
             mock_config.tmux_session_name = "ccgram"
             await discover_and_register_transcript(
-                "@7", bot=bot, user_id=1, thread_id=42
+                "@7", client=bot, user_id=1, thread_id=42
             )
 
         mock_sm.set_window_provider.assert_called_once_with("@7", "shell")
@@ -1037,7 +1037,7 @@ class TestProviderSwitchChain:
                 )
             )
             await discover_and_register_transcript(
-                "@7", bot=bot, user_id=1, thread_id=42
+                "@7", client=bot, user_id=1, thread_id=42
             )
             assert state.provider_name == "shell"
             assert state.transcript_path == ""
@@ -1055,7 +1055,7 @@ class TestProviderSwitchChain:
                 )
             )
             await discover_and_register_transcript(
-                "@7", bot=bot, user_id=1, thread_id=42
+                "@7", client=bot, user_id=1, thread_id=42
             )
             assert state.provider_name == "gemini"
             mock_clear_capture.assert_called_once_with("@7")
@@ -1071,7 +1071,7 @@ class TestProviderSwitchChain:
                 )
             )
             await discover_and_register_transcript(
-                "@7", bot=bot, user_id=1, thread_id=42
+                "@7", client=bot, user_id=1, thread_id=42
             )
             assert state.provider_name == "shell"
             assert state.transcript_path == ""
