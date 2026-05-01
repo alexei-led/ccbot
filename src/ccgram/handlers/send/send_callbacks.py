@@ -22,6 +22,7 @@ from telegram import Message, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...thread_router import thread_router
 from ..callback_data import (
     CB_SEND_CANCEL,
@@ -44,11 +45,11 @@ from ..user_state import (
 )
 
 
-async def _react_uploaded(bot, sent: Message | None) -> None:
+async def _react_uploaded(client: TelegramClient, sent: Message | None) -> None:
     """Best-effort persistent ✅ on the just-uploaded file message."""
     if sent is None:
         return
-    await react(bot, sent.chat_id, sent.message_id, REACT_DONE)
+    await react(client, sent.chat_id, sent.message_id, REACT_DONE)
 
 
 logger = structlog.get_logger()
@@ -154,14 +155,15 @@ async def _handle_file(
         await query.answer("Cannot determine target chat", show_alert=True)
         return
 
+    client: TelegramClient = PTBTelegramClient(context.bot)
     try:
-        sent = await upload_file(context.bot, chat_id, thread_id, path)
+        sent = await upload_file(client, chat_id, thread_id, path)
     except TelegramError as exc:
         await query.answer(f"Upload failed: {exc}", show_alert=True)
         return
 
     _clear_send_state(context)
-    await _react_uploaded(context.bot, sent)
+    await _react_uploaded(client, sent)
     await query.answer()
     if msg is not None:
         with contextlib.suppress(TelegramError):

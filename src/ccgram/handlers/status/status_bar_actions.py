@@ -31,6 +31,7 @@ from ...miniapp.auth import sign_token
 from ...screenshot import text_to_image
 from ... import window_query
 from ...session import session_manager
+from ...telegram_client import PTBTelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import send_to_window, tmux_manager
 from ...topic_state_registry import topic_state
@@ -115,7 +116,12 @@ async def _handle_notify_toggle(query: CallbackQuery, user_id: int, data: str) -
     bubble = query.message
     react_emoji = NOTIFY_MODE_REACT.get(new_mode)
     if isinstance(bubble, Message) and react_emoji is not None:
-        await react(query.get_bot(), bubble.chat_id, bubble.message_id, react_emoji)
+        await react(
+            PTBTelegramClient(query.get_bot()),
+            bubble.chat_id,
+            bubble.message_id,
+            react_emoji,
+        )
     await query.answer(label)
 
 
@@ -165,7 +171,11 @@ async def _handle_status_recall(
         from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(
-            query.get_bot(), user_id, thread_id, window_id, command
+            PTBTelegramClient(query.get_bot()),
+            user_id,
+            thread_id,
+            window_id,
+            command,
         )
         await query.answer("\u21a9 Recalled")
         return

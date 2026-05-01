@@ -14,11 +14,10 @@ from typing import TYPE_CHECKING
 import structlog
 from telegram.error import TelegramError
 
+from ...telegram_client import TelegramClient
 from .msg_delivery import delivery_strategy
 
 if TYPE_CHECKING:
-    from telegram import Bot
-
     from ...mailbox import Mailbox, Message
     from ...tmux_manager import TmuxManager
 
@@ -191,7 +190,7 @@ async def broker_delivery_cycle(
     window_states: dict,
     tmux_session: str,
     msg_rate_limit: int,
-    bot: "Bot | None" = None,
+    client: "TelegramClient | None" = None,
     idle_windows: frozenset[str] = frozenset(),
 ) -> int:
     """Run one broker delivery cycle.
@@ -199,7 +198,7 @@ async def broker_delivery_cycle(
     Scans all inboxes for pending messages, checks idle windows,
     and injects via send_keys. Returns the number of messages delivered.
 
-    When *bot* is provided, Telegram notifications are sent for
+    When *client* is provided, Telegram notifications are sent for
     delivered messages, shell-pending messages, and loop detection.
     """
     from ...providers import get_provider_for_window
@@ -221,7 +220,7 @@ async def broker_delivery_cycle(
             window_id, provider_name=get_window_provider(window_id)
         )
         if not provider.capabilities.supports_mailbox_delivery:
-            await _deliver_to_shell_topic(bot, mailbox, qualified_id)
+            await _deliver_to_shell_topic(client, mailbox, qualified_id)
             continue
 
         # Hook-enabled providers get delivery via Stop event (hook_events.py).
@@ -233,7 +232,7 @@ async def broker_delivery_cycle(
 
         # Notify Telegram about detected loops
         for window_a, window_b in loops:
-            await _notify_loop(bot, window_a, window_b)
+            await _notify_loop(client, window_a, window_b)
 
         if not to_deliver:
             continue
@@ -253,25 +252,25 @@ async def broker_delivery_cycle(
                 window_id=qualified_id,
                 count=len(to_deliver),
             )
-            await _notify_delivered(bot, qualified_id, to_deliver, mailbox)
-            await _notify_senders(bot, qualified_id, to_deliver)
+            await _notify_delivered(client, qualified_id, to_deliver, mailbox)
+            await _notify_senders(client, qualified_id, to_deliver)
 
     return delivered_count
 
 
 async def _notify_delivered(
-    bot: "Bot | None",
+    client: "TelegramClient | None",
     to_window: str,
     messages: list["Message"],
     mailbox: "Mailbox | None" = None,
 ) -> None:
-    """Send Telegram notification for delivered messages (if bot available)."""
-    if bot is None:
+    """Send Telegram notification for delivered messages (if client available)."""
+    if client is None:
         return
     from .msg_telegram import notify_messages_delivered, notify_reply_received
 
     try:
-        await notify_messages_delivered(bot, to_window, messages)
+        await notify_messages_delivered(client, to_window, messages)
     except OSError, TelegramError:
         logger.debug("Failed to send delivery notification", window=to_window)
 
@@ -281,42 +280,44 @@ async def _notify_delivered(
                 try:
                     original = mailbox.get(msg.reply_to, msg.from_id)
                     if original is not None:
-                        await notify_reply_received(bot, original, msg)
+                        await notify_reply_received(client, original, msg)
                 except OSError, TelegramError:
                     logger.debug("Failed to send reply notification", msg_id=msg.id)
 
 
 async def _notify_senders(
-    bot: "Bot | None",
+    client: "TelegramClient | None",
     to_window: str,
     messages: list["Message"],
 ) -> None:
     """Notify each sender's Telegram topic that their message was delivered."""
-    if bot is None:
+    if client is None:
         return
     from .msg_telegram import notify_message_sent
 
     for msg in messages:
         try:
-            await notify_message_sent(bot, msg.from_id, to_window, msg)
+            await notify_message_sent(client, msg.from_id, to_window, msg)
         except OSError, TelegramError:
             logger.debug("Failed to send sender notification", from_id=msg.from_id)
 
 
-async def _notify_loop(bot: "Bot | None", window_a: str, window_b: str) -> None:
-    """Send Telegram loop detection alert (if bot available)."""
-    if bot is None:
+async def _notify_loop(
+    client: "TelegramClient | None", window_a: str, window_b: str
+) -> None:
+    """Send Telegram loop detection alert (if client available)."""
+    if client is None:
         return
     from .msg_telegram import notify_loop_detected
 
     try:
-        await notify_loop_detected(bot, window_a, window_b)
+        await notify_loop_detected(client, window_a, window_b)
     except OSError, TelegramError:
         logger.debug("Failed to send loop alert", window_a=window_a, window_b=window_b)
 
 
 async def _deliver_to_shell_topic(
-    bot: "Bot | None", mailbox: "Mailbox", qualified_id: str
+    client: "TelegramClient | None", mailbox: "Mailbox", qualified_id: str
 ) -> None:
     """Deliver messages to shell topics via Telegram notification.
 
@@ -324,7 +325,7 @@ async def _deliver_to_shell_topic(
     Telegram notification IS the delivery. Marks messages as delivered
     after notification to prevent repeated deliveries every broker cycle.
     """
-    if bot is None:
+    if client is None:
         return
     from .msg_telegram import notify_pending_shell
 
@@ -333,7 +334,7 @@ async def _deliver_to_shell_topic(
     for msg in pending:
         if msg.status == "pending" and msg.id not in state.notified_shell_ids:
             try:
-                await notify_pending_shell(bot, qualified_id, msg)
+                await notify_pending_shell(client, qualified_id, msg)
                 state.notified_shell_ids.add(msg.id)
                 mailbox.mark_delivered(msg.id, qualified_id)
             except OSError, TelegramError:

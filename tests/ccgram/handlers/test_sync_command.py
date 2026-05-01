@@ -306,8 +306,14 @@ class TestSyncFix:
             patch("ccgram.handlers.sync_command.clear_topic_state") as mock_cleanup,
         ):
             await handle_sync_fix(query)
-            mock_bot.delete_forum_topic.assert_called_once_with(-999, 42)
-            mock_cleanup.assert_called_once_with(100, 42, bot=mock_bot, window_id="@7")
+            mock_bot.delete_forum_topic.assert_called_once_with(
+                chat_id=-999, message_thread_id=42
+            )
+            mock_cleanup.assert_called_once()
+            cleanup_args = mock_cleanup.call_args
+            assert cleanup_args.args[:2] == (100, 42)
+            assert cleanup_args.kwargs["window_id"] == "@7"
+            assert cleanup_args.kwargs["client"].bot is mock_bot
             mock_tr.unbind_thread.assert_called_once_with(100, 42)
             report_text = mock_edit.call_args[0][1]
             assert "Removed 1 stale topic" in report_text
@@ -386,7 +392,11 @@ class TestSyncFix:
         ):
             await handle_sync_fix(query)
             mock_bot.close_forum_topic.assert_not_called()
-            mock_cleanup.assert_called_once_with(100, 42, bot=mock_bot, window_id="@7")
+            mock_cleanup.assert_called_once()
+            cleanup_args = mock_cleanup.call_args
+            assert cleanup_args.args[:2] == (100, 42)
+            assert cleanup_args.kwargs["window_id"] == "@7"
+            assert cleanup_args.kwargs["client"].bot is mock_bot
             mock_tr.unbind_thread.assert_called_once_with(100, 42)
 
     async def test_fix_adopts_orphaned_windows(self, _patch_deps) -> None:

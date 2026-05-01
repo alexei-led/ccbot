@@ -10,11 +10,10 @@ import re
 from pathlib import Path
 
 import structlog
-from telegram import Bot
 
 from ... import session_query, window_query
 from ...session_monitor import NewMessage
-from ...telegram_client import PTBTelegramClient
+from ...telegram_client import TelegramClient
 from ...user_preferences import user_preferences
 from ..interactive import (
     INTERACTIVE_TOOL_NAMES,
@@ -35,7 +34,7 @@ _ERROR_KEYWORDS_RE = re.compile(
 _MIN_THINKING_LENGTH = 20
 
 
-async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, PLR0912
+async def handle_new_message(msg: NewMessage, client: TelegramClient) -> None:  # noqa: C901, PLR0912
     """Handle a new assistant message — enqueue for sequential processing.
 
     Messages are queued per-user to ensure status messages always appear last.
@@ -86,9 +85,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
             if queue:
                 await queue.join()
             await asyncio.sleep(0.3)
-            handled = await handle_interactive_ui(
-                PTBTelegramClient(bot), user_id, window_id, thread_id
-            )
+            handled = await handle_interactive_ui(client, user_id, window_id, thread_id)
             if handled:
                 session = await session_query.resolve_session_for_window(window_id)
                 if session and session.file_path:
@@ -104,7 +101,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
                 clear_interactive_mode(user_id, thread_id)
 
         if get_interactive_msg_id(user_id, thread_id):
-            await clear_interactive_msg(user_id, PTBTelegramClient(bot), thread_id)
+            await clear_interactive_msg(user_id, client, thread_id)
 
         parts = build_response_parts(
             msg.text,
@@ -115,7 +112,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
 
         if msg.is_complete:
             await enqueue_content_message(
-                client=PTBTelegramClient(bot),
+                client=client,
                 user_id=user_id,
                 window_id=window_id,
                 parts=parts,

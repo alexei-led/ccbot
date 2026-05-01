@@ -37,6 +37,7 @@ _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
 async def status_poll_loop(bot: "Bot") -> None:
     """Background task to poll terminal status for all thread-bound windows."""
     from ...config import config as _cfg
+    from ...telegram_client import PTBTelegramClient
 
     # Deferred import: periodic_tasks transitively imports topics.topic_lifecycle,
     # which imports polling_strategies. Importing eagerly forms a cycle through
@@ -45,6 +46,7 @@ async def status_poll_loop(bot: "Bot") -> None:
     from .periodic_tasks import run_lifecycle_tasks, run_periodic_tasks
 
     poll_interval = _cfg.status_poll_interval
+    client = PTBTelegramClient(bot)
     logger.info("Status polling started (interval: %ss)", poll_interval)
     timers = {"topic_check": 0.0, "broker": 0.0, "sweep": 0.0, "live_view": 0.0}
     _error_streak = 0
@@ -55,7 +57,7 @@ async def status_poll_loop(bot: "Bot") -> None:
             all_windows.extend(external_windows)
             window_lookup = {w.window_id: w for w in all_windows}
 
-            await run_periodic_tasks(bot, all_windows, timers)
+            await run_periodic_tasks(client, all_windows, timers)
 
             for user_id, thread_id, wid in list(thread_router.iter_thread_bindings()):
                 structlog.contextvars.clear_contextvars()
@@ -73,7 +75,7 @@ async def status_poll_loop(bot: "Bot") -> None:
                         e,
                     )
 
-            await run_lifecycle_tasks(bot, all_windows)
+            await run_lifecycle_tasks(client, all_windows)
 
         except _LoopError:
             logger.exception("Status poll loop error")

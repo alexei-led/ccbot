@@ -11,11 +11,11 @@ Key function: handle_window_callback (uniform callback handler signature).
 import structlog
 from pathlib import Path
 
-from telegram import Bot, CallbackQuery, Chat, Update
+from telegram import CallbackQuery, Chat, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
-from ...telegram_client import PTBTelegramClient
 
+from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...session import session_manager
 from ...thread_router import thread_router
 from ...tmux_manager import send_to_window, tmux_manager
@@ -80,7 +80,7 @@ async def _detect_and_setup_provider(
     pane_current_command: str | None,
     *,
     pane_tty: str = "",
-    bot: "Bot | None" = None,
+    client: TelegramClient | None = None,
     user_id: int = 0,
     thread_id: int = 0,
 ) -> str:
@@ -110,7 +110,7 @@ async def _detect_and_setup_provider(
             await ensure_setup(
                 window_id,
                 "external_bind",
-                bot=bot,
+                client=client,
                 chat_id=thread_router.resolve_chat_id(user_id, thread_id),
                 thread_id=thread_id,
             )
@@ -118,7 +118,7 @@ async def _detect_and_setup_provider(
 
 
 async def _forward_pending_text(
-    bot: "Bot",
+    client: TelegramClient,
     user_id: int,
     thread_id: int,
     window_id: str,
@@ -141,7 +141,7 @@ async def _forward_pending_text(
     if is_chat_first and not is_existing_window:
         from ..shell.shell_commands import handle_shell_message
 
-        await handle_shell_message(bot, user_id, thread_id, window_id, text)
+        await handle_shell_message(client, user_id, thread_id, window_id, text)
     else:
         # For non-shell providers or existing shell windows, send raw text.
         # Existing shell windows skip handle_shell_message to avoid
@@ -150,7 +150,7 @@ async def _forward_pending_text(
         if not send_ok:
             logger.warning("Failed to forward pending text: %s", send_msg)
             await safe_send(
-                PTBTelegramClient(bot),
+                client,
                 thread_router.resolve_chat_id(user_id, thread_id),
                 f"❌ Failed to send pending message: {send_msg}",
                 message_thread_id=thread_id,
@@ -201,17 +201,18 @@ async def _handle_bind(
     thread_router.bind_thread(user_id, thread_id, selected_wid, window_name=display)
     _store_group_chat_id(user_id, thread_id, update, query)
 
+    client: TelegramClient = PTBTelegramClient(context.bot)
     detected = await _detect_and_setup_provider(
         selected_wid,
         w.pane_current_command,
         pane_tty=w.pane_tty,
-        bot=context.bot,
+        client=client,
         user_id=user_id,
         thread_id=thread_id,
     )
 
     try:
-        await context.bot.edit_forum_topic(
+        await client.edit_forum_topic(
             chat_id=thread_router.resolve_chat_id(user_id, thread_id),
             message_thread_id=thread_id,
             name=format_topic_name_for_mode(
@@ -234,7 +235,7 @@ async def _handle_bind(
         context.user_data.pop(PENDING_THREAD_ID, None)
     if pending_text:
         await _forward_pending_text(
-            context.bot,
+            client,
             user_id,
             thread_id,
             selected_wid,

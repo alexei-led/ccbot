@@ -14,16 +14,15 @@ import time
 from typing import TYPE_CHECKING
 
 import structlog
-from telegram import Bot
 from telegram.error import TelegramError
 
 from ...config import config
 from ...session import session_manager
-from ...telegram_client import PTBTelegramClient
+from ...telegram_client import TelegramClient
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttle_sweep
-from ..messaging.msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
 from ..live.live_view import tick_live_views
+from ..messaging.msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
 from ..topics.topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
@@ -45,12 +44,11 @@ TOPIC_CHECK_INTERVAL = 60.0  # seconds
 
 
 async def run_broker_cycle(
-    bot: Bot | None = None,
+    client: TelegramClient | None = None,
     idle_windows: frozenset[str] = frozenset(),
 ) -> None:
     """Run one broker delivery cycle (called from poll loop and hook_events)."""
     from ...mailbox import Mailbox
-
     from ..messaging.msg_broker import broker_delivery_cycle
 
     mailbox = Mailbox(config.mailbox_dir)
@@ -60,14 +58,14 @@ async def run_broker_cycle(
         window_states=session_manager.window_states,
         tmux_session=config.tmux_session_name,
         msg_rate_limit=config.msg_rate_limit,
-        bot=bot,
+        client=client,
         idle_windows=idle_windows,
     )
-    if bot is not None:
-        await _run_spawn_cycle(bot)
+    if client is not None:
+        await _run_spawn_cycle(client)
 
 
-async def _run_spawn_cycle(bot: Bot) -> None:
+async def _run_spawn_cycle(client: TelegramClient) -> None:
     """Scan for file-based spawn requests and post approval keyboards or auto-approve."""
     from ...spawn_request import pop_pending, scan_spawn_requests
     from ..messaging.msg_spawn import (
@@ -80,11 +78,11 @@ async def _run_spawn_cycle(bot: Bot) -> None:
         try:
             if req.auto or config.msg_auto_spawn:
                 await handle_spawn_approval(
-                    req.id, bot, spawn_timeout=config.msg_spawn_timeout
+                    req.id, client, spawn_timeout=config.msg_spawn_timeout
                 )
             else:
                 posted = await post_spawn_approval_keyboard(
-                    bot, req.requester_window, req
+                    client, req.requester_window, req
                 )
                 if not posted:
                     pop_pending(req.id)
@@ -107,7 +105,7 @@ def _run_mailbox_sweep() -> None:
 
 
 async def run_periodic_tasks(
-    bot: Bot,
+    client: TelegramClient,
     all_windows: list["TmuxWindow"],
     timers: dict[str, float],
 ) -> None:
@@ -116,24 +114,26 @@ async def run_periodic_tasks(
 
     if now - timers["live_view"] >= config.live_view_interval:
         timers["live_view"] = now
-        await tick_live_views(PTBTelegramClient(bot))
+        await tick_live_views(client)
 
     if now - timers["topic_check"] >= TOPIC_CHECK_INTERVAL:
         timers["topic_check"] = now
         await prune_stale_state(all_windows)
-        await probe_topic_existence(bot)
+        await probe_topic_existence(client)
         log_throttle_sweep()
 
     if now - timers["broker"] >= BROKER_CYCLE_INTERVAL:
         timers["broker"] = now
-        await run_broker_cycle(bot)
+        await run_broker_cycle(client)
 
     if now - timers["sweep"] >= SWEEP_INTERVAL:
         timers["sweep"] = now
         _run_mailbox_sweep()
 
 
-async def run_lifecycle_tasks(bot: Bot, all_windows: list["TmuxWindow"]) -> None:
+async def run_lifecycle_tasks(
+    client: TelegramClient, all_windows: list["TmuxWindow"]
+) -> None:
     """Run per-tick lifecycle tasks (autoclose timers, unbound window TTL)."""
-    await check_autoclose_timers(bot)
+    await check_autoclose_timers(client)
     await check_unbound_window_ttl(all_windows)

@@ -18,15 +18,14 @@ from typing import TYPE_CHECKING
 
 import structlog
 from telegram import (
-    Bot,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Update,
 )
 from telegram.ext import ContextTypes
-from ...telegram_client import PTBTelegramClient
 
+from ...telegram_client import TelegramClient
 from ...thread_router import thread_router
 from ...topic_state_registry import topic_state
 from ...utils import tmux_session_name
@@ -143,7 +142,7 @@ def _format_subject(subject: str) -> str:
 
 
 async def notify_message_sent(
-    bot: Bot,
+    client: TelegramClient,
     from_window: str,
     to_window: str,
     message: Message,
@@ -162,10 +161,10 @@ async def notify_message_sent(
     subj = _format_subject(message.subject)
     subj_part = f" {subj}" if subj else ""
 
-    text = f"\u2192 {to_wid} ({to_name}) [{message.type}]{subj_part}"
+    text = f"→ {to_wid} ({to_name}) [{message.type}]{subj_part}"
 
     await rate_limit_send_message(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -174,7 +173,7 @@ async def notify_message_sent(
 
 
 async def notify_messages_delivered(
-    bot: Bot,
+    client: TelegramClient,
     to_window: str,
     messages: list[Message],
 ) -> None:
@@ -197,9 +196,9 @@ async def notify_messages_delivered(
         from_wid = _extract_window_id(msg.from_id)
         subj = _format_subject(msg.subject)
         subj_part = f" {subj}" if subj else ""
-        text = f"\u2190 {from_wid} ({from_name}) [{msg.type}]{subj_part}"
+        text = f"← {from_wid} ({from_name}) [{msg.type}]{subj_part}"
     else:
-        lines = [f"\u2190 {len(messages)} messages delivered:"]
+        lines = [f"← {len(messages)} messages delivered:"]
         for msg in messages:
             from_name = _display_name(msg.from_id)
             from_wid = _extract_window_id(msg.from_id)
@@ -209,20 +208,20 @@ async def notify_messages_delivered(
         text = "\n".join(lines)
 
     sent = await rate_limit_send_message(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
         disable_notification=True,
     )
-    # \ud83d\udcec ack so the inter-agent delivery is visible in the topic without
+    # 📬 ack so the inter-agent delivery is visible in the topic without
     # competing with the agent's own status updates.
     if sent is not None:
-        await react(bot, chat_id, sent.message_id, REACT_INBOX)
+        await react(client, chat_id, sent.message_id, REACT_INBOX)
 
 
 async def notify_reply_received(
-    bot: Bot,
+    client: TelegramClient,
     original_msg: Message,
     reply_msg: Message,
 ) -> None:
@@ -240,10 +239,10 @@ async def notify_reply_received(
     subj = _format_subject(original_msg.subject)
     subj_part = f" for: {subj}" if subj else ""
 
-    text = f"\u2713 Reply received from {from_wid} ({from_name}){subj_part}"
+    text = f"✓ Reply received from {from_wid} ({from_name}){subj_part}"
 
     await rate_limit_send_message(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -252,7 +251,7 @@ async def notify_reply_received(
 
 
 async def notify_pending_shell(
-    bot: Bot,
+    client: TelegramClient,
     window_id: str,
     message: Message,
 ) -> None:
@@ -275,12 +274,12 @@ async def notify_pending_shell(
         body_preview += "..."
 
     text = (
-        f"\u2709 Pending from {from_wid} ({from_name})"
+        f"✉ Pending from {from_wid} ({from_name})"
         f" [{message.type}]{subj_part} {body_preview}"
     )
 
     await rate_limit_send_message(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -289,7 +288,7 @@ async def notify_pending_shell(
 
 
 async def notify_loop_detected(
-    bot: Bot,
+    client: TelegramClient,
     window_a: str,
     window_b: str,
 ) -> None:
@@ -323,8 +322,7 @@ async def notify_loop_detected(
     _loop_alert_pairs[pair_hash] = (window_a, window_b)
 
     text = (
-        f"\u26a0 Messaging loop detected between"
-        f" {wid_a} ({name_a}) and {wid_b} ({name_b})"
+        f"⚠ Messaging loop detected between {wid_a} ({name_a}) and {wid_b} ({name_b})"
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -343,7 +341,7 @@ async def notify_loop_detected(
     )
 
     await rate_limit_send_message(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -374,13 +372,13 @@ async def _handle_loop_alert(
         if pair:
             delivery_strategy.pause_peer(pair[0], pair[1])
             delivery_strategy.pause_peer(pair[1], pair[0])
-        await _safe_edit_text(query, "\u23f8 Messaging paused between these windows")
+        await _safe_edit_text(query, "⏸ Messaging paused between these windows")
     elif data.startswith(CB_MSG_LOOP_ALLOW):
         pair_hash = data[len(CB_MSG_LOOP_ALLOW) :]
         pair = _loop_alert_pairs.get(pair_hash)
         if pair:
             delivery_strategy.allow_more(pair[0], pair[1])
-        await _safe_edit_text(query, "\u25b6 Allowing 5 more exchanges")
+        await _safe_edit_text(query, "▶ Allowing 5 more exchanges")
 
 
 async def _safe_edit_text(query: CallbackQuery, text: str) -> None:

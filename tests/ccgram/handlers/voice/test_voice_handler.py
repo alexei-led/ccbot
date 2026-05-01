@@ -622,13 +622,10 @@ class TestHandleVoiceCallback:
         ) as mock_shell:
             await voice_callbacks.handle_voice_callback(update, context)
 
-            mock_shell.assert_called_once_with(
-                update.callback_query.message.get_bot(),
-                100,
-                42,
-                "@0",
-                "list files",
-            )
+            mock_shell.assert_called_once()
+            args = mock_shell.call_args.args
+            assert args[1:] == (100, 42, "@0", "list files")
+            assert args[0].bot is update.callback_query.message.get_bot()
 
         mock_send_to_window.assert_not_called()
         update.callback_query.message.delete.assert_called_once()

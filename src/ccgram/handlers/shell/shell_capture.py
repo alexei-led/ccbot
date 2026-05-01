@@ -23,8 +23,7 @@ import structlog
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from telegram import Bot
-from ...telegram_client import PTBTelegramClient
+from ...telegram_client import TelegramClient
 
 from ...providers.shell import match_prompt
 from ...thread_router import thread_router
@@ -41,12 +40,14 @@ from ...topic_state_registry import topic_state
 logger = structlog.get_logger()
 
 
-async def _react_exit(bot: Bot, chat_id: int, message_id: int, exit_code: int) -> None:
+async def _react_exit(
+    client: TelegramClient, chat_id: int, message_id: int, exit_code: int
+) -> None:
     """Persistent ✅/❌ ack on the user's command message after completion."""
     if not message_id:
         return
     emoji = REACT_DONE if exit_code == 0 else REACT_FAIL
-    await react(bot, chat_id, message_id, emoji)
+    await react(client, chat_id, message_id, emoji)
 
 
 class CommandApprovalCallback(Protocol):
@@ -57,7 +58,7 @@ class CommandApprovalCallback(Protocol):
 
     async def __call__(
         self,
-        bot: Bot,
+        client: TelegramClient,
         chat_id: int,
         thread_id: int,
         window_id: str,
@@ -304,7 +305,7 @@ def mark_telegram_command(
 
 
 async def _relay_output(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     thread_id: int,
     output: str,
@@ -331,7 +332,7 @@ async def _relay_output(
 
     if msg_id is None:
         sent = await rate_limit_send_message(
-            PTBTelegramClient(bot),
+            client,
             chat_id,
             formatted,
             message_thread_id=thread_id,
@@ -340,12 +341,12 @@ async def _relay_output(
             return sent.message_id
         return None
     else:
-        await edit_with_fallback(PTBTelegramClient(bot), chat_id, msg_id, formatted)
+        await edit_with_fallback(client, chat_id, msg_id, formatted)
         return msg_id
 
 
 async def _update_error_message(
-    bot: Bot, chat_id: int, msg_id: int, exit_code: int, output: str
+    client: TelegramClient, chat_id: int, msg_id: int, exit_code: int, output: str
 ) -> None:
     """Edit the output message to prepend an error indicator (monospace)."""
     error_prefix = f"\u274c exit {exit_code}\n"
@@ -356,11 +357,11 @@ async def _update_error_message(
         display = display[-max_body:]
     display = display.replace("```", "` ` `")
     formatted = f"{error_prefix}```\n{display}\n```"
-    await edit_with_fallback(PTBTelegramClient(bot), chat_id, msg_id, formatted)
+    await edit_with_fallback(client, chat_id, msg_id, formatted)
 
 
 async def _maybe_suggest_fix(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     chat_id: int,
     thread_id: int,
@@ -374,7 +375,7 @@ async def _maybe_suggest_fix(
 ) -> None:
     """If exit code is non-zero, show error indicator and ask LLM for a fix."""
     if msg_id:
-        await _update_error_message(bot, chat_id, msg_id, exit_code, output)
+        await _update_error_message(client, chat_id, msg_id, exit_code, output)
 
     try:
         from ...llm import get_completer
@@ -416,7 +417,7 @@ async def _maybe_suggest_fix(
     if not result.command or result.command == command:
         return
 
-    await _approval_callback(bot, chat_id, thread_id, window_id, result, user_id)
+    await _approval_callback(client, chat_id, thread_id, window_id, result, user_id)
 
 
 # ── Shell output monitoring ───────────────────────────────────────────
@@ -456,7 +457,7 @@ def _has_markers_in_tail(rendered_text: str) -> bool:
 
 
 async def check_passive_shell_output(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     thread_id: int,
     window_id: str,
@@ -502,7 +503,7 @@ async def check_passive_shell_output(
         state.last_output = ""
         state.exit_code_sent = False
 
-    await _relay_passive_output(bot, user_id, thread_id, state, passive, window_id)
+    await _relay_passive_output(client, user_id, thread_id, state, passive, window_id)
 
 
 def _command_from_echo(echo: str) -> str:
@@ -515,7 +516,7 @@ def _command_from_echo(echo: str) -> str:
 
 
 async def _relay_passive_output(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     thread_id: int,
     state: _ShellMonitorState,
@@ -533,7 +534,7 @@ async def _relay_passive_output(
         cmd = _command_from_echo(passive.command_echo)
         combined = f"❯ {cmd}\n{passive.text}" if cmd else passive.text
         state.msg_id = await _relay_output(
-            bot, chat_id, thread_id, combined, msg_id=state.msg_id
+            client, chat_id, thread_id, combined, msg_id=state.msg_id
         )
 
     if (
@@ -544,13 +545,13 @@ async def _relay_passive_output(
     ):
         state.exit_code_sent = True
         await _update_error_message(
-            bot, chat_id, state.msg_id, passive.exit_code, passive.text
+            client, chat_id, state.msg_id, passive.exit_code, passive.text
         )
 
     # ✅/❌ reaction on the user's source message once exit is known.
     # Skips when the message was already reacted (dedupe in react()).
     if passive.exit_code is not None and state.telegram_message_id:
-        await _react_exit(bot, chat_id, state.telegram_message_id, passive.exit_code)
+        await _react_exit(client, chat_id, state.telegram_message_id, passive.exit_code)
         if passive.exit_code == 0:
             state.telegram_message_id = 0
 
@@ -570,7 +571,7 @@ async def _relay_passive_output(
         state.telegram_message_id = 0
         state.telegram_generation = 0
         await _maybe_suggest_fix(
-            bot,
+            client,
             tg_uid,
             chat_id,
             tg_tid,

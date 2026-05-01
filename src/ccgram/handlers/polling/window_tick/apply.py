@@ -283,7 +283,9 @@ async def _maybe_check_passive_shell(
         rendered = raw
     from ...shell.shell_capture import check_passive_shell_output
 
-    await check_passive_shell_output(bot, user_id, thread_id, window_id, rendered)
+    await check_passive_shell_output(
+        PTBTelegramClient(bot), user_id, thread_id, window_id, rendered
+    )
 
 
 # ── Dead window notification ─────────────────────────────────────────────
@@ -334,8 +336,9 @@ async def _handle_dead_window_notification(
         reply_markup=keyboard,
     )
     if sent is None:
+        client = PTBTelegramClient(bot)
         try:
-            await bot.unpin_all_forum_topic_messages(
+            await client.unpin_all_forum_topic_messages(
                 chat_id=chat_id, message_thread_id=thread_id
             )
         except BadRequest as probe_err:
@@ -347,7 +350,7 @@ async def _handle_dead_window_notification(
                 await clear_topic_state(
                     user_id,
                     thread_id,
-                    bot,
+                    client,
                     window_id=wid,
                     window_dead=True,
                 )

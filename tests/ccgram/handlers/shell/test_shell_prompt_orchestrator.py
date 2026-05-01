@@ -159,12 +159,12 @@ async def test_dispatch_skip_button():
 async def test_show_offer_keyboard_sends_message(mock_setup, mock_has_marker):
     from ccgram.handlers.shell.shell_prompt_orchestrator import _show_offer_keyboard
 
-    bot = AsyncMock()
+    client = AsyncMock()
     with patch(
         "ccgram.handlers.shell.shell_prompt_orchestrator.safe_send",
         new_callable=AsyncMock,
     ) as mock_send:
-        await _show_offer_keyboard("@3", bot=bot, chat_id=-100, thread_id=42)
+        await _show_offer_keyboard("@3", client=client, chat_id=-100, thread_id=42)
 
     mock_send.assert_awaited_once()
     call_kwargs = mock_send.call_args[1]
@@ -187,13 +187,15 @@ async def test_external_bind_sends_offer_keyboard_when_bot_present(
 ):
     mock_has_marker.return_value = False
 
-    bot = AsyncMock()
+    client = AsyncMock()
     with patch(
         "ccgram.handlers.shell.shell_prompt_orchestrator.safe_send",
         new_callable=AsyncMock,
         return_value=AsyncMock(),
     ) as mock_send:
-        await ensure_setup(WINDOW, "external_bind", bot=bot, chat_id=-100, thread_id=5)
+        await ensure_setup(
+            WINDOW, "external_bind", client=client, chat_id=-100, thread_id=5
+        )
 
     mock_send.assert_awaited_once()
     assert _state[WINDOW].was_offered is True
@@ -208,12 +210,14 @@ async def test_external_bind_suppresses_reoffer_after_was_offered(
 
     _state[WINDOW] = _OrchestratorState(was_offered=True)
 
-    bot = AsyncMock()
+    client = AsyncMock()
     with patch(
         "ccgram.handlers.shell.shell_prompt_orchestrator.safe_send",
         new_callable=AsyncMock,
     ) as mock_send:
-        await ensure_setup(WINDOW, "external_bind", bot=bot, chat_id=-100, thread_id=5)
+        await ensure_setup(
+            WINDOW, "external_bind", client=client, chat_id=-100, thread_id=5
+        )
 
     mock_send.assert_not_awaited()
     mock_setup.assert_not_awaited()

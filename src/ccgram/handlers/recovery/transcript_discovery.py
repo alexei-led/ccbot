@@ -25,7 +25,7 @@ from ...providers import (
 )
 from ...session import session_manager
 from ...session_map import session_map_sync
-from ...telegram_client import TelegramClient, unwrap_bot
+from ...telegram_client import TelegramClient
 from ...tmux_manager import tmux_manager
 from ...window_resolver import is_foreign_window
 
@@ -75,7 +75,7 @@ async def _detect_and_apply_provider(
             await ensure_setup(
                 window_id,
                 "provider_switch",
-                bot=unwrap_bot(client) if client else None,
+                client=client,
                 chat_id=chat_id,
                 thread_id=thread_id,
             )
@@ -219,7 +219,7 @@ async def discover_and_register_transcript(
         await ensure_setup(
             window_id,
             "provider_switch",
-            bot=unwrap_bot(client) if client else None,
+            client=client,
             chat_id=chat_id,
             thread_id=thread_id,
         )

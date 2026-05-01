@@ -632,10 +632,11 @@ async def _create_window_and_bind(
 
         # Chat-first providers (shell): route through NL→command approval flow
         if provider_caps.chat_first_command_path:
+            from ...telegram_client import PTBTelegramClient
             from ..shell.shell_commands import handle_shell_message
 
             await handle_shell_message(
-                context.bot,
+                PTBTelegramClient(context.bot),
                 user_id,
                 pending_thread_id,
                 created_wid,

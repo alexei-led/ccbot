@@ -655,7 +655,10 @@ class TestSendCommand:
             ) as mock_up,
         ):
             await send_command(update, ctx)
-        mock_up.assert_awaited_once_with(ctx.bot, -100123, 42, f)
+        mock_up.assert_awaited_once()
+        call_args = mock_up.call_args
+        assert call_args[0][1:] == (-100123, 42, f)
+        assert call_args[0][0].bot is ctx.bot
 
     async def test_glob_multiple_matches_shows_keyboard(self, tmp_path: Path) -> None:
         self.ws.cwd = str(tmp_path)
@@ -694,7 +697,10 @@ class TestSendCommand:
             ) as mock_up,
         ):
             await send_command(update, ctx)
-        mock_up.assert_awaited_once_with(ctx.bot, -100123, 42, f)
+        mock_up.assert_awaited_once()
+        call_args = mock_up.call_args
+        assert call_args[0][1:] == (-100123, 42, f)
+        assert call_args[0][0].bot is ctx.bot
 
     async def test_exact_path_denied_by_security(self, tmp_path: Path) -> None:
         self.ws.cwd = str(tmp_path)

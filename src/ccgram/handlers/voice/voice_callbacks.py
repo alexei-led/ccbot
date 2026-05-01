@@ -13,6 +13,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ...providers import get_provider_for_window
+from ...telegram_client import PTBTelegramClient
 from ...window_query import get_window_provider
 from ...tmux_manager import send_to_window
 from ...thread_router import thread_router
@@ -87,10 +88,10 @@ async def _handle_send(
         await query.answer("⚠️ No session bound.", show_alert=True)
         return
 
-    bot = msg.get_bot()
+    client = PTBTelegramClient(msg.get_bot())
 
     # 👀 ack: persistent "I see you" indicator on the original voice message.
-    await react(bot, msg.chat.id, message_id, REACT_SEEN)
+    await react(client, msg.chat.id, message_id, REACT_SEEN)
 
     # Shell provider: route through LLM for NL→command generation
     provider = get_provider_for_window(
@@ -100,34 +101,36 @@ async def _handle_send(
         from ..shell.shell_commands import handle_shell_message
 
         try:
-            await handle_shell_message(bot, user_id, thread_id, window_id, pending_text)
+            await handle_shell_message(
+                client, user_id, thread_id, window_id, pending_text
+            )
         except (OSError, TelegramError) as exc:
             logger.warning("Shell message handling failed: %s", exc)
             pending_store[(msg.chat.id, message_id)] = pending_text
             await query.answer("❌ Failed to send", show_alert=True)
             return
-        await _ack_delivered(bot, msg, query, message_id)
+        await _ack_delivered(client, msg, query, message_id)
         return
 
     success, err = await send_to_window(window_id, pending_text)
 
     if success:
-        await _ack_delivered(bot, msg, query, message_id)
+        await _ack_delivered(client, msg, query, message_id)
     else:
         pending_store[(msg.chat.id, message_id)] = pending_text
         await query.answer(f"❌ {err}", show_alert=True)
 
 
 async def _ack_delivered(
-    bot, msg: Message, query: CallbackQuery, message_id: int
+    client: PTBTelegramClient, msg: Message, query: CallbackQuery, message_id: int
 ) -> None:
     """Replace the previous "✓ Sent" toast with a persistent reaction.
 
     Order matters: REACT_DONE replaces the prior 👀; ack_reaction (if user
     configured ``CCGRAM_ACK_REACTION``) overrides REACT_DONE in turn.
     """
-    await react(bot, msg.chat.id, message_id, REACT_DONE)
-    await ack_reaction(bot, msg.chat.id, message_id)
+    await react(client, msg.chat.id, message_id, REACT_DONE)
+    await ack_reaction(client, msg.chat.id, message_id)
     try:
         await msg.delete()
     except TelegramError as e:

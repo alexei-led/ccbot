@@ -34,14 +34,12 @@ class TestTopicClosedHandler:
         await topic_closed_handler(update, ctx)
 
         mock_tr.get_window_for_thread.assert_called_once_with(1, 42)
-        mock_clear.assert_called_once_with(
-            1,
-            42,
-            ctx.bot,
-            ctx.user_data,
-            window_id="@0",
-            window_dead=False,
-        )
+        mock_clear.assert_called_once()
+        clear_args = mock_clear.call_args
+        assert clear_args.args[0:2] == (1, 42)
+        assert clear_args.args[2].bot is ctx.bot
+        assert clear_args.args[3] is ctx.user_data
+        assert clear_args.kwargs == {"window_id": "@0", "window_dead": False}
         mock_tr.unbind_thread.assert_called_once_with(1, 42)
 
     @_PATCH_ALLOWED

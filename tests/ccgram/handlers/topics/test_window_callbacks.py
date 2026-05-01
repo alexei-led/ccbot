@@ -303,15 +303,11 @@ class TestBindProviderDetection:
             mock_sm.get_approval_mode.return_value = "normal"
             await handle_window_callback(query, 100, f"{CB_WIN_BIND}0", update, context)
 
-        mock_forward.assert_awaited_once_with(
-            context.bot,
-            100,
-            42,
-            "@5",
-            "ls -la",
-            "shell",
-            is_existing_window=True,
-        )
+        mock_forward.assert_awaited_once()
+        forward_args = mock_forward.call_args.args
+        assert forward_args[1:] == (100, 42, "@5", "ls -la", "shell")
+        assert forward_args[0].bot is context.bot
+        assert mock_forward.call_args.kwargs == {"is_existing_window": True}
 
 
 class TestForwardPendingText:
@@ -350,4 +346,7 @@ class TestForwardPendingText:
                 bot, 1, 42, "@5", "list files", "shell", is_existing_window=False
             )
 
-        mock_shell.assert_awaited_once_with(bot, 1, 42, "@5", "list files")
+        mock_shell.assert_awaited_once()
+        args = mock_shell.call_args.args
+        assert args[1:] == (1, 42, "@5", "list files")
+        assert args[0] is bot

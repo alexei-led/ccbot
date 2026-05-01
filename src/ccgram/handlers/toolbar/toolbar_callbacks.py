@@ -161,10 +161,16 @@ async def _builtin_send(
     if chat_id is None:
         await query.answer("Use in a topic", show_alert=True)
         return
+    from ...telegram_client import PTBTelegramClient
     from ..send import open_file_browser
 
     await open_file_browser(
-        query.get_bot(), chat_id, thread_id, context.user_data, window_id, cwd
+        PTBTelegramClient(query.get_bot()),
+        chat_id,
+        thread_id,
+        context.user_data,
+        window_id,
+        cwd,
     )
     await query.answer()
 

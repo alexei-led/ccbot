@@ -15,16 +15,13 @@ Key components:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
-from ...telegram_client import PTBTelegramClient
 
-from ...providers import resolve_launch_command
 from ... import window_query
+from ...providers import resolve_launch_command
 from ...session import session_manager
 from ...spawn_request import (
     SpawnRequest,
@@ -32,13 +29,11 @@ from ...spawn_request import (
     pop_pending,
     spawns_dir,
 )
+from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...tmux_manager import tmux_manager
 from ...window_state_store import CCGRAM_CREATED_WINDOW_ORIGIN
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import rate_limit_send_message
-
-if TYPE_CHECKING:
-    from telegram import Bot
 
 logger = structlog.get_logger()
 
@@ -48,7 +43,7 @@ CB_SPAWN_DENY = "sp:no:"
 
 async def handle_spawn_approval(
     request_id: str,
-    bot: Bot,
+    client: TelegramClient,
     spawn_timeout: int = 300,
 ) -> SpawnResult | None:
     req = pop_pending(request_id)
@@ -92,7 +87,7 @@ async def handle_spawn_approval(
     session_manager.set_window_provider(window_id, req.provider, cwd=req.cwd)
 
     try:
-        await _create_topic_for_spawn(bot, window_id, window_name, req)
+        await _create_topic_for_spawn(client, window_id, window_name, req)
     except TelegramError:
         logger.warning(
             "Topic creation failed for spawned window %s, window still active",
@@ -132,7 +127,7 @@ def handle_spawn_denial(request_id: str) -> None:
 
 
 async def post_spawn_approval_keyboard(
-    bot: Bot,
+    client: TelegramClient,
     requester_window: str,
     request: SpawnRequest,
 ) -> bool:
@@ -169,7 +164,7 @@ async def post_spawn_approval_keyboard(
     )
 
     result = await rate_limit_send_message(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -179,24 +174,24 @@ async def post_spawn_approval_keyboard(
 
 
 async def _create_topic_for_spawn(
-    bot: Bot,
+    client: TelegramClient,
     window_id: str,
     window_name: str,
     req: SpawnRequest,
 ) -> None:
-    from .msg_telegram import resolve_topic
     from ..topics.topic_orchestration import collect_target_chats, create_topic_in_chat
+    from .msg_telegram import resolve_topic
 
     target_chats = collect_target_chats(window_id)
     for chat_id in target_chats:
-        await create_topic_in_chat(bot, chat_id, window_id, window_name)
+        await create_topic_in_chat(client, chat_id, window_id, window_name)
 
     topic_info = resolve_topic(req.requester_window)
     if topic_info:
         _, thread_id, chat_id, _ = topic_info
-        text = f"\u2705 Spawned {window_name} ({window_id}) for: {req.prompt}"
+        text = f"✅ Spawned {window_name} ({window_id}) for: {req.prompt}"
         await rate_limit_send_message(
-            PTBTelegramClient(bot),
+            client,
             chat_id,
             text,
             message_thread_id=thread_id,
@@ -223,20 +218,20 @@ async def _handle_spawn_callback(
 
     if data.startswith(CB_SPAWN_APPROVE):
         request_id = data[len(CB_SPAWN_APPROVE) :]
-        bot = update.get_bot()
+        client = PTBTelegramClient(update.get_bot())
         try:
             from ...config import config as _cfg
 
             result = await handle_spawn_approval(
-                request_id, bot, spawn_timeout=_cfg.msg_spawn_timeout
+                request_id, client, spawn_timeout=_cfg.msg_spawn_timeout
             )
         except TelegramError:
             logger.warning("Spawn approval failed for %s", request_id, exc_info=True)
             result = None
         if result:
-            text = f"\u2705 Spawned: {result.window_name} ({result.window_id})"
+            text = f"✅ Spawned: {result.window_name} ({result.window_id})"
         else:
-            text = "\u274c Spawn failed (request expired or window creation error)"
+            text = "❌ Spawn failed (request expired or window creation error)"
         with _contextlib.suppress(TelegramError):
             await query.edit_message_text(text)
 
@@ -244,4 +239,4 @@ async def _handle_spawn_callback(
         request_id = data[len(CB_SPAWN_DENY) :]
         handle_spawn_denial(request_id)
         with _contextlib.suppress(TelegramError):
-            await query.edit_message_text("\u274c Spawn request denied")
+            await query.edit_message_text("❌ Spawn request denied")

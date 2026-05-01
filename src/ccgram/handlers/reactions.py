@@ -23,9 +23,11 @@ from collections import OrderedDict
 from typing import Final
 
 import structlog
-from telegram import Bot, CallbackQuery, ReactionTypeEmoji
+from telegram import CallbackQuery, ReactionTypeEmoji
 from telegram.constants import ReactionEmoji
 from telegram.error import TelegramError
+
+from ..telegram_client import TelegramClient
 
 logger = structlog.get_logger()
 
@@ -51,7 +53,7 @@ _last_reaction: OrderedDict[tuple[int, int], str] = OrderedDict()
 
 
 async def react(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     message_id: int,
     emoji: str,
@@ -78,7 +80,7 @@ async def react(
         return True
 
     try:
-        await bot.set_message_reaction(
+        await client.set_message_reaction(
             chat_id=chat_id,
             message_id=message_id,
             reaction=[ReactionTypeEmoji(emoji=emoji)],
@@ -95,10 +97,10 @@ async def react(
     return True
 
 
-async def clear_reaction(bot: Bot, chat_id: int, message_id: int) -> bool:
+async def clear_reaction(client: TelegramClient, chat_id: int, message_id: int) -> bool:
     """Remove all reactions from a message."""
     try:
-        await bot.set_message_reaction(
+        await client.set_message_reaction(
             chat_id=chat_id,
             message_id=message_id,
             reaction=[],

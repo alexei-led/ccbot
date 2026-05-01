@@ -135,8 +135,8 @@ def wire_runtime_callbacks() -> None:
     """
     global _callbacks_wired
 
-    async def _on_stop(bot_, window_key: str) -> None:  # type: ignore[no-untyped-def]
-        await run_broker_cycle(bot_, idle_windows=frozenset({window_key}))
+    async def _on_stop(client_, window_key: str) -> None:  # type: ignore[no-untyped-def]
+        await run_broker_cycle(client_, idle_windows=frozenset({window_key}))
 
     register_stop_callback(_on_stop)
     register_rc_active_provider(terminal_screen_buffer.is_rc_active)
@@ -160,18 +160,22 @@ async def start_session_monitor(application: Application) -> SessionMonitor:
     monitor = SessionMonitor()
     set_active_monitor(monitor)
 
+    from .telegram_client import PTBTelegramClient
+
+    client = PTBTelegramClient(application.bot)
+
     async def message_callback(msg: NewMessage) -> None:
-        await handle_new_message(msg, application.bot)
+        await handle_new_message(msg, client)
 
     monitor.set_message_callback(message_callback)
 
     async def new_window_callback(event: NewWindowEvent) -> None:
-        await _handle_new_window(event, application.bot)
+        await _handle_new_window(event, client)
 
     monitor.set_new_window_callback(new_window_callback)
 
     async def hook_event_callback(event: HookEvent) -> None:
-        await dispatch_hook_event(event, application.bot)
+        await dispatch_hook_event(event, client)
 
     monitor.set_hook_event_callback(hook_event_callback)
 

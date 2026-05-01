@@ -11,14 +11,13 @@ import time
 from typing import TYPE_CHECKING
 
 import structlog
-from telegram import Bot
-from telegram.error import BadRequest, TelegramError
-
 from telegram import Update
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import ContextTypes
 
 from ...config import config
 from ...session import session_manager
+from ...telegram_client import PTBTelegramClient, TelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttled
@@ -40,7 +39,7 @@ logger = structlog.get_logger()
 # ── Autoclose timer management ────────────────────────────────────────────
 
 
-async def check_autoclose_timers(bot: Bot) -> None:
+async def check_autoclose_timers(client: TelegramClient) -> None:
     """Close topics whose done/dead timers have expired."""
     all_topics = lifecycle_strategy.iter_topic_states()
     if not all_topics:
@@ -62,23 +61,25 @@ async def check_autoclose_timers(bot: Bot) -> None:
             expired.append((user_id, thread_id))
 
     for user_id, thread_id in expired:
-        await _close_expired_topic(bot, user_id, thread_id)
+        await _close_expired_topic(client, user_id, thread_id)
 
 
-async def _close_expired_topic(bot: Bot, user_id: int, thread_id: int) -> None:
+async def _close_expired_topic(
+    client: TelegramClient, user_id: int, thread_id: int
+) -> None:
     """Attempt to close/delete an expired topic and clean up state."""
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     window_id = thread_router.get_window_for_thread(user_id, thread_id)
     removed = False
     try:
-        await bot.delete_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
+        await client.delete_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
         removed = True
     except TelegramError as e:
         if is_thread_gone(e):
             removed = True
         else:
             try:
-                await bot.close_forum_topic(
+                await client.close_forum_topic(
                     chat_id=chat_id, message_thread_id=thread_id
                 )
                 removed = True
@@ -97,7 +98,7 @@ async def _close_expired_topic(bot: Bot, user_id: int, thread_id: int) -> None:
         await clear_topic_state(
             user_id,
             thread_id,
-            bot=bot,
+            client=client,
             window_id=window_id,
             window_dead=True,
         )
@@ -177,13 +178,13 @@ async def prune_stale_state(live_windows: "list[TmuxWindow]") -> None:
 # ── Topic existence probing ───────────────────────────────────────────────
 
 
-async def probe_topic_existence(bot: Bot) -> None:
+async def probe_topic_existence(client: TelegramClient) -> None:
     """Probe all bound topics via Telegram API; detect deleted topics."""
     for user_id, thread_id, wid in list(thread_router.iter_thread_bindings()):
         if lifecycle_strategy.should_skip_probe(wid):
             continue
         try:
-            await bot.unpin_all_forum_topic_messages(
+            await client.unpin_all_forum_topic_messages(
                 chat_id=thread_router.resolve_chat_id(user_id, thread_id),
                 message_thread_id=thread_id,
             )
@@ -200,7 +201,7 @@ async def probe_topic_existence(bot: Bot) -> None:
                     await tmux_manager.kill_window(w.window_id)
                     killed = True
                 terminal_poll_state.reset_probe_failures(wid)
-                await clear_topic_state(user_id, thread_id, bot, window_id=wid)
+                await clear_topic_state(user_id, thread_id, client, window_id=wid)
                 thread_router.unbind_thread(user_id, thread_id)
                 action = "killed" if killed else "unbound"
                 logger.info(
@@ -252,7 +253,7 @@ async def topic_closed_handler(
         await clear_topic_state(
             user.id,
             thread_id,
-            context.bot,
+            PTBTelegramClient(context.bot),
             context.user_data,
             window_id=window_id,
             window_dead=False,

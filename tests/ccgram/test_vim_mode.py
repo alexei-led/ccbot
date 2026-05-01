@@ -362,7 +362,7 @@ class TestPollingAndCleanupIntegration:
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            await clear_topic_state(1, 42, bot=AsyncMock(), window_id="@7")
+            await clear_topic_state(1, 42, client=AsyncMock(), window_id="@7")
         assert "@7" not in _vim_state
 
     async def test_cleanup_skips_vim_state_without_window_id(self):
@@ -376,7 +376,7 @@ class TestPollingAndCleanupIntegration:
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            await clear_topic_state(1, 42, bot=AsyncMock(), window_id=None)
+            await clear_topic_state(1, 42, client=AsyncMock(), window_id=None)
         # Vim state for @7 should remain untouched
         assert _vim_state["@7"] is True
 

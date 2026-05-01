@@ -17,7 +17,6 @@ import time
 from pathlib import Path
 
 import structlog
-from telegram import Bot
 from telegram.error import NetworkError, RetryAfter, TelegramError, TimedOut
 
 from ...config import config
@@ -28,6 +27,7 @@ from ...providers import (
 )
 from ...session import session_manager
 from ...session_monitor import NewWindowEvent
+from ...telegram_client import TelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ..messaging_pipeline.message_sender import is_thread_gone
@@ -47,12 +47,14 @@ _TOPIC_CREATE_TRANSIENT_RETRIES = 1
 _TOPIC_CREATE_TRANSIENT_BACKOFF_S = 1.0
 
 
-async def _create_forum_topic_with_retry(bot: Bot, chat_id: int, topic_name: str):
-    """Call ``bot.create_forum_topic`` with one retry on TimedOut/NetworkError."""
+async def _create_forum_topic_with_retry(
+    client: TelegramClient, chat_id: int, topic_name: str
+):
+    """Call ``client.create_forum_topic`` with one retry on TimedOut/NetworkError."""
     last_exc: TelegramError | None = None
     for attempt in range(_TOPIC_CREATE_TRANSIENT_RETRIES + 1):
         try:
-            return await bot.create_forum_topic(chat_id=chat_id, name=topic_name)
+            return await client.create_forum_topic(chat_id=chat_id, name=topic_name)
         except (TimedOut, NetworkError) as exc:
             last_exc = exc
             if attempt < _TOPIC_CREATE_TRANSIENT_RETRIES:
@@ -168,7 +170,7 @@ def _bind_topic_to_user(
 
 
 async def create_topic_in_chat(
-    bot: Bot, chat_id: int, window_id: str, topic_name: str
+    client: TelegramClient, chat_id: int, window_id: str, topic_name: str
 ) -> None:
     """Create a forum topic in one chat with backoff handling."""
     retry_until = _topic_create_retry_until.get(chat_id, 0.0)
@@ -185,7 +187,7 @@ async def create_topic_in_chat(
         return
 
     try:
-        topic = await _create_forum_topic_with_retry(bot, chat_id, topic_name)
+        topic = await _create_forum_topic_with_retry(client, chat_id, topic_name)
         _topic_create_retry_until.pop(chat_id, None)
         logger.info(
             "Auto-created topic '%s' (thread=%d) in chat %d for window %s",
@@ -219,12 +221,14 @@ async def create_topic_in_chat(
         )
 
 
-async def _topic_exists(bot: Bot, chat_id: int, thread_id: int) -> bool | None:
+async def _topic_exists(
+    client: TelegramClient, chat_id: int, thread_id: int
+) -> bool | None:
     """Probe a Telegram topic. True=exists, False=gone, None=unknown."""
     try:
-        msg = await bot.send_message(
+        msg = await client.send_message(
             chat_id,
-            "\u200b",
+            "​",
             message_thread_id=thread_id,
             disable_notification=True,
         )
@@ -233,12 +237,12 @@ async def _topic_exists(bot: Bot, chat_id: int, thread_id: int) -> bool | None:
             return False
         return None
     with contextlib.suppress(TelegramError):
-        await bot.delete_message(chat_id, msg.message_id)
+        await client.delete_message(chat_id, msg.message_id)
     return True
 
 
 async def _rebind_existing_topic_by_name(
-    event: NewWindowEvent, bot: Bot, topic_name: str
+    event: NewWindowEvent, client: TelegramClient, topic_name: str
 ) -> bool:
     """Bind a stale same-name topic to a newly discovered manual window."""
     clean_topic_name = strip_emoji_prefix(topic_name)
@@ -267,7 +271,7 @@ async def _rebind_existing_topic_by_name(
         return False
 
     user_id, thread_id, old_window_id, chat_id = matches[0]
-    exists = await _topic_exists(bot, chat_id, thread_id)
+    exists = await _topic_exists(client, chat_id, thread_id)
     if exists is False:
         thread_router.unbind_thread(user_id, thread_id)
         logger.info(
@@ -298,7 +302,7 @@ async def _rebind_existing_topic_by_name(
     return True
 
 
-async def handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
+async def handle_new_window(event: NewWindowEvent, client: TelegramClient) -> None:
     """Create or bind a Telegram forum topic for a newly detected tmux window.
 
     Skips if the window is already bound. Reuses one stale same-name topic when
@@ -313,7 +317,7 @@ async def handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
     await _auto_detect_provider(event.window_id)
 
     topic_name = event.window_name or Path(event.cwd).name or event.window_id
-    if await _rebind_existing_topic_by_name(event, bot, topic_name):
+    if await _rebind_existing_topic_by_name(event, client, topic_name):
         return
 
     seen_chats = collect_target_chats(event.window_id)
@@ -321,10 +325,10 @@ async def handle_new_window(event: NewWindowEvent, bot: Bot) -> None:
         return
 
     for chat_id in seen_chats:
-        await create_topic_in_chat(bot, chat_id, event.window_id, topic_name)
+        await create_topic_in_chat(client, chat_id, event.window_id, topic_name)
 
 
-async def adopt_unbound_windows(bot: Bot) -> None:
+async def adopt_unbound_windows(client: TelegramClient) -> None:
     """Auto-adopt known-but-unbound windows (post-restart recovery)."""
     all_windows = await tmux_manager.list_windows()
     live_ids = {w.window_id for w in all_windows}
@@ -334,5 +338,5 @@ async def adopt_unbound_windows(bot: Bot) -> None:
     if orphaned:
         from ..sync_command import _adopt_orphaned_windows
 
-        await _adopt_orphaned_windows(bot, orphaned)
+        await _adopt_orphaned_windows(client, orphaned)
         logger.info("Startup: adopted %d unbound window(s)", len(orphaned))

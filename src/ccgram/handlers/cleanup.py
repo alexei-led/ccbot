@@ -13,13 +13,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from telegram import Bot
+from ..telegram_client import PTBTelegramClient, TelegramClient
 
 if TYPE_CHECKING:
     from telegram import Update
     from telegram.ext import ContextTypes
 
-from ..telegram_client import PTBTelegramClient
 from ..utils import log_throttle_reset
 from .interactive import clear_interactive_msg
 from .messaging_pipeline.message_queue import enqueue_status_update
@@ -30,7 +29,7 @@ from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, VOICE_PENDING
 async def clear_topic_state(
     user_id: int,
     thread_id: int,
-    bot: Bot | None = None,
+    client: TelegramClient | None = None,
     user_data: dict[str, Any] | None = None,
     window_id: str | None = None,
     *,
@@ -52,8 +51,8 @@ async def clear_topic_state(
     """
     from ..config import config
     from ..thread_router import thread_router
-    from ..window_resolver import is_foreign_window
     from ..topic_state_registry import topic_state
+    from ..window_resolver import is_foreign_window
 
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
 
@@ -66,9 +65,9 @@ async def clear_topic_state(
         )
 
     # Enqueue status-message delete BEFORE registry clears the message ID
-    if bot is not None:
+    if client is not None:
         await enqueue_status_update(
-            PTBTelegramClient(bot),
+            client,
             user_id,
             window_id or "",
             None,
@@ -104,9 +103,7 @@ async def clear_topic_state(
         if qualified_id is not None:
             mb.clear_inbox(qualified_id)
 
-    await clear_interactive_msg(
-        user_id, PTBTelegramClient(bot) if bot else None, thread_id
-    )
+    await clear_interactive_msg(user_id, client, thread_id)
 
     # user_data cleanup
     if user_data is not None and user_data.get(PENDING_THREAD_ID) == thread_id:
@@ -146,24 +143,21 @@ async def unbind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 update.get_bot(), update.message, update.effective_chat.id
             )
         else:
-            await safe_reply(update.message, "\u274c Use this command inside a topic.")
+            await safe_reply(update.message, "❌ Use this command inside a topic.")
         return
 
     window_id = thread_router.get_window_for_thread(user.id, thread_id)
     if not window_id:
-        await safe_reply(
-            update.message, "\u274c This topic is not bound to any session."
-        )
+        await safe_reply(update.message, "❌ This topic is not bound to any session.")
         return
 
     display = thread_router.get_display_name(window_id)
-    await enqueue_status_update(
-        PTBTelegramClient(context.bot), user.id, window_id, None, thread_id
-    )
+    client = PTBTelegramClient(context.bot)
+    await enqueue_status_update(client, user.id, window_id, None, thread_id)
     await clear_topic_state(
         user.id,
         thread_id,
-        context.bot,
+        client,
         context.user_data,
         window_id=window_id,
         window_dead=False,
@@ -171,6 +165,6 @@ async def unbind_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     thread_router.unbind_thread(user.id, thread_id)
     await safe_reply(
         update.message,
-        f"\u2702 Unbound from window `{display}`. The session is still running.\n"
+        f"✂ Unbound from window `{display}`. The session is still running.\n"
         "Send a message in this topic to rebind or create a new session.",
     )

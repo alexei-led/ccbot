@@ -8,14 +8,15 @@ The orchestrator (handle_text_message) calls steps in sequence.
 """
 
 import asyncio
-import structlog
 from pathlib import Path
-from telegram import Bot, Message, Update
+
+import structlog
+from telegram import Message, Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
-from ...telegram_client import PTBTelegramClient
 
 from ...config import config
+from ...telegram_client import PTBTelegramClient, TelegramClient
 from ..callback_helpers import get_thread_id as _get_thread_id
 from ..command_orchestration import sync_scoped_menu_for_text_context
 from ..topics.directory_browser import (
@@ -70,13 +71,15 @@ def cancel_bash_capture(user_id: int, thread_id: int) -> None:
         task.cancel()
 
 
-async def _edit_bash_message(bot: Bot, chat_id: int, msg_id: int, output: str) -> None:
+async def _edit_bash_message(
+    client: TelegramClient, chat_id: int, msg_id: int, output: str
+) -> None:
     """Edit an existing bash-output message with entity-based formatting fallback."""
-    await edit_with_fallback(PTBTelegramClient(bot), chat_id, msg_id, output)
+    await edit_with_fallback(client, chat_id, msg_id, output)
 
 
 async def _capture_bash_output(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     thread_id: int,
     window_id: str,
@@ -118,7 +121,7 @@ async def _capture_bash_output(
             if msg_id is None:
                 # First capture — send a new message
                 sent = await rate_limit_send_message(
-                    PTBTelegramClient(bot),
+                    client,
                     chat_id,
                     output,
                     message_thread_id=thread_id,
@@ -126,7 +129,7 @@ async def _capture_bash_output(
                 if sent:
                     msg_id = sent.message_id
             else:
-                await _edit_bash_message(bot, chat_id, msg_id, output)
+                await _edit_bash_message(client, chat_id, msg_id, output)
 
             await asyncio.sleep(1.0)
     except asyncio.CancelledError:
@@ -324,16 +327,14 @@ async def _forward_message(
     user_id: int,
     thread_id: int,
     text: str,
-    bot: Bot,
+    client: TelegramClient,
     message: Message,
 ) -> None:
     """Forward a text message to the bound tmux window."""
     await message.chat.send_action(ChatAction.TYPING)  # type: ignore[union-attr]
     # Enqueue a status clear to actually delete the Telegram message
     # (clear_status_msg_info only clears the tracking dict, leaving a ghost)
-    await enqueue_status_update(
-        PTBTelegramClient(bot), user_id, window_id, None, thread_id
-    )
+    await enqueue_status_update(client, user_id, window_id, None, thread_id)
 
     # Cancel any running bash capture — new message pushes pane content down
     cancel_bash_capture(user_id, thread_id)
@@ -345,7 +346,7 @@ async def _forward_message(
         await safe_reply(message, f"\u274c {err_message}")
         return
 
-    await ack_reaction(PTBTelegramClient(bot), message.chat.id, message.message_id)
+    await ack_reaction(client, message.chat.id, message.message_id)
 
     from ..command_history import record_command
 
@@ -355,7 +356,7 @@ async def _forward_message(
     if text.startswith("!") and len(text) > 1:
         bash_cmd = text[1:]  # strip leading "!"
         task = asyncio.create_task(
-            _capture_bash_output(bot, user_id, thread_id, window_id, bash_cmd)
+            _capture_bash_output(client, user_id, thread_id, window_id, bash_cmd)
         )
         task.add_done_callback(task_done_callback)
         _bash_capture_tasks[(user_id, thread_id)] = task
@@ -364,9 +365,7 @@ async def _forward_message(
     interactive_window = get_interactive_window(user_id, thread_id)
     if interactive_window and interactive_window == window_id:
         await asyncio.sleep(0.2)
-        await handle_interactive_ui(
-            PTBTelegramClient(bot), user_id, window_id, thread_id
-        )
+        await handle_interactive_ui(client, user_id, window_id, thread_id)
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -453,9 +452,21 @@ async def handle_text_message(
         from ..shell.shell_commands import handle_shell_message
 
         await handle_shell_message(
-            context.bot, user.id, thread_id, window_id, text, message
+            PTBTelegramClient(context.bot),
+            user.id,
+            thread_id,
+            window_id,
+            text,
+            message,
         )
         return
 
     # Forward message to window
-    await _forward_message(window_id, user.id, thread_id, text, context.bot, message)
+    await _forward_message(
+        window_id,
+        user.id,
+        thread_id,
+        text,
+        PTBTelegramClient(context.bot),
+        message,
+    )

@@ -12,7 +12,7 @@ class TestClearTopicState:
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            await clear_topic_state(1, 42, bot=bot, window_id="@0")
+            await clear_topic_state(1, 42, client=bot, window_id="@0")
 
         mock_enqueue.assert_called_once()
         args = mock_enqueue.call_args
@@ -28,7 +28,7 @@ class TestClearTopicState:
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            await clear_topic_state(1, 42, bot=None, window_id="@0")
+            await clear_topic_state(1, 42, client=None, window_id="@0")
 
         mock_enqueue.assert_not_called()
 
@@ -40,7 +40,7 @@ class TestClearTopicState:
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
-            await clear_topic_state(1, 42, bot=bot, window_id=None)
+            await clear_topic_state(1, 42, client=bot, window_id=None)
 
         mock_enqueue.assert_called_once()
         assert mock_enqueue.call_args[0][2] == ""

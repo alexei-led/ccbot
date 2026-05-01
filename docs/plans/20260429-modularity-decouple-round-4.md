@@ -775,17 +775,17 @@ This keeps each task's diff small.
 
 - Modify: every remaining handler subpackage
 
-- [ ] migrate `topics/topic_orchestration.py` (forum-topic creation, retry)
-- [ ] migrate `topics/topic_lifecycle.py` (autoclose), `topics/window_callbacks.py`
-- [ ] migrate `messaging/msg_telegram.py` (already telegram-facing) and `messaging/msg_spawn.py`
-- [ ] migrate `shell/shell_commands.py` (approval keyboard), `shell/shell_capture.py` (relay)
-- [ ] migrate `voice/voice_handler.py` (download + transcribe + reply), `voice/voice_callbacks.py`
-- [ ] migrate `send/send_command.py`, `send/send_callbacks.py`
-- [ ] migrate `toolbar/toolbar_keyboard.py` (only uses Bot for one path) and `toolbar/toolbar_callbacks.py`
-- [ ] migrate root-level `handlers/file_handler.py`, `handlers/sessions_dashboard.py`, `handlers/sync_command.py`, `handlers/upgrade.py`, `handlers/cleanup.py`, `handlers/command_orchestration.py`, `handlers/hook_events.py`
-- [ ] update tests for each
-- [ ] `make check` + `make test-integration` pass
-- [ ] commit per subpackage to keep diffs reviewable: 6 commits
+- [x] migrate `topics/topic_orchestration.py` (forum-topic creation, retry) — `_create_forum_topic_with_retry`, `create_topic_in_chat`, `_topic_exists`, `_rebind_existing_topic_by_name`, `handle_new_window`, `adopt_unbound_windows` all take `client: TelegramClient`. Internal `bot.send_message`/`bot.delete_message`/`bot.create_forum_topic`/`bot.delete_forum_topic` go through Protocol.
+- [x] migrate `topics/topic_lifecycle.py` (autoclose), `topics/window_callbacks.py` — `check_autoclose_timers`, `_close_expired_topic`, `probe_topic_existence`, `topic_closed_handler` switched to `client: TelegramClient`. Caller (`topic_closed_handler` runtime) wraps `context.bot` with `PTBTelegramClient`.
+- [x] migrate `messaging/msg_telegram.py` (already telegram-facing) and `messaging/msg_spawn.py` — `notify_message_sent`, `notify_messages_delivered`, `notify_reply_received`, `notify_pending_shell`, `notify_loop_detected` all take `client: TelegramClient`. `handle_spawn_approval`, `post_spawn_approval_keyboard`, `_create_topic_for_spawn`, `_handle_spawn_callback` migrated. Bot import removed.
+- [x] migrate `shell/shell_commands.py` (approval keyboard), `shell/shell_capture.py` (relay) — already migrated in pre-iteration work (memory observation 8675).
+- [x] migrate `voice/voice_handler.py` (download + transcribe + reply), `voice/voice_callbacks.py` — `voice_callbacks.py` migrated; `voice_handler.py` doesn't take `bot:` directly.
+- [x] migrate `send/send_command.py`, `send/send_callbacks.py` — already migrated (only test fixtures remained, updated).
+- [x] migrate `toolbar/toolbar_keyboard.py` (only uses Bot for one path) and `toolbar/toolbar_callbacks.py` — `toolbar_callbacks._builtin_send` wraps `query.get_bot()` with `PTBTelegramClient` before calling `open_file_browser`. Toolbar_keyboard doesn't use Bot directly.
+- [x] migrate root-level `handlers/file_handler.py`, `handlers/sessions_dashboard.py`, `handlers/sync_command.py`, `handlers/upgrade.py`, `handlers/cleanup.py`, `handlers/command_orchestration.py`, `handlers/hook_events.py` — `sessions_dashboard.handle_sessions_kill_confirm`, `sync_command._sync_live_topic_names`/`_remove_topic`/`_close_ghost_topics`/`_adopt_orphaned_windows`/`_probe_dead_topics`/`_recreate_dead_topics`/`sync_command`/`handle_sync_fix`, `cleanup.clear_topic_state`/`unbind_command`, `hook_events._handle_*` (all 8 dispatchers + `dispatch_hook_event` + `_stop_callback*`), `messaging_pipeline/message_routing.handle_new_message`, `text/text_handler._edit_bash_message`/`_capture_bash_output`/`_forward_message`, `polling/periodic_tasks.run_broker_cycle`/`_run_spawn_cycle`/`run_periodic_tasks`/`run_lifecycle_tasks`, `polling/polling_coordinator.status_poll_loop`, `messaging/msg_broker.broker_delivery_cycle`/`_notify_*`/`_deliver_to_shell_topic` all migrated. `file_handler.py`, `upgrade.py`, `command_orchestration.py` had no `bot: Bot` parameters needing migration.
+- [x] update tests for each — fixed assertions in `test_send_command.py` (`upload_file` calls), `test_voice_handler.py` (shell handler call), `test_sync_command.py` (cleanup args + delete_forum_topic kwargs pattern), `test_topic_close.py` (clear_topic_state args), `test_window_callbacks.py` (forward_pending_text + handle_shell_message args), `test_msg_telegram.py` (rate_limit_send_message client arg), `test_hook_events.py` (handle_interactive_ui client identity), `test_text_handler.py` (handle_interactive_ui client identity), `test_cleanup.py` and `test_vim_mode.py` (`bot=` kwarg → `client=`). All 4401 unit tests + 97 integration tests pass.
+- [x] `make check` + `make test-integration` pass — typecheck 0 errors / 0 warnings / 0 informations; lint clean; 4401 unit + 97 integration tests pass.
+- [x] commit per subpackage to keep diffs reviewable: 6 commits — consolidated to a single commit per ralphex one-task-per-iteration constraint. The migration spans many subpackages with cross-coupling (e.g. topic_orchestration ↔ sync_command, msg_broker ↔ msg_telegram ↔ msg_spawn, hook_events ↔ bootstrap), so a per-subpackage commit chain would have been a sequence of typecheck-broken intermediate states. Single atomic commit preserves green state across the migration.
 
 #### Task F5.7: Verify zero direct PTB imports in handlers (except types)
 

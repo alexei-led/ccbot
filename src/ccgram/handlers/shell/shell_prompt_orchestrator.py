@@ -18,10 +18,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import structlog
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
-from ...telegram_client import PTBTelegramClient
 
+from ...telegram_client import TelegramClient
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_send
 
@@ -54,7 +54,7 @@ async def ensure_setup(
     window_id: str,
     trigger: Trigger,
     *,
-    bot: Bot | None = None,
+    client: TelegramClient | None = None,
     chat_id: int = 0,
     thread_id: int = 0,
 ) -> None:
@@ -80,7 +80,7 @@ async def ensure_setup(
         suppress = st.was_offered if trigger == "external_bind" else st.skip_flag
         if not suppress:
             await _show_offer_keyboard(
-                window_id, bot=bot, chat_id=chat_id, thread_id=thread_id
+                window_id, client=client, chat_id=chat_id, thread_id=thread_id
             )
         return
 
@@ -113,14 +113,14 @@ def _reset_all_state() -> None:
 async def _show_offer_keyboard(
     window_id: str,
     *,
-    bot: Bot | None = None,
+    client: TelegramClient | None = None,
     chat_id: int = 0,
     thread_id: int = 0,
 ) -> None:
     """Show inline keyboard with Set up / Skip buttons."""
     st = _get_state(window_id)
 
-    if not bot or not chat_id:
+    if not client or not chat_id:
         from ...providers.shell_infra import setup_shell_prompt
 
         st.was_offered = True
@@ -140,7 +140,7 @@ async def _show_offer_keyboard(
         ]
     )
     sent = await safe_send(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         "Shell prompt marker helps ccgram detect command output. Set up now?",
         message_thread_id=thread_id,

@@ -17,11 +17,11 @@ import os
 import structlog
 from pathlib import Path
 
-from telegram import Bot, Message, Update
+from telegram import Message, Update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
-from ...telegram_client import PTBTelegramClient
+from ...telegram_client import PTBTelegramClient, TelegramClient
 
 from ...config import config
 from ...window_query import view_window
@@ -296,7 +296,7 @@ def build_search_results(
 
 
 async def upload_file(
-    bot: Bot, chat_id: int, thread_id: int, path: Path
+    client: TelegramClient, chat_id: int, thread_id: int, path: Path
 ) -> Message | None:
     """Send *path* to the given Telegram chat/thread as photo or document.
 
@@ -306,14 +306,14 @@ async def upload_file(
     try:
         with path.open("rb") as fh:
             if _is_image(path):
-                return await bot.send_photo(
+                return await client.send_photo(
                     chat_id=chat_id,
                     photo=fh,
                     filename=path.name,
                     message_thread_id=thread_id,
                     read_timeout=300,
                 )
-            return await bot.send_document(
+            return await client.send_document(
                 chat_id=chat_id,
                 document=fh,
                 filename=path.name,
@@ -340,7 +340,7 @@ def _cache_browser_state(
 
 
 async def open_file_browser(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     thread_id: int | None,
     user_data: dict,
@@ -351,7 +351,7 @@ async def open_file_browser(
     text, markup, items = build_file_browser(cwd, cwd, 0)
     _cache_browser_state(user_data, cwd, items, window_id)
     await safe_send(
-        PTBTelegramClient(bot),
+        client,
         chat_id,
         text,
         message_thread_id=thread_id,
@@ -368,7 +368,7 @@ async def _upload_with_feedback(
 ) -> None:
     """Upload *path*, replying with a human-readable error on TelegramError."""
     try:
-        await upload_file(context.bot, chat_id, thread_id, path)
+        await upload_file(PTBTelegramClient(context.bot), chat_id, thread_id, path)
     except TelegramError as exc:
         await safe_reply(update.message, f"Upload failed: {exc}")  # type: ignore[arg-type]
 
