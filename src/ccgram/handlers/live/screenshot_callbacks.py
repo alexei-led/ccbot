@@ -30,6 +30,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ...screenshot import text_to_image
+from ...telegram_client import PTBTelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ..callback_data import (
@@ -236,8 +237,9 @@ async def _handle_pane_screenshot(
         await query.answer("Use in a topic", show_alert=True)
         return
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    client = PTBTelegramClient(query.get_bot())
     try:
-        await query.get_bot().send_document(
+        await client.send_document(
             chat_id=chat_id,
             document=io.BytesIO(png_bytes),
             filename=f"pane_{pane_id}.png",
@@ -342,8 +344,9 @@ async def _handle_status_screenshot(
         await query.answer("Use in a topic", show_alert=True)
         return
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    client = PTBTelegramClient(query.get_bot())
     try:
-        await query.get_bot().send_document(
+        await client.send_document(
             chat_id=chat_id,
             document=io.BytesIO(png_bytes),
             filename="screenshot.png",
@@ -411,8 +414,9 @@ async def screenshot_command(
     png_bytes = await text_to_image(pane_text, with_ansi=True)
     keyboard = build_screenshot_keyboard(window_id)
     chat_id = thread_router.resolve_chat_id(user.id, thread_id)
+    client = PTBTelegramClient(update.message.get_bot())
     try:
-        await update.message.get_bot().send_document(
+        await client.send_document(
             chat_id=chat_id,
             document=io.BytesIO(png_bytes),
             filename="screenshot.png",
@@ -479,8 +483,9 @@ async def live_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
     chat_id = thread_router.resolve_chat_id(user.id, thread_id)
     png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
     keyboard = build_live_keyboard(window_id)
+    client = PTBTelegramClient(update.message.get_bot())
     try:
-        sent = await update.message.get_bot().send_photo(
+        sent = await client.send_photo(
             chat_id=chat_id,
             photo=io.BytesIO(png_bytes),
             caption=f"Live · {time.strftime('%H:%M:%S')}",

@@ -13,6 +13,7 @@ import structlog
 from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes
 
+from ...telegram_client import PTBTelegramClient
 from ...tmux_manager import tmux_manager
 from ..callback_data import (
     CB_ASK_DOWN,
@@ -97,10 +98,11 @@ async def handle_interactive_callback(
         return
 
     thread_id = get_thread_id(update)
+    client = PTBTelegramClient(context.bot)
 
     if cb_prefix == CB_ASK_REFRESH:
         await handle_interactive_ui(
-            context.bot, user_id, window_id, thread_id, pane_id=pane_id
+            client, user_id, window_id, thread_id, pane_id=pane_id
         )
         await query.answer("\U0001f504")
     else:
@@ -117,10 +119,10 @@ async def handle_interactive_callback(
         if sent and refresh_ui:
             await asyncio.sleep(0.5)
             await handle_interactive_ui(
-                context.bot, user_id, window_id, thread_id, pane_id=pane_id
+                client, user_id, window_id, thread_id, pane_id=pane_id
             )
         elif sent and not refresh_ui:
-            await clear_interactive_msg(user_id, context.bot, thread_id)
+            await clear_interactive_msg(user_id, client, thread_id)
         await query.answer(INTERACTIVE_KEY_LABELS.get(cb_prefix, ""))
 
 

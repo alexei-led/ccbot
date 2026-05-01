@@ -20,11 +20,12 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 import structlog
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.error import RetryAfter, TelegramError
 
 from ...config import config
 from ...screenshot import text_to_image
+from ...telegram_client import TelegramClient
 from ...tmux_manager import tmux_manager
 from ...topic_state_registry import topic_state
 from ..callback_data import CB_KEYS_PREFIX, CB_LIVE_STOP
@@ -108,7 +109,7 @@ def _clear_live_view(user_id: int, thread_id: int) -> None:
     _active_views.pop((user_id, thread_id), None)
 
 
-async def tick_live_views(bot: Bot) -> None:
+async def tick_live_views(client: TelegramClient) -> None:
     """Refresh all active live views. Called from periodic_tasks."""
 
     effective_timeout = config.live_view_timeout
@@ -116,11 +117,11 @@ async def tick_live_views(bot: Bot) -> None:
     now = time.monotonic()
 
     for key, view in list(_active_views.items()):
-        await _tick_one_view(bot, key, view, now, effective_timeout, interval)
+        await _tick_one_view(client, key, view, now, effective_timeout, interval)
 
 
 async def _tick_one_view(
-    bot: Bot,
+    client: TelegramClient,
     key: tuple[int, int],
     view: LiveViewState,
     now: float,
@@ -131,7 +132,7 @@ async def _tick_one_view(
     try:
         if now - view.start_time > timeout:
             _active_views.pop(key, None)
-            await _edit_caption(bot, view, "Live view ended (timeout)")
+            await _edit_caption(client, view, "Live view ended (timeout)")
             return
 
         if now < view.next_edit_after:
@@ -140,7 +141,7 @@ async def _tick_one_view(
         window = await tmux_manager.find_window_by_id(view.window_id)
         if window is None:
             _active_views.pop(key, None)
-            await _edit_caption(bot, view, "Live view ended (window closed)")
+            await _edit_caption(client, view, "Live view ended (window closed)")
             return
 
         text = await _capture_pane(view, window.window_id)
@@ -157,7 +158,7 @@ async def _tick_one_view(
         await rate_limit_send(view.chat_id)
 
         keyboard = build_live_keyboard(view.window_id, pane_id=view.pane_id)
-        await bot.edit_message_media(
+        await client.edit_message_media(
             chat_id=view.chat_id,
             message_id=view.message_id,
             media=InputMediaPhoto(
@@ -188,13 +189,13 @@ async def _capture_pane(view: LiveViewState, window_id: str) -> str | None:
     return await tmux_manager.capture_pane(window_id, with_ansi=True)
 
 
-async def _edit_caption(bot: Bot, view: LiveViewState, text: str) -> None:
+async def _edit_caption(client: TelegramClient, view: LiveViewState, text: str) -> None:
     """Best-effort edit of the live view message caption on stop."""
     from .screenshot_callbacks import build_screenshot_keyboard
 
     keyboard = build_screenshot_keyboard(view.window_id, pane_id=view.pane_id)
     with contextlib.suppress(TelegramError):
-        await bot.edit_message_caption(
+        await client.edit_message_caption(
             chat_id=view.chat_id,
             message_id=view.message_id,
             caption=text,

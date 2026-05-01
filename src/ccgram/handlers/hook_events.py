@@ -131,7 +131,9 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
 
         await asyncio.sleep(0.3)
 
-        handled = await handle_interactive_ui(bot, user_id, window_id, thread_id)
+        handled = await handle_interactive_ui(
+            PTBTelegramClient(bot), user_id, window_id, thread_id
+        )
         if not handled:
             clear_interactive_mode(user_id, thread_id)
 

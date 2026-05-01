@@ -28,7 +28,27 @@ from ccgram.handlers.polling.polling_strategies import (
     terminal_poll_state,
     terminal_screen_buffer,
 )
+from ccgram.telegram_client import PTBTelegramClient
 from ccgram.tmux_manager import PaneInfo
+
+
+def _assert_handle_called_once_with_client(mock_handle, bot, *args, **kwargs):
+    mock_handle.assert_called_once()
+    client_arg = mock_handle.call_args.args[0]
+    assert isinstance(client_arg, PTBTelegramClient)
+    assert client_arg.bot is bot
+    assert mock_handle.call_args.args[1:] == args
+    assert mock_handle.call_args.kwargs == kwargs
+
+
+def _assert_clear_called_once_with_client(mock_clear, user_id, bot, thread_id):
+    mock_clear.assert_called_once()
+    args = mock_clear.call_args.args
+    assert args[0] == user_id
+    assert isinstance(args[1], PTBTelegramClient)
+    assert args[1].bot is bot
+    assert args[2] == thread_id
+
 
 _window_poll_state = terminal_poll_state._states
 _topic_poll_state = lifecycle_strategy._states
@@ -1972,7 +1992,9 @@ class TestScanWindowPanes:
             )
             mock_tm.capture_pane_by_id = AsyncMock(return_value="Allow?\nEsc\n")
             await _scan_window_panes(bot, 1, "@0", 42)
-        mock_handle.assert_called_once_with(bot, 1, "@0", 42, pane_id="%2")
+        _assert_handle_called_once_with_client(
+            mock_handle, bot, 1, "@0", 42, pane_id="%2"
+        )
 
     async def test_skips_active_pane(self) -> None:
         bot = AsyncMock(spec=Bot)
@@ -2304,7 +2326,7 @@ class TestUpdateStatusMessageEdgeCases:
             mock_tr.get_display_name.return_value = "project"
             mock_sm.get_notification_mode.return_value = "normal"
             await update_status_message(bot, 1, "@0", thread_id=42)
-        mock_clear.assert_called_once_with(1, bot, 42)
+        _assert_clear_called_once_with_client(mock_clear, 1, bot, 42)
 
     async def test_new_interactive_ui_enters_interactive_mode(self) -> None:
         from ccgram.handlers.polling.window_tick import (
@@ -2347,7 +2369,7 @@ class TestUpdateStatusMessageEdgeCases:
             mock_tm.find_window_by_id = AsyncMock(return_value=mock_window)
             mock_tm.capture_pane = AsyncMock(return_value="Allow?\nEsc\n")
             await update_status_message(bot, 1, "@0", thread_id=42)
-        mock_handle.assert_called_once_with(bot, 1, "@0", 42)
+        _assert_handle_called_once_with_client(mock_handle, bot, 1, "@0", 42)
 
 
 @pytest.mark.usefixtures("_reset_pyte")
@@ -2396,7 +2418,7 @@ class TestCheckInteractiveOnly:
             await _check_interactive_only(bot, 1, "@0", 42, _window=mock_window)
         mock_pyte.assert_called_once_with("@0", "Allow?\nEsc\n", columns=80, rows=24)
         mock_set.assert_called_once_with(1, "@0", 42)
-        mock_handle.assert_called_once_with(bot, 1, "@0", 42)
+        _assert_handle_called_once_with_client(mock_handle, bot, 1, "@0", 42)
 
     async def test_clears_interactive_mode_on_handle_failure(self) -> None:
         from ccgram.handlers.polling.window_tick import _check_interactive_only
@@ -2597,6 +2619,6 @@ class TestCheckInteractiveOnly:
         mock_provider.parse_terminal_status.assert_called_once_with(
             "Allow?\nEsc\n", pane_title=expected_title
         )
-        mock_handle.assert_called_once_with(bot, 1, "@0", 42)
+        _assert_handle_called_once_with_client(mock_handle, bot, 1, "@0", 42)
         if uses_pane_title:
             observe_tm.get_pane_title.assert_called_once_with("@0")

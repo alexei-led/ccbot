@@ -20,10 +20,11 @@ import time
 
 import structlog
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, NetworkError, RetryAfter, TelegramError, TimedOut
 
 from ...providers import get_provider_for_window
+from ...telegram_client import TelegramClient
 from ...window_query import get_window_provider
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
@@ -204,7 +205,7 @@ def _build_interactive_keyboard(
 
 
 async def _edit_interactive_msg(
-    bot: Bot,
+    client: TelegramClient,
     chat_id: int,
     msg_id: int,
     text: str,
@@ -217,7 +218,7 @@ async def _edit_interactive_msg(
     Returns True/False on success/failure, or None if no edit was attempted.
     """
     try:
-        await bot.edit_message_text(
+        await client.edit_message_text(
             chat_id=chat_id,
             message_id=msg_id,
             text=text,
@@ -293,7 +294,7 @@ def _lookup_pane_name(window_id: str, pane_id: str) -> str | None:
 
 
 async def _send_interactive_with_retry(
-    bot: Bot,
+    client: TelegramClient,
     *,
     chat_id: int,
     text: str,
@@ -307,7 +308,7 @@ async def _send_interactive_with_retry(
     """Send interactive UI with one retry on transient transport errors."""
     for attempt in range(_INTERACTIVE_SEND_RETRIES + 1):
         try:
-            return await bot.send_message(
+            return await client.send_message(
                 chat_id=chat_id,
                 text=text,
                 reply_markup=keyboard,
@@ -343,7 +344,7 @@ async def _send_interactive_with_retry(
 
 
 async def handle_interactive_ui(
-    bot: Bot,
+    client: TelegramClient,
     user_id: int,
     window_id: str,
     thread_id: int | None = None,
@@ -375,7 +376,7 @@ async def handle_interactive_ui(
     if existing_msg_id:
         return (
             await _edit_interactive_msg(
-                bot, chat_id, existing_msg_id, text, keyboard, ikey, window_id
+                client, chat_id, existing_msg_id, text, keyboard, ikey, window_id
             )
             or False
         )
@@ -398,7 +399,7 @@ async def handle_interactive_ui(
     # Send as plain text — terminal content should not be formatted.
     await rate_limit_send(chat_id)
     sent = await _send_interactive_with_retry(
-        bot,
+        client,
         chat_id=chat_id,
         text=text,
         keyboard=keyboard,
@@ -417,7 +418,7 @@ async def handle_interactive_ui(
 
 async def clear_interactive_msg(
     user_id: int,
-    bot: Bot | None = None,
+    client: TelegramClient | None = None,
     thread_id: int | None = None,
 ) -> None:
     """Clear tracked interactive message, delete from chat, and exit interactive mode."""
@@ -431,7 +432,7 @@ async def clear_interactive_msg(
         thread_id,
         msg_id,
     )
-    if bot and msg_id:
+    if client and msg_id:
         chat_id = thread_router.resolve_chat_id(user_id, thread_id)
         with contextlib.suppress(TelegramError):
-            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            await client.delete_message(chat_id=chat_id, message_id=msg_id)

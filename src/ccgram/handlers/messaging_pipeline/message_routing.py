@@ -86,7 +86,9 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
             if queue:
                 await queue.join()
             await asyncio.sleep(0.3)
-            handled = await handle_interactive_ui(bot, user_id, window_id, thread_id)
+            handled = await handle_interactive_ui(
+                PTBTelegramClient(bot), user_id, window_id, thread_id
+            )
             if handled:
                 session = await session_query.resolve_session_for_window(window_id)
                 if session and session.file_path:
@@ -102,7 +104,7 @@ async def handle_new_message(msg: NewMessage, bot: Bot) -> None:  # noqa: C901, 
                 clear_interactive_mode(user_id, thread_id)
 
         if get_interactive_msg_id(user_id, thread_id):
-            await clear_interactive_msg(user_id, bot, thread_id)
+            await clear_interactive_msg(user_id, PTBTelegramClient(bot), thread_id)
 
         parts = build_response_parts(
             msg.text,

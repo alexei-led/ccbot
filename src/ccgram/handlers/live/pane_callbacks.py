@@ -25,6 +25,7 @@ from telegram import (
 from telegram.ext import ContextTypes
 
 from ...config import config
+from ...telegram_client import PTBTelegramClient
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ...window_state_store import window_store
@@ -166,8 +167,9 @@ async def _handle_rename(
         context.user_data[PANE_RENAME_THREAD_ID] = thread_id
 
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    client = PTBTelegramClient(query.get_bot())
     try:
-        await query.get_bot().send_message(
+        await client.send_message(
             chat_id=chat_id,
             text=_RENAME_PROMPT.format(pane_id=pane_id),
             message_thread_id=thread_id,

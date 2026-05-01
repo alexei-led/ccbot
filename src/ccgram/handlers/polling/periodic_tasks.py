@@ -19,6 +19,7 @@ from telegram.error import TelegramError
 
 from ...config import config
 from ...session import session_manager
+from ...telegram_client import PTBTelegramClient
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttle_sweep
 from ..messaging.msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
@@ -115,7 +116,7 @@ async def run_periodic_tasks(
 
     if now - timers["live_view"] >= config.live_view_interval:
         timers["live_view"] = now
-        await tick_live_views(bot)
+        await tick_live_views(PTBTelegramClient(bot))
 
     if now - timers["topic_check"] >= TOPIC_CHECK_INTERVAL:
         timers["topic_check"] = now

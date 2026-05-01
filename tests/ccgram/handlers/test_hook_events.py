@@ -4,6 +4,8 @@ import pytest
 
 from telegram import Bot
 
+from ccgram.telegram_client import PTBTelegramClient
+
 from ccgram.claude_task_state import claude_task_state
 from ccgram.handlers.callback_data import IDLE_STATUS_TEXT
 
@@ -311,7 +313,11 @@ class TestHandleNotification:
             await dispatch_hook_event(event, bot)
 
             mock_set.assert_called_once_with(100, "@0", 42)
-            mock_handle.assert_called_once_with(bot, 100, "@0", 42)
+            mock_handle.assert_called_once()
+            client_arg = mock_handle.call_args.args[0]
+            assert isinstance(client_arg, PTBTelegramClient)
+            assert client_arg.bot is bot
+            assert mock_handle.call_args.args[1:] == (100, "@0", 42)
 
     async def test_skips_when_already_interactive(self, monkeypatch) -> None:
         monkeypatch.setattr(

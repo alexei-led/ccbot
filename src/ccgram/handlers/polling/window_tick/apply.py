@@ -121,7 +121,9 @@ async def _transition_to_idle(
 async def _surface_pane_alert(
     bot: "Bot", user_id: int, window_id: str, thread_id: int, pane_id: str
 ) -> None:
-    await handle_interactive_ui(bot, user_id, window_id, thread_id, pane_id=pane_id)
+    await handle_interactive_ui(
+        PTBTelegramClient(bot), user_id, window_id, thread_id, pane_id=pane_id
+    )
 
 
 _PANE_OUTPUT_PREVIEW_LINES = 12
@@ -257,7 +259,9 @@ async def _check_interactive_only(
 
     if status is not None and status.is_interactive:
         set_interactive_mode(user_id, window_id, thread_id)
-        handled = await handle_interactive_ui(bot, user_id, window_id, thread_id)
+        handled = await handle_interactive_ui(
+            PTBTelegramClient(bot), user_id, window_id, thread_id
+        )
         if not handled:
             clear_interactive_mode(user_id, thread_id)
 
@@ -503,16 +507,17 @@ async def _update_status(
     interactive_window = get_interactive_window(user_id, thread_id)
     should_check_new_ui = True
 
+    client = PTBTelegramClient(bot)
     if interactive_window == window_id:
         if status is not None and status.is_interactive:
             return
-        await clear_interactive_msg(user_id, bot, thread_id)
+        await clear_interactive_msg(user_id, client, thread_id)
         should_check_new_ui = False
     elif interactive_window is not None:
-        await clear_interactive_msg(user_id, bot, thread_id)
+        await clear_interactive_msg(user_id, client, thread_id)
 
     if should_check_new_ui and status is not None and status.is_interactive:
-        await handle_interactive_ui(bot, user_id, window_id, thread_id)
+        await handle_interactive_ui(client, user_id, window_id, thread_id)
         return
 
     notification_mode = window_query.get_notification_mode(window_id)

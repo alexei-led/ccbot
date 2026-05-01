@@ -763,11 +763,11 @@ This keeps each task's diff small.
 - Modify: `src/ccgram/handlers/live/screenshot_callbacks.py`
 - Modify: `src/ccgram/handlers/live/pane_callbacks.py`
 
-- [ ] migrate interactive UI rendering + callbacks
-- [ ] migrate live view tick + screenshot callbacks
-- [ ] update tests
-- [ ] `make check` passes
-- [ ] commit "refactor(interactive,live): depend on TelegramClient Protocol"
+- [x] migrate interactive UI rendering + callbacks — `interactive_ui.handle_interactive_ui`, `clear_interactive_msg`, `_edit_interactive_msg`, `_send_interactive_with_retry` switched from `bot: Bot` to `client: TelegramClient`. `interactive_callbacks.handle_interactive_callback` constructs `client = PTBTelegramClient(context.bot)` once and passes through.
+- [x] migrate live view tick + screenshot callbacks — `live_view.tick_live_views`, `_tick_one_view`, `_edit_caption` take `client: TelegramClient`. `screenshot_callbacks._handle_pane_screenshot`, `_handle_status_screenshot`, `screenshot_command`, `live_command` wrap `query.get_bot()` / `update.message.get_bot()` with `PTBTelegramClient` before send. `pane_callbacks._handle_rename` does the same for the rename-prompt `send_message`. Production callers in `cleanup.py`, `hook_events.py`, `message_routing.py`, `periodic_tasks.py`, `polling/window_tick/apply.py`, and `text/text_handler.py` updated to wrap `bot` with `PTBTelegramClient` at the call site (mirroring the F5.3/F5.4 pattern).
+- [x] update tests — `tests/ccgram/handlers/test_hook_events.py::TestHandleNotification::test_renders_interactive_ui` switched from `mock_handle.assert_called_once_with(bot, ...)` to isinstance(`PTBTelegramClient`) + `.bot is bot` identity check. `tests/ccgram/handlers/polling/test_status_polling.py` added two helpers (`_assert_handle_called_once_with_client`, `_assert_clear_called_once_with_client`) and replaced six exact-arg assertions in `TestCheckInteractiveOnly`, `TestScanWindowPanes`, and `TestUpdateStatusMessageEdgeCases`. `tests/ccgram/handlers/text/test_text_handler.py::TestForwardMessage::test_refreshes_interactive_ui` switched to the same isinstance + .bot identity pattern. Existing tests in `test_interactive_ui.py` and `test_live_view.py` unchanged — they pass `AsyncMock`/`AsyncMock(spec=Bot)` instances that duck-type as `TelegramClient` (Protocol structural typing, no isinstance enforcement).
+- [x] `make check` passes — typecheck 0 errors / 0 warnings / 0 informations; lint clean; 4401 unit + 97 integration tests pass
+- [x] commit "refactor(interactive,live): depend on TelegramClient Protocol"
 
 #### Task F5.6: Migrate `topics/`, `messaging/`, `shell/`, `voice/`, `send/`, `toolbar/`
 

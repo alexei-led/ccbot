@@ -9,6 +9,7 @@ from ccgram.handlers.text.text_handler import (
     _handle_dead_window,
     _handle_unbound_topic,
 )
+from ccgram.telegram_client import PTBTelegramClient
 from ccgram.handlers.topics.directory_browser import (
     STATE_BROWSING_DIRECTORY,
     STATE_KEY,
@@ -530,7 +531,11 @@ class TestForwardMessage:
 
         await _forward_message("@0", 100, 42, "hello", bot, message)
 
-        mock_handle_ui.assert_called_once_with(bot, 100, "@0", 42)
+        mock_handle_ui.assert_called_once()
+        client_arg = mock_handle_ui.call_args.args[0]
+        assert isinstance(client_arg, PTBTelegramClient)
+        assert client_arg.bot is bot
+        assert mock_handle_ui.call_args.args[1:] == (100, "@0", 42)
 
     @patch(f"{_TH}.send_to_window", new_callable=AsyncMock, return_value=(True, "ok"))
     @patch(f"{_TH}.window_query")

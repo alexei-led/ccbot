@@ -364,7 +364,9 @@ async def _forward_message(
     interactive_window = get_interactive_window(user_id, thread_id)
     if interactive_window and interactive_window == window_id:
         await asyncio.sleep(0.2)
-        await handle_interactive_ui(bot, user_id, window_id, thread_id)
+        await handle_interactive_ui(
+            PTBTelegramClient(bot), user_id, window_id, thread_id
+        )
 
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
