@@ -10,13 +10,13 @@ from ccgram.handlers.callback_data import (
     CB_RECOVERY_FRESH,
     CB_RECOVERY_RESUME,
 )
-from ccgram.handlers.recovery.recovery_callbacks import (
+from ccgram.handlers.recovery.recovery_banner import (
     RecoveryBanner,
     RecoveryMode,
     render_banner,
 )
 
-_RC = "ccgram.handlers.recovery.recovery_callbacks"
+_RC = "ccgram.handlers.recovery.recovery_banner"
 
 
 @pytest.fixture()

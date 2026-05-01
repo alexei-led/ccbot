@@ -253,14 +253,14 @@ def test_no_import_cycles(module):
 - Create: `tests/ccgram/handlers/recovery/test_recovery_banner.py`
 - Create: `tests/ccgram/handlers/recovery/test_resume_picker.py`
 
-- [ ] create `recovery_banner.py` — move `RecoveryBanner`, `render_banner`, `_recovery_help_text`, `build_recovery_keyboard`, `_create_and_bind_window`, `_handle_back/_fresh/_continue/_resume/_send_empty_state/_handle_browse/_handle_cancel`. Top-level docstring documents it as "dead-window banner UX flow"
-- [ ] create `resume_picker.py` — move `_SessionEntry`, `scan_sessions_for_cwd`, `_scan_index_for_cwd`, `_scan_bare_jsonl_for_cwd`, `_build_resume_picker_keyboard`, `_build_empty_resume_keyboard`, `_handle_resume_pick`. Top-level docstring documents it as "resume picker UX flow + transcript scan"
-- [ ] shrink `recovery_callbacks.py` to dispatcher only: `_dispatch`, `handle_recovery_callback`, `_validate_recovery_state`, `_clear_recovery_state`. Top-level docstring updated
-- [ ] update `recovery/__init__.py` to re-export the same public surface; verify no external call site breaks
-- [ ] update `resume_command.py` import path for `scan_sessions_for_cwd`
-- [ ] split `test_recovery_callbacks.py` into `test_recovery_banner.py` (banner flow) + `test_resume_picker.py` (picker flow) + remaining dispatcher-level tests
-- [ ] add a structural test asserting both new modules **exist** as importable names and that `set(handlers.recovery.__all__)` matches the pre-refactor public surface — codifies that the split happened without breaking external callers
-- [ ] run `make check` — must pass before next task
+- [x] create `recovery_banner.py` — move `RecoveryBanner`, `render_banner`, `_recovery_help_text`, `build_recovery_keyboard`, `_create_and_bind_window`, `_handle_back/_fresh/_continue/_resume/_send_empty_state/_handle_browse/_handle_cancel`. Top-level docstring documents it as "dead-window banner UX flow"
+- [x] create `resume_picker.py` — move `_SessionEntry`, `scan_sessions_for_cwd`, `_scan_index_for_cwd`, `_scan_bare_jsonl_for_cwd`, `_build_resume_picker_keyboard`, `_build_empty_resume_keyboard`, `_handle_resume_pick`. Top-level docstring documents it as "resume picker UX flow + transcript scan"
+- [x] shrink `recovery_callbacks.py` to dispatcher only: `_dispatch`, `handle_recovery_callback`, `_validate_recovery_state`, `_clear_recovery_state`. Top-level docstring updated. The validator was further trimmed to drop the `window_query.view_window(...)` cwd lookup — each banner handler does its own `_cwd_for_window(...)` lookup so the dispatcher has no `window_query` import, breaking what would otherwise be a sibling-cycle test patching headache. No `__getattr__` compat shim — the structural test pins the public surface instead.
+- [x] update `recovery/__init__.py` to re-export the same public surface; verify no external call site breaks — `bot.py`, `handlers/registry.py`, `handlers/text/text_handler.py`, `handlers/polling/window_tick/apply.py` all use the same import paths or the subpackage public surface
+- [x] update `resume_command.py` import path for `scan_sessions_for_cwd` — already imported via the subpackage `__init__.py` re-export, no churn
+- [x] split tests for the new shape — `test_recovery_banner.py` covers the banner flow (re-pointed `_RC` constant from `recovery_callbacks` to `recovery_banner`); `test_recovery_ui.py` retained for the dispatcher-level tests with `_RP` patches added for picker-side seams; new `test_recovery_subpackage_surface.py` codifies the structural invariant
+- [x] add a structural test asserting both new modules **exist** as importable names and that `set(handlers.recovery.__all__)` matches the pre-refactor public surface — `tests/ccgram/handlers/recovery/test_recovery_subpackage_surface.py` (6 cases)
+- [x] run `make check` — must pass before next task — green: 4496 unit + 134 integration + 28 skipped, lint clean, typecheck 0 errors
 
 ### Task 4: Split `command_orchestration.py` into `handlers/commands/` subpackage (forward / menu_sync / failure_probe / status_snapshot)
 

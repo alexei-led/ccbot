@@ -6,13 +6,12 @@ import pytest
 
 import ccgram.handlers.command_orchestration as cmd_orch_mod
 from ccgram.handlers.text.text_handler import text_handler
-from ccgram.handlers.recovery.recovery_callbacks import (
-    _SessionEntry,
+from ccgram.handlers.recovery.recovery_banner import (
     _recovery_help_text,
     build_recovery_keyboard,
-    handle_recovery_callback,
-    scan_sessions_for_cwd,
 )
+from ccgram.handlers.recovery.recovery_callbacks import handle_recovery_callback
+from ccgram.handlers.recovery.resume_picker import _SessionEntry, scan_sessions_for_cwd
 from ccgram.handlers.callback_data import (
     CB_RECOVERY_BACK,
     CB_RECOVERY_BROWSE,
@@ -29,7 +28,13 @@ from ccgram.handlers.user_state import (
     RECOVERY_WINDOW_ID,
 )
 
-_RC = "ccgram.handlers.recovery.recovery_callbacks"
+# After Round 5 split: _handle_fresh/continue/resume/back/cancel/browse,
+# _create_and_bind_window, build_recovery_keyboard, _recovery_help_text,
+# scan_sessions_for_cwd (re-imported here), session_manager, thread_router,
+# tmux_manager, etc. all live in recovery_banner. Keeping the constant name
+# minimises diff against pre-split tests.
+_RC = "ccgram.handlers.recovery.recovery_banner"
+_RP = "ccgram.handlers.recovery.resume_picker"
 
 
 @pytest.fixture(autouse=True)
@@ -851,6 +856,7 @@ class TestRecoveryResumeCallback:
 
 
 class TestRecoveryResumePickCallback:
+    @patch(f"{_RP}.window_query")
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.window_query")
@@ -861,10 +867,11 @@ class TestRecoveryResumePickCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
         mock_tr: MagicMock,
+        mock_picker_wq: MagicMock,
     ) -> None:
-        mock_sm.view_window.return_value = MagicMock(
-            cwd="/tmp/project", provider_name=""
-        )
+        view = MagicMock(cwd="/tmp/project", provider_name="")
+        mock_sm.view_window.return_value = view
+        mock_picker_wq.view_window.return_value = view
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -887,8 +894,12 @@ class TestRecoveryResumePickCallback:
         ctx = _make_context(user_data)
         query = update.callback_query
 
-        with patch(f"{_RC}.Path") as mock_path:
+        with (
+            patch(f"{_RC}.Path") as mock_path,
+            patch(f"{_RP}.Path") as mock_p_path,
+        ):
             mock_path.return_value.is_dir.return_value = True
+            mock_p_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
@@ -898,6 +909,7 @@ class TestRecoveryResumePickCallback:
         )
         mock_tr.bind_thread.assert_called_once()
 
+    @patch(f"{_RP}.window_query")
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
     @patch(f"{_RC}.window_query")
@@ -908,10 +920,11 @@ class TestRecoveryResumePickCallback:
         mock_sm: MagicMock,
         mock_tm: MagicMock,
         mock_tr: MagicMock,
+        mock_picker_wq: MagicMock,
     ) -> None:
-        mock_sm.view_window.return_value = MagicMock(
-            cwd="/tmp/project", provider_name=""
-        )
+        view = MagicMock(cwd="/tmp/project", provider_name="")
+        mock_sm.view_window.return_value = view
+        mock_picker_wq.view_window.return_value = view
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
@@ -934,8 +947,12 @@ class TestRecoveryResumePickCallback:
         ctx = _make_context(user_data)
         query = update.callback_query
 
-        with patch(f"{_RC}.Path") as mock_path:
+        with (
+            patch(f"{_RC}.Path") as mock_path,
+            patch(f"{_RP}.Path") as mock_p_path,
+        ):
             mock_path.return_value.is_dir.return_value = True
+            mock_p_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
         mock_tm.create_window.assert_called_once_with(
@@ -1123,7 +1140,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1156,14 +1173,14 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
         assert result == []
 
     def test_returns_empty_when_projects_path_missing(self, tmp_path) -> None:
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = tmp_path / "nonexistent"
             result = scan_sessions_for_cwd("/some/path")
 
@@ -1206,7 +1223,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1235,7 +1252,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1265,7 +1282,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1286,7 +1303,7 @@ class TestScanSessionsForCwd:
             f'{{"type":"user","cwd":"{resolved}","message":{{"content":[{{"type":"text","text":"Fix bug"}}]}}}}\n'
         )
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1309,7 +1326,7 @@ class TestScanSessionsForCwd:
             f'{{"type":"user","cwd":"{other_dir.resolve()}","message":{{"content":"hi"}}}}\n'
         )
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1342,7 +1359,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1374,7 +1391,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1407,7 +1424,7 @@ class TestScanSessionsForCwd:
         }
         (proj_dir / "sessions-index.json").write_text(json.dumps(index))
 
-        with patch(f"{_RC}.config") as mock_config:
+        with patch(f"{_RP}.config") as mock_config:
             mock_config.claude_projects_path = projects_path
             result = scan_sessions_for_cwd(str(work_dir))
 
@@ -1539,6 +1556,8 @@ class TestRecoveryPerWindowProvider:
             use_continue=True
         )
 
+    @patch(f"{_RP}.get_provider_for_window")
+    @patch(f"{_RP}.window_query")
     @patch(f"{_RC}.get_provider_for_window")
     @patch(f"{_RC}.thread_router")
     @patch(f"{_RC}.tmux_manager")
@@ -1551,15 +1570,19 @@ class TestRecoveryPerWindowProvider:
         mock_tm: MagicMock,
         mock_tr: MagicMock,
         mock_gpw: MagicMock,
+        mock_picker_wq: MagicMock,
+        mock_picker_gpw: MagicMock,
     ) -> None:
-        mock_sm.view_window.return_value = MagicMock(cwd="/tmp/project")
+        view = MagicMock(cwd="/tmp/project", provider_name="")
+        mock_sm.view_window.return_value = view
+        mock_picker_wq.view_window.return_value = view
         mock_tm.create_window = AsyncMock(
             return_value=(True, "Window created", "project", "@5")
         )
         mock_sm.wait_for_session_map_entry = AsyncMock()
         mock_sm.send_to_window = AsyncMock(return_value=(True, "ok"))
         mock_tr.resolve_chat_id.return_value = -100999
-        mock_gpw.return_value.make_launch_args.return_value = "--resume sess-1"
+        mock_picker_gpw.return_value.make_launch_args.return_value = "--resume sess-1"
 
         update = _make_callback_update(data=f"{CB_RECOVERY_PICK}0")
         user_data = _recovery_user_data()
@@ -1569,12 +1592,16 @@ class TestRecoveryPerWindowProvider:
         ctx = _make_context(user_data)
         query = update.callback_query
 
-        with patch(f"{_RC}.Path") as mock_path:
+        with (
+            patch(f"{_RC}.Path") as mock_path,
+            patch(f"{_RP}.Path") as mock_p_path,
+        ):
             mock_path.return_value.is_dir.return_value = True
+            mock_p_path.return_value.is_dir.return_value = True
             await handle_recovery_callback(query, 100, query.data, update, ctx)
 
-        mock_gpw.assert_called_with("@0", provider_name=ANY)
-        mock_gpw.return_value.make_launch_args.assert_called_once_with(
+        mock_picker_gpw.assert_called_with("@0", provider_name=ANY)
+        mock_picker_gpw.return_value.make_launch_args.assert_called_once_with(
             resume_id="sess-1"
         )
 
@@ -1702,7 +1729,7 @@ class TestRecoveryEmptyStateAndBrowseFallback:
 
 class TestEmptyStateKeyboardBuilder:
     def test_empty_keyboard_has_browse_fresh_and_cancel(self) -> None:
-        from ccgram.handlers.recovery.recovery_callbacks import (
+        from ccgram.handlers.recovery.resume_picker import (
             _build_empty_resume_keyboard,
         )
 
@@ -1718,7 +1745,7 @@ class TestEmptyStateKeyboardBuilder:
         assert CB_RECOVERY_CANCEL in datas
 
     def test_empty_keyboard_callback_data_within_64_bytes(self) -> None:
-        from ccgram.handlers.recovery.recovery_callbacks import (
+        from ccgram.handlers.recovery.resume_picker import (
             _build_empty_resume_keyboard,
         )
 

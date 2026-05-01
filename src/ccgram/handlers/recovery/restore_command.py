@@ -5,7 +5,7 @@ surfaces a recovery banner once. /restore lets the user re-show that
 banner on demand so they can pick how to recover (Fresh / Continue /
 Resume) — the actual session creation is owned by the recovery
 callbacks. The command is a thin re-render — see
-``handlers.recovery_callbacks.render_banner``.
+``handlers.recovery.recovery_banner.render_banner``.
 
 Key function: restore_command().
 """
@@ -23,7 +23,7 @@ from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ..messaging_pipeline.message_sender import safe_reply
 from ..user_state import PENDING_THREAD_ID, RECOVERY_WINDOW_ID
-from .recovery_callbacks import RecoveryBanner, render_banner
+from .recovery_banner import RecoveryBanner, render_banner
 
 if TYPE_CHECKING:
     from telegram.ext import ContextTypes

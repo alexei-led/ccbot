@@ -294,7 +294,7 @@ class TestHandleDeadWindow:
         message = AsyncMock()
 
         with patch(
-            "ccgram.handlers.recovery.recovery_callbacks.get_provider_for_window"
+            "ccgram.handlers.recovery.recovery_banner.get_provider_for_window"
         ) as mock_gpw:
             caps = mock_gpw.return_value.capabilities
             caps.supports_continue = True

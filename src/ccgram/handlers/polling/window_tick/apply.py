@@ -45,7 +45,7 @@ from ...messaging_pipeline.message_queue import (
     enqueue_status_update,
 )
 from ...messaging_pipeline.message_sender import rate_limit_send_message, safe_send
-from ...recovery.recovery_callbacks import RecoveryBanner, render_banner
+from ...recovery.recovery_banner import RecoveryBanner, render_banner
 from ...status.topic_emoji import update_topic_emoji
 from ..polling_state import (
     lifecycle_strategy,

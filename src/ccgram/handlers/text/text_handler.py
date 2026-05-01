@@ -42,7 +42,7 @@ from ..messaging_pipeline.message_sender import (
     rate_limit_send_message,
     safe_reply,
 )
-from ..recovery.recovery_callbacks import RecoveryBanner, render_banner
+from ..recovery.recovery_banner import RecoveryBanner, render_banner
 from ..polling.polling_state import lifecycle_strategy
 from ...topic_state_registry import topic_state
 from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
