@@ -167,7 +167,11 @@ def _walk_stmt(
         yield from _find_violations_in_function(stmt, source_lines, in_type_checking)
         return
     if isinstance(stmt, ast.ClassDef):
-        yield from _walk_outer_block(stmt.body, source_lines, in_type_checking)
+        # Class body inside a function executes at function-call time, so
+        # its imports are functionally lazy and must be annotated. Walk
+        # via _walk_block so Import statements are checked rather than
+        # silently skipped as eager top-level imports would be.
+        yield from _walk_block(stmt.body, source_lines, in_type_checking)
         return
     sub = list(_sub_bodies(stmt))
     if sub:

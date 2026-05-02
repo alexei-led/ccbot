@@ -141,6 +141,12 @@ def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, s
 
     Also matches legacy "ccbot:" prefix keys when the current prefix is "ccgram:".
     Returns {window_name: {"session_id": ..., "cwd": ...}} for matching entries.
+
+    Safe to call from a clean interpreter (no SessionManager wired): the
+    nested-session preference logic in ``_prefer_existing_primary`` short-
+    circuits to ``None`` when the window store is unwired, so the result
+    reflects the raw session_map rather than a wiring crash. When wired,
+    the result also incorporates the in-memory primary-session preference.
     """
     result: dict[str, dict[str, str]] = {}
     legacy_prefix = _LEGACY_SESSION_PREFIX if prefix.startswith("ccgram:") else ""

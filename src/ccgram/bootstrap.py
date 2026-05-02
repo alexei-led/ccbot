@@ -136,10 +136,14 @@ def verify_hooks_installed() -> None:
 def wire_runtime_callbacks() -> None:
     """Wire module-level callbacks that break cross-subsystem direct imports.
 
-    Must run before ``start_session_monitor`` — the monitor dispatches
-    Stop events to ``register_stop_callback``, which raises if not wired.
+    Idempotent — safe to call multiple times. Must run before
+    ``start_session_monitor`` — the monitor dispatches Stop events to
+    ``register_stop_callback``, which raises if not wired.
     """
     global _callbacks_wired
+
+    if _callbacks_wired:
+        return
 
     async def _on_stop(client_, window_key: str) -> None:  # type: ignore[no-untyped-def]
         await run_broker_cycle(client_, idle_windows=frozenset({window_key}))

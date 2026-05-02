@@ -46,14 +46,16 @@ from ..callback_data import (
     CB_RECOVERY_FRESH,
     CB_RECOVERY_RESUME,
 )
+from ..callback_helpers import get_thread_id
 from ..messaging_pipeline.message_sender import safe_edit, safe_send
 from ..status.topic_emoji import format_topic_name_for_mode
 from ..user_state import (
     PENDING_THREAD_ID,
     PENDING_THREAD_TEXT,
     RECOVERY_SESSIONS,
+    RECOVERY_WINDOW_ID,
 )
-from .recovery_callbacks import _clear_recovery_state, _validate_recovery_state
+from .recovery_callbacks import _clear_recovery_state
 from .resume_picker import (
     _build_empty_resume_keyboard,
     _build_resume_picker_keyboard,
@@ -86,6 +88,49 @@ class RecoveryBanner:
     provider: str | None = None
     display: str = ""
     cwd: str = ""
+
+
+def _validate_recovery_state(
+    data_suffix: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> tuple[int, str] | None:
+    """Validate common recovery preconditions.
+
+    Supports two paths:
+      1. Text-handler path: PENDING_THREAD_ID and RECOVERY_WINDOW_ID in user_data.
+      2. Proactive notification path: no user_data state, validate via binding.
+
+    Returns ``(thread_id, old_window_id)`` on success, or ``None`` on
+    failure (caller should return early and call ``query.answer``).
+    """
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        return None
+
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id is None:
+        return None
+
+    pending_tid = (
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
+    )
+    stored_wid = (
+        context.user_data.get(RECOVERY_WINDOW_ID) if context.user_data else None
+    )
+
+    if pending_tid is not None:
+        if thread_id != pending_tid or stored_wid != data_suffix:
+            return None
+    else:
+        bound_wid = thread_router.get_window_for_thread(user_id, thread_id)
+        if bound_wid != data_suffix:
+            return None
+        if context.user_data is not None:
+            context.user_data[PENDING_THREAD_ID] = thread_id
+            context.user_data[RECOVERY_WINDOW_ID] = data_suffix
+
+    return thread_id, data_suffix
 
 
 def render_banner(banner: RecoveryBanner) -> tuple[str, InlineKeyboardMarkup]:
@@ -504,7 +549,6 @@ async def _handle_cancel(
 ) -> None:
     """Handle CB_RECOVERY_CANCEL: cancel recovery."""
     # Lazy: callback_helpers ↔ recovery cycle
-    from ..callback_helpers import get_thread_id
 
     thread_id = get_thread_id(update)
     if thread_id is None:

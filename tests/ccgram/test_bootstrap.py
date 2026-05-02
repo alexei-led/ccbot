@@ -55,10 +55,16 @@ class TestWireRuntimeCallbacks:
         assert shell_capture._approval_callback_registered is True
         assert bootstrap._callbacks_wired is True
 
-    def test_double_wire_raises(self):
+    def test_double_wire_is_idempotent(self):
+        from ccgram.handlers import hook_events
+
         bootstrap.wire_runtime_callbacks()
-        with pytest.raises(RuntimeError, match="already registered"):
-            bootstrap.wire_runtime_callbacks()
+        first_callback = hook_events._stop_callback
+
+        bootstrap.wire_runtime_callbacks()
+
+        assert bootstrap._callbacks_wired is True
+        assert hook_events._stop_callback is first_callback
 
 
 class TestBootstrapApplication:

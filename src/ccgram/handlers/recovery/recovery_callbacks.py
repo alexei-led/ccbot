@@ -1,17 +1,15 @@
-"""Recovery callback dispatcher + shared validators.
+"""Recovery callback dispatcher + shared state cleanup.
 
 After the Round 5 split, this module is a thin dispatcher: it routes
 prefix-tagged callback data to the banner handlers in
 :mod:`recovery_banner` or the picker handler in :mod:`resume_picker`,
-and owns the two validators (``_validate_recovery_state``,
-``_clear_recovery_state``) used by both flows.
+and owns ``_clear_recovery_state`` — the only helper both sibling
+modules import. The banner-specific ``_validate_recovery_state`` lives
+in :mod:`recovery_banner` next to its callers.
 
-Why the validators live here: both sibling modules need them, and putting
-them in either one would create a redundant cycle. Keeping them on the
-dispatcher (which has no top-level imports of the siblings) means
-``recovery_banner`` and ``resume_picker`` can both import the validators
-eagerly, while the dispatcher imports the handler modules lazily inside
-``handle_recovery_callback`` to break the cycle.
+The dispatcher has no top-level imports of the siblings, so they can
+both import ``_clear_recovery_state`` eagerly while the dispatcher
+imports their handlers lazily inside ``handle_recovery_callback``.
 
 Routes handled:
   - CB_RECOVERY_FRESH: create fresh session in same directory
@@ -30,7 +28,6 @@ from typing import TYPE_CHECKING
 import structlog
 from telegram import CallbackQuery, Update
 
-from ...thread_router import thread_router
 from ..callback_data import (
     CB_RECOVERY_BACK,
     CB_RECOVERY_BROWSE,
@@ -40,7 +37,6 @@ from ..callback_data import (
     CB_RECOVERY_PICK,
     CB_RECOVERY_RESUME,
 )
-from ..callback_helpers import get_thread_id
 from ..callback_registry import register
 from ..user_state import (
     PENDING_THREAD_ID,
@@ -53,52 +49,6 @@ if TYPE_CHECKING:
     from telegram.ext import ContextTypes
 
 logger = structlog.get_logger()
-
-
-def _validate_recovery_state(
-    data_suffix: str,
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> tuple[int, str] | None:
-    """Validate common recovery preconditions.
-
-    Supports two paths:
-      1. Text-handler path: PENDING_THREAD_ID and RECOVERY_WINDOW_ID in user_data.
-      2. Proactive notification path: no user_data state, validate via binding.
-
-    Returns ``(thread_id, old_window_id)`` on success, or ``None`` on
-    failure (caller should return early and call ``query.answer``). The
-    caller looks up ``cwd`` via :mod:`window_query` itself — keeping the
-    validator window_query-free means the sibling-import cycle stays
-    one-way and tests only need to patch the banner module.
-    """
-    thread_id = get_thread_id(update)
-    if thread_id is None:
-        return None
-
-    user_id = update.effective_user.id if update.effective_user else None
-    if user_id is None:
-        return None
-
-    pending_tid = (
-        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
-    )
-    stored_wid = (
-        context.user_data.get(RECOVERY_WINDOW_ID) if context.user_data else None
-    )
-
-    if pending_tid is not None:
-        if thread_id != pending_tid or stored_wid != data_suffix:
-            return None
-    else:
-        bound_wid = thread_router.get_window_for_thread(user_id, thread_id)
-        if bound_wid != data_suffix:
-            return None
-        if context.user_data is not None:
-            context.user_data[PENDING_THREAD_ID] = thread_id
-            context.user_data[RECOVERY_WINDOW_ID] = data_suffix
-
-    return thread_id, data_suffix
 
 
 def _clear_recovery_state(user_data: dict | None) -> None:
@@ -121,10 +71,7 @@ async def handle_recovery_callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    """Handle recovery UI callbacks."""
-    # Lazy: sibling cycle — recovery_banner / resume_picker import the
-    # validators above, so importing them at module load would create a
-    # cycle.
+    """Handle recovery UI callbacks. Always answers ``query`` once."""
     # Lazy: dispatcher → handler-module cycle (siblings register on import)
     from .recovery_banner import (
         _handle_back,
@@ -138,22 +85,33 @@ async def handle_recovery_callback(
     # Lazy: dispatcher → handler-module cycle (siblings register on import)
     from .resume_picker import _handle_resume_pick
 
-    # Order matters: CB_RECOVERY_BROWSE ("rec:br:") shares its prefix with
-    # CB_RECOVERY_BACK ("rec:b:"), so BROWSE must be tested first.
+    # All recovery prefixes terminate with a non-overlapping character
+    # ("rec:b:" vs "rec:br:" diverge at index 5: ":" vs "r"), so order is
+    # not load-bearing — but check the longer prefix first as a safety
+    # belt against future renames that introduce a real overlap.
     if data.startswith(CB_RECOVERY_BROWSE):
         await _handle_browse(query, user_id, data, update, context)
-    elif data.startswith(CB_RECOVERY_BACK):
+        return
+    if data.startswith(CB_RECOVERY_BACK):
         await _handle_back(query, data, update, context)
-    elif data.startswith(CB_RECOVERY_FRESH):
+        return
+    if data.startswith(CB_RECOVERY_FRESH):
         await _handle_fresh(query, user_id, data, update, context)
-    elif data.startswith(CB_RECOVERY_CONTINUE):
+        return
+    if data.startswith(CB_RECOVERY_CONTINUE):
         await _handle_continue(query, user_id, data, update, context)
-    elif data.startswith(CB_RECOVERY_RESUME):
+        return
+    if data.startswith(CB_RECOVERY_RESUME):
         await _handle_resume(query, user_id, data, update, context)
-    elif data.startswith(CB_RECOVERY_PICK):
+        return
+    if data.startswith(CB_RECOVERY_PICK):
         await _handle_resume_pick(query, user_id, data, update, context)
-    elif data == CB_RECOVERY_CANCEL:
+        return
+    if data == CB_RECOVERY_CANCEL:
         await _handle_cancel(query, update, context)
+        return
+    logger.warning("Unhandled recovery callback data: %r", data)
+    await query.answer()
 
 
 @register(

@@ -49,11 +49,18 @@ def test_resume_picker_module_importable() -> None:
 
 
 def test_recovery_callbacks_dispatcher_only() -> None:
-    """Dispatcher is a thin module — banner/picker symbols moved away."""
+    """Dispatcher is a thin module — banner/picker symbols moved away.
+
+    ``_validate_recovery_state`` lives in :mod:`recovery_banner` (its
+    only caller); only ``_clear_recovery_state`` is shared between the
+    siblings and stays on the dispatcher.
+    """
     mod = importlib.import_module("ccgram.handlers.recovery.recovery_callbacks")
     assert callable(mod.handle_recovery_callback)
-    assert callable(mod._validate_recovery_state)
     assert callable(mod._clear_recovery_state)
+    assert not hasattr(mod, "_validate_recovery_state")
+    banner = importlib.import_module("ccgram.handlers.recovery.recovery_banner")
+    assert callable(banner._validate_recovery_state)
 
 
 def test_subpackage_public_surface_unchanged() -> None:
