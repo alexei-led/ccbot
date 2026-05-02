@@ -504,3 +504,40 @@ def test_nested_class_lazy_import_passes(lint_module, tmp_path: Path) -> None:
         """,
     )
     assert lint_module.find_violations(path) == []
+
+
+def test_undocumented_import_in_match_case_fails(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "match_case.py",
+        """
+        def fn(x):
+            match x:
+                case 1:
+                    from .foo import bar
+                    return bar
+                case _:
+                    return None
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_documented_import_in_match_case_passes(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "match_case_lazy.py",
+        """
+        def fn(x):
+            match x:
+                case 1:
+                    # Lazy: optional path for specific case
+                    from .foo import bar
+                    return bar
+                case _:
+                    return None
+        """,
+    )
+    assert lint_module.find_violations(path) == []

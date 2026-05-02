@@ -94,6 +94,10 @@ def _sub_bodies(stmt: ast.stmt) -> Iterator[list[ast.stmt]]:
         return
     if isinstance(stmt, ast.With | ast.AsyncWith):
         yield stmt.body
+        return
+    if isinstance(stmt, ast.Match):
+        for case in stmt.cases:
+            yield case.body
 
 
 def _check_import(
