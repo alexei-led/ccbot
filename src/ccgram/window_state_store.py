@@ -585,6 +585,11 @@ class WindowStateStore:
 _active_store: WindowStateStore | None = None
 
 
+def is_window_store_wired() -> bool:
+    """Return True if SessionManager has installed the module-level store."""
+    return _active_store is not None
+
+
 def get_window_store() -> WindowStateStore:
     """Return the SessionManager-owned WindowStateStore.
 

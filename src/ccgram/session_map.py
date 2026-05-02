@@ -84,8 +84,10 @@ def _prefer_existing_primary(
     # session cycle.  Lazy import also guarantees the store has been
     # wired via install_window_store before access.
     # Lazy: window_state_store / thread_router proxies wired by SessionManager constructor
-    from .window_state_store import window_store
+    from .window_state_store import is_window_store_wired, window_store
 
+    if not is_window_store_wired():
+        return None
     state = window_store.window_states.get(window_id)
     if not state or not state.session_id:
         return None
