@@ -49,6 +49,7 @@ from .session_monitor import (
     NewMessage,
     NewWindowEvent,
     SessionMonitor,
+    clear_active_monitor,
     set_active_monitor,
 )
 from .utils import task_done_callback
@@ -235,6 +236,7 @@ async def shutdown_runtime() -> None:
         session_monitor.stop()
         logger.info("Session monitor stopped")
         session_monitor = None
+    clear_active_monitor()
 
     await shutdown_workers()
 
@@ -276,3 +278,4 @@ def reset_for_testing() -> None:
     _callbacks_wired = False
     session_monitor = None
     _status_poll_task = None
+    clear_active_monitor()

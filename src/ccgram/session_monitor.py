@@ -434,6 +434,12 @@ def set_active_monitor(monitor: SessionMonitor) -> None:
     _active_monitor = monitor
 
 
+def clear_active_monitor() -> None:
+    """Clear the active SessionMonitor singleton (shutdown / test reset)."""
+    global _active_monitor  # noqa: PLW0603
+    _active_monitor = None
+
+
 def get_active_monitor() -> SessionMonitor | None:
     """Return the active SessionMonitor instance."""
     return _active_monitor

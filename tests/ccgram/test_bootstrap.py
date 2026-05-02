@@ -177,6 +177,37 @@ class TestResetForTesting:
         assert bootstrap.session_monitor is None
         assert bootstrap._status_poll_task is None
 
+    def test_clears_global_active_monitor_singleton(self):
+        from ccgram import session_monitor as sm_mod
+
+        monitor = MagicMock()
+        sm_mod.set_active_monitor(monitor)
+        bootstrap.session_monitor = monitor
+        assert sm_mod.get_active_monitor() is monitor
+
+        bootstrap.reset_for_testing()
+
+        assert sm_mod.get_active_monitor() is None
+
+    async def test_shutdown_runtime_clears_global_active_monitor_singleton(self):
+        from ccgram import session_monitor as sm_mod
+
+        monitor = MagicMock()
+        monitor.stop = MagicMock()
+        sm_mod.set_active_monitor(monitor)
+        bootstrap.session_monitor = monitor
+
+        with (
+            patch("ccgram.bootstrap.shutdown_workers", new_callable=AsyncMock),
+            patch("ccgram.mailbox.Mailbox") as mailbox_cls,
+            patch("ccgram.main.stop_miniapp_if_enabled", new_callable=AsyncMock),
+            patch("ccgram.bootstrap.session_manager"),
+        ):
+            mailbox_cls.return_value.sweep = MagicMock()
+            await bootstrap.shutdown_runtime()
+
+        assert sm_mod.get_active_monitor() is None
+
     def test_resets_inner_callback_registrations(self):
         from ccgram.handlers import hook_events
         from ccgram.handlers.shell import shell_capture
