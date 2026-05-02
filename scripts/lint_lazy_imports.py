@@ -118,19 +118,34 @@ def _check_import(
     return (stmt.lineno, snippet)
 
 
-def _walk_class_body(
-    cls: ast.ClassDef,
+def _walk_outer_block(
+    body: Iterable[ast.stmt],
     source_lines: list[str],
     in_type_checking: bool,
 ) -> Iterator[tuple[int, str]]:
-    """Yield violations for every method on *cls* and any nested class."""
-    for child in cls.body:
-        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+    """Walk a non-function block (module or class body).
+
+    Recurses through control flow into any nested ``def``/``class``,
+    preserving the ``in_type_checking`` flag and honoring nested
+    ``if TYPE_CHECKING:`` so that imports in a class body wrapped in
+    ``if`` / ``try`` / ``with`` / ``for`` / ``while`` / ``match`` /
+    ``except*`` are still seen by the linter.
+    """
+    for stmt in body:
+        if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             yield from _find_violations_in_function(
-                child, source_lines, in_type_checking
+                stmt, source_lines, in_type_checking
             )
-        elif isinstance(child, ast.ClassDef):
-            yield from _walk_class_body(child, source_lines, in_type_checking)
+            continue
+        if isinstance(stmt, ast.ClassDef):
+            yield from _walk_outer_block(stmt.body, source_lines, in_type_checking)
+            continue
+        if isinstance(stmt, ast.If) and _is_type_checking_test(stmt.test):
+            yield from _walk_outer_block(stmt.body, source_lines, in_type_checking=True)
+            yield from _walk_outer_block(stmt.orelse, source_lines, in_type_checking)
+            continue
+        for sub_body in _sub_bodies(stmt):
+            yield from _walk_outer_block(sub_body, source_lines, in_type_checking)
 
 
 def _walk_stmt(
@@ -152,7 +167,7 @@ def _walk_stmt(
         yield from _find_violations_in_function(stmt, source_lines, in_type_checking)
         return
     if isinstance(stmt, ast.ClassDef):
-        yield from _walk_class_body(stmt, source_lines, in_type_checking)
+        yield from _walk_outer_block(stmt.body, source_lines, in_type_checking)
         return
     sub = list(_sub_bodies(stmt))
     if sub:
@@ -195,23 +210,7 @@ def find_violations(path: Path) -> list[tuple[int, str]]:
     source = path.read_text(encoding="utf-8")
     source_lines = source.splitlines()
     tree = ast.parse(source, filename=str(path))
-    violations: list[tuple[int, str]] = []
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            violations.extend(_find_violations_in_function(node, source_lines, False))
-            continue
-        if isinstance(node, ast.ClassDef):
-            violations.extend(_walk_class_body(node, source_lines, False))
-            continue
-        if isinstance(node, ast.If) and _is_type_checking_test(node.test):
-            continue
-        for child in ast.iter_child_nodes(node):
-            for grand in ast.walk(child):
-                if isinstance(grand, ast.FunctionDef | ast.AsyncFunctionDef):
-                    violations.extend(
-                        _find_violations_in_function(grand, source_lines, False)
-                    )
-    return violations
+    return list(_walk_outer_block(tree.body, source_lines, in_type_checking=False))
 
 
 def lint(roots: Iterable[Path]) -> list[tuple[Path, int, str]]:

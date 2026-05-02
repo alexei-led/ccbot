@@ -525,6 +525,66 @@ def test_undocumented_import_in_match_case_fails(lint_module, tmp_path: Path) ->
     assert "from .foo import bar" in violations[0][1]
 
 
+def test_top_level_type_checking_else_branch_caught(
+    lint_module, tmp_path: Path
+) -> None:
+    path = _write(
+        tmp_path,
+        "tc_else.py",
+        """
+        from typing import TYPE_CHECKING
+
+        if TYPE_CHECKING:
+            pass
+        else:
+            def fn():
+                from .foo import bar
+                return bar
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_class_body_control_flow_caught(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "class_if.py",
+        """
+        FLAG = True
+
+        class Outer:
+            if FLAG:
+                def method(self):
+                    from .foo import bar
+                    return bar
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
+def test_class_body_try_block_caught(lint_module, tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "class_try.py",
+        """
+        class Outer:
+            try:
+                pass
+            except Exception:
+                def method(self):
+                    from .foo import bar
+                    return bar
+        """,
+    )
+    violations = lint_module.find_violations(path)
+    assert len(violations) == 1
+    assert "from .foo import bar" in violations[0][1]
+
+
 def test_documented_import_in_match_case_passes(lint_module, tmp_path: Path) -> None:
     path = _write(
         tmp_path,
