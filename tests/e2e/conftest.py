@@ -20,24 +20,24 @@ pytestmark = pytest.mark.e2e
 
 @pytest.fixture(autouse=True)
 def _reset_runtime_callbacks():
-    """Reset register-once callbacks between e2e tests.
+    """Reset register-once callbacks AND bootstrap wire flag between tests.
 
-    Each e2e test runs `app.post_init(app)`, which calls
-    `register_stop_callback`, `register_rc_active_provider`, and
-    `register_approval_callback`. F2.6 made those fail loud on double
-    registration; without this reset, the second test in a run would raise.
+    Each e2e test runs ``app.post_init(app)`` which calls
+    ``wire_runtime_callbacks`` → ``register_stop_callback`` /
+    ``register_rc_active_provider`` / ``register_approval_callback``.
+    F2.6 made those fail loud on double registration AND
+    ``wire_runtime_callbacks`` is idempotent (short-circuits on
+    ``_callbacks_wired``), so without resetting both layers, test N+1
+    either re-registers and raises (without idempotency) or skips wiring
+    entirely and leaves the inner callbacks unwired (with idempotency).
+    Delegating to ``bootstrap.reset_for_testing`` keeps both layers in
+    sync with the production reset path.
     """
-    from ccgram.handlers import hook_events
-    from ccgram.handlers.shell import shell_capture
-    from ccgram.handlers.status import status_bubble
+    from ccgram import bootstrap
 
-    hook_events._reset_stop_callback_for_testing()
-    status_bubble._reset_rc_active_provider_for_testing()
-    shell_capture._reset_approval_callback_for_testing()
+    bootstrap.reset_for_testing()
     yield
-    hook_events._reset_stop_callback_for_testing()
-    status_bubble._reset_rc_active_provider_for_testing()
-    shell_capture._reset_approval_callback_for_testing()
+    bootstrap.reset_for_testing()
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +88,10 @@ def e2e_tmux(monkeypatch):
     from ccgram.tmux_manager import TmuxManager
 
     monkeypatch.setattr(config, "tmux_session_name", E2E_TMUX_SESSION)
+    # Suppress external-session discovery so the dev's own tmux sessions
+    # don't bleed into the test's window picker. The pattern matches
+    # nothing, which short-circuits ``discover_external_sessions``.
+    monkeypatch.setattr(config, "tmux_external_patterns", "__no_external_in_e2e__")
 
     server = libtmux.Server()
 

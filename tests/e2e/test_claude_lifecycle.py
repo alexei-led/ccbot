@@ -165,7 +165,7 @@ async def test_recovery_fresh_start(e2e_app, work_dir):
             break
         await asyncio.sleep(0.5)
     assert new_window_id is not None, "Topic not rebound after fresh recovery"
-    new_pane = await tmux.capture_pane(new_window_id)
+    new_pane = await wait_for_pane(tmux, new_window_id, timeout=30)
     assert new_pane is not None
 
 
@@ -221,7 +221,7 @@ async def test_recovery_continue(e2e_app, work_dir):
             break
         await asyncio.sleep(0.5)
     assert new_window_id is not None, "Topic not rebound after continue recovery"
-    new_pane = await tmux.capture_pane(new_window_id)
+    new_pane = await wait_for_pane(tmux, new_window_id, timeout=30)
     assert new_pane is not None
 
 

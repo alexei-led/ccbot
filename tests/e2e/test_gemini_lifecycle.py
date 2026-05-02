@@ -95,5 +95,5 @@ async def test_recovery_fresh(e2e_app, work_dir):
 
     new_window_id = thread_router.get_window_for_thread(TEST_USER_ID, TEST_THREAD_ID)
     assert new_window_id is not None
-    new_pane = await tmux.capture_pane(new_window_id)
+    new_pane = await wait_for_pane(tmux, new_window_id, timeout=30)
     assert new_pane is not None
