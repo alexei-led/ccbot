@@ -8,6 +8,7 @@ from telegram.error import BadRequest, RetryAfter, TelegramError, TimedOut
 
 from ccgram.handlers.topics.topic_orchestration import (
     collect_target_chats,
+    _auto_detect_provider,
     _is_window_already_bound,
     _topic_create_retry_until,
     adopt_unbound_windows,
@@ -134,6 +135,66 @@ class TestCollectTargetChats:
             mock_config.group_id = None
             result = collect_target_chats("@5")
             assert result == set()
+
+
+class TestAutoDetectProvider:
+    async def test_does_not_persist_shell_detection_for_wrapped_external_window(
+        self,
+    ) -> None:
+        window = MagicMock()
+        window.pane_current_command = "bash"
+        window.pane_tty = "/dev/ttys004"
+
+        with (
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.window_query"
+            ) as mock_wq,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
+                new_callable=AsyncMock,
+                return_value="shell",
+            ),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.session_manager"
+            ) as mock_sm,
+        ):
+            mock_wq.view_window.return_value = None
+            mock_tmux.find_window_by_id = AsyncMock(return_value=window)
+
+            await _auto_detect_provider("omx-project:@90")
+
+        mock_sm.set_window_provider.assert_not_called()
+
+    async def test_persists_agent_provider_detection(self) -> None:
+        window = MagicMock()
+        window.pane_current_command = "codex"
+        window.pane_tty = "/dev/ttys004"
+
+        with (
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.window_query"
+            ) as mock_wq,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.detect_provider_from_pane",
+                new_callable=AsyncMock,
+                return_value="codex",
+            ),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.session_manager"
+            ) as mock_sm,
+        ):
+            mock_wq.view_window.return_value = None
+            mock_tmux.find_window_by_id = AsyncMock(return_value=window)
+
+            await _auto_detect_provider("omx-project:@90")
+
+        mock_sm.set_window_provider.assert_called_once_with("omx-project:@90", "codex")
 
 
 class TestHandleNewWindow:

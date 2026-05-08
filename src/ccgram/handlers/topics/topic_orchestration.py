@@ -110,7 +110,7 @@ async def _auto_detect_provider(window_id: str) -> None:
             w.pane_current_command,
             pane_title=pane_title,
         )
-    if detected:
+    if detected and detected != "shell":
         session_manager.set_window_provider(window_id, detected)
         logger.info(
             "Auto-detected provider %r for window %s (command=%s)",
