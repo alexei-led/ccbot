@@ -825,13 +825,20 @@ class TmuxManager:
                 fnmatch.fnmatch(session_name, pat) for pat in patterns
             ):
                 continue
-            results.extend(await self._scan_session_windows(session_name))
+            results.extend(
+                await self._scan_session_windows(
+                    session_name,
+                    include_unrecognized=bool(patterns),
+                )
+            )
 
         self._external_cache = results
         self._external_cache_expires = now + _EXTERNAL_DISCOVERY_TTL
         return list(results)
 
-    async def _scan_session_windows(self, session_name: str) -> list[TmuxWindow]:
+    async def _scan_session_windows(
+        self, session_name: str, *, include_unrecognized: bool = False
+    ) -> list[TmuxWindow]:
         """List windows in *session_name* that run a recognised AI provider."""
         proc: asyncio.subprocess.Process | None = None
         try:
@@ -880,7 +887,7 @@ class TmuxManager:
                 pane_tty=tty,
                 window_id=f"{session_name}:{win_id}",
             )
-            if not detected or detected == "shell":
+            if (not detected or detected == "shell") and not include_unrecognized:
                 continue
             qualified_id = f"{session_name}:{win_id}"
             display_name = win_name or session_name.removeprefix(_EMDASH_PREFIX)

@@ -75,6 +75,27 @@ class TestDiscoverExternalSessions:
         assert result[0].window_id == "omc-abc:@0"
 
     @pytest.mark.asyncio
+    async def test_pattern_matched_sessions_include_shell_wrapped_windows(
+        self, manager
+    ):
+        sessions_proc = _make_proc("omx-project\nrandom-session\n")
+        omx_windows = _make_proc("@0\tbash\t/tmp/project\tbash\t/dev/ttys004\n")
+        ps_proc = _make_proc("")
+
+        with (
+            patch("ccgram.tmux_manager.asyncio.create_subprocess_exec") as mock_exec,
+            patch("ccgram.tmux_manager.config") as mock_config,
+        ):
+            mock_config.tmux_external_patterns = "omx-*"
+            mock_exec.side_effect = [sessions_proc, omx_windows, ps_proc]
+            result = await manager.discover_external_sessions()
+
+        assert len(result) == 1
+        assert result[0].window_id == "omx-project:@0"
+        assert result[0].window_name == "omx-project"
+        assert result[0].pane_current_command == "bash"
+
+    @pytest.mark.asyncio
     async def test_multiple_patterns(self, manager):
         sessions_proc = _make_proc("omc-abc\nomx-xyz\nother\n")
         omc_windows = _make_proc("@0\tagent\t/tmp\tclaude\n")
@@ -236,6 +257,22 @@ class TestScanSessionWindows:
 
         assert len(result) == 1
         assert result[0].window_id == "my-session:@0"
+
+    @pytest.mark.asyncio
+    async def test_can_include_unrecognized_windows_for_explicit_sessions(
+        self, manager
+    ):
+        proc = _make_proc("@0\tbash\t/home/user/project\tbash\n@1\tvim\t/home\tvim\n")
+
+        with patch(
+            "ccgram.tmux_manager.asyncio.create_subprocess_exec", return_value=proc
+        ):
+            result = await manager._scan_session_windows(
+                "omx-project", include_unrecognized=True
+            )
+
+        assert [w.window_id for w in result] == ["omx-project:@0", "omx-project:@1"]
+        assert result[0].window_name == "omx-project"
 
     @pytest.mark.asyncio
     async def test_detects_shell_wrapped_agent_from_tty(self, manager):

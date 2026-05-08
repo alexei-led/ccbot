@@ -501,10 +501,13 @@ class SessionManager:
                     )
                 )
 
-        # 7. Orphaned tmux windows (live, known to ccgram, but not bound to any topic)
+        # 7. Orphaned tmux windows (live and adoptable, but not bound to any topic)
         known_wids = session_map_wids | set(self.window_states.keys())
         for wid in live_window_ids:
-            if wid not in bound_window_ids and wid in known_wids:
+            if (
+                wid not in bound_window_ids
+                and (wid in known_wids or is_foreign_window(wid))
+            ):
                 name = dict(live_windows).get(wid, wid)
                 issues.append(
                     AuditIssue(

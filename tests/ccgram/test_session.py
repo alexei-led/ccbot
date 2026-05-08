@@ -59,6 +59,29 @@ class TestResolveChatId:
         assert thread_router.resolve_chat_id(100) == 100
 
 
+class TestAuditExternalWindows:
+    def test_unbound_foreign_window_is_orphan_even_without_prior_state(
+        self, mgr: SessionManager
+    ) -> None:
+        result = mgr.audit_state(
+            {"omx-project:@90"},
+            [("omx-project:@90", "omx-project")],
+        )
+
+        assert any(
+            issue.category == "orphaned_window"
+            and issue.detail == "omx-project:@90 (omx-project)"
+            for issue in result.issues
+        )
+
+    def test_unbound_unknown_native_window_is_not_orphan(
+        self, mgr: SessionManager
+    ) -> None:
+        result = mgr.audit_state({"@90"}, [("@90", "scratch")])
+
+        assert not any(issue.category == "orphaned_window" for issue in result.issues)
+
+
 class TestWindowState:
     def test_get_creates_new(self, mgr: SessionManager) -> None:
         state = window_store.get_window_state("@0")
