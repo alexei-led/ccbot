@@ -61,6 +61,15 @@ async def _detect_and_apply_provider(
         )
 
     if detected == "shell" and is_foreign_window(window_id):
+        if state.provider_name == "shell":
+            session_manager.set_window_provider(window_id, "", cwd=w.cwd or None)
+            state.provider_name = ""
+            state.transcript_path = ""
+            logger.info(
+                "Cleared stale shell provider for foreign window %s; "
+                "probing hookless providers",
+                window_id,
+            )
         detected = ""
 
     if detected and detected != state.provider_name:
@@ -253,5 +262,7 @@ async def discover_and_register_transcript(
     if not providers_to_try:
         return
 
-    pane_alive = w is not None and not is_shell_prompt(w.pane_current_command)
+    pane_alive = w is not None and (
+        not is_shell_prompt(w.pane_current_command) or is_foreign_window(window_id)
+    )
     await _find_and_register_transcript(window_id, state, providers_to_try, pane_alive)

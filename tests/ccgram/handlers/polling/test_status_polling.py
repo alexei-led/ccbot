@@ -988,7 +988,76 @@ class TestProviderSwitchPromptSetup:
         mock_ensure.assert_not_awaited()
         mock_find.assert_awaited_once()
         assert mock_find.call_args.args[0] == "omx-project:@90"
-        assert mock_find.call_args.args[3] is False
+        assert mock_find.call_args.args[3] is True
+
+    async def test_foreign_stale_shell_provider_reprobes_transcripts(self) -> None:
+        from ccgram.handlers.recovery.transcript_discovery import (
+            discover_and_register_transcript,
+        )
+
+        bot = AsyncMock(spec=Bot)
+        state = MagicMock(
+            session_id="",
+            cwd="/proj",
+            provider_name="shell",
+            transcript_path="",
+        )
+
+        def _clear_provider(
+            window_id: str, provider_name: str, *, cwd: str | None = None
+        ) -> None:
+            assert window_id == "omx-project:@90"
+            assert provider_name == ""
+            state.provider_name = provider_name
+            if cwd:
+                state.cwd = cwd
+
+        with (
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_manager"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.detect_provider_from_pane",
+                new_callable=AsyncMock,
+                return_value="shell",
+            ),
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery._find_and_register_transcript",
+                new_callable=AsyncMock,
+            ) as mock_find,
+            patch(
+                "ccgram.handlers.shell.shell_prompt_orchestrator.ensure_setup",
+                new_callable=AsyncMock,
+            ) as mock_ensure,
+        ):
+            mock_ws.window_states = {"omx-project:@90": state}
+            mock_sm.set_window_provider.side_effect = _clear_provider
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(
+                    pane_current_command="bash",
+                    pane_tty="/dev/ttys004",
+                    cwd="/proj",
+                )
+            )
+
+            await discover_and_register_transcript(
+                "omx-project:@90", client=bot, user_id=1, thread_id=42
+            )
+
+        mock_sm.set_window_provider.assert_called_once_with(
+            "omx-project:@90", "", cwd="/proj"
+        )
+        mock_ensure.assert_not_awaited()
+        mock_find.assert_awaited_once()
+        assert mock_find.call_args.args[0] == "omx-project:@90"
+        assert mock_find.call_args.args[3] is True
+        assert state.provider_name == ""
 
     async def test_fallback_shell_assignment_sets_up_prompt_without_bot(self) -> None:
         from ccgram.handlers.recovery.transcript_discovery import (

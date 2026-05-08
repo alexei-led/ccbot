@@ -88,7 +88,9 @@ _TmuxError = (
 )
 
 _EXTERNAL_DISCOVERY_TTL = 10.0  # seconds — cache external session discovery
-_GENERIC_EXTERNAL_WINDOW_NAMES = frozenset({"bash", "zsh", "sh", "fish", "dash", "ksh"})
+_GENERIC_EXTERNAL_WINDOW_NAMES = frozenset(
+    {"bash", "zsh", "sh", "fish", "dash", "ksh", "node", "bun", "deno"}
+)
 
 
 @dataclass

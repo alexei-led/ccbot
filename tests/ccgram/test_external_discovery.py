@@ -96,6 +96,24 @@ class TestDiscoverExternalSessions:
         assert result[0].pane_current_command == "bash"
 
     @pytest.mark.asyncio
+    async def test_runtime_auto_renamed_windows_use_session_name(self, manager):
+        sessions_proc = _make_proc("omx-project\n")
+        omx_windows = _make_proc("@0\tnode\t/tmp/project\tbash\t/dev/ttys004\n")
+        ps_proc = _make_proc("")
+
+        with (
+            patch("ccgram.tmux_manager.asyncio.create_subprocess_exec") as mock_exec,
+            patch("ccgram.tmux_manager.config") as mock_config,
+        ):
+            mock_config.tmux_external_patterns = "omx-*"
+            mock_exec.side_effect = [sessions_proc, omx_windows, ps_proc]
+            result = await manager.discover_external_sessions()
+
+        assert len(result) == 1
+        assert result[0].window_id == "omx-project:@0"
+        assert result[0].window_name == "omx-project"
+
+    @pytest.mark.asyncio
     async def test_multiple_patterns(self, manager):
         sessions_proc = _make_proc("omc-abc\nomx-xyz\nother\n")
         omc_windows = _make_proc("@0\tagent\t/tmp\tclaude\n")
