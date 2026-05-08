@@ -88,6 +88,7 @@ _TmuxError = (
 )
 
 _EXTERNAL_DISCOVERY_TTL = 10.0  # seconds — cache external session discovery
+_GENERIC_EXTERNAL_WINDOW_NAMES = frozenset({"bash", "zsh", "sh", "fish", "dash", "ksh"})
 
 
 @dataclass
@@ -862,7 +863,7 @@ class TmuxManager:
         # (providers) at module level.
         # Lazy: providers reach back into tmux_manager during process detection
         from .providers import (
-            detect_provider_from_command,
+            detect_provider_from_pane,
         )
 
         results: list[TmuxWindow] = []
@@ -874,14 +875,21 @@ class TmuxManager:
                 continue
             win_id, win_name, cwd, cmd = parts[:4]
             tty = parts[4] if len(parts) > 4 else ""  # noqa: PLR2004
-            detected = detect_provider_from_command(cmd)
+            detected = await detect_provider_from_pane(
+                cmd,
+                pane_tty=tty,
+                window_id=f"{session_name}:{win_id}",
+            )
             if not detected or detected == "shell":
                 continue
             qualified_id = f"{session_name}:{win_id}"
+            display_name = win_name or session_name.removeprefix(_EMDASH_PREFIX)
+            if win_name in _GENERIC_EXTERNAL_WINDOW_NAMES:
+                display_name = session_name.removeprefix(_EMDASH_PREFIX)
             results.append(
                 TmuxWindow(
                     window_id=qualified_id,
-                    window_name=win_name or session_name.removeprefix(_EMDASH_PREFIX),
+                    window_name=display_name,
                     cwd=cwd,
                     pane_current_command=cmd,
                     pane_tty=tty,

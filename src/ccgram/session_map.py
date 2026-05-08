@@ -140,7 +140,8 @@ def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, s
     """Parse session_map.json entries matching a tmux session prefix.
 
     Also matches legacy "ccbot:" prefix keys when the current prefix is "ccgram:".
-    Returns {window_name: {"session_id": ..., "cwd": ...}} for matching entries.
+    Also accepts foreign qualified window IDs (for example ``omx-...:@90``).
+    Returns {window_id: {"session_id": ..., "cwd": ...}} for matching entries.
 
     Safe to call from a clean interpreter (no SessionManager wired): the
     nested-session preference logic in ``_prefer_existing_primary`` short-
@@ -155,6 +156,8 @@ def parse_session_map(raw: dict[str, Any], prefix: str) -> dict[str, dict[str, s
             window_name = key[len(prefix) :]
         elif legacy_prefix and key.startswith(legacy_prefix):
             window_name = key[len(legacy_prefix) :]
+        elif is_foreign_window(key):
+            window_name = key
         else:
             continue
         if not isinstance(info, dict):
@@ -240,12 +243,11 @@ class SessionMapSync:
         for key, info in session_map.items():
             if not isinstance(info, dict):
                 continue
-            if key.startswith(EMDASH_SESSION_PREFIX):
-                valid_wids.add(key)
-                if self._sync_emdash_entry(key, info):
-                    changed = True
-                continue
             if not key.startswith(prefix):
+                if is_foreign_window(key):
+                    valid_wids.add(key)
+                    if self._sync_foreign_entry(key, info):
+                        changed = True
                 continue
             window_id = key[len(prefix) :]
             if not is_window_id(window_id):
@@ -260,8 +262,8 @@ class SessionMapSync:
 
         return valid_wids, old_format_sids, old_format_keys, changed
 
-    def _sync_emdash_entry(self, key: str, info: dict[str, Any]) -> bool:
-        """Sync one emdash session_map entry; infer provider if missing.
+    def _sync_foreign_entry(self, key: str, info: dict[str, Any]) -> bool:
+        """Sync one foreign session_map entry; infer emdash provider if missing.
 
         Returns True if any state changed.
         """
@@ -386,13 +388,7 @@ class SessionMapSync:
             return
 
         prefix = f"{config.tmux_session_name}:"
-        dead_entries: list[tuple[str, str]] = []  # (map_key, window_id)
-        for key in raw:
-            if not key.startswith(prefix):
-                continue
-            window_id = key[len(prefix) :]
-            if is_window_id(window_id) and window_id not in live_window_ids:
-                dead_entries.append((key, window_id))
+        dead_entries = self._dead_session_map_entries(raw, prefix, live_window_ids)
 
         if not dead_entries:
             return
@@ -411,11 +407,35 @@ class SessionMapSync:
         if changed_state:
             self._schedule_save()
 
+    def _dead_session_map_entries(
+        self,
+        raw: dict[str, Any],
+        prefix: str,
+        live_window_ids: set[str],
+    ) -> list[tuple[str, str]]:
+        """Return ``(map_key, window_id)`` entries that are known dead."""
+        # Lazy: same cycle + wiring contract as _prefer_existing_primary.
+        from .window_state_store import window_store
+
+        dead_entries: list[tuple[str, str]] = []
+        for key in raw:
+            if key.startswith(prefix):
+                window_id = key[len(prefix) :]
+                if is_window_id(window_id) and window_id not in live_window_ids:
+                    dead_entries.append((key, window_id))
+            elif (
+                is_foreign_window(key)
+                and key not in live_window_ids
+                and window_store.has_window(key)
+            ):
+                dead_entries.append((key, key))
+        return dead_entries
+
     def get_session_map_window_ids(self) -> set[str]:
         """Read session_map.json and return window IDs tracked by ccgram.
 
-        Includes native windows (stripped to @id) and emdash windows
-        (full qualified key like "emdash-claude-main-xxx:@0").
+        Includes native windows (stripped to @id) and foreign windows
+        (full qualified key like "omx-project-xxx:@0").
         """
         if not config.session_map_file.exists():
             return set()
@@ -430,7 +450,7 @@ class SessionMapSync:
                 wid = key[len(prefix) :]
                 if is_window_id(wid):
                     result.add(wid)
-            elif key.startswith(EMDASH_SESSION_PREFIX):
+            elif is_foreign_window(key):
                 result.add(key)
         return result
 

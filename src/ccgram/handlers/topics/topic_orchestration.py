@@ -332,6 +332,7 @@ async def handle_new_window(event: NewWindowEvent, client: TelegramClient) -> No
 async def adopt_unbound_windows(client: TelegramClient) -> None:
     """Auto-adopt known-but-unbound windows (post-restart recovery)."""
     all_windows = await tmux_manager.list_windows()
+    all_windows.extend(await tmux_manager.discover_external_sessions())
     live_ids = {w.window_id for w in all_windows}
     live_pairs = [(w.window_id, w.window_name) for w in all_windows]
     audit = session_manager.audit_state(live_ids, live_pairs)

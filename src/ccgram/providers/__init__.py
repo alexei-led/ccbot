@@ -221,24 +221,24 @@ async def detect_provider_from_pane(
        fall back to ``ps -t`` foreground process inspection with PGID cache.
     """
     detected = detect_provider_from_command(pane_current_command)
-    if detected:
+    if detected and detected != "shell":
         return detected
 
     if pane_tty and pane_current_command:
         cmd = pane_current_command.strip().lower()
         if not cmd:
-            return ""
+            return detected
         basename = os.path.basename(cmd.split()[0])
-        if basename in JS_RUNTIMES:
+        if detected == "shell" or basename in JS_RUNTIMES:
             # Lazy: process_detection forks `ps` subprocesses; only worth
             # loading when the pane command is a JS runtime wrapper.
             from .process_detection import detect_provider_cached
 
-            detected = await detect_provider_cached(window_id or "", pane_tty)
-            if detected:
-                return detected
+            tty_detected = await detect_provider_cached(window_id or "", pane_tty)
+            if tty_detected and tty_detected != "shell":
+                return tty_detected
 
-    return ""
+    return detected
 
 
 def resolve_launch_command(

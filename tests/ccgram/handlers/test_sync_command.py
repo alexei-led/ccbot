@@ -9,6 +9,7 @@ from ccgram.handlers.sync_command import (
     _format_report,
     _probe_dead_topics,
     _recreate_dead_topics,
+    _run_audit,
     handle_sync_dismiss,
     handle_sync_fix,
     sync_command,
@@ -32,6 +33,7 @@ def _patch_deps():
         mock_tr.iter_thread_bindings.return_value = []
         mock_sm.window_states = {}
         mock_tm.list_windows = AsyncMock(return_value=[])
+        mock_tm.discover_external_sessions = AsyncMock(return_value=[])
         mock_cfg.is_user_allowed.return_value = True
         yield mock_sm, mock_sms, mock_wq, mock_tr, mock_tm, mock_cfg
 
@@ -188,6 +190,22 @@ class TestSyncCommand:
             mock_sm.audit_state.assert_called_once()
             assert "2 topics bound" in mock_reply.call_args[0][1]
 
+    async def test_audit_includes_external_windows(self, _patch_deps) -> None:
+        mock_sm, _, _, _, mock_tm, _ = _patch_deps
+        mock_tm.list_windows.return_value = [
+            MagicMock(window_id="@1", window_name="native")
+        ]
+        mock_tm.discover_external_sessions.return_value = [
+            MagicMock(window_id="omx-project:@90", window_name="omx-project")
+        ]
+
+        await _run_audit()
+
+        mock_sm.audit_state.assert_called_once_with(
+            {"@1", "omx-project:@90"},
+            [("@1", "native"), ("omx-project:@90", "omx-project")],
+        )
+
     async def test_reconciles_live_topic_names_before_reporting(
         self, _patch_deps
     ) -> None:
@@ -251,6 +269,32 @@ class TestSyncFix:
             assert mock_sm.audit_state.call_count == 2
             mock_edit.assert_called_once()
             assert "\u2705 Fixed 1 issue" in mock_edit.call_args[0][1]
+
+    async def test_fix_uses_external_windows_as_live(self, _patch_deps) -> None:
+        mock_sm, mock_sms, _, _, mock_tm, _ = _patch_deps
+        mock_tm.list_windows.return_value = [
+            MagicMock(window_id="@1", window_name="native")
+        ]
+        mock_tm.discover_external_sessions.return_value = [
+            MagicMock(window_id="omx-project:@90", window_name="omx-project")
+        ]
+        mock_sm.audit_state.side_effect = [
+            AuditResult(issues=[], total_bindings=2, live_binding_count=2),
+            AuditResult(issues=[], total_bindings=2, live_binding_count=2),
+        ]
+
+        query = MagicMock()
+
+        with patch("ccgram.handlers.sync_command.safe_edit"):
+            await handle_sync_fix(query)
+
+        live_ids = {"@1", "omx-project:@90"}
+        live_pairs = [("@1", "native"), ("omx-project:@90", "omx-project")]
+        mock_sm.sync_display_names.assert_called_once_with(live_pairs)
+        mock_sm.prune_stale_state.assert_called_once_with(live_ids)
+        mock_sms.prune_session_map.assert_called_once_with(live_ids)
+        mock_sm.prune_stale_window_states.assert_called_once_with(live_ids)
+        mock_sm.audit_state.assert_any_call(live_ids, live_pairs)
 
     async def test_fix_computes_actual_fixed_count(self, _patch_deps) -> None:
         mock_sm, _, _, _, _, _ = _patch_deps
@@ -430,6 +474,41 @@ class TestSyncFix:
             assert event.window_id == "@5"
             assert event.window_name == "stray-proj"
 
+    async def test_fix_adopts_orphaned_external_windows(self, _patch_deps) -> None:
+        mock_sm, _, mock_wq, _, _, _ = _patch_deps
+        window_id = "omx-project:@90"
+        mock_sm.audit_state.side_effect = [
+            AuditResult(
+                issues=[
+                    AuditIssue(
+                        "orphaned_window",
+                        f"{window_id} (omx-project)",
+                        fixable=True,
+                    ),
+                ],
+                total_bindings=1,
+                live_binding_count=1,
+            ),
+            AuditResult(issues=[], total_bindings=1, live_binding_count=1),
+        ]
+        mock_wq.view_window.return_value = MagicMock(
+            session_id="s1", cwd="/tmp", window_name="omx-project"
+        )
+
+        query = MagicMock()
+
+        with (
+            patch("ccgram.handlers.sync_command.safe_edit"),
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.handle_new_window",
+                new_callable=AsyncMock,
+            ) as mock_handle,
+        ):
+            await handle_sync_fix(query)
+            event = mock_handle.call_args[0][0]
+            assert event.window_id == window_id
+            assert event.window_name == "omx-project"
+
     def test_orphaned_window_label(self) -> None:
         audit = AuditResult(
             issues=[
@@ -555,6 +634,35 @@ class TestDeadTopicRecreation:
             event = mock_handle.call_args[0][0]
             assert event.window_id == "@2"
             assert event.window_name == "qmd-go"
+
+    async def test_recreate_handles_foreign_window_ids(self, _patch_deps) -> None:
+        mock_sm, _, mock_wq, mock_tr, _, _ = _patch_deps
+        window_id = "omx-project-main-abc:@90"
+        mock_wq.view_window.return_value = MagicMock(
+            session_id="s1", cwd="/tmp/proj", window_name="omx-project-main-abc"
+        )
+        mock_tr.get_window_for_thread.return_value = window_id
+
+        issues = [
+            AuditIssue(
+                "dead_topic",
+                f"user:100 thread:42 window:{window_id} (omx-project-main-abc)",
+                fixable=True,
+            ),
+        ]
+
+        mock_bot = AsyncMock()
+
+        with patch(
+            "ccgram.handlers.topics.topic_orchestration.handle_new_window",
+            new_callable=AsyncMock,
+        ) as mock_handle:
+            count = await _recreate_dead_topics(mock_bot, issues)
+            assert count == 1
+            mock_tr.unbind_thread.assert_called_once_with(100, 42)
+            event = mock_handle.call_args[0][0]
+            assert event.window_id == window_id
+            assert event.window_name == "omx-project-main-abc"
 
     async def test_recreate_skips_non_dead_topic_issues(self, _patch_deps) -> None:
         issues = [

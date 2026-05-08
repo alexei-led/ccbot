@@ -31,7 +31,7 @@ from ..session import AuditIssue, AuditResult, session_manager
 from ..session_map import session_map_sync
 from ..telegram_client import PTBTelegramClient, TelegramClient
 from ..thread_router import thread_router
-from ..tmux_manager import tmux_manager
+from ..tmux_manager import TmuxWindow, tmux_manager
 from ..user_preferences import user_preferences
 from .callback_data import CB_SYNC_DISMISS, CB_SYNC_FIX
 from .callback_registry import register
@@ -44,8 +44,8 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-_GHOST_RE = re.compile(r"user:(\d+) thread:(\d+) window:(@\d+)")
-_WINDOW_RE = re.compile(r"(@\d+)")
+_GHOST_RE = re.compile(r"user:(\d+) thread:(\d+) window:(\S+)")
+_WINDOW_RE = re.compile(r"(\S+)")
 
 _CATEGORY_LABELS: dict[str, str] = {
     "ghost_binding": "ghost binding (dead window)",
@@ -61,10 +61,17 @@ _CATEGORY_LABELS: dict[str, str] = {
 
 async def _run_audit() -> AuditResult:
     """Fetch live tmux state and run audit."""
-    all_windows = await tmux_manager.list_windows()
+    all_windows = await _list_all_windows()
     live_ids = {w.window_id for w in all_windows}
     live_pairs = [(w.window_id, w.window_name) for w in all_windows]
     return session_manager.audit_state(live_ids, live_pairs)
+
+
+async def _list_all_windows() -> list[TmuxWindow]:
+    """Return native ccgram windows plus configured external tmux windows."""
+    windows = await tmux_manager.list_windows()
+    windows.extend(await tmux_manager.discover_external_sessions())
+    return windows
 
 
 def _issue_summary_lines(audit: AuditResult) -> list[str]:
@@ -90,7 +97,7 @@ async def _sync_live_topic_names(
 ) -> None:
     """Best-effort reconciliation of bound live topic titles."""
     if live_ids is None:
-        all_windows = await tmux_manager.list_windows()
+        all_windows = await _list_all_windows()
         live_ids = {w.window_id for w in all_windows}
 
     for user_id, thread_id, window_id in thread_router.iter_thread_bindings():
@@ -431,8 +438,8 @@ async def sync_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def handle_sync_fix(query: CallbackQuery) -> None:
     """Run all fix operations, re-audit, and edit message in place."""
-    # Single list_windows call — reused for both audit and fix
-    all_windows = await tmux_manager.list_windows()
+    # Single live-window snapshot — reused for both audit and fix
+    all_windows = await _list_all_windows()
     live_ids = {w.window_id for w in all_windows}
     live_pairs = [(w.window_id, w.window_name) for w in all_windows]
 

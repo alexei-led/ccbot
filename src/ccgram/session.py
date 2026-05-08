@@ -37,7 +37,7 @@ from .user_preferences import (
     install_user_preferences,
     user_preferences,
 )
-from .window_resolver import EMDASH_SESSION_PREFIX, is_foreign_window, is_window_id
+from .window_resolver import is_foreign_window, is_window_id
 from .window_view import WindowView
 from .window_state_store import (
     APPROVAL_MODES,
@@ -238,6 +238,7 @@ class SessionManager:
         from .window_resolver import LiveWindow, resolve_stale_ids as _resolve
 
         windows = await tmux_manager.list_windows()
+        windows.extend(await tmux_manager.discover_external_sessions())
         live = [
             LiveWindow(window_id=w.window_id, window_name=w.window_name)
             for w in windows
@@ -369,8 +370,8 @@ class SessionManager:
     def _get_session_map_window_ids(self) -> set[str]:
         """Read session_map.json and return window IDs tracked by ccgram.
 
-        Includes native windows (stripped to @id) and emdash windows
-        (full qualified key like "emdash-claude-main-xxx:@0").
+        Includes native windows (stripped to @id) and foreign windows
+        (full qualified key like "omx-project-main-xxx:@0").
         """
         if not config.session_map_file.exists():
             return set()
@@ -385,7 +386,7 @@ class SessionManager:
                 wid = key[len(prefix) :]
                 if self._is_window_id(wid):
                     result.add(wid)
-            elif key.startswith(EMDASH_SESSION_PREFIX):
+            elif is_foreign_window(key):
                 result.add(key)
         return result
 

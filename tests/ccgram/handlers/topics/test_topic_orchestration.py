@@ -629,6 +629,7 @@ class TestAdoptUnboundWindows:
             ),
         ):
             mock_tmux.list_windows = AsyncMock(return_value=[mock_window])
+            mock_tmux.discover_external_sessions = AsyncMock(return_value=[])
             mock_sm.audit_state.return_value = mock_audit
 
             with patch(
@@ -637,6 +638,43 @@ class TestAdoptUnboundWindows:
             ) as mock_adopt:
                 await adopt_unbound_windows(bot)
                 mock_adopt.assert_called_once()
+
+    async def test_adopts_external_orphaned_windows(self):
+        bot = AsyncMock()
+        external_window = MagicMock()
+        external_window.window_id = "omx-project:@90"
+        external_window.window_name = "omx-project"
+
+        mock_audit = MagicMock()
+        mock_issue = MagicMock()
+        mock_issue.category = "orphaned_window"
+        mock_audit.issues = [mock_issue]
+
+        with (
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.topics.topic_orchestration.session_manager"
+            ) as mock_sm,
+            patch(
+                "ccgram.handlers.sync_command._adopt_orphaned_windows",
+                new_callable=AsyncMock,
+            ) as mock_adopt,
+        ):
+            mock_tmux.list_windows = AsyncMock(return_value=[])
+            mock_tmux.discover_external_sessions = AsyncMock(
+                return_value=[external_window]
+            )
+            mock_sm.audit_state.return_value = mock_audit
+
+            await adopt_unbound_windows(bot)
+
+        mock_sm.audit_state.assert_called_once_with(
+            {"omx-project:@90"},
+            [("omx-project:@90", "omx-project")],
+        )
+        mock_adopt.assert_called_once_with(bot, [mock_issue])
 
     async def test_no_orphans_skips(self):
         bot = AsyncMock()
@@ -652,5 +690,6 @@ class TestAdoptUnboundWindows:
             ) as mock_sm,
         ):
             mock_tmux.list_windows = AsyncMock(return_value=[])
+            mock_tmux.discover_external_sessions = AsyncMock(return_value=[])
             mock_sm.audit_state.return_value = mock_audit
             await adopt_unbound_windows(bot)

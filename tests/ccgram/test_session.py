@@ -1013,8 +1013,11 @@ class TestResolveStaleIdsPreservesDeadBindings:
         alive = SimpleNamespace(window_id="@1", window_name="alive-proj")
         from ccgram.tmux_manager import tmux_manager
 
-        with patch.object(
-            tmux_manager, "list_windows", AsyncMock(return_value=[alive])
+        with (
+            patch.object(tmux_manager, "list_windows", AsyncMock(return_value=[alive])),
+            patch.object(
+                tmux_manager, "discover_external_sessions", AsyncMock(return_value=[])
+            ),
         ):
             await mgr.resolve_stale_ids()
 
@@ -1027,19 +1030,65 @@ class TestResolveStaleIdsPreservesDeadBindings:
         alive = SimpleNamespace(window_id="@1", window_name="proj")
         from ccgram.tmux_manager import tmux_manager
 
-        with patch.object(
-            tmux_manager, "list_windows", AsyncMock(return_value=[alive])
+        with (
+            patch.object(tmux_manager, "list_windows", AsyncMock(return_value=[alive])),
+            patch.object(
+                tmux_manager, "discover_external_sessions", AsyncMock(return_value=[])
+            ),
         ):
             await mgr.resolve_stale_ids()
 
         assert thread_router.get_window_for_thread(100, 1) == "@1"
+
+    async def test_foreign_session_map_entry_not_pruned_on_startup(
+        self, mgr: SessionManager, tmp_path, monkeypatch
+    ) -> None:
+        foreign_wid = "omx-project-main-abc:@90"
+        session_map_file = tmp_path / "session_map.json"
+        session_map_file.write_text(
+            json.dumps(
+                {
+                    foreign_wid: {
+                        "session_id": "sid-omx",
+                        "cwd": "/tmp/project",
+                        "window_name": "omx-project-main-abc",
+                        "provider_name": "codex",
+                    }
+                }
+            )
+        )
+        monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
+
+        external = SimpleNamespace(
+            window_id=foreign_wid,
+            window_name="omx-project-main-abc",
+        )
+        from ccgram.tmux_manager import tmux_manager
+
+        with (
+            patch.object(tmux_manager, "list_windows", AsyncMock(return_value=[])),
+            patch.object(
+                tmux_manager,
+                "discover_external_sessions",
+                AsyncMock(return_value=[external]),
+            ),
+        ):
+            await mgr.resolve_stale_ids()
+
+        result = json.loads(session_map_file.read_text())
+        assert foreign_wid in result
 
     async def test_dead_window_state_preserved(self, mgr: SessionManager) -> None:
         thread_router.bind_thread(100, 1, "@1", window_name="proj")
         mgr.window_states["@1"] = WindowState(cwd="/my/project", provider_name="codex")
         from ccgram.tmux_manager import tmux_manager
 
-        with patch.object(tmux_manager, "list_windows", AsyncMock(return_value=[])):
+        with (
+            patch.object(tmux_manager, "list_windows", AsyncMock(return_value=[])),
+            patch.object(
+                tmux_manager, "discover_external_sessions", AsyncMock(return_value=[])
+            ),
+        ):
             await mgr.resolve_stale_ids()
 
         assert "@1" in mgr.window_states

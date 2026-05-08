@@ -31,3 +31,16 @@ class TestSessionMapParsing:
         result = parse_session_map(raw, "ccgram:")
         assert result["@0"]["session_id"] == "abc-123"
         assert result["@0"]["cwd"] == "/tmp/project"
+
+    def test_foreign_session_map_parsing(self) -> None:
+        window_id = "omx-project-main-abc:@90"
+        raw = {
+            window_id: {
+                "session_id": "sid-omx",
+                "cwd": "/tmp/project",
+                "provider_name": "codex",
+            }
+        }
+        result = parse_session_map(raw, "ccgram:")
+        assert result[window_id]["session_id"] == "sid-omx"
+        assert result[window_id]["provider_name"] == "codex"

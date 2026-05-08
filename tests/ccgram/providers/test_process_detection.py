@@ -36,6 +36,19 @@ class TestClassifyProviderFromArgs:
             ("bash ./scripts/restart.sh run", "shell"),
             ("zsh", "shell"),
             ("fish", "shell"),
+            (
+                "/bin/sh -c exec 'codex' "
+                "'--dangerously-bypass-approvals-and-sandbox'",
+                "codex",
+            ),
+            ("bash -lc 'codex --full-auto'", "codex"),
+            ("sh -c FOO=bar exec codex --full-auto", "codex"),
+            (
+                "/bin/sh -c 'OMX=1 exec 3<&0; /bin/zsh -c exec codex --full-auto'",
+                "codex",
+            ),
+            ("sh -c 'vim /path/to/claude'", ""),
+            ("sh -c 'echo; /path/to/claude'", ""),
             ("sudo codex", "codex"),
             ("env node /path/to/claude", "claude"),
             ("sudo env bun /Users/x/.bun/bin/codex", "codex"),

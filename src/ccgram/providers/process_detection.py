@@ -35,6 +35,8 @@ logger = structlog.get_logger()
 _WRAPPER_TOKENS = frozenset(
     {"sudo", "env", "node", "bun", "npx", "bunx", "uv", "python", "python3"}
 )
+_SHELL_COMMAND_PREFIXES = frozenset({"exec", "command"})
+_SHELL_CONTROL_TOKENS = frozenset({"&", "&&", "|", "||", ";", ";;"})
 
 # Basename → provider name.  Checked via exact match and prefix (``claude-*``).
 _PROVIDER_BASENAMES: tuple[tuple[frozenset[str], str], ...] = (
@@ -60,7 +62,8 @@ JS_RUNTIMES = frozenset({"node", "bun", "npx", "bunx"})
 
 def _match_token(token: str) -> str:
     """Match a single argv token against provider basenames and path markers."""
-    basename = os.path.basename(token).lower().lstrip("-")
+    normalized_token = token.strip("\"'")
+    basename = os.path.basename(normalized_token).lower().lstrip("-")
 
     # Direct basename match
     for names, provider in _PROVIDER_BASENAMES:
@@ -70,12 +73,68 @@ def _match_token(token: str) -> str:
         return "shell"
 
     # Path-based match for ambiguous basenames (e.g. cli.js)
-    token_lower = token.lower()
+    token_lower = normalized_token.lower()
     for markers, provider in _PROVIDER_PATH_MARKERS:
         if any(m in token_lower for m in markers):
             return provider
 
     return ""
+
+
+def _clean_token(token: str) -> str:
+    """Return the normalized basename used for wrapper/control-token checks."""
+    return os.path.basename(token.strip("\"'")).lower().lstrip("-")
+
+
+def _is_shell_command_flag(token: str) -> bool:
+    """Return True for shell option groups that include ``-c``."""
+    cleaned = token.strip("\"'")
+    return cleaned.startswith("-") and "c" in cleaned[1:]
+
+
+def _classify_shell_command_tokens(tokens: list[str]) -> str:
+    """Classify tokens inside a shell ``-c`` command string.
+
+    Shell launchers often prepend assignments/redirections before the agent
+    command.  Scanning is allowed here because ``-c`` explicitly says the
+    remaining text is command syntax, unlike arbitrary process arguments.
+    """
+    for index, token in enumerate(tokens):
+        if _is_shell_setup_token(token):
+            continue
+        provider = _match_token(token)
+        if provider == "shell":
+            for shell_arg_index, shell_arg in enumerate(tokens[index + 1 :]):
+                if _is_shell_command_flag(shell_arg):
+                    command_start = index + 1 + shell_arg_index + 1
+                    return _classify_shell_command_tokens(tokens[command_start:])
+            return ""
+        return provider
+    return ""
+
+
+def _is_shell_setup_token(token: str) -> bool:
+    """Return True for shell setup syntax before the real command."""
+    cleaned = _clean_token(token)
+    if cleaned in _SHELL_COMMAND_PREFIXES or cleaned in _WRAPPER_TOKENS:
+        return True
+    if "=" in cleaned:
+        return True
+    stripped = token.strip("\"'")
+    if stripped in _SHELL_CONTROL_TOKENS:
+        return True
+    return _is_fd_redirection_token(stripped)
+
+
+def _is_fd_redirection_token(token: str) -> bool:
+    """Return True for shell file-descriptor redirection tokens."""
+    trimmed = token.rstrip(";")
+    if not trimmed:
+        return False
+    first = trimmed[0]
+    if first in "<>":
+        return True
+    return first.isdigit() and any(op in trimmed for op in ("<", ">"))
 
 
 def classify_provider_from_args(args: str) -> str:
@@ -89,11 +148,19 @@ def classify_provider_from_args(args: str) -> str:
     if not args:
         return ""
 
-    for token in args.split():
-        cleaned = os.path.basename(token).lower().lstrip("-")
+    tokens = args.split()
+    for index, token in enumerate(tokens):
+        cleaned = _clean_token(token)
         if cleaned in _WRAPPER_TOKENS:
             continue
-        return _match_token(token)
+        provider = _match_token(token)
+        if provider == "shell":
+            for shell_arg_index, shell_arg in enumerate(tokens[index + 1 :]):
+                if _is_shell_command_flag(shell_arg):
+                    command_start = index + 1 + shell_arg_index + 1
+                    return _classify_shell_command_tokens(tokens[command_start:])
+            return "shell"
+        return provider
 
     return ""
 

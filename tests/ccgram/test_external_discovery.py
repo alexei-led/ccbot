@@ -238,6 +238,26 @@ class TestScanSessionWindows:
         assert result[0].window_id == "my-session:@0"
 
     @pytest.mark.asyncio
+    async def test_detects_shell_wrapped_agent_from_tty(self, manager):
+        windows_proc = _make_proc("@0\tbash\t/home/user/project\tbash\t/dev/ttys004\n")
+        ps_proc = _make_proc(
+            "72033 72033 Ss+ /bin/sh -c exec 'codex' '--dangerously-bypass-approvals-and-sandbox'\n"
+            "72100 72033 S+ node /Users/x/bin/codex\n"
+        )
+
+        with patch(
+            "ccgram.tmux_manager.asyncio.create_subprocess_exec",
+            side_effect=[windows_proc, ps_proc],
+        ):
+            result = await manager._scan_session_windows("omx-project-abc")
+
+        assert len(result) == 1
+        assert result[0].window_id == "omx-project-abc:@0"
+        assert result[0].window_name == "omx-project-abc"
+        assert result[0].pane_current_command == "bash"
+        assert result[0].pane_tty == "/dev/ttys004"
+
+    @pytest.mark.asyncio
     async def test_multiple_ai_windows(self, manager):
         proc = _make_proc(
             "@0\tproject-a\t/home/a\tclaude\n"

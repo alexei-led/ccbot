@@ -199,6 +199,33 @@ class TestLoadSessionMapEmdash:
 
         assert "emdash-claude-main-abc:@0" in mgr.window_states
 
+    async def test_picks_up_non_emdash_foreign_entries(
+        self, mgr: SessionManager, tmp_path: Path, monkeypatch
+    ) -> None:
+        session_map_file = tmp_path / "session_map.json"
+        session_map_file.write_text(
+            json.dumps(
+                {
+                    "omx-project-main-abc:@90": {
+                        "session_id": "sid-omx",
+                        "cwd": "/tmp/omx",
+                        "window_name": "omx-project-main-abc",
+                        "provider_name": "codex",
+                    },
+                }
+            )
+        )
+        monkeypatch.setattr("ccgram.session.config.session_map_file", session_map_file)
+        monkeypatch.setattr("ccgram.session.config.tmux_session_name", "ccgram")
+
+        await session_map_sync.load_session_map()
+
+        wid = "omx-project-main-abc:@90"
+        assert wid in mgr.window_states
+        assert mgr.window_states[wid].session_id == "sid-omx"
+        assert mgr.window_states[wid].external is True
+        assert mgr.window_states[wid].provider_name == "codex"
+
 
 class TestGetSessionMapWindowIds:
     def test_includes_emdash_entries(
@@ -210,7 +237,7 @@ class TestGetSessionMapWindowIds:
                 {
                     "ccgram:@1": {"session_id": "s1", "cwd": "/a"},
                     "emdash-claude-main-abc:@0": {"session_id": "s2", "cwd": "/b"},
-                    "other:@9": {"session_id": "s3", "cwd": "/c"},
+                    "omx-project-main-abc:@90": {"session_id": "s3", "cwd": "/c"},
                 }
             )
         )
@@ -220,7 +247,7 @@ class TestGetSessionMapWindowIds:
         result = mgr._get_session_map_window_ids()
         assert "@1" in result
         assert "emdash-claude-main-abc:@0" in result
-        assert "@9" not in result  # different session prefix
+        assert "omx-project-main-abc:@90" in result
 
 
 class TestPruneStaleWindowStatesEmdash:
