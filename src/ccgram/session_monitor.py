@@ -35,6 +35,8 @@ from .tmux_manager import tmux_manager
 from .monitor_events import NewMessage, NewWindowEvent, SessionInfo
 from .transcript_reader import TranscriptReader
 from .utils import task_done_callback
+from .window_resolver import is_foreign_window
+from .window_state_store import window_store
 
 import aiofiles
 import json
@@ -59,6 +61,32 @@ _MSG_PREVIEW_LENGTH = 80
 logger = structlog.get_logger()
 
 _SessionMapError = (json.JSONDecodeError, OSError)
+
+
+async def _include_tracked_foreign_windows(all_windows: list) -> list:
+    """Add bound/tracked foreign windows without provider filtering."""
+    seen = {w.window_id for w in all_windows}
+
+    # Lazy: thread_router is part of the SessionManager-wired state graph.
+    from .thread_router import thread_router
+
+    candidates = {
+        wid
+        for _, _, wid in thread_router.iter_thread_bindings()
+        if is_foreign_window(wid)
+    }
+    candidates.update(
+        wid for wid in window_store.iter_window_ids() if is_foreign_window(wid)
+    )
+
+    for window_id in candidates:
+        if window_id in seen:
+            continue
+        window = await tmux_manager.find_window_by_id(window_id)
+        if window:
+            all_windows.append(window)
+            seen.add(window_id)
+    return all_windows
 
 
 class SessionMonitor:
@@ -343,6 +371,7 @@ class SessionMonitor:
                 all_windows = await tmux_manager.list_windows()
                 external_windows = await tmux_manager.discover_external_sessions()
                 all_windows = all_windows + external_windows
+                all_windows = await _include_tracked_foreign_windows(all_windows)
                 live_window_ids = {w.window_id for w in all_windows}
                 session_map_sync.prune_session_map(live_window_ids)
                 known_window_ids = set(current_map.keys())

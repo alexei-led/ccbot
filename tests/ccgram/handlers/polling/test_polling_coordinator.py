@@ -82,6 +82,7 @@ def _patch_loop_deps(
             mocks["tmux_manager"].discover_external_sessions = AsyncMock(
                 return_value=external
             )
+            mocks["tmux_manager"].find_window_by_id = AsyncMock(return_value=None)
             mocks["thread_router"].iter_thread_bindings.return_value = bindings
             mocks["config"].status_poll_interval = 1.0
 
@@ -157,6 +158,31 @@ class TestStatusPollLoopHandlesExternalSessions:
         bindings = [(1, 100, "emdash-claude-main-abc:@0")]
 
         ctx = await _run_loop_once(bot, bindings=bindings, external=[ext])
+
+        tick = ctx.mocks["tick_window"]
+        assert tick.call_count == 1
+        assert tick.call_args[0][4] is ext
+
+    async def test_bound_foreign_window_rechecked_when_discovery_misses_it(self):
+        bot = AsyncMock(spec=Bot)
+        ext = _make_window("omx-project:@90", "omx-project")
+        bindings = [(1, 100, "omx-project:@90")]
+
+        combined, ctx = _patch_loop_deps(bindings=bindings, external=[])
+
+        async def _stop_after_one(_delay: float) -> None:
+            raise asyncio.CancelledError
+
+        with (
+            combined(),
+            patch(
+                "ccgram.handlers.polling.polling_coordinator.asyncio.sleep",
+                side_effect=_stop_after_one,
+            ),
+            contextlib.suppress(asyncio.CancelledError),
+        ):
+            ctx.mocks["tmux_manager"].find_window_by_id = AsyncMock(return_value=ext)
+            await status_poll_loop(bot)
 
         tick = ctx.mocks["tick_window"]
         assert tick.call_count == 1
@@ -280,6 +306,7 @@ class TestImportsAreMinimal:
             "..thread_router",
             "..tmux_manager",
             "..utils",
+            "..window_resolver",
             "..config",
             ".window_tick",
             ".periodic_tasks",

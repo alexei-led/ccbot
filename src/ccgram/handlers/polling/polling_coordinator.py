@@ -16,6 +16,7 @@ from telegram.error import TelegramError
 from ...thread_router import thread_router
 from ...tmux_manager import tmux_manager
 from ...utils import log_throttled
+from ...window_resolver import is_foreign_window
 from . import window_tick
 
 if TYPE_CHECKING:
@@ -29,6 +30,19 @@ _BACKOFF_MIN = 2.0
 _BACKOFF_MAX = 30.0
 
 _LoopError = (TelegramError, OSError, RuntimeError, ValueError)
+
+
+async def _include_bound_foreign_windows(all_windows: list) -> list:
+    """Add bound foreign windows even when provider-filtered discovery misses them."""
+    seen = {w.window_id for w in all_windows}
+    for _user_id, _thread_id, window_id in thread_router.iter_thread_bindings():
+        if not is_foreign_window(window_id) or window_id in seen:
+            continue
+        window = await tmux_manager.find_window_by_id(window_id)
+        if window:
+            all_windows.append(window)
+            seen.add(window_id)
+    return all_windows
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────
@@ -62,6 +76,7 @@ async def status_poll_loop(bot: "Bot") -> None:
             all_windows = await tmux_manager.list_windows()
             external_windows = await tmux_manager.discover_external_sessions()
             all_windows.extend(external_windows)
+            all_windows = await _include_bound_foreign_windows(all_windows)
             window_lookup = {w.window_id: w for w in all_windows}
 
             await run_periodic_tasks(client, all_windows, timers)
