@@ -236,6 +236,30 @@ class TestDraftStreamTransientLegacyFailure:
         bot.send_message.assert_not_awaited()
 
 
+class TestDraftStreamDeadTopicCleanup:
+    async def test_thread_gone_unbinds_matching_group_topic(self) -> None:
+        mark_draft_unavailable("test")
+        bot = _make_bot()
+        bot.send_message.side_effect = BadRequest("Message thread not found")
+        router = MagicMock()
+        router.iter_thread_bindings.return_value = [
+            (100, 5, "@1"),
+            (200, 5, "@2"),
+        ]
+        router.resolve_chat_id.side_effect = (
+            lambda user_id, _thread_id: -999 if user_id == 100 else -998
+        )
+
+        stream = DraftStream(bot, chat_id=-999, message_thread_id=5)
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr("ccgram.thread_router.thread_router", router)
+            mid = await stream.start("hi")
+
+        assert mid is None
+        router.unbind_thread.assert_called_once_with(100, 5)
+        router.set_group_chat_id.assert_called_once_with(100, 5, -999)
+
+
 class TestDraftStreamPeerCache:
     async def test_peer_invalid_caches_per_peer(self) -> None:
         bot = _make_bot()

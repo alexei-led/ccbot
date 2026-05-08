@@ -61,6 +61,43 @@ _KEEP_MARKUP: Final[Any] = object()
 
 logger = structlog.get_logger()
 
+
+def _is_thread_gone_error(exc: TelegramError) -> bool:
+    """Return True when Telegram says the target topic/thread is gone."""
+    if not isinstance(exc, BadRequest):
+        return False
+    message = (exc.message or "").lower()
+    return "thread not found" in message or "topic_id_invalid" in message
+
+
+def _clear_dead_thread_binding(chat_id: int, thread_id: int | None) -> None:
+    """Unbind deleted Telegram topics while preserving the group chat hint."""
+    if thread_id is None:
+        return
+    try:
+        # Lazy: DraftStream is lower-level transport code; importing router at
+        # module import time would make transport import the bot state graph.
+        from .thread_router import thread_router
+
+        for user_id, bound_thread_id, window_id in list(
+            thread_router.iter_thread_bindings()
+        ):
+            if bound_thread_id != thread_id:
+                continue
+            if thread_router.resolve_chat_id(user_id, thread_id) != chat_id:
+                continue
+            thread_router.unbind_thread(user_id, thread_id)
+            if chat_id < 0:
+                thread_router.set_group_chat_id(user_id, thread_id, chat_id)
+            logger.info(
+                "Removed stale topic binding after Telegram thread-gone error",
+                user_id=user_id,
+                thread_id=thread_id,
+                window_id=window_id,
+            )
+    except OSError:
+        logger.exception("Failed to persist stale topic binding cleanup")
+
 __all__ = [
     "DRAFT_LEGACY",
     "DRAFT_STREAMING",
@@ -254,12 +291,16 @@ class DraftStream:
             else:
                 await self._start_streaming()
         except (TimedOut, NetworkError) as exc:
+            if _is_thread_gone_error(exc):
+                _clear_dead_thread_binding(self._chat_id, self._thread_id)
             logger.warning("DraftStream.start transient failure: %s", exc)
             return None
         except RetryAfter as exc:
             logger.warning("DraftStream.start rate-limited: %s", exc)
             return None
         except TelegramError as exc:
+            if _is_thread_gone_error(exc):
+                _clear_dead_thread_binding(self._chat_id, self._thread_id)
             logger.warning("DraftStream.start telegram error: %s", exc)
             return None
         return self._message_id
