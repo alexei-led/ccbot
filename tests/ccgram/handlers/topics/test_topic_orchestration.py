@@ -146,9 +146,7 @@ class TestAutoDetectProvider:
         window.pane_tty = "/dev/ttys004"
 
         with (
-            patch(
-                "ccgram.handlers.topics.topic_orchestration.window_query"
-            ) as mock_wq,
+            patch("ccgram.handlers.topics.topic_orchestration.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.topics.topic_orchestration.tmux_manager"
             ) as mock_tmux,
@@ -174,9 +172,7 @@ class TestAutoDetectProvider:
         window.pane_tty = "/dev/ttys004"
 
         with (
-            patch(
-                "ccgram.handlers.topics.topic_orchestration.window_query"
-            ) as mock_wq,
+            patch("ccgram.handlers.topics.topic_orchestration.window_query") as mock_wq,
             patch(
                 "ccgram.handlers.topics.topic_orchestration.tmux_manager"
             ) as mock_tmux,

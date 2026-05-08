@@ -37,8 +37,7 @@ class TestClassifyProviderFromArgs:
             ("zsh", "shell"),
             ("fish", "shell"),
             (
-                "/bin/sh -c exec 'codex' "
-                "'--dangerously-bypass-approvals-and-sandbox'",
+                "/bin/sh -c exec 'codex' '--dangerously-bypass-approvals-and-sandbox'",
                 "codex",
             ),
             ("bash -lc 'codex --full-auto'", "codex"),

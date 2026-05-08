@@ -128,8 +128,10 @@ def _resolve_providers_to_try(
             return []
         return [(provider.capabilities.name, provider)]
 
-    if w and is_shell_prompt(w.pane_current_command) and not is_foreign_window(
-        window_id
+    if (
+        w
+        and is_shell_prompt(w.pane_current_command)
+        and not is_foreign_window(window_id)
     ):
         return None  # signals caller to set up shell
 
