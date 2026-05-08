@@ -111,6 +111,31 @@ class TestNewWindowDetection:
 
         cb.assert_not_called()
 
+    async def test_new_hookless_transcript_is_marked_for_initial_replay(
+        self, monitor: SessionMonitor
+    ) -> None:
+        monitor._last_session_map = {}
+        new_map = {
+            "@9": {
+                "session_id": "codex-new",
+                "cwd": "/proj",
+                "window_name": "proj",
+                "transcript_path": "/tmp/codex.jsonl",
+                "provider_name": "codex",
+            }
+        }
+
+        with patch.object(
+            monitor,
+            "_load_current_session_map",
+            spec=True,
+            new_callable=AsyncMock,
+            return_value=new_map,
+        ):
+            await monitor._detect_and_cleanup_changes()
+
+        assert "codex-new" in monitor._initial_replay_sessions
+
     async def test_callback_error_does_not_crash(self, monitor: SessionMonitor) -> None:
         cb = AsyncMock(side_effect=RuntimeError("boom"))
         monitor.set_new_window_callback(cb)
@@ -212,10 +237,20 @@ class TestPerWindowProviderResolution:
         captured_window_ids = []
         original = monitor._process_session_file
 
-        async def spy(session_id, file_path, new_messages, window_id=""):
+        async def spy(
+            session_id,
+            file_path,
+            new_messages,
+            window_id="",
+            replay_initial=False,
+        ):
             captured_window_ids.append(window_id)
             return await original(
-                session_id, file_path, new_messages, window_id=window_id
+                session_id,
+                file_path,
+                new_messages,
+                window_id=window_id,
+                replay_initial=replay_initial,
             )
 
         monitor._process_session_file = spy
@@ -383,6 +418,46 @@ class TestCheckForUpdates:
         tracked = monitor.state.get_session("sess-direct")
         assert tracked is not None
         assert tracked.last_byte_offset == session_file.stat().st_size
+
+    async def test_new_hookless_session_replays_initial_transcript(
+        self, tmp_path
+    ) -> None:
+        """A live-discovered hookless session must not drop its first response."""
+        session_file = tmp_path / "codex.jsonl"
+        session_file.write_text(
+            "\n".join(
+                [
+                    '{"type":"session_meta","payload":{"id":"sess-codex","cwd":"/proj"}}',
+                    '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"first question"}]}}',
+                    "",
+                ]
+            )
+        )
+
+        monitor = SessionMonitor(
+            projects_path=tmp_path / "projects",
+            state_file=tmp_path / "ms.json",
+        )
+        monitor._initial_replay_sessions.add("sess-codex")
+        current_map = {
+            "@0": {
+                "session_id": "sess-codex",
+                "cwd": "/proj",
+                "window_name": "proj",
+                "transcript_path": str(session_file),
+                "provider_name": "codex",
+            },
+        }
+
+        with patch(
+            "ccgram.transcript_reader.get_provider_for_window",
+            return_value=CodexProvider(),
+        ):
+            msgs = await monitor.check_for_updates(current_map)
+
+        assert len(msgs) == 1
+        assert msgs[0].text == "first question"
+        assert "sess-codex" not in monitor._initial_replay_sessions
 
     async def test_unchanged_mtime_skips_read(self, tmp_path) -> None:
         projects_path = tmp_path / "projects"

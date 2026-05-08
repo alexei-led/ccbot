@@ -99,6 +99,7 @@ class TranscriptReader:
         new_messages: list[NewMessage],
         window_id: str = "",
         current_map: dict[str, dict[str, Any]] | None = None,
+        replay_initial: bool = False,
     ) -> None:
         """Process a single session file for new messages."""
         tracked = self._state.get_session(session_id)
@@ -113,7 +114,7 @@ class TranscriptReader:
                 current_mtime = 0.0
 
             if provider.capabilities.supports_incremental_read:
-                initial_offset = file_size
+                initial_offset = 0 if replay_initial else file_size
             else:
                 _, initial_offset = await asyncio.to_thread(
                     provider.read_transcript_file, str(file_path), 0
@@ -125,11 +126,12 @@ class TranscriptReader:
                 last_byte_offset=initial_offset,
             )
             self._state.update_session(tracked)
-            self._file_mtimes[session_id] = current_mtime
+            self._file_mtimes[session_id] = 0.0 if replay_initial else current_mtime
             if provider.capabilities.supports_task_tracking and window_id:
                 await provider.seed_task_state(window_id, session_id, str(file_path))
             logger.debug("Started tracking session: %s", session_id)
-            return
+            if not replay_initial:
+                return
 
         try:
             st = file_path.stat()

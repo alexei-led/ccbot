@@ -128,6 +128,7 @@ class SessionMonitor:
 
         self._idle_tracker = IdleTracker()
         self._transcript_reader = TranscriptReader(self.state, self._idle_tracker)
+        self._initial_replay_sessions: set[str] = set()
 
     # Delegation properties for backward-compatible test access
     @property
@@ -198,12 +199,15 @@ class SessionMonitor:
 
         for session_id, file_path in direct_sessions:
             try:
+                replay_initial = session_id in self._initial_replay_sessions
                 await self._process_session_file(
                     session_id,
                     file_path,
                     new_messages,
                     window_id=sid_to_wid.get(session_id, ""),
+                    replay_initial=replay_initial,
                 )
+                self._initial_replay_sessions.discard(session_id)
             except Exception:
                 logger.exception("Error processing session %s", session_id)
 
@@ -214,12 +218,17 @@ class SessionMonitor:
                 if session_info.session_id not in fallback_session_ids:
                     continue
                 try:
+                    replay_initial = (
+                        session_info.session_id in self._initial_replay_sessions
+                    )
                     await self._process_session_file(
                         session_info.session_id,
                         session_info.file_path,
                         new_messages,
                         window_id=sid_to_wid.get(session_info.session_id, ""),
+                        replay_initial=replay_initial,
                     )
+                    self._initial_replay_sessions.discard(session_info.session_id)
                 except Exception:
                     logger.exception(
                         "Error processing session %s", session_info.session_id
@@ -229,11 +238,20 @@ class SessionMonitor:
         return new_messages
 
     async def _process_session_file(
-        self, session_id: str, file_path: Path, new_messages: list, window_id: str = ""
+        self,
+        session_id: str,
+        file_path: Path,
+        new_messages: list,
+        window_id: str = "",
+        replay_initial: bool = False,
     ) -> None:
         """Process a single session file (delegates to TranscriptReader)."""
         await self._transcript_reader._process_session_file(
-            session_id, file_path, new_messages, window_id=window_id
+            session_id,
+            file_path,
+            new_messages,
+            window_id=window_id,
+            replay_initial=replay_initial,
         )
 
     def _scan_projects_sync(self, active_cwds: set) -> list:
@@ -310,8 +328,17 @@ class SessionMonitor:
 
         for session_id in result.sessions_to_remove:
             self._transcript_reader.clear_session(session_id)
+            self._initial_replay_sessions.discard(session_id)
         if result.sessions_to_remove:
             self.state.save_if_dirty()
+
+        for details in (*result.new_windows.values(), *result.changed_windows.values()):
+            provider_name = details.get("provider_name", "")
+            if not details.get("transcript_path") or not provider_name:
+                continue
+            provider = get_provider_for_window("", provider_name=provider_name)
+            if not provider.capabilities.supports_hook:
+                self._initial_replay_sessions.add(details["session_id"])
 
         adoption_windows = dict(result.new_windows)
         # Lazy: thread_router is wired into session_manager which imports
