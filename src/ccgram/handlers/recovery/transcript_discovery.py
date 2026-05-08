@@ -60,6 +60,9 @@ async def _detect_and_apply_provider(
             pane_title=pane_title,
         )
 
+    if detected == "shell" and is_foreign_window(window_id):
+        detected = ""
+
     if detected and detected != state.provider_name:
         old_provider = state.provider_name
         session_manager.set_window_provider(window_id, detected, cwd=w.cwd or None)
@@ -125,7 +128,9 @@ def _resolve_providers_to_try(
             return []
         return [(provider.capabilities.name, provider)]
 
-    if w and is_shell_prompt(w.pane_current_command):
+    if w and is_shell_prompt(w.pane_current_command) and not is_foreign_window(
+        window_id
+    ):
         return None  # signals caller to set up shell
 
     return [
