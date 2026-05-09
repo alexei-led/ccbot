@@ -1343,6 +1343,69 @@ class TestMaybeDiscoverTranscript:
             provider_name="codex",
         )
 
+    async def test_skips_session_if_already_bound_to_other_window(self) -> None:
+        from ccgram.handlers.recovery.transcript_discovery import (
+            discover_and_register_transcript,
+        )
+        from ccgram.providers.base import SessionStartEvent
+
+        mock_provider = MagicMock()
+        mock_provider.capabilities.supports_hook = False
+        mock_provider.capabilities.name = "codex"
+        event = SessionStartEvent(
+            session_id="shared-session",
+            cwd="/my/project",
+            transcript_path="/path/to/transcript.jsonl",
+            window_key="ccgram:@7",
+        )
+        mock_provider.discover_transcript.return_value = event
+
+        mock_router = MagicMock()
+        mock_router.iter_thread_bindings.return_value = [
+            (123, 42, "@7"),
+            (321, 7, "@9"),
+        ]
+
+        with (
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_manager"
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
+            ) as mock_sms,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
+                return_value=mock_provider,
+            ),
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.config"
+            ) as mock_config,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
+            ) as mock_tmux,
+            patch("ccgram.thread_router.thread_router", mock_router),
+        ):
+            mock_ws.window_states = {
+                "@7": MagicMock(session_id="", cwd="/my/project", provider_name="codex"),
+                "@9": MagicMock(
+                    session_id="shared-session",
+                    cwd="/my/project",
+                    provider_name="codex",
+                ),
+            }
+            mock_config.tmux_session_name = "ccgram"
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(pane_current_command="bun")
+            )
+            mock_tmux.get_pane_title = AsyncMock(return_value="")
+            await discover_and_register_transcript("@7")
+
+        mock_sms.register_hookless_session.assert_not_called()
+        mock_sms.write_hookless_session_map.assert_not_called()
+
     async def test_updates_when_new_session_discovered_for_same_window(self) -> None:
         from ccgram.handlers.recovery.transcript_discovery import (
             discover_and_register_transcript,
@@ -1573,6 +1636,91 @@ class TestMaybeDiscoverTranscript:
             cwd="/proj",
             transcript_path="/path/to/transcript.jsonl",
             provider_name="codex",
+        )
+
+    async def test_tries_next_provider_when_session_conflicts_with_bound_window(self) -> None:
+        from ccgram.handlers.recovery.transcript_discovery import (
+            discover_and_register_transcript,
+        )
+        from ccgram.providers.base import SessionStartEvent
+
+        conflicting_event = SessionStartEvent(
+            session_id="uuid-in-use",
+            cwd="/proj",
+            transcript_path="/path/to/in-use.jsonl",
+            window_key="ccgram:@7",
+        )
+        alternative_event = SessionStartEvent(
+            session_id="uuid-new",
+            cwd="/proj",
+            transcript_path="/path/to/alt.jsonl",
+            window_key="ccgram:@7",
+        )
+
+        mock_codex = MagicMock()
+        mock_codex.capabilities.supports_hook = False
+        mock_codex.capabilities.name = "codex"
+        mock_codex.discover_transcript.return_value = conflicting_event
+
+        mock_gemini = MagicMock()
+        mock_gemini.capabilities.supports_hook = False
+        mock_gemini.capabilities.name = "gemini"
+        mock_gemini.discover_transcript.return_value = alternative_event
+
+        mock_registry = MagicMock()
+        mock_registry.provider_names.return_value = ["codex", "gemini"]
+
+        def mock_get(name: str) -> MagicMock:
+            return {"codex": mock_codex, "gemini": mock_gemini}[name]
+
+        mock_registry.get = mock_get
+        mock_router = MagicMock()
+        mock_router.iter_thread_bindings.return_value = [(123, 42, "@9")]
+
+        mock_bound_state = MagicMock(
+            session_id="uuid-in-use",
+            cwd="/proj",
+            provider_name="codex",
+        )
+
+        with (
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_manager"
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
+            ) as mock_sms,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.config"
+            ) as mock_config,
+            patch("ccgram.providers.registry", mock_registry),
+            patch("ccgram.thread_router.thread_router", mock_router),
+        ):
+            mock_ws.window_states = {
+                "@7": MagicMock(session_id="", cwd="/proj", provider_name=""),
+                "@9": mock_bound_state,
+            }
+            mock_config.tmux_session_name = "ccgram"
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(pane_current_command="bun")
+            )
+            mock_tmux.get_pane_title = AsyncMock(return_value="")
+            await discover_and_register_transcript("@7")
+
+        mock_codex.discover_transcript.assert_called_once()
+        mock_gemini.discover_transcript.assert_called_once()
+        mock_sms.register_hookless_session.assert_called_once_with(
+            window_id="@7",
+            session_id="uuid-new",
+            cwd="/proj",
+            transcript_path="/path/to/alt.jsonl",
+            provider_name="gemini",
         )
 
     async def test_skips_hookless_fallback_when_pane_is_shell(self) -> None:
