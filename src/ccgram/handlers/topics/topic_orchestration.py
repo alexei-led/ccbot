@@ -83,6 +83,64 @@ def _is_window_already_bound(window_id: str) -> bool:
     return thread_router.has_window(window_id)
 
 
+# In-flight directory-flow window creations. Keyed by tmux window_id, value is
+# the monotonic expiry timestamp. Set by directory_callbacks._create_window_and_bind
+# right after `tmux_manager.create_window` returns and BEFORE any subsequent
+# `await` (so the SessionMonitor poll cycle can't slip in and fire
+# handle_new_window before the bind completes).
+#
+# Without this, the bug at MC-2967 / MC-3015 / MC-3030 fires:
+#   1. directory flow calls tmux_manager.create_window → tmux pane spawns
+#   2. claude-code (or other provider) boots inside, fires SessionStart hook
+#   3. SessionMonitor reads events.jsonl on its 1s poll, builds NewWindowEvent
+#   4. handle_new_window checks _is_window_already_bound — still False, because
+#      directory_callbacks hasn't reached `thread_router.bind_thread()` yet
+#   5. handle_new_window auto-creates a *new* Telegram topic and binds the
+#      window to it
+#   6. directory_callbacks then runs `bind_thread` for the original topic, but
+#      thread_router only stores one binding per window — original topic stays
+#      unbound forever ("Will deliver once the agent starts")
+#
+# The pending set lets handle_new_window detect "this window is owned by a
+# directory flow that's about to bind, do not create a duplicate topic." A
+# 30s TTL is the safety net in case directory_callbacks crashes before
+# clearing the entry — handle_new_window will eventually reclaim the window.
+_pending_user_creations: dict[str, float] = {}
+_PENDING_CREATION_TTL_S = 30.0
+
+
+def register_pending_creation(window_id: str) -> None:
+    """Mark a tmux window as owned by an in-flight directory-flow bind.
+
+    Call BEFORE any `await` between tmux window creation and
+    `thread_router.bind_thread`. Pair with `clear_pending_creation` (or rely on
+    the TTL) once the bind is complete.
+    """
+    if not window_id:
+        return
+    _pending_user_creations[window_id] = time.monotonic() + _PENDING_CREATION_TTL_S
+
+
+def clear_pending_creation(window_id: str) -> None:
+    """Remove a window's pending-creation marker (idempotent)."""
+    _pending_user_creations.pop(window_id, None)
+
+
+def _is_pending_user_creation(window_id: str) -> bool:
+    """Return True iff a directory flow is mid-creation for this window.
+
+    Expired entries are evicted lazily on read so a crashed directory flow
+    can't permanently shadow a window from auto-topic-creation.
+    """
+    expires_at = _pending_user_creations.get(window_id)
+    if expires_at is None:
+        return False
+    if time.monotonic() >= expires_at:
+        _pending_user_creations.pop(window_id, None)
+        return False
+    return True
+
+
 async def _auto_detect_provider(window_id: str) -> None:
     """Auto-detect provider from the running process if not already set.
 
@@ -312,6 +370,14 @@ async def handle_new_window(event: NewWindowEvent, client: TelegramClient) -> No
     if _is_window_already_bound(event.window_id):
         logger.debug(
             "New window %s already bound, skipping topic creation", event.window_id
+        )
+        return
+
+    if _is_pending_user_creation(event.window_id):
+        logger.debug(
+            "New window %s creation pending in directory flow — "
+            "skipping auto topic creation",
+            event.window_id,
         )
         return
 
