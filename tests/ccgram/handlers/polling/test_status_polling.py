@@ -1389,7 +1389,9 @@ class TestMaybeDiscoverTranscript:
             patch("ccgram.thread_router.thread_router", mock_router),
         ):
             mock_ws.window_states = {
-                "@7": MagicMock(session_id="", cwd="/my/project", provider_name="codex"),
+                "@7": MagicMock(
+                    session_id="", cwd="/my/project", provider_name="codex"
+                ),
                 "@9": MagicMock(
                     session_id="shared-session",
                     cwd="/my/project",
@@ -1638,7 +1640,9 @@ class TestMaybeDiscoverTranscript:
             provider_name="codex",
         )
 
-    async def test_tries_next_provider_when_session_conflicts_with_bound_window(self) -> None:
+    async def test_tries_next_provider_when_session_conflicts_with_bound_window(
+        self,
+    ) -> None:
         from ccgram.handlers.recovery.transcript_discovery import (
             discover_and_register_transcript,
         )
