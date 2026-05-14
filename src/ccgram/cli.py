@@ -229,18 +229,38 @@ def run_cmd(**kwargs: object) -> None:
 
 @cli.command("hook")
 @click.option(
-    "--install", is_flag=True, help="Install hook into ~/.claude/settings.json."
+    "--install",
+    is_flag=True,
+    help="Install hook into the selected provider's settings file.",
 )
 @click.option(
-    "--uninstall", is_flag=True, help="Remove hook from ~/.claude/settings.json."
+    "--uninstall",
+    is_flag=True,
+    help="Remove hook from the selected provider's settings file.",
 )
-@click.option("--status", is_flag=True, help="Check if hook is installed.")
-def hook_cmd(install: bool, uninstall: bool, status: bool) -> None:
-    """Claude Code session tracking hook."""
+@click.option(
+    "--status",
+    is_flag=True,
+    help="Check whether the selected provider's hook is installed.",
+)
+@click.option(
+    "--provider",
+    "provider_name",
+    type=click.Choice(["claude", "pi", "codex", "gemini"], case_sensitive=False),
+    default="claude",
+    help="Agent provider hook contract to use.",
+)
+def hook_cmd(install: bool, uninstall: bool, status: bool, provider_name: str) -> None:
+    """Agent session tracking hook."""
     # Lazy: defer subcommand import until that command is invoked, keeping `ccgram --help` fast
     from .hook import hook_main
 
-    hook_main(install=install, uninstall=uninstall, status=status)
+    hook_main(
+        install=install,
+        uninstall=uninstall,
+        status=status,
+        provider_name=provider_name.lower(),
+    )
 
 
 # --- status command --------------------------------------------------------
