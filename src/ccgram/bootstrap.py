@@ -98,9 +98,21 @@ async def register_provider_commands(application: Application) -> None:
 
 
 def verify_hooks_installed() -> None:
-    """Warn if Claude Code hooks are missing for the default provider."""
+    """Warn if managed hooks are missing for the default provider."""
     provider = get_provider()
     if not provider.capabilities.supports_hook:
+        return
+    provider_name = provider.capabilities.name
+    if provider_name != "claude":
+        if provider.capabilities.hook_install_managed_by_ccgram:
+            # INFO (not WARNING): Codex/Gemini fall back to transcript-scan
+            # discovery when hooks are absent, so missing hooks are an
+            # opt-in latency improvement, not a degraded state.
+            logger.info(
+                "%s hooks can improve status tracking. Run: ccgram hook --provider %s --install",
+                provider_name,
+                provider_name,
+            )
         return
 
     # Lazy: hook module is the Claude-Code subprocess entry point;

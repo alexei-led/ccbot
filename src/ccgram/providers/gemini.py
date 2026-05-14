@@ -463,7 +463,10 @@ class GeminiProvider(JsonlProvider):
     _CAPS = ProviderCapabilities(
         name="gemini",
         launch_command="gemini",
-        supports_hook=False,
+        supports_hook=True,
+        supports_hook_events=True,
+        hook_install_managed_by_ccgram=True,
+        hook_event_types=("SessionStart", "AfterAgent", "SessionEnd", "Notification"),
         supports_resume=True,
         supports_continue=True,
         supports_structured_transcript=True,

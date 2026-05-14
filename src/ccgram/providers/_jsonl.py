@@ -175,12 +175,6 @@ class JsonlProvider:
             return f"--resume {resume_id}"
         return ""
 
-    def parse_hook_payload(
-        self,
-        payload: dict[str, Any],  # noqa: ARG002 — protocol signature
-    ) -> SessionStartEvent | None:
-        return None
-
     def read_transcript_file(
         self, file_path: str, last_offset: int
     ) -> tuple[list[dict[str, Any]], int]:

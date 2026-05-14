@@ -586,7 +586,10 @@ class CodexProvider(JsonlProvider):
     _CAPS = ProviderCapabilities(
         name="codex",
         launch_command="codex",
-        supports_hook=False,
+        supports_hook=True,
+        supports_hook_events=True,
+        hook_install_managed_by_ccgram=True,
+        hook_event_types=("SessionStart", "Stop"),
         supports_resume=True,
         supports_continue=True,
         supports_structured_transcript=True,

@@ -1,8 +1,9 @@
 """Pi coding agent provider — https://pi.dev behind AgentProvider.
 
-Pi is a Node.js-based CLI with JSONL session transcripts (v3 format) and no
-hook subsystem; session discovery therefore follows the Codex/Gemini pattern:
-scan ``~/.pi/agent/sessions/`` for the newest transcript whose header ``cwd``
+Pi is a Node.js-based CLI with JSONL session transcripts (v3 format). With the
+cc-thingz hook-runner extension, lifecycle hooks provide instant status signals;
+transcript discovery remains the fallback and message source of truth. Discovery
+scans ``~/.pi/agent/sessions/`` for the newest transcript whose header ``cwd``
 matches the window working directory.
 
 Session path:  ``~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl``
@@ -116,8 +117,16 @@ class PiProvider(JsonlProvider):
     _CAPS = ProviderCapabilities(
         name="pi",
         launch_command="pi",
-        supports_hook=False,
-        supports_hook_events=False,
+        supports_hook=True,
+        supports_hook_events=True,
+        hook_event_types=(
+            "SessionStart",
+            "Stop",
+            "SessionEnd",
+            "SubagentStart",
+            "SubagentStop",
+            "Notification",
+        ),
         supports_resume=True,
         supports_continue=True,
         supports_structured_transcript=True,

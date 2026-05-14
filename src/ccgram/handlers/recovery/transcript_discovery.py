@@ -218,7 +218,11 @@ async def discover_and_register_transcript(
 
     if state.provider_name:
         provider = get_provider_for_window(window_id, state.provider_name)
-        if provider.capabilities.supports_hook:
+        # Skip discovery only when hook has already populated transcript_path.
+        # Capability alone (supports_hook=True) is insufficient — Codex/Gemini
+        # support hooks but the user may not have installed them yet, in which
+        # case transcript scan is the fallback path.
+        if provider.capabilities.supports_hook and state.transcript_path:
             return
 
     if not state.cwd:
