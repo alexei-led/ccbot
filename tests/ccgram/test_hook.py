@@ -8,17 +8,22 @@ from unittest.mock import patch
 import pytest
 
 from ccgram.hook import (
-    UUID_RE,
     _claude_settings_file,
     _closest_claude_ancestor,
     _foreground_pgid_on_tty,
     _hook_status,
     _install_hook,
-    _is_hook_installed,
     _is_nested_session,
+    _provider_from_pane_tty,
     _uninstall_hook,
+    get_installed_events,
     hook_main,
 )
+from ccgram.providers.base import UUID_RE
+
+
+def _is_hook_installed(settings: dict) -> bool:
+    return get_installed_events(settings).get("SessionStart", False)
 
 
 def _expected_module_command() -> str:
@@ -915,3 +920,39 @@ class TestNestedHookEndToEnd:
         with patch("ccgram.hook.subprocess.run", return_value=tmux_result):
             hook_main()
         assert (tmp_path / "session_map.json").exists()
+
+
+class TestProviderFromPaneTty:
+    def _run(self, stdout: str) -> object:
+        result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=stdout, stderr=""
+        )
+        with patch("ccgram.hook.subprocess.run", return_value=result):
+            return _provider_from_pane_tty("/dev/ttys012")
+
+    def test_detects_gemini(self) -> None:
+        assert self._run("/usr/local/bin/gemini --model flash\n") == "gemini"
+
+    def test_detects_codex(self) -> None:
+        assert self._run("/usr/local/bin/codex\n") == "codex"
+
+    def test_detects_claude(self) -> None:
+        assert self._run("/usr/local/bin/claude\n") == "claude"
+
+    def test_detects_pi_exact_basename(self) -> None:
+        assert self._run("/usr/local/bin/pi\n") == "pi"
+
+    def test_pi_does_not_match_pip(self) -> None:
+        assert self._run("/usr/bin/pip install requests\n") is None
+
+    def test_pi_does_not_match_pipenv(self) -> None:
+        assert self._run("/usr/local/bin/pipenv shell\n") is None
+
+    def test_pi_does_not_match_pip3(self) -> None:
+        assert self._run("/usr/bin/pip3 install foo\n") is None
+
+    def test_empty_tty_returns_none(self) -> None:
+        assert _provider_from_pane_tty("") is None
+
+    def test_unknown_process_returns_none(self) -> None:
+        assert self._run("/usr/bin/python3 script.py\n") is None

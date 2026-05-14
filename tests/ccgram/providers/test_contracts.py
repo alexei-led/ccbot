@@ -9,7 +9,6 @@ from ccgram.providers.base import (
     AgentProvider,
     DiscoveredCommand,
     ProviderCapabilities,
-    SessionStartEvent,
     StatusUpdate,
 )
 from ccgram.providers._jsonl import JsonlProvider
@@ -44,18 +43,6 @@ class StubProvider(JsonlProvider):
         if use_continue and self._CAPS.supports_continue:
             return "--continue"
         return ""
-
-    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
-        sid = payload.get("session_id", "")
-        cwd = payload.get("cwd", "")
-        if not sid or not cwd:
-            return None
-        return SessionStartEvent(
-            session_id=sid,
-            cwd=cwd,
-            transcript_path=payload.get("transcript_path", ""),
-            window_key=payload.get("window_key", ""),
-        )
 
 
 PROVIDER_FIXTURES: list[type] = [
@@ -107,38 +94,6 @@ class TestMakeLaunchArgs:
             assert result != ""  # Each provider has its own continue syntax
         else:
             assert result == ""
-
-
-class TestParseHookPayload:
-    def test_valid_payload_returns_event(self, provider: AgentProvider) -> None:
-        payload = {
-            "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-            "cwd": "/tmp/test",
-            "transcript_path": "/tmp/test.jsonl",
-            "window_key": "ccgram:@0",
-        }
-        event = provider.parse_hook_payload(payload)
-        if provider.capabilities.supports_hook:
-            assert event is not None
-            assert isinstance(event, SessionStartEvent)
-            assert event.session_id == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-            assert event.cwd == "/tmp/test"
-        else:
-            assert event is None
-
-    @pytest.mark.parametrize(
-        "payload",
-        [
-            {},
-            {"session_id": ""},
-            {"session_id": "x"},
-        ],
-        ids=["empty", "empty_sid", "invalid_sid_no_cwd"],
-    )
-    def test_invalid_payload_returns_none(
-        self, provider: AgentProvider, payload: dict[str, Any]
-    ) -> None:
-        assert provider.parse_hook_payload(payload) is None
 
 
 class TestParseTranscriptLine:

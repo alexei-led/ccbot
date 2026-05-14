@@ -79,15 +79,6 @@ class TestShellOverrides:
     def test_discover_commands_returns_empty(self, provider: ShellProvider) -> None:
         assert provider.discover_commands("/any/dir") == []
 
-    def test_parse_hook_payload_returns_none(self, provider: ShellProvider) -> None:
-        payload = {
-            "session_id": "test-sid",
-            "cwd": "/tmp",
-            "transcript_path": "/tmp/t.jsonl",
-            "window_key": "ccgram:@0",
-        }
-        assert provider.parse_hook_payload(payload) is None
-
     def test_parse_terminal_status_returns_none_for_spinner(
         self, provider: ShellProvider
     ) -> None:

@@ -246,7 +246,11 @@ class TestDispatch:
     ):
         ct = _content_task("tool", content_type="tool_use")
         mock_tool_event.return_value = None
-        extra = await _dispatch(bot, 1, ct, queue, lock)
+        with patch(
+            "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+            return_value=False,
+        ):
+            extra = await _dispatch(bot, 1, ct, queue, lock)
         assert extra == 0
         mock_tool_event.assert_awaited_once_with(bot, 1, ct)
         mock_process.assert_not_awaited()
@@ -269,7 +273,11 @@ class TestDispatch:
         ct = _content_task("tool", content_type="tool_use")
         followup = _content_task("overflow")
         mock_tool_event.return_value = followup
-        await _dispatch(bot, 1, ct, queue, lock)
+        with patch(
+            "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+            return_value=False,
+        ):
+            await _dispatch(bot, 1, ct, queue, lock)
         mock_process.assert_awaited_once_with(bot, 1, followup)
 
     @patch(

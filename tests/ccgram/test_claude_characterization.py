@@ -8,7 +8,7 @@ tests in test_provider_contracts.py.
 import pytest
 
 from ccgram.cc_commands import CC_BUILTINS
-from ccgram.hook import UUID_RE
+from ccgram.providers.base import UUID_RE
 from ccgram.terminal_parser import (
     STATUS_SPINNERS,
     UI_PATTERNS,
@@ -48,22 +48,6 @@ class TestClaudeProviderMethods:
         provider = ClaudeProvider()
         with pytest.raises(ValueError, match="Invalid resume_id"):
             provider.make_launch_args(resume_id="not-a-uuid")
-
-    def test_relative_cwd_rejected(self) -> None:
-        provider = ClaudeProvider()
-        payload = {
-            "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-            "cwd": "relative/path",
-        }
-        assert provider.parse_hook_payload(payload) is None
-
-    def test_invalid_uuid_in_hook_rejected(self) -> None:
-        provider = ClaudeProvider()
-        payload = {
-            "session_id": "NOT-A-VALID-UUID",
-            "cwd": "/tmp/test",
-        }
-        assert provider.parse_hook_payload(payload) is None
 
     def test_parse_transcript_entries_adapter(self, make_jsonl_entry) -> None:
         entries = [

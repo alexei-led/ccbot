@@ -48,28 +48,34 @@ class TestResolvePending:
         assert _resolve_pending(42, pending) == (None, None)
 
 
-HOOKLESS_PROVIDERS = [CodexProvider, GeminiProvider]
+HOOK_AWARE_JSONL_PROVIDERS = [CodexProvider, GeminiProvider]
 
 
-@pytest.fixture(params=HOOKLESS_PROVIDERS, ids=lambda cls: cls.__name__)
-def hookless(request: pytest.FixtureRequest):
+@pytest.fixture(params=HOOK_AWARE_JSONL_PROVIDERS, ids=lambda cls: cls.__name__)
+def hook_aware_jsonl_provider(request: pytest.FixtureRequest):
     return request.param()
 
 
-class TestHooklessCapabilities:
-    def test_hookless_flags(self, hookless) -> None:
-        caps = hookless.capabilities
-        assert caps.supports_hook is False
+@pytest.fixture(params=HOOK_AWARE_JSONL_PROVIDERS, ids=lambda cls: cls.__name__)
+def jsonl_provider(request: pytest.FixtureRequest):
+    return request.param()
+
+
+class TestHookAwareCapabilities:
+    def test_hook_flags(self, hook_aware_jsonl_provider) -> None:
+        caps = hook_aware_jsonl_provider.capabilities
+        assert caps.supports_hook is True
+        assert caps.supports_hook_events is True
         assert caps.supports_resume is True
         assert caps.supports_continue is True
 
-    def test_invalid_resume_id_raises(self, hookless) -> None:
+    def test_invalid_resume_id_raises(self, hook_aware_jsonl_provider) -> None:
         with pytest.raises(ValueError, match="Invalid resume_id"):
-            hookless.make_launch_args(resume_id="abc; rm -rf /")
+            hook_aware_jsonl_provider.make_launch_args(resume_id="abc; rm -rf /")
 
-    def test_valid_resume_ids(self, hookless) -> None:
-        assert hookless.make_launch_args(resume_id="abc-123")
-        assert hookless.make_launch_args(resume_id="session_42")
+    def test_valid_resume_ids(self, hook_aware_jsonl_provider) -> None:
+        assert hook_aware_jsonl_provider.make_launch_args(resume_id="abc-123")
+        assert hook_aware_jsonl_provider.make_launch_args(resume_id="session_42")
 
 
 class TestCodexLaunchArgs:
@@ -1143,10 +1149,10 @@ class TestGeminiPaneTitleStatus:
 
 
 class TestHooklessCommands:
-    def test_returns_exact_builtins(self, hookless) -> None:
-        result = hookless.discover_commands("/tmp/nonexistent")
+    def test_returns_exact_builtins(self, jsonl_provider) -> None:
+        result = jsonl_provider.discover_commands("/tmp/nonexistent")
         names = {c.name for c in result}
-        assert names == set(hookless.capabilities.builtin_commands)
+        assert names == set(jsonl_provider.capabilities.builtin_commands)
 
 
 class TestGeminiCommandDiscovery:

@@ -143,7 +143,9 @@ class TestCheckHooks:
 
         status, msg, event_status = _check_hooks()
         assert status == "fail"
-        assert event_status == {}
+        # Populated with {event: False} so doctor --fix can install them.
+        assert event_status
+        assert all(v is False for v in event_status.values())
 
 
 class TestDoctorMain:
@@ -164,7 +166,11 @@ class TestDoctorMain:
         )
         monkeypatch.setattr(
             "ccgram.doctor_cmd._check_hooks",
-            lambda: ("pass", "all 5 hook events installed", _all_hooks_status()),
+            lambda _provider="claude": (
+                "pass",
+                "all 5 hook events installed",
+                _all_hooks_status(),
+            ),
         )
         monkeypatch.setattr(
             "ccgram.doctor_cmd._find_orphaned_windows",
@@ -195,7 +201,11 @@ class TestDoctorMain:
         )
         monkeypatch.setattr(
             "ccgram.doctor_cmd._check_hooks",
-            lambda: ("pass", "all 5 hook events installed", _all_hooks_status()),
+            lambda _provider="claude": (
+                "pass",
+                "all 5 hook events installed",
+                _all_hooks_status(),
+            ),
         )
         monkeypatch.setattr("ccgram.doctor_cmd._find_orphaned_windows", lambda: [])
 
@@ -205,7 +215,7 @@ class TestDoctorMain:
         captured = capsys.readouterr()
         assert "Provider: claude" in captured.out
 
-    def test_skips_hook_check_for_hookless_provider(
+    def test_reports_missing_hooks_for_codex_provider(
         self, tmp_path, monkeypatch, capsys
     ) -> None:
         monkeypatch.setenv("CCGRAM_DIR", str(tmp_path))
@@ -229,7 +239,7 @@ class TestDoctorMain:
 
         captured = capsys.readouterr()
         assert "Provider: codex" in captured.out
-        assert "hook check skipped" in captured.out
+        assert "hooks not installed" in captured.out
 
 
 class TestCheckProviderCommand:

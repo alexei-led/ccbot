@@ -563,7 +563,8 @@ class TestCapabilities:
         caps = PiProvider().capabilities
         assert caps.name == "pi"
         assert caps.launch_command == "pi"
-        assert caps.supports_hook is False
+        assert caps.supports_hook is True
+        assert caps.supports_hook_events is True
         assert caps.supports_resume is True
         assert caps.supports_continue is True
         assert caps.transcript_format == "jsonl"

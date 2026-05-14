@@ -873,7 +873,7 @@ class TestProviderSwitchPromptSetup:
                     session_id="",
                     cwd="/proj",
                     provider_name="shell",
-                    transcript_path="",
+                    transcript_path="/path/to/claude.jsonl",
                 )
             }
             mock_tmux.find_window_by_id = AsyncMock(

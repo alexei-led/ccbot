@@ -587,7 +587,11 @@ class TestHandleContentTask:
             parts=("Read x",),
         )
         mock_batch.return_value = None
-        extra = await _handle_content_task(bot, 1, task, queue, lock)
+        with patch(
+            "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+            return_value=False,
+        ):
+            extra = await _handle_content_task(bot, 1, task, queue, lock)
         assert extra == 0
         mock_batch.assert_awaited_once()
 
@@ -608,7 +612,11 @@ class TestHandleContentTask:
             window_id="@0",
             parts=("Read x",),
         )
-        extra = await _handle_content_task(bot, 1, task, queue, lock)
+        with patch(
+            "ccgram.handlers.messaging_pipeline.message_queue.is_tool_calls_hidden",
+            return_value=False,
+        ):
+            extra = await _handle_content_task(bot, 1, task, queue, lock)
         assert extra == 0
         mock_process.assert_awaited_once()
 
