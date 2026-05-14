@@ -119,19 +119,19 @@ When creating a topic via the directory browser, users can choose the provider (
 
 ### Provider Capability Matrix
 
-| Capability       | Claude                          | Codex              | Gemini                      | Pi                       | Shell                       |
-| ---------------- | ------------------------------- | ------------------ | --------------------------- | ------------------------ | --------------------------- |
-| Hook events      | Yes (all supported event types) | No                 | No                          | No                       | No                          |
-| Resume           | Yes (`--resume`)                | Yes (`resume`)     | Yes (`--resume idx/latest`) | Yes (`--session <path>`) | No                          |
-| Continue         | Yes                             | Yes                | Yes                         | Yes                      | No                          |
-| Transcript       | JSONL                           | JSONL              | JSONL (incremental)         | JSONL (v3)               | None                        |
-| Incremental read | Yes                             | Yes                | Yes                         | Yes                      | No                          |
-| Commands         | Yes                             | Yes                | Yes                         | Yes (builtins + skills)  | No                          |
-| Status detection | Hook events + pyte + spinner    | Activity heuristic | Pane title + interactive UI | Transcript activity      | Shell prompt idle detection |
-| YOLO auto-accept | Yes                             | No                 | No                          | No                       | No                          |
-| Mode scraping    | Yes (mode-line parse)           | No                 | No                          | No                       | No                          |
+| Capability       | Claude                          | Codex                          | Gemini                                                           | Pi                              | Shell                       |
+| ---------------- | ------------------------------- | ------------------------------ | ---------------------------------------------------------------- | ------------------------------- | --------------------------- |
+| Hook events      | Yes (all supported event types) | Yes (`SessionStart`, `Stop`)   | Yes (`SessionStart`, `AfterAgent`, `SessionEnd`, `Notification`) | Yes via hook-runner             | No                          |
+| Resume           | Yes (`--resume`)                | Yes (`resume`)                 | Yes (`--resume idx/latest`)                                      | Yes (`--session <path>`)        | No                          |
+| Continue         | Yes                             | Yes                            | Yes                                                              | Yes                             | No                          |
+| Transcript       | JSONL                           | JSONL                          | JSONL (incremental)                                              | JSONL (v3)                      | None                        |
+| Incremental read | Yes                             | Yes                            | Yes                                                              | Yes                             | No                          |
+| Commands         | Yes                             | Yes                            | Yes                                                              | Yes (builtins + skills)         | No                          |
+| Status detection | Hook events + pyte + spinner    | Stop hook + activity heuristic | AfterAgent hook + pane title                                     | Stop hook + transcript activity | Shell prompt idle detection |
+| YOLO auto-accept | Yes                             | No                             | No                                                               | No                              | No                          |
+| Mode scraping    | Yes (mode-line parse)           | No                             | No                                                               | No                              | No                          |
 
-Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks all hook event types for Claude. Codex, Gemini, Pi, and Shell have no hooks — session tracking for these providers relies on auto-detection from running processes.
+Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks managed hook installs for Claude, Codex, and Gemini. Pi hook support is supplied by cc-thingz hook-runner; transcript/process detection remains fallback for all non-shell agents.
 
 ### Shell Prompt Configuration
 
@@ -239,11 +239,11 @@ Providers absent from the TOML keep their built-in defaults. Malformed entries a
 
 ### Migration Notes
 
-Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccgram hook --install`) is Claude-specific and skipped for other providers.
+Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccgram hook --install`) defaults to Claude; pass `--provider {codex,gemini,pi}` to manage other providers. Codex and Gemini hook installs are ccgram-managed (settings written into `~/.codex/hooks.json` + `~/.codex/config.toml` and `~/.gemini/settings.json` respectively). Pi hooks are owned by the cc-thingz hook-runner extension — ccgram receives Pi events but does not modify Pi configuration. Shell windows have no hooks. When hooks are absent or fail, providers with JSONL transcripts (Codex/Gemini/Pi) fall back to transcript-scan discovery, so missing hooks degrade latency rather than functionality.
 
 ### Pi Provider
 
-[Pi](https://pi.dev) is a Node.js-based coding agent CLI with JSONL v3 transcripts and no hook subsystem, so session discovery follows the Codex/Gemini pattern (hookless `discover_transcript()`). Transcripts live under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`; the canonical session id sits in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`). Resume always uses `--session <path>` — `--resume` would open an interactive picker ccgram can't drive. Command discovery (`pi_discovery.py`) surfaces Telegram-friendly builtins (`/clear`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`, `/changelog`) plus on-disk sources: skills under `.pi/skills`, `.agents/skills`, `~/.pi/agent/skills`, and `~/.agents/skills`; prompt templates under `.pi/prompts` and `~/.pi/agent/prompts`; extension commands via `pi.registerCommand(...)` scans in `.pi/extensions` and `~/.pi/agent/extensions`.
+[Pi](https://pi.dev) is a Node.js-based coding agent CLI with JSONL v3 transcripts and hook support via cc-thingz hook-runner. The extension sends `SessionStart`, `Stop`, `SessionEnd`, and subagent events to `ccgram hook`; transcript discovery remains fallback and message source of truth. Transcripts live under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`; the canonical session id sits in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`). Resume always uses `--session <path>` — `--resume` would open an interactive picker ccgram can't drive. Command discovery (`pi_discovery.py`) surfaces Telegram-friendly builtins (`/clear`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`, `/changelog`) plus on-disk sources: skills under `.pi/skills`, `.agents/skills`, `~/.pi/agent/skills`, and `~/.agents/skills`; prompt templates under `.pi/prompts` and `~/.pi/agent/prompts`; extension commands via `pi.registerCommand(...)` scans in `.pi/extensions` and `~/.pi/agent/extensions`.
 
 ## Testing
 

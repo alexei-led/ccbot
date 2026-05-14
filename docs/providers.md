@@ -4,13 +4,13 @@ CCGram supports multiple agent CLI backends. Each Telegram topic can use a diffe
 
 ## Overview
 
-| Provider    | CLI Command | Hook Events | Resume | Continue | Transcript | Status Detection                                          |
-| ----------- | ----------- | ----------- | ------ | -------- | ---------- | --------------------------------------------------------- |
-| Claude Code | `claude`    | Yes         | Yes    | Yes      | JSONL      | Hook events + pyte VT100 + spinner                        |
-| Codex CLI   | `codex`     | No          | Yes    | Yes      | JSONL      | pyte VT100 interactive UI + transcript activity heuristic |
-| Gemini CLI  | `gemini`    | No          | Yes    | Yes      | JSONL      | Pane title + interactive UI + `/status` snapshot          |
-| Pi          | `pi`        | No          | Yes    | Yes      | JSONL (v3) | Transcript activity heuristic                             |
-| Shell       | `bash`      | No          | No     | No       | None       | Shell prompt idle detection                               |
+| Provider    | CLI Command | Hook Events | Resume | Continue | Transcript | Status Detection                                                      |
+| ----------- | ----------- | ----------- | ------ | -------- | ---------- | --------------------------------------------------------------------- |
+| Claude Code | `claude`    | Yes         | Yes    | Yes      | JSONL      | Hook events + pyte VT100 + spinner                                    |
+| Codex CLI   | `codex`     | Yes         | Yes    | Yes      | JSONL      | Hook Stop + pyte VT100 interactive UI + transcript activity heuristic |
+| Gemini CLI  | `gemini`    | Yes         | Yes    | Yes      | JSONL      | Hook AfterAgent + pane title + interactive UI + `/status` snapshot    |
+| Pi          | `pi`        | Yes         | Yes    | Yes      | JSONL (v3) | Hook-runner Stop + transcript activity heuristic                      |
+| Shell       | `bash`      | No          | No     | No       | None       | Shell prompt idle detection                                           |
 
 ## Choosing a Provider
 
@@ -75,11 +75,11 @@ The bot also detects Remote Control mode (📡 topic badge + one-tap activation 
 
 ### Hooks
 
-Install hooks with `ccgram hook --install`. This is Claude-specific and not needed for other providers.
+Install hooks with `ccgram hook --install`.
 
 If hooks are missing, ccgram warns at startup with the fix command. Hooks are optional — terminal scraping works as fallback.
 
-### Transcript
+### Claude Transcript
 
 Claude transcripts are JSONL files under `~/.claude/projects/`. They are read incrementally (byte offsets) for efficient polling.
 
@@ -89,7 +89,7 @@ Claude task state is derived from the transcript, not from terminal footer scrap
 
 ## Codex CLI
 
-Codex CLI lacks a session hook, so session tracking relies on hookless transcript discovery plus provider detection from the running process name.
+Codex CLI supports feature-flagged hooks. Install ccgram's lifecycle hooks with `ccgram hook --provider codex --install`; ccgram writes user-level `~/.codex/hooks.json` entries for `SessionStart` and `Stop` and enables `[features].codex_hooks = true` in `~/.codex/config.toml`. Transcript discovery remains as fallback and as the source of message truth.
 
 ### Interactive Prompts
 
@@ -124,13 +124,13 @@ Press enter to confirm or esc to cancel
 
 For Codex, `/status` sends a transcript-based fallback snapshot in Telegram (session/cwd/token/rate-limit summary) because some Codex builds render status in the terminal UI without emitting a transcript assistant message.
 
-### Transcript
+### Codex Transcript
 
 Codex transcripts are JSONL files under `~/.codex/sessions/`. They are read incrementally (byte offsets).
 
 ## Gemini CLI
 
-Gemini CLI lacks a session hook. Session tracking relies on hookless transcript discovery plus provider detection.
+Gemini CLI supports command hooks in `settings.json`. Install ccgram's lifecycle hooks with `ccgram hook --provider gemini --install`; ccgram writes user-level `~/.gemini/settings.json` entries for `SessionStart`, `AfterAgent`, `SessionEnd`, and `Notification`. Transcript discovery remains as fallback and as the source of message truth.
 
 Gemini sets pane titles (`Working: ✦`, `Action Required: ✋`, `Ready: ◇`) that CCGram reads for status, and its `@inquirer/select` permission prompts are detected as interactive UI. Gemini transcript discovery matches project hash/alias only (no cross-project full scan) to avoid wrong-session attachment.
 
@@ -138,7 +138,7 @@ Gemini sets pane titles (`Working: ✦`, `Action Required: ✋`, `Ready: ◇`) t
 
 For ccgram-managed Gemini launches, CCGram injects `GEMINI_CLI_SYSTEM_SETTINGS_PATH=~/.ccgram/gemini-system-settings.json` with `tools.shell.enableInteractiveShell=false` to avoid node-pty `EBADF` crashes in tmux. If you set `CCGRAM_GEMINI_COMMAND`, your override is used as-is.
 
-### Transcript
+### Gemini Transcript
 
 As of Gemini CLI v0.40+, transcripts are append-only JSONL files under `~/.gemini/tmp/<project-hash>/chats/`. Each line is a JSON record (header with `sessionId`/`projectHash`/`startTime`, then message records and `{"$set": {...}}` metadata updates). CCGram reads them incrementally via the shared `JsonlProvider` byte-offset reader and dedupes repeated message ids and pending tool_use ids — a single tool announcement, then one tool_result on the update that carries the result.
 
@@ -150,7 +150,7 @@ Gemini supports `/status` snapshots: CCGram parses recent transcript activity to
 
 ## Pi
 
-[Pi](https://pi.dev) is a Node.js-based CLI with JSONL v3 transcripts and no hook subsystem. Session tracking follows the Codex/Gemini pattern: ccgram scans `~/.pi/agent/sessions/--<encoded-cwd>--/` for the newest transcript whose header `cwd` matches the window working directory.
+[Pi](https://pi.dev) is a Node.js-based CLI with JSONL v3 transcripts. With the `hook-runner` extension from `cc-thingz`, Pi emits Claude-compatible lifecycle hooks to `ccgram hook` for instant `SessionStart`, `Stop`, `SessionEnd`, and subagent signals. Without hook-runner, session tracking falls back to scanning `~/.pi/agent/sessions/--<encoded-cwd>--/` for the newest transcript whose header `cwd` matches the window working directory.
 
 ### Launch
 
@@ -160,7 +160,7 @@ The default command is `pi`. Override via `CCGRAM_PI_COMMAND` to change models, 
 
 Resume always uses `--session <path-or-uuid>`. Pi's `--resume` flag opens an interactive picker ccgram can't drive over `send_keys`, so ccgram always passes the resolved transcript path (or UUID prefix) directly. Pi's own `--continue` is used for the Continue recovery button.
 
-### Transcript
+### Pi Transcript
 
 Pi transcripts are JSONL files (v3 format) under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`. The canonical session id lives in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`) — the filename prefix is just a timestamp. Transcripts are read incrementally via byte offsets.
 
@@ -176,7 +176,7 @@ Names collide-dedupe with first-source wins (skills > prompts > extensions).
 
 ### Status Detection
 
-Pi has no hooks and no pane-title signaling, so status is inferred from transcript activity — idle when the latest assistant message has no pending tool calls, working when there are unreturned tool uses.
+With hook-runner installed, Pi `Stop` hooks mark the topic ready immediately and trigger pending mailbox delivery. Without hooks, status is inferred from transcript activity — idle when the latest assistant message has no pending tool calls, working when there are unreturned tool uses.
 
 ### Toolbar
 
