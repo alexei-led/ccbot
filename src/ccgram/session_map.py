@@ -617,16 +617,20 @@ class SessionMapSync:
 
             inferred = detect_provider_from_transcript_path(path_for_inference)
             if inferred and inferred != new_provider:
-                logger.warning(
-                    "session_map provider_name=%s contradicts transcript_path=%s "
-                    "(inferred=%s); preferring transcript-path for %s",
-                    new_provider,
-                    path_for_inference,
-                    inferred,
-                    window_id,
-                )
                 new_provider = inferred
         if new_provider and state.provider_name != new_provider:
+            # Log only on actual mutation so a persistent stale claim in
+            # session_map.json doesn't spam the log every poll cycle once the
+            # in-memory state has already been corrected.
+            logger.warning(
+                "Corrected provider for %s: state=%s -> %s "
+                "(session_map claimed %s; transcript_path=%s)",
+                window_id,
+                state.provider_name,
+                new_provider,
+                effective["provider_name"].lower(),
+                path_for_inference,
+            )
             state.provider_name = new_provider
             changed = True
         if (

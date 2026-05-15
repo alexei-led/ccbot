@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from ccgram import session_map as session_map_module
 from ccgram.session_map import SessionMapSync
 from ccgram.thread_router import ThreadRouter, install_thread_router
 from ccgram.window_state_store import (
@@ -40,9 +41,7 @@ def _sync() -> SessionMapSync:
     return SessionMapSync(schedule_save=lambda: None)
 
 
-def _info(
-    session_id: str, transcript: Path, provider_name: str
-) -> dict[str, Any]:
+def _info(session_id: str, transcript: Path, provider_name: str) -> dict[str, Any]:
     return {
         "session_id": session_id,
         "cwd": "/repo",
@@ -98,6 +97,43 @@ def test_session_map_provider_kept_when_transcript_path_is_ambiguous(
 
     # No path-based inference possible → trust session_map's claim.
     assert store.window_states["@1"].provider_name == "codex"
+
+
+def test_repeated_sync_with_stale_claim_is_idempotent_and_silent(
+    tmp_path: Path,
+    store: WindowStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Once state.provider_name is corrected, a stale session_map claim must
+    not re-trigger the warning or flip state again on subsequent polls.
+
+    Patches ``logger.warning`` directly because the module uses structlog and
+    pytest's ``caplog`` only sees the stdlib ``logging`` pipeline.
+    """
+    claude_dir = tmp_path / ".claude" / "projects" / "repo"
+    claude_dir.mkdir(parents=True)
+    transcript = claude_dir / "session.jsonl"
+    transcript.write_text("{}\n")
+
+    warnings: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(
+        session_map_module.logger,
+        "warning",
+        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    )
+
+    stale_info = _info("session-a", transcript, provider_name="codex")
+    sync = _sync()
+
+    first = sync._sync_window_from_session_map("@1", stale_info)
+    assert first is True
+    assert store.window_states["@1"].provider_name == "claude"
+    assert len(warnings) == 1
+
+    second = sync._sync_window_from_session_map("@1", stale_info)
+    assert second is False
+    assert store.window_states["@1"].provider_name == "claude"
+    assert len(warnings) == 1
 
 
 def test_existing_transcript_path_used_when_info_omits_it(
