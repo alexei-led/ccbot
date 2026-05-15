@@ -7,6 +7,8 @@ and ``resolve_capabilities()`` for lightweight CLI commands that don't
 require Config (doctor, status).
 """
 
+import re
+
 import structlog
 import os
 
@@ -155,14 +157,22 @@ def detect_provider_from_command(pane_current_command: str) -> str:
     return ""
 
 
+_CLAUDE_PROJECTS_RE = re.compile(r"/\.claude[a-z0-9._-]*/projects/")
+
+
 def detect_provider_from_transcript_path(transcript_path: str) -> str:
-    """Infer provider name from a persisted transcript path when possible."""
+    """Infer provider name from a persisted transcript path when possible.
+
+    Claude wrappers (`ce`, `cc-mirror`, `zai`, `claude-team`, etc.) use sibling
+    config dirs of the form ``~/.claude<suffix>/projects/`` with the same JSONL
+    schema, so any ``.claude*`` config dir is treated as Claude.
+    """
     normalized = transcript_path.strip().lower().replace("\\", "/")
     if not normalized:
         return ""
     if "/.codex/sessions/" in normalized:
         return "codex"
-    if "/.claude/projects/" in normalized:
+    if _CLAUDE_PROJECTS_RE.search(normalized):
         return "claude"
     if "/.gemini/" in normalized and "/chats/" in normalized:
         return "gemini"

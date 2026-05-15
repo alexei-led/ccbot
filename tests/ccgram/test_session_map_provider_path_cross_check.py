@@ -136,6 +136,70 @@ def test_repeated_sync_with_stale_claim_is_idempotent_and_silent(
     assert len(warnings) == 1
 
 
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/Users/x/.claude/projects/repo/abc.jsonl", "claude"),
+        ("/Users/x/.claude-team/projects/repo/abc.jsonl", "claude"),
+        ("/Users/x/.claude.local/projects/repo/abc.jsonl", "claude"),
+        ("/Users/x/.cc-mirror/projects/repo/abc.jsonl", ""),
+        ("/Users/x/.codex/sessions/repo/abc.jsonl", "codex"),
+        ("/Users/x/.gemini/chats/repo/abc.json", "gemini"),
+        ("/Users/x/.pi/agent/sessions/--repo--/abc.jsonl", "pi"),
+        ("/Users/x/weird/abc.jsonl", ""),
+    ],
+)
+def test_detect_provider_from_transcript_path(path: str, expected: str) -> None:
+    """Claude wrapper config dirs (.claude-team, .claude.local, ...) must
+    detect as claude. Non-claude-prefixed wrappers stay unrecognised."""
+    from ccgram.providers import detect_provider_from_transcript_path
+
+    assert detect_provider_from_transcript_path(path) == expected
+
+
+def test_claude_wrapper_transcript_path_silences_session_map_cross_check(
+    tmp_path: Path,
+    store: WindowStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Process detection sets provider=claude (claude-team wrapper basename),
+    but session_map.json still claims codex. Path-based inference must
+    classify .claude-team/projects as claude so the cross-check silently
+    keeps state=claude instead of flipping back to codex every poll.
+    """
+    transcript = tmp_path / ".claude-team" / "projects" / "repo" / "abc.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("{}\n")
+
+    store.window_states["@9730"] = WindowState(
+        session_id="abc",
+        cwd="/repo",
+        window_name="repo",
+        transcript_path=str(transcript),
+        provider_name="claude",
+    )
+
+    warnings: list[tuple[Any, ...]] = []
+    monkeypatch.setattr(
+        session_map_module.logger,
+        "warning",
+        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    )
+
+    sync = _sync()
+    sync._sync_window_from_session_map(
+        "@9730", _info("abc", transcript, provider_name="codex")
+    )
+    assert store.window_states["@9730"].provider_name == "claude"
+    assert warnings == []
+
+    sync._sync_window_from_session_map(
+        "@9730", _info("abc", transcript, provider_name="codex")
+    )
+    assert store.window_states["@9730"].provider_name == "claude"
+    assert warnings == []
+
+
 def test_existing_transcript_path_used_when_info_omits_it(
     tmp_path: Path, store: WindowStateStore
 ) -> None:
