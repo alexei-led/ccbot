@@ -11,6 +11,8 @@ Key components:
   - build_directory_browser: Build directory browser UI
   - clear_window_picker_state: Clear picker state from user_data
   - clear_browse_state: Clear browsing state from user_data
+  - build_worktree_picker: Offer current-branch vs new-worktree for a git repo
+  - build_worktree_confirm: Confirm a suggested worktree branch (or edit it)
 """
 
 from pathlib import Path
@@ -35,6 +37,10 @@ from ..callback_data import (
     CB_WIN_BIND,
     CB_WIN_CANCEL,
     CB_WIN_NEW,
+    CB_WT_CONFIRM,
+    CB_WT_EDIT_NAME,
+    CB_WT_NEW,
+    CB_WT_USE_CURRENT,
 )
 
 # Max favorites shown in directory browser
@@ -361,6 +367,71 @@ def build_mode_picker(
                 callback_data=f"{CB_MODE_SELECT}{provider_name}:yolo",
             )
         ],
+        [InlineKeyboardButton("Cancel", callback_data=CB_DIR_CANCEL)],
+    ]
+    return text, InlineKeyboardMarkup(buttons)
+
+
+def build_worktree_picker(
+    repo_path: str, current_branch: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Build the worktree opt-in keyboard for an eligible git repo.
+
+    Shown between directory-confirm and provider-pick. The user either
+    keeps the current branch (today's behaviour) or spins up a new
+    worktree on a fresh branch.
+
+    Returns: (text, keyboard).
+    """
+    display_path = repo_path.replace(str(Path.home()), "~")
+    text = (
+        "*Git Worktree*\n\n"
+        f"Repo: `{display_path}`\n"
+        f"Current branch: `{current_branch}`\n\n"
+        "Work on the current branch, or create an isolated worktree "
+        "on a new branch?"
+    )
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"🌿 Use current ({current_branch})",
+                callback_data=CB_WT_USE_CURRENT,
+            )
+        ],
+        [InlineKeyboardButton("➕ New worktree", callback_data=CB_WT_NEW)],
+        [InlineKeyboardButton("Cancel", callback_data=CB_DIR_CANCEL)],
+    ]
+    return text, InlineKeyboardMarkup(buttons)
+
+
+def build_worktree_confirm(
+    repo_path: str, branch: str, worktree_path: str, dirty: bool
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Build the worktree confirm/edit keyboard with a suggested branch.
+
+    The suggested branch name is the happy path (one-tap confirm); the
+    Edit name button opens the only free-text step in this flow. A
+    dirty source repo is allowed but warned about.
+
+    Returns: (text, keyboard).
+    """
+    display_repo = repo_path.replace(str(Path.home()), "~")
+    display_wt = worktree_path.replace(str(Path.home()), "~")
+    lines = [
+        "*New Worktree*\n",
+        f"Repo: `{display_repo}`",
+        f"Branch: `{branch}`",
+        f"Worktree: `{display_wt}`",
+    ]
+    if dirty:
+        lines.append(
+            "\n⚠️ The source repo has uncommitted changes. The worktree "
+            "starts from HEAD; uncommitted work stays where it is."
+        )
+    text = "\n".join(lines)
+    buttons = [
+        [InlineKeyboardButton("✅ Use this", callback_data=CB_WT_CONFIRM)],
+        [InlineKeyboardButton("✏️ Edit name", callback_data=CB_WT_EDIT_NAME)],
         [InlineKeyboardButton("Cancel", callback_data=CB_DIR_CANCEL)],
     ]
     return text, InlineKeyboardMarkup(buttons)

@@ -96,6 +96,13 @@ NOTIFY_MODE_REACT: dict[str, str] = {
 CB_PROV_SELECT = "prov:"  # prov:<provider_name>
 CB_MODE_SELECT = "mode:"  # mode:<provider_name>:<normal|yolo>
 
+# Worktree picker (directory browser flow — inserted before provider pick
+# when the confirmed directory is an eligible git repo)
+CB_WT_USE_CURRENT = "wt:cur"  # keep current branch, fall through to provider pick
+CB_WT_NEW = "wt:new"  # show confirm/edit screen with suggested branch
+CB_WT_CONFIRM = "wt:ok"  # create the worktree, fall through to provider pick
+CB_WT_EDIT_NAME = "wt:ed"  # prompt for branch name via text reply
+
 # Pane screenshot (from /panes command)
 CB_PANE_SCREENSHOT = "pn:ss:"  # pn:ss:<window_id>:<pane_id>
 

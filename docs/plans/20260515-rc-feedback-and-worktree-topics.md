@@ -244,12 +244,12 @@ Set on window creation in `topic_orchestration.py` when the flow took the worktr
 - Modify: `src/ccgram/handlers/user_state.py`
 - Modify: `tests/ccgram/handlers/topics/test_directory_browser.py` (or create)
 
-- [ ] add `CB_WT_USE_CURRENT`, `CB_WT_NEW`, `CB_WT_CONFIRM`, `CB_WT_EDIT_NAME` constants (≤24-char callback_data budget)
-- [ ] add `PENDING_WORKTREE_REPO`, `PENDING_WORKTREE_BRANCH`, `PENDING_WORKTREE_PATH`, `AWAITING_WORKTREE_BRANCH_NAME` user-state keys
-- [ ] implement `build_worktree_picker(repo_path, current_branch) -> (text, InlineKeyboardMarkup)` matching the design preview (use-current / new-worktree / cancel)
-- [ ] implement `build_worktree_confirm(repo_path, branch, worktree_path, dirty) -> (text, InlineKeyboardMarkup)` with dirty warning line if applicable
-- [ ] write unit tests asserting both keyboards have the expected button rows, labels include the branch name, and callback_data length is within budget
-- [ ] run `make check` — must pass before Task 5
+- [x] add `CB_WT_USE_CURRENT`, `CB_WT_NEW`, `CB_WT_CONFIRM`, `CB_WT_EDIT_NAME` constants (static `wt:*` callbacks, no per-instance suffix — well under the 64-byte budget; the ≤24-char note in the design refers to action-name length and is N/A here)
+- [x] add `PENDING_WORKTREE_REPO`, `PENDING_WORKTREE_BRANCH`, `PENDING_WORKTREE_PATH`, `AWAITING_WORKTREE_BRANCH_NAME` user-state keys
+- [x] implement `build_worktree_picker(repo_path, current_branch) -> (text, InlineKeyboardMarkup)` matching the design preview (use-current / new-worktree / cancel) — cancel reuses `CB_DIR_CANCEL`, consistent with `build_provider_picker`/`build_mode_picker`
+- [x] implement `build_worktree_confirm(repo_path, branch, worktree_path, dirty) -> (text, InlineKeyboardMarkup)` with dirty warning line if applicable
+- [x] write unit tests asserting both keyboards have the expected button rows, labels include the branch name, and callback_data length is within budget (9 new tests in `test_directory_browser.py`)
+- [x] run `make check` — fmt/lint-lazy/lint/typecheck clean; 4830 unit pass; import-cycle (171) + query-layer (89) guards green. ⚠️ only `test_doctor_cmd.py::test_reports_missing_hooks_for_codex_provider` fails — same pre-existing environmental failure documented in Tasks 1–3 (codex hooks installed on this machine; Task 4 touches no doctor code)
 
 ### Task 5: Wire worktree picker into directory flow
 

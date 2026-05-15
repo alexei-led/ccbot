@@ -5,8 +5,17 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from ccgram.handlers.callback_data import (
+    CB_DIR_CANCEL,
+    CB_WT_CONFIRM,
+    CB_WT_EDIT_NAME,
+    CB_WT_NEW,
+    CB_WT_USE_CURRENT,
+)
 from ccgram.handlers.topics.directory_browser import (
     build_directory_browser,
+    build_worktree_confirm,
+    build_worktree_picker,
     get_favorites,
 )
 from ccgram.user_preferences import UserPreferences
@@ -125,3 +134,73 @@ class TestHiddenDirs:
 
         assert "visible" in subdirs
         assert ".hidden" in subdirs
+
+
+def _callback_data_values(keyboard) -> list[str]:
+    return [
+        btn.callback_data
+        for row in keyboard.inline_keyboard
+        for btn in row
+        if btn.callback_data is not None
+    ]
+
+
+class TestBuildWorktreePicker:
+    def test_three_rows_one_button_each(self) -> None:
+        _text, kb = build_worktree_picker("/home/u/proj", "main")
+        rows = kb.inline_keyboard
+        assert [len(r) for r in rows] == [1, 1, 1]
+
+    def test_callbacks_and_branch_in_label(self) -> None:
+        _text, kb = build_worktree_picker("/home/u/proj", "develop")
+        values = _callback_data_values(kb)
+        assert values == [CB_WT_USE_CURRENT, CB_WT_NEW, CB_DIR_CANCEL]
+        use_current_label = kb.inline_keyboard[0][0].text
+        assert "develop" in use_current_label
+
+    def test_text_includes_repo_and_branch(self) -> None:
+        text, _kb = build_worktree_picker("/home/u/proj", "feat/x")
+        assert "/home/u/proj" in text
+        assert "feat/x" in text
+
+    def test_callback_data_within_budget(self) -> None:
+        _text, kb = build_worktree_picker("/home/u/proj", "main")
+        for value in _callback_data_values(kb):
+            assert len(value.encode()) <= 64
+
+
+class TestBuildWorktreeConfirm:
+    def test_three_rows_one_button_each(self) -> None:
+        _text, kb = build_worktree_confirm(
+            "/home/u/proj", "ccg/feature", "/home/u/proj.worktrees/ccg-feature", False
+        )
+        assert [len(r) for r in kb.inline_keyboard] == [1, 1, 1]
+
+    def test_callbacks_and_branch_in_text(self) -> None:
+        text, kb = build_worktree_confirm(
+            "/home/u/proj", "ccg/feature", "/home/u/proj.worktrees/ccg-feature", False
+        )
+        assert _callback_data_values(kb) == [
+            CB_WT_CONFIRM,
+            CB_WT_EDIT_NAME,
+            CB_DIR_CANCEL,
+        ]
+        assert "ccg/feature" in text
+        assert "/home/u/proj.worktrees/ccg-feature" in text
+
+    def test_dirty_warning_shown_only_when_dirty(self) -> None:
+        clean_text, _ = build_worktree_confirm(
+            "/home/u/proj", "ccg/x", "/home/u/proj.worktrees/ccg-x", False
+        )
+        dirty_text, _ = build_worktree_confirm(
+            "/home/u/proj", "ccg/x", "/home/u/proj.worktrees/ccg-x", True
+        )
+        assert "uncommitted" not in clean_text
+        assert "uncommitted" in dirty_text
+
+    def test_callback_data_within_budget(self) -> None:
+        _text, kb = build_worktree_confirm(
+            "/home/u/proj", "ccg/feature", "/home/u/proj.worktrees/ccg-feature", True
+        )
+        for value in _callback_data_values(kb):
+            assert len(value.encode()) <= 64

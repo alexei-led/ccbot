@@ -22,3 +22,9 @@ SEND_CWD_KEY = "send_cwd"
 PANE_RENAME_WINDOW_ID = "_pane_rename_window_id"
 PANE_RENAME_PANE_ID = "_pane_rename_pane_id"
 PANE_RENAME_THREAD_ID = "_pane_rename_thread_id"
+
+# Worktree picker flow (between directory-confirm and provider-pick)
+PENDING_WORKTREE_REPO = "_pending_worktree_repo"
+PENDING_WORKTREE_BRANCH = "_pending_worktree_branch"
+PENDING_WORKTREE_PATH = "_pending_worktree_path"
+AWAITING_WORKTREE_BRANCH_NAME = "_awaiting_worktree_branch_name"
