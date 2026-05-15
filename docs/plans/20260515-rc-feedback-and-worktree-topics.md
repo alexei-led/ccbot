@@ -225,16 +225,16 @@ Set on window creation in `topic_orchestration.py` when the flow took the worktr
 - Create: `src/ccgram/handlers/topics/worktree.py`
 - Create: `tests/ccgram/handlers/topics/test_worktree.py`
 
-- [ ] implement `WorktreeEligibility` frozen dataclass and `check_worktree_eligibility(path: Path)` running the four git checks (in-work-tree, not-bare, named-branch, no merge/rebase). Use `subprocess.run` with `check=False` and inspect returncode/stdout
-- [ ] implement `suggest_branch_name(topic_title, repo_path)` with kebab-case + `ccg/agent-<n>` fallback; collision avoidance by listing `git -C <repo> branch --list` and `git -C <repo> worktree list --porcelain`
-- [ ] implement `slug_for_path(branch)` and `worktree_path_for(repo_path, slug)`
-- [ ] implement `validate_branch_name(name)` via `git check-ref-format --branch <name>` (returncode check)
-- [ ] implement `create_worktree(repo_path, branch, worktree_path)` with `WorktreeError` exception on failure (include git stderr in message)
-- [ ] write unit tests using a `tmp_path` git repo fixture: eligibility for clean repo, bare repo, detached HEAD, mid-rebase, non-git dir (all combinations)
-- [ ] write unit tests for `suggest_branch_name`: kebab-case, collision with existing branch, collision with existing worktree, no topic title
-- [ ] write unit tests for `validate_branch_name`: valid name, name with spaces (invalid), name with `..` (invalid)
-- [ ] write unit tests for `create_worktree`: success creates the dir + branch; on conflict raises `WorktreeError`
-- [ ] run `make check` — must pass before Task 4
+- [x] implement `WorktreeEligibility` frozen dataclass and `check_worktree_eligibility(path: Path)` running the four git checks (in-work-tree, not-bare, named-branch, no merge/rebase). Use `subprocess.run` with `check=False` and inspect returncode/stdout — git-dir resolution + merge/rebase check extracted to `_resolve_git_dir`/`_has_merge_or_rebase` helpers to stay under C901 complexity-10
+- [x] implement `suggest_branch_name(topic_title, repo_path)` with kebab-case + `ccg/agent-<n>` fallback; collision avoidance by listing `git -C <repo> branch --list` and `git -C <repo> worktree list --porcelain`
+- [x] implement `slug_for_path(branch)` and `worktree_path_for(repo_path, slug)`
+- [x] implement `validate_branch_name(name)` via `git check-ref-format --branch <name>` (returncode check); also rejects empty/over-long/leading-dash up front (leading-dash would be misread as a git option)
+- [x] implement `create_worktree(repo_path, branch, worktree_path)` with `WorktreeError` exception on failure (include git stderr in message)
+- [x] write unit tests using a `tmp_path` git repo fixture: eligibility for clean repo, bare repo, detached HEAD, mid-rebase, non-git dir (all combinations) — real git, not mocked
+- [x] write unit tests for `suggest_branch_name`: kebab-case, collision with existing branch, collision with existing worktree, no topic title
+- [x] write unit tests for `validate_branch_name`: valid name, name with spaces (invalid), name with `..` (invalid)
+- [x] write unit tests for `create_worktree`: success creates the dir + branch; on conflict raises `WorktreeError`
+- [x] run `make check` — fmt/lint/typecheck clean; 26 new tests pass; 4822 total pass. ⚠️ only `test_doctor_cmd.py::test_reports_missing_hooks_for_codex_provider` fails — same pre-existing environmental failure documented in Tasks 1 & 2 (codex hooks installed on this machine; new module is isolated, cannot affect doctor)
 
 ### Task 4: Worktree picker keyboards and callback constants
 

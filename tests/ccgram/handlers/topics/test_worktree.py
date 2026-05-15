@@ -1,0 +1,186 @@
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from ccgram.handlers.topics.worktree import (
+    WorktreeError,
+    check_worktree_eligibility,
+    create_worktree,
+    slug_for_path,
+    suggest_branch_name,
+    validate_branch_name,
+    worktree_path_for,
+)
+
+
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.fixture
+def git_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "Tester")
+    (repo / "file.txt").write_text("hello")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "init")
+    _git(repo, "branch", "-M", "main")
+    return repo
+
+
+class TestCheckWorktreeEligibility:
+    def test_clean_repo_is_eligible(self, git_repo: Path) -> None:
+        result = check_worktree_eligibility(git_repo)
+        assert result.eligible is True
+        assert result.current_branch == "main"
+        assert result.dirty is False
+        assert result.repo_path == git_repo.resolve()
+        assert result.reason is None
+
+    def test_dirty_repo_is_eligible_with_dirty_flag(self, git_repo: Path) -> None:
+        (git_repo / "file.txt").write_text("changed")
+        result = check_worktree_eligibility(git_repo)
+        assert result.eligible is True
+        assert result.dirty is True
+
+    def test_untracked_file_marks_dirty(self, git_repo: Path) -> None:
+        (git_repo / "new.txt").write_text("x")
+        result = check_worktree_eligibility(git_repo)
+        assert result.eligible is True
+        assert result.dirty is True
+
+    def test_bare_repo_is_ineligible(self, tmp_path: Path) -> None:
+        bare = tmp_path / "bare.git"
+        bare.mkdir()
+        _git(bare, "init", "--bare")
+        result = check_worktree_eligibility(bare)
+        assert result.eligible is False
+        assert result.reason is not None
+
+    def test_detached_head_is_ineligible(self, git_repo: Path) -> None:
+        sha = _git(git_repo, "rev-parse", "HEAD").stdout.strip()
+        _git(git_repo, "checkout", sha)
+        result = check_worktree_eligibility(git_repo)
+        assert result.eligible is False
+        assert result.reason == "detached HEAD"
+
+    def test_mid_rebase_is_ineligible(self, git_repo: Path) -> None:
+        git_dir = Path(_git(git_repo, "rev-parse", "--git-dir").stdout.strip())
+        if not git_dir.is_absolute():
+            git_dir = git_repo / git_dir
+        (git_dir / "rebase-merge").mkdir()
+        result = check_worktree_eligibility(git_repo)
+        assert result.eligible is False
+        assert result.reason == "merge or rebase in progress"
+
+    def test_merge_head_is_ineligible(self, git_repo: Path) -> None:
+        git_dir = Path(_git(git_repo, "rev-parse", "--git-dir").stdout.strip())
+        if not git_dir.is_absolute():
+            git_dir = git_repo / git_dir
+        (git_dir / "MERGE_HEAD").write_text("deadbeef\n")
+        result = check_worktree_eligibility(git_repo)
+        assert result.eligible is False
+        assert result.reason == "merge or rebase in progress"
+
+    def test_non_git_dir_is_ineligible(self, tmp_path: Path) -> None:
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        result = check_worktree_eligibility(plain)
+        assert result.eligible is False
+        assert result.reason == "not a git work tree"
+        assert result.repo_path is None
+
+
+class TestSuggestBranchName:
+    def test_kebab_case_from_title(self, git_repo: Path) -> None:
+        assert suggest_branch_name("Fix the Bug!", git_repo) == "ccg/fix-the-bug"
+
+    def test_no_title_falls_back_to_agent(self, git_repo: Path) -> None:
+        assert suggest_branch_name(None, git_repo) == "ccg/agent-1"
+
+    def test_empty_title_falls_back_to_agent(self, git_repo: Path) -> None:
+        assert suggest_branch_name("   ", git_repo) == "ccg/agent-1"
+
+    def test_collision_with_existing_branch(self, git_repo: Path) -> None:
+        _git(git_repo, "branch", "ccg/feature")
+        assert suggest_branch_name("feature", git_repo) == "ccg/feature-2"
+
+    def test_double_collision_increments(self, git_repo: Path) -> None:
+        _git(git_repo, "branch", "ccg/feature")
+        _git(git_repo, "branch", "ccg/feature-2")
+        assert suggest_branch_name("feature", git_repo) == "ccg/feature-3"
+
+    def test_collision_with_existing_worktree(self, git_repo: Path) -> None:
+        wt = git_repo.parent / "wt-agent-1"
+        _git(git_repo, "worktree", "add", str(wt), "-b", "ccg/agent-1", "HEAD")
+        assert suggest_branch_name(None, git_repo) == "ccg/agent-2"
+
+
+class TestValidateBranchName:
+    def test_valid_simple_name(self) -> None:
+        assert validate_branch_name("ccg/feature") is True
+
+    def test_name_with_space_is_invalid(self) -> None:
+        assert validate_branch_name("has space") is False
+
+    def test_name_with_double_dot_is_invalid(self) -> None:
+        assert validate_branch_name("bad..name") is False
+
+    def test_empty_name_is_invalid(self) -> None:
+        assert validate_branch_name("") is False
+
+    def test_leading_dash_is_invalid(self) -> None:
+        assert validate_branch_name("-leading") is False
+
+    def test_overlong_name_is_invalid(self) -> None:
+        assert validate_branch_name("a" * 300) is False
+
+
+class TestPathHelpers:
+    def test_slug_for_path_replaces_slashes(self) -> None:
+        assert slug_for_path("ccg/foo/bar") == "ccg-foo-bar"
+
+    def test_slug_for_path_noop_without_slash(self) -> None:
+        assert slug_for_path("ccg-x") == "ccg-x"
+
+    def test_worktree_path_for(self) -> None:
+        repo = Path("/a/b/myrepo")
+        assert worktree_path_for(repo, "ccg-x") == Path("/a/b/myrepo.worktrees/ccg-x")
+
+
+class TestCreateWorktree:
+    def test_success_creates_dir_and_branch(self, git_repo: Path) -> None:
+        slug = slug_for_path("ccg/new")
+        target = worktree_path_for(git_repo, slug)
+        create_worktree(git_repo, "ccg/new", target)
+        assert target.is_dir()
+        assert (target / "file.txt").read_text() == "hello"
+        branches = _git(
+            git_repo, "branch", "--list", "--format=%(refname:short)"
+        ).stdout.split()
+        assert "ccg/new" in branches
+
+    def test_duplicate_branch_raises_worktree_error(self, git_repo: Path) -> None:
+        first = worktree_path_for(git_repo, slug_for_path("ccg/dup"))
+        create_worktree(git_repo, "ccg/dup", first)
+        second = worktree_path_for(git_repo, "other-dup")
+        with pytest.raises(WorktreeError):
+            create_worktree(git_repo, "ccg/dup", second)
+
+    def test_occupied_target_path_raises_worktree_error(self, git_repo: Path) -> None:
+        target = worktree_path_for(git_repo, "occupied")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.mkdir()
+        (target / "stray.txt").write_text("x")
+        with pytest.raises(WorktreeError):
+            create_worktree(git_repo, "ccg/occupied", target)
