@@ -167,6 +167,8 @@ def detect_provider_from_transcript_path(transcript_path: str) -> str:
     config dirs of the form ``~/.claude<suffix>/projects/`` with the same JSONL
     schema, so any ``.claude*`` config dir is treated as Claude.
     """
+    if not isinstance(transcript_path, str):
+        return ""
     normalized = transcript_path.strip().lower().replace("\\", "/")
     if not normalized:
         return ""
