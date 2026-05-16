@@ -166,13 +166,16 @@ _BOX_OPEN_RE = re.compile(r"^\s*[╭┌╔]")
 _BOX_CLOSE_RE = re.compile(r"^\s*[╰└╚]")
 _BOX_SIDE_RE = re.compile(r"^\s*[│┃║|]\s?|\s*[│┃║|]\s*$")
 _BOX_GLYPHS = frozenset("─━═│┃║|╭╮╰╯┌┐└┘╔╗╚╝ ")
-_GEMINI_INTERACTIVE_MARKERS = (
+# Any one of these unambiguously marks an interactive prompt.
+_GEMINI_STRONG_MARKERS = (
     re.compile(r"^\s*[●❯]\s*\d+\."),  # selected option marker
-    re.compile(r"^\s*\d+\.\s"),  # numbered option
     re.compile(r"(?i)\benter to (submit|select|confirm|continue)\b"),
     re.compile(r"(?i)\(press esc to (close|cancel)\)"),
     re.compile(r"(?i)\(esc\b"),
 )
+# A bare numbered line is weak — a single one may be prose. Require ≥2.
+_GEMINI_NUMBERED_OPTION_RE = re.compile(r"^\s*\d+\.\s")
+_MIN_NUMBERED_OPTIONS = 2
 _PERMISSION_HINT_RE = re.compile(
     r"(?i)\b(allow|permission|denied|proceed|approve)\b|\(esc\b"
 )
@@ -198,7 +201,14 @@ def _clean_box_lines(lines: list[str]) -> list[str]:
 
 
 def _extract_active_box(pane_text: str) -> str | None:
-    """Return the cleaned content of the last (active) box, or None."""
+    """Return the cleaned content of the active box, or None.
+
+    Conservative against torn captures: returns content only for a single
+    well-formed box at the bottom. A dangling open border below the last
+    close (active box mid-render) or another box boundary between the
+    matched open and close yields None — the next poll re-reads a complete
+    frame rather than surfacing a stale earlier box.
+    """
     lines = pane_text.split("\n")
     close_idx = next(
         (i for i in range(len(lines) - 1, -1, -1) if _BOX_CLOSE_RE.match(lines[i])),
@@ -206,10 +216,15 @@ def _extract_active_box(pane_text: str) -> str | None:
     )
     if close_idx is None:
         return None
-    open_idx = next(
-        (i for i in range(close_idx - 1, -1, -1) if _BOX_OPEN_RE.match(lines[i])),
-        None,
-    )
+    if any(_BOX_OPEN_RE.match(lines[i]) for i in range(close_idx + 1, len(lines))):
+        return None
+    open_idx: int | None = None
+    for i in range(close_idx - 1, -1, -1):
+        if _BOX_CLOSE_RE.match(lines[i]):
+            return None
+        if _BOX_OPEN_RE.match(lines[i]):
+            open_idx = i
+            break
     if open_idx is None:
         return None
     inner = _clean_box_lines(lines[open_idx + 1 : close_idx])
@@ -217,11 +232,21 @@ def _extract_active_box(pane_text: str) -> str | None:
 
 
 def _box_is_interactive(box_text: str) -> bool:
-    """True when the box content carries an interactive affordance."""
-    return any(
-        any(marker.search(line) for marker in _GEMINI_INTERACTIVE_MARKERS)
-        for line in box_text.split("\n")
-    )
+    """True when the box content carries an interactive affordance.
+
+    Any strong marker (selected ``●``/``❯`` option, footer hint) is
+    sufficient. A bare numbered list needs ≥2 entries so a single ``1.``
+    line in informational prose is not misread as a prompt.
+    """
+    numbered = 0
+    for line in box_text.split("\n"):
+        if any(marker.search(line) for marker in _GEMINI_STRONG_MARKERS):
+            return True
+        if _GEMINI_NUMBERED_OPTION_RE.search(line):
+            numbered += 1
+            if numbered >= _MIN_NUMBERED_OPTIONS:
+                return True
+    return False
 
 
 _TRANSCRIPT_MAX_AGE_SECS = 120.0

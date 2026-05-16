@@ -1230,6 +1230,38 @@ class TestGeminiBoxedPrompt:
     def test_box_is_interactive_false_for_plain_text(self) -> None:
         assert _box_is_interactive("just a status line\nno options here") is False
 
+    def test_box_is_interactive_single_numbered_line_is_prose(self) -> None:
+        assert _box_is_interactive("Step 1. do the thing first") is False
+
+    def test_box_is_interactive_two_numbered_lines_is_prompt(self) -> None:
+        assert _box_is_interactive("Pick:\n1. yes\n2. no") is True
+
+    def test_extract_active_box_none_on_dangling_open(self) -> None:
+        torn = (
+            "╭───╮\n│ old │\n╰───╯\n"
+            "interim output\n"
+            "╭───────────────────╮\n│ new question being drawn │\n"
+        )
+        assert _extract_active_box(torn) is None
+
+    def test_extract_active_box_none_when_crossing_box_boundary(self) -> None:
+        torn = "╭──╮\n│ a │\n╰──╯\n╰──╯\n"
+        assert _extract_active_box(torn) is None
+
+    def test_dangling_open_falls_back_not_stale_question(self) -> None:
+        torn = (
+            "╭────────────────────────────╮\n"
+            "│ Old answered prompt          │\n"
+            "│ ● 1. picked                  │\n"
+            "╰────────────────────────────╯\n"
+            "scrollback\n"
+            "╭────────────────────────────╮\n"
+            "│ New prompt still rendering   │\n"
+        )
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(torn, pane_title="Ready: ◇")
+        assert status is None
+
 
 class TestGeminiPaneTitleStatus:
     def test_working_title_returns_working_status(self) -> None:
