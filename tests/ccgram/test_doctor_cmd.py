@@ -233,6 +233,10 @@ class TestDoctorMain:
             lambda: ("pass", "ok"),
         )
         monkeypatch.setattr("ccgram.doctor_cmd._find_orphaned_windows", lambda: [])
+        monkeypatch.setattr(
+            "ccgram.hook._codex_hooks_file",
+            lambda: tmp_path / ".codex" / "hooks.json",
+        )
 
         with pytest.raises(SystemExit):
             doctor_main()
