@@ -219,6 +219,11 @@ async def _handle_remote_control(query: CallbackQuery, user_id: int, data: str) 
     else:
         display = thread_router.get_display_name(window_id)
         await send_to_window(window_id, f"/remote-control {display}")
+        # Lazy: rc_probe pulls providers/__init__ at import \u2014 same reason
+        # _handle_status_recall defers the providers import in this module.
+        from .rc_probe import arm_rc_probe
+
+        arm_rc_probe(window_id, PTBTelegramClient(query.get_bot()))
         await query.answer("\U0001f4e1 Activating\u2026")
 
 

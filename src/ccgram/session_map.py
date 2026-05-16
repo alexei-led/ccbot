@@ -604,7 +604,33 @@ class SessionMapSync:
             state.transcript_path = new_transcript
             changed = True
         new_provider = effective["provider_name"].lower()
+        # Cross-check provider claim against the transcript path. session_map.json
+        # may carry a stale `provider_name` from a previous run in the same tmux
+        # window (e.g. codex once owned @9729, then claude took over). The
+        # transcript path is observed reality and wins; without this guard the
+        # transcript_reader spams "Provider mismatch" warnings every poll.
+        path_for_inference = new_transcript or state.transcript_path
+        if new_provider and path_for_inference:
+            # Lazy: providers import pulls the agent provider registry which
+            # imports the shell provider's prompt-marker machinery; defer.
+            from .providers import detect_provider_from_transcript_path
+
+            inferred = detect_provider_from_transcript_path(path_for_inference)
+            if inferred and inferred != new_provider:
+                new_provider = inferred
         if new_provider and state.provider_name != new_provider:
+            # Log only on actual mutation so a persistent stale claim in
+            # session_map.json doesn't spam the log every poll cycle once the
+            # in-memory state has already been corrected.
+            logger.warning(
+                "Corrected provider for %s: state=%s -> %s "
+                "(session_map claimed %s; transcript_path=%s)",
+                window_id,
+                state.provider_name,
+                new_provider,
+                effective["provider_name"].lower(),
+                path_for_inference,
+            )
             state.provider_name = new_provider
             changed = True
         if (

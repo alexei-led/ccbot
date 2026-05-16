@@ -86,23 +86,88 @@ def _check_tmux_session() -> tuple[str, str]:
         return _FAIL, "cannot connect to tmux server"
 
 
-def _check_hooks() -> tuple[str, str, dict[str, bool]]:
+def _resolve_hook_check_config(
+    provider_name: str,
+) -> tuple[Path, tuple[str, ...], Callable[[str], bool] | None] | None:
+    """Resolve (settings_file, expected_events, predicate) for a provider.
+
+    Returns None for unknown providers. For claude, predicate is None and
+    events is empty — the caller uses get_installed_events directly.
+    """
+    # Lazy: hook helpers reach back into bot wiring; defer until doctor runs
+    from .hook import (
+        _CODEX_HOOK_EVENTS,
+        _GEMINI_HOOK_EVENTS,
+        _HOOK_EVENT_TYPES,
+        _claude_settings_file,
+        _codex_hooks_file,
+        _gemini_settings_file,
+        _json_hook_command_predicate,
+    )
+
+    if provider_name == "codex":
+        return (
+            _codex_hooks_file(),
+            _CODEX_HOOK_EVENTS,
+            _json_hook_command_predicate("codex"),
+        )
+    if provider_name == "gemini":
+        return (
+            _gemini_settings_file(),
+            _GEMINI_HOOK_EVENTS,
+            _json_hook_command_predicate("gemini"),
+        )
+    if provider_name == "claude":
+        return _claude_settings_file(), _HOOK_EVENT_TYPES, None
+    return None
+
+
+def _scan_json_hook_events(
+    settings: dict, events: tuple[str, ...], predicate: Callable[[str], bool]
+) -> dict[str, bool]:
+    """Detect installed hook events in a JSON-format settings file."""
+    return {
+        event_type: any(
+            isinstance(hook_config, dict) and predicate(hook_config.get("command", ""))
+            for group in settings.get("hooks", {}).get(event_type, [])
+            if isinstance(group, dict)
+            for hook_config in group.get("hooks", [])
+        )
+        for event_type in events
+    }
+
+
+def _check_hooks(provider_name: str = "claude") -> tuple[str, str, dict[str, bool]]:
     """Check hook installation for all event types.
 
     Returns (status, message, event_status_dict).
     """
-    # Lazy: hook helpers reach back into bot wiring; defer until doctor runs
-    from .hook import _claude_settings_file, get_installed_events
+    if provider_name == "pi":
+        return _PASS, "Pi hooks are managed by hook-runner extension", {}
 
-    settings_file = _claude_settings_file()
+    resolved = _resolve_hook_check_config(provider_name)
+    if resolved is None:
+        return _FAIL, f"unknown provider for hook check: {provider_name}", {}
+    settings_file, events, predicate = resolved
+
+    # {event: False} when settings file missing/unreadable so doctor --fix
+    # has something to install — an empty dict would no-op _fix_hooks.
+    all_missing = {event: False for event in events}
+
     if not settings_file.exists():
-        return _FAIL, f"hooks not installed ({settings_file} missing)", {}
+        return _FAIL, f"hooks not installed ({settings_file} missing)", all_missing
     try:
         settings = json.loads(settings_file.read_text())
     except (json.JSONDecodeError, OSError):  # fmt: skip
-        return _FAIL, "hooks not installed (settings.json unreadable)", {}
+        return _FAIL, "hooks not installed (settings.json unreadable)", all_missing
 
-    event_status = get_installed_events(settings)
+    if predicate is None:
+        # Lazy: claude uses its own settings.json scanner
+        from .hook import get_installed_events
+
+        event_status = get_installed_events(settings)
+    else:
+        event_status = _scan_json_hook_events(settings, events, predicate)
     installed = [e for e, v in event_status.items() if v]
     missing = [e for e, v in event_status.items() if not v]
 
@@ -270,7 +335,9 @@ def _run_check(check_fn: Callable[[], tuple[str, str]]) -> tuple[str, str, bool]
     return status, msg, status == _FAIL
 
 
-def _fix_hooks(event_status: dict[str, bool], fix: bool) -> None:
+def _fix_hooks(
+    event_status: dict[str, bool], fix: bool, provider_name: str = "claude"
+) -> None:
     """Attempt to install missing hooks if --fix is set."""
     if not fix:
         return
@@ -280,7 +347,7 @@ def _fix_hooks(event_status: dict[str, bool], fix: bool) -> None:
     # Lazy: hook helpers reach back into bot wiring; defer until doctor runs
     from .hook import _install_hook
 
-    result = _install_hook()
+    result = _install_hook(provider_name)
     if result == 0:
         _print_check(_PASS, "hooks installed (fixed)")
     else:
@@ -330,11 +397,11 @@ def doctor_main(fix: bool = False) -> None:
 
     # Hook checks — only relevant for providers with hook support
     if caps.supports_hook:
-        hook_status, hook_msg, event_status = _check_hooks()
+        hook_status, hook_msg, event_status = _check_hooks(caps.name)
         _print_check(hook_status, hook_msg)
         if hook_status == _FAIL:
             has_failures = True
-        _fix_hooks(event_status, fix)
+        _fix_hooks(event_status, fix, caps.name)
     else:
         _print_check(_PASS, f"hook check skipped ({caps.name} has no hook support)")
 

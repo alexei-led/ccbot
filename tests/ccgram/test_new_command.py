@@ -50,6 +50,25 @@ class TestNewCommand:
             await new_command(update, ctx)
             mock_clear.assert_called_once_with(ctx.user_data)
 
+    async def test_clears_stranded_worktree_and_thread_state(self) -> None:
+        update = _make_update(100)
+        ctx = _make_context()
+        ctx.user_data.update(
+            {
+                "_pending_worktree_creating": True,
+                "_pending_worktree_repo": "/repo",
+                "_pending_worktree_branch": "ccg/x",
+                "_pending_thread_id": 42,
+                "_pending_thread_text": "hi",
+                "state": "selecting_window",
+                "unbound_windows": ["@5"],
+            }
+        )
+
+        await new_command(update, ctx)
+
+        assert ctx.user_data == {}
+
     async def test_unauthorized_user(self) -> None:
         update = _make_update(999)
         ctx = _make_context()

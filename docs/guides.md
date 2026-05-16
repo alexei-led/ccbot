@@ -88,7 +88,7 @@ End-to-end tests exercise the full lifecycle: inject fake Telegram updates → r
 | Gemini   | 3     | Lifecycle, command forwarding, recovery                                                                                                                      |
 | Pi       | —     | Unit + contract coverage only; no e2e lifecycle suite yet                                                                                                    |
 
-**How it works:** The Bot API HTTP layer is mocked — fake `Update` objects are injected via `app.process_update()` and all outgoing API calls are intercepted and recorded for assertions. The tests drive through the full topic binding flow (directory browser → provider picker → mode select → window creation) and verify agent processes launch, messages are forwarded, and responses are delivered.
+**How it works:** The Bot API HTTP layer is mocked — fake `Update` objects are injected via `app.process_update()` and all outgoing API calls are intercepted and recorded for assertions. The tests drive through the full topic binding flow (directory browser → optional worktree picker → provider picker → mode select → window creation) and verify agent processes launch, messages are forwarded, and responses are delivered.
 
 **Running:**
 

@@ -40,6 +40,7 @@ Telegram handler surface (post Round 4 F1 — feature subpackages):
 - `src/ccgram/handlers/topics/topic_orchestration.py`: new window/topic creation, unbound window adoption.
 - `src/ccgram/handlers/topics/window_callbacks.py`: window picker callbacks (bind, new, cancel).
 - `src/ccgram/handlers/topics/new_command.py`: `/new` (and `/start` alias) handler.
+- `src/ccgram/handlers/topics/worktree.py`: pure git-worktree plumbing — `check_worktree_eligibility`, `suggest_branch_name`, `validate_branch_name`, `create_worktree` (raises `WorktreeError`); no Telegram/tmux/state deps.
 - `src/ccgram/handlers/interactive/interactive_ui.py` + `interactive_callbacks.py`: interactive prompt UX.
 - `src/ccgram/handlers/sessions_dashboard.py`: `/sessions` dashboard behavior.
 - `src/ccgram/handlers/recovery/recovery_callbacks.py`: thin dispatcher (Round 5 F3) — `_dispatch`, `handle_recovery_callback`, recovery-state validate/clear.
@@ -57,6 +58,7 @@ Telegram handler surface (post Round 4 F1 — feature subpackages):
 - `src/ccgram/handlers/status/topic_emoji.py`: debounced topic name emoji updates (active/idle/done/dead). Color scheme is configurable via `CCGRAM_STATUS_MODE` (`system`: green=working; `user`: green=ready).
 - `src/ccgram/handlers/status/status_bubble.py`: status-bubble keyboard + status message lifecycle.
 - `src/ccgram/handlers/status/status_bar_actions.py`: status-bubble button callbacks.
+- `src/ccgram/handlers/status/rc_probe.py`: Remote Control outcome probe — `arm_rc_probe`, pure `classify_rc_output`, `_classify_loop`; captures/classifies the pane after Claude `/remote-control`, posts one status reply, de-duped via in-memory `WindowState.rc_probe_state` (Claude-only).
 - `src/ccgram/handlers/file_handler.py`: photo/document upload → `.ccgram-uploads/` → agent notification.
 - `src/ccgram/handlers/upgrade.py`: `/upgrade` uv tool upgrade + `os.execv()` restart.
 - `src/ccgram/handlers/sync_command.py`: `/sync` state audit + fix button.

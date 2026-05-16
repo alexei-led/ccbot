@@ -161,6 +161,44 @@ class TestRemoteControl:
             )
         query.answer.assert_awaited_once_with("\U0001f4e1 Remote Control active")
 
+    async def test_arms_rc_probe_after_activation(self):
+        from ccgram.telegram_client import PTBTelegramClient
+
+        query = _q()
+        with (
+            patch(f"{MOD}.user_owns_window", return_value=True),
+            patch(
+                "ccgram.handlers.polling.polling_state.terminal_screen_buffer"
+            ) as tsb,
+            patch(f"{MOD}.thread_router") as tr,
+            patch(f"{MOD}.send_to_window", new_callable=AsyncMock),
+            patch("ccgram.handlers.status.rc_probe.arm_rc_probe") as mock_arm,
+        ):
+            tsb.is_rc_active.return_value = False
+            tr.get_display_name.return_value = "proj"
+            await _handle_status_bar_action(
+                query, 1, f"{CB_STATUS_REMOTE}@0", MagicMock(), MagicMock()
+            )
+        mock_arm.assert_called_once()
+        args = mock_arm.call_args.args
+        assert args[0] == "@0"
+        assert isinstance(args[1], PTBTelegramClient)
+
+    async def test_does_not_arm_probe_when_already_active(self):
+        query = _q()
+        with (
+            patch(f"{MOD}.user_owns_window", return_value=True),
+            patch(
+                "ccgram.handlers.polling.polling_state.terminal_screen_buffer"
+            ) as tsb,
+            patch("ccgram.handlers.status.rc_probe.arm_rc_probe") as mock_arm,
+        ):
+            tsb.is_rc_active.return_value = True
+            await _handle_status_bar_action(
+                query, 1, f"{CB_STATUS_REMOTE}@0", MagicMock(), MagicMock()
+            )
+        mock_arm.assert_not_called()
+
 
 class TestKeys:
     async def test_sends_key_and_schedules_refresh(self):

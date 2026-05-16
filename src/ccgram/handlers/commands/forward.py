@@ -91,6 +91,23 @@ async def _handle_clear_command(
     reset_window_polling_state(window_id)
 
 
+def _arm_rc_probe_if_remote_control(
+    update: Update, window_id: str, cc_name: str
+) -> None:
+    """Arm the RC outcome probe after a forwarded /remote-control.
+
+    Claude-only: ``arm_rc_probe``'s capability gate no-ops for every
+    other provider, so no per-provider branch is needed here.
+    """
+    if cc_name not in ("remote-control", "rc"):
+        return
+    # Lazy: rc_probe → providers/messaging_pipeline; keep it out of
+    # forward's module-load path.
+    from ..status.rc_probe import arm_rc_probe
+
+    arm_rc_probe(window_id, PTBTelegramClient(update.get_bot()))
+
+
 async def forward_command_handler(
     update: Update, _context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -176,6 +193,7 @@ async def forward_command_handler(
     if thread_id is not None:
         record_command(user.id, thread_id, cc_slash)
     await safe_reply(update.message, f"⚡ [{display}] Sent: {cc_slash}")
+    _arm_rc_probe_if_remote_control(update, window_id, cc_name)
     await _maybe_send_status_snapshot(
         update.message,
         window_id,

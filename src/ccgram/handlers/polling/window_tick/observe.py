@@ -41,8 +41,12 @@ def _parse_with_pyte(
     pane_text: str,
     columns: int = 0,
     rows: int = 0,
+    *,
+    parse_claude_chrome: bool = True,
 ) -> StatusUpdate | None:
-    return terminal_screen_buffer.parse_with_pyte(window_id, pane_text, columns, rows)
+    return terminal_screen_buffer.parse_with_pyte(
+        window_id, pane_text, columns, rows, parse_claude_chrome=parse_claude_chrome
+    )
 
 
 def _check_vim_insert(window_id: str, pane_text: str, w: "TmuxWindow") -> None:
@@ -63,13 +67,17 @@ def _get_last_activity_ts(window_id: str) -> float | None:
 async def _resolve_status(
     window_id: str, pane_text: str, w: "TmuxWindow"
 ) -> StatusUpdate | None:
+    provider = _get_provider(window_id)
     status = _parse_with_pyte(
-        window_id, pane_text, columns=w.pane_width, rows=w.pane_height
+        window_id,
+        pane_text,
+        columns=w.pane_width,
+        rows=w.pane_height,
+        parse_claude_chrome=provider.capabilities.uses_pyte_status_parsing,
     )
     if status is not None:
         return status
     clean_text = terminal_screen_buffer.get_rendered_text(window_id, pane_text)
-    provider = _get_provider(window_id)
     pane_title = ""
     if provider.capabilities.uses_pane_title:
         pane_title = await tmux_manager.get_pane_title(w.window_id)

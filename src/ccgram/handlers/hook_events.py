@@ -102,8 +102,10 @@ async def _handle_notification(event: HookEvent, client: TelegramClient) -> None
         return
 
     tool_name = event.data.get("tool_name", "")
+    provider_name = event.data.get("provider_name", "claude")
     logger.debug(
-        "Hook notification: tool_name=%s, window_key=%s",
+        "Hook notification: provider=%s, tool_name=%s, window_key=%s",
+        provider_name,
         tool_name,
         event.window_key,
     )
@@ -115,6 +117,13 @@ async def _handle_notification(event: HookEvent, client: TelegramClient) -> None
             await enqueue_status_update(
                 client, user_id, window_id, None, thread_id=thread_id
             )
+
+        if provider_name != "claude":
+            message = str(event.data.get("message", "") or "Agent notification")
+            await enqueue_status_update(
+                client, user_id, window_id, f"⚠ {message}", thread_id=thread_id
+            )
+            continue
 
         # Skip if already in interactive mode for this window
         existing = get_interactive_window(user_id, thread_id)
@@ -168,8 +177,10 @@ async def _handle_stop(event: HookEvent, client: TelegramClient) -> None:
         return
 
     stop_reason = event.data.get("stop_reason", "")
+    provider_name = event.data.get("provider_name", "claude")
     logger.debug(
-        "Hook stop: window_key=%s, stop_reason=%s",
+        "Hook stop: provider=%s, window_key=%s, stop_reason=%s",
+        provider_name,
         event.window_key,
         stop_reason,
     )
@@ -199,9 +210,12 @@ async def _handle_stop(event: HookEvent, client: TelegramClient) -> None:
         if notif_mode in ("muted", "errors_only"):
             status_text = None
         else:
-            status_text = claude_task_state.format_completion_text(
-                window_id, num_turns=num_turns
-            )
+            if provider_name == "claude":
+                status_text = claude_task_state.format_completion_text(
+                    window_id, num_turns=num_turns
+                )
+            else:
+                status_text = "✓ Ready"
             if summary and status_text:
                 status_text = status_text.replace("✓ Ready", f"✓ Done — {summary}", 1)
         await enqueue_status_update(
@@ -410,6 +424,7 @@ async def dispatch_hook_event(event: HookEvent, client: TelegramClient) -> None:
             | "WorktreeCreate"
             | "WorktreeRemove"
             | "PreCompact"
+            | "PostCompact"
         ):
             pass  # Not actionable for the bot — SessionStart handled via session_map.json
         case _:

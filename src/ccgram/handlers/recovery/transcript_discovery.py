@@ -38,6 +38,26 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
+def _session_id_already_bound(session_id: str, window_id: str) -> bool:
+    """Return True if another currently bound window already uses ``session_id``."""
+    # Lazy: thread_router may not be installed in some test paths; fail open
+    # if it isn't available so discovery can still continue with this window.
+    from ...thread_router import thread_router
+
+    try:
+        iterator = thread_router.iter_thread_bindings()
+    except RuntimeError:
+        return False
+
+    for _user_id, _thread_id, bound_window_id in iterator:
+        if bound_window_id == window_id:
+            continue
+        state = window_store.window_states.get(bound_window_id)
+        if state and state.session_id == session_id:
+            return True
+    return False
+
+
 async def _detect_and_apply_provider(
     window_id: str,
     state: "WindowState",
@@ -159,6 +179,14 @@ async def _find_and_register_transcript(
         if not event:
             continue
 
+        if _session_id_already_bound(event.session_id, window_id):
+            logger.debug(
+                "Skipping discover result for window %s: session_id %s already bound",
+                window_id,
+                event.session_id,
+            )
+            continue
+
         if (
             state.session_id == event.session_id
             and state.transcript_path == event.transcript_path
@@ -218,7 +246,11 @@ async def discover_and_register_transcript(
 
     if state.provider_name:
         provider = get_provider_for_window(window_id, state.provider_name)
-        if provider.capabilities.supports_hook:
+        # Skip discovery only when hook has already populated transcript_path.
+        # Capability alone (supports_hook=True) is insufficient — Codex/Gemini
+        # support hooks but the user may not have installed them yet, in which
+        # case transcript scan is the fallback path.
+        if provider.capabilities.supports_hook and state.transcript_path:
             return
 
     if not state.cwd:

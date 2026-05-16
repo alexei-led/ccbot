@@ -65,7 +65,7 @@ SessionMonitor reads new message (session_id = "uuid-xxx")
   → Deliver message to user in the correct topic (thread_id)
 ```
 
-**New topic flow**: First message in an unbound topic → directory browser → select directory → select provider → create window with chosen provider → bind topic → forward pending message.
+**New topic flow**: First message in an unbound topic → directory browser → select directory → worktree picker (optional, inserted only when the selected directory is an eligible git repo — use current branch or create a new worktree on a new branch; skipped silently otherwise) → select provider → create window with chosen provider (rooted at the worktree path when one was created) → bind topic → forward pending message.
 
 **Topic lifecycle**: Closing/deleting a topic auto-kills the associated tmux window and unbinds the thread. Stale bindings (window deleted externally) are cleaned up by the status polling loop.
 

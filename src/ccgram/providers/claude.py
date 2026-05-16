@@ -7,7 +7,6 @@ that translates between the provider protocol and existing module APIs.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
@@ -93,6 +92,7 @@ class ClaudeProvider:
         launch_command="claude",
         supports_hook=True,
         supports_hook_events=True,
+        hook_install_managed_by_ccgram=True,
         hook_event_types=(
             "Notification",
             "Stop",
@@ -111,6 +111,7 @@ class ClaudeProvider:
         supports_user_command_discovery=True,
         has_yolo_confirmation=True,
         supports_task_tracking=True,
+        uses_pyte_status_parsing=True,
     )
 
     @property
@@ -130,33 +131,6 @@ class ClaudeProvider:
         if use_continue:
             return "--continue"
         return ""
-
-    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
-        """Parse a Claude Code SessionStart hook payload.
-
-        Validates session_id (UUID format), cwd (absolute path), and
-        rejects payloads missing required fields.
-        """
-        session_id = payload.get("session_id", "")
-        cwd = payload.get("cwd", "")
-        transcript_path = payload.get("transcript_path", "")
-        window_key = payload.get("window_key", "")
-
-        if not session_id or not cwd:
-            return None
-
-        if not UUID_RE.match(session_id):
-            return None
-
-        if not os.path.isabs(cwd):
-            return None
-
-        return SessionStartEvent(
-            session_id=session_id,
-            cwd=cwd,
-            transcript_path=transcript_path,
-            window_key=window_key,
-        )
 
     def read_transcript_file(
         self, file_path: str, last_offset: int

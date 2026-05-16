@@ -112,12 +112,20 @@ class ProviderCapabilities:
     supports_hook: bool = False
     supports_hook_events: bool = False
     hook_event_types: tuple[str, ...] = ()
+    hook_install_managed_by_ccgram: bool = False
     supports_resume: bool = False
     supports_continue: bool = False
     supports_structured_transcript: bool = False
     supports_incremental_read: bool = True  # False → whole-file JSON (e.g. Gemini)
     transcript_format: Literal["jsonl", "plain"] = "jsonl"
     uses_pane_title: bool = False  # Provider reads OSC pane title for status
+    # True only for providers whose terminal chrome matches Claude Code's
+    # UI_PATTERNS + ─-separator status block, so the shared pyte fast-path
+    # (parse_from_screen / parse_status_block_from_screen) is meaningful.
+    # When False, the pyte path still populates rendered_text / RC state /
+    # vim-insert but does not run Claude pattern extraction, so the
+    # provider's own parse_terminal_status is not shadowed (issue #85).
+    uses_pyte_status_parsing: bool = False
     builtin_commands: tuple[str, ...] = ()
     # When true, CommandCatalog appends user-defined commands discovered from
     # the configured command sources (currently ~/.claude skills/commands).
@@ -161,13 +169,6 @@ class AgentProvider(Protocol):
 
         Returns a string like ``--resume abc123`` or ``--continue``.
         Empty string for a fresh session.
-        """
-        ...
-
-    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
-        """Parse a hook's stdin JSON into a SessionStartEvent.
-
-        Returns None if the payload is invalid or not from this provider.
         """
         ...
 

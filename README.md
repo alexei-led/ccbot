@@ -73,6 +73,7 @@ Each Telegram Forum topic binds to one tmux window. Messages you type are sent a
 ### Session Control
 
 - **Topic-per-agent** — each Telegram Forum topic is one tmux window running one agent CLI
+- **Git worktree topics** — when a new topic's directory is an eligible git repo, you can spin the agent up in a fresh worktree on a new branch (suggested `ccg/<topic-title>`, one-tap confirm or edit the name) instead of the current branch; non-git directories see the unchanged flow
 - **Interactive prompts** — AskUserQuestion, ExitPlanMode, and Permission dialogs rendered as inline keyboards
 - **Slash commands** — provider-aware menu (Claude `/cost`, Codex `/status`, Gemini `/chat`, Pi `/compact`, etc.); mismatched commands report errors
 - **Voice messages** — transcribed via Whisper API (OpenAI/Groq), shown with **Send / Discard** buttons before forwarding
@@ -81,7 +82,7 @@ Each Telegram Forum topic binds to one tmux window. Messages you type are sent a
 - **Terminal live view** — auto-refreshing screenshots every 5 seconds via **Live** button or `/live` command; content-hash gating skips edits when nothing changed; auto-stops after timeout (configurable)
 - **File delivery** (`/send`) — send workspace files to Telegram: exact path (`/send docs/arch.png`), glob (`/send *.png`), substring search (`/send arch`), or interactive browser (`/send`). Project-scoped with security filtering (hidden files, credentials, gitignored, >50 MB denied)
 - **Action toolbar** (`/toolbar`) — provider-specific inline buttons. Universal row: Screenshot, Ctrl-C, Live, Send. Provider row varies: Claude (Mode, Think, Esc), Codex (Esc, Enter, Tab), Gemini (Mode, YOLO, Esc), Pi (Esc, Enter, Tab), Shell (Enter, EOF, Suspend)
-- **Remote Control** — 📡 topic badge when RC is active; one-tap activation from status keyboard
+- **Remote Control** — 📡 topic badge when RC is active; one-tap activation from status keyboard. Claude's `/remote-control` is silent on outcome, so ccgram probes the pane afterward and posts the result (sharing URL on success, "unavailable", or failure) as a single status reply (Claude only)
 
 ### Real-Time Monitoring
 

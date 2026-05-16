@@ -30,8 +30,15 @@ from ..topics.directory_browser import (
     UNBOUND_WINDOWS_KEY,
     build_directory_browser,
     build_window_picker,
+    build_worktree_confirm,
     clear_browse_state,
     clear_window_picker_state,
+    clear_worktree_state,
+)
+from ..topics.worktree import (
+    slug_for_path,
+    validate_branch_name,
+    worktree_path_for,
 )
 from ..interactive import get_interactive_window, handle_interactive_ui
 from ..messaging_pipeline.message_queue import enqueue_status_update
@@ -45,7 +52,16 @@ from ..messaging_pipeline.message_sender import (
 from ..recovery.recovery_banner import RecoveryBanner, render_banner
 from ..polling.polling_state import lifecycle_strategy
 from ...topic_state_registry import topic_state
-from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
+from ..user_state import (
+    AWAITING_WORKTREE_BRANCH_NAME,
+    PENDING_THREAD_ID,
+    PENDING_THREAD_TEXT,
+    PENDING_WORKTREE_BRANCH,
+    PENDING_WORKTREE_DIRTY,
+    PENDING_WORKTREE_PATH,
+    PENDING_WORKTREE_REPO,
+    RECOVERY_WINDOW_ID,
+)
 from ... import window_query
 from ...thread_router import thread_router
 from ...providers import get_provider_for_window
@@ -163,8 +179,13 @@ async def _check_ui_guards(
                 "Please use the window picker above, or tap Cancel.",
             )
             return True
-        # Stale picker state from a different thread — clear it
+        # Stale picker state from a different thread — clear it.
+        # clear_worktree_state too: a half-finished worktree flow in the
+        # other thread leaves PENDING_WORKTREE_* (incl. the CREATING
+        # re-entrancy flag) set; without this the next worktree confirm
+        # in this thread is rejected as "Creating worktree…" forever.
         clear_window_picker_state(user_data)
+        clear_worktree_state(user_data)
         user_data.pop(PENDING_THREAD_ID, None)
         user_data.pop(PENDING_THREAD_TEXT, None)
 
@@ -177,12 +198,59 @@ async def _check_ui_guards(
                 "Please use the directory browser above, or tap Cancel.",
             )
             return True
-        # Stale browsing state from a different thread — clear it
+        # Stale browsing state from a different thread — clear it.
+        # The worktree picker runs inside STATE_BROWSING_DIRECTORY, so a
+        # superseded flow leaves PENDING_WORKTREE_* (incl. the CREATING
+        # re-entrancy flag) behind; clear it or the next worktree confirm
+        # in this thread stays stuck on "Creating worktree…".
         clear_browse_state(user_data)
+        clear_worktree_state(user_data)
         user_data.pop(PENDING_THREAD_ID, None)
         user_data.pop(PENDING_THREAD_TEXT, None)
 
     return False
+
+
+async def _handle_worktree_name_reply(
+    user_data: dict | None, thread_id: int | None, text: str, message: Message
+) -> bool:
+    """Consume a text reply carrying a custom worktree branch name.
+
+    Active only when the Edit-name step armed ``AWAITING_WORKTREE_BRANCH_NAME``.
+    On a valid name, re-renders the confirm screen (as a fresh message —
+    a text reply has no inline message to edit). On an invalid name,
+    re-prompts. Either way the reply is consumed (never forwarded to an
+    agent — none exists yet). Returns True if handled.
+    """
+    if not user_data or not user_data.get(AWAITING_WORKTREE_BRANCH_NAME):
+        return False
+    if user_data.get(PENDING_THREAD_ID) != thread_id:
+        return False
+
+    repo = user_data.get(PENDING_WORKTREE_REPO)
+    if not repo:
+        user_data.pop(AWAITING_WORKTREE_BRANCH_NAME, None)
+        await safe_reply(
+            message, "❌ Worktree state lost. Start over with a new message."
+        )
+        return True
+
+    name = text.strip()
+    # Offloaded: validate_branch_name shells out to `git check-ref-format`.
+    if not await asyncio.to_thread(validate_branch_name, name):
+        await safe_reply(message, "❌ Invalid branch name; try again or tap Cancel.")
+        return True
+
+    worktree_path = worktree_path_for(Path(repo), slug_for_path(name))
+    user_data[PENDING_WORKTREE_BRANCH] = name
+    user_data[PENDING_WORKTREE_PATH] = str(worktree_path)
+    user_data.pop(AWAITING_WORKTREE_BRANCH_NAME, None)
+    dirty = bool(user_data.get(PENDING_WORKTREE_DIRTY, False))
+    confirm_text, keyboard = build_worktree_confirm(
+        repo, name, str(worktree_path), dirty
+    )
+    await safe_reply(message, confirm_text, reply_markup=keyboard)
+    return True
 
 
 async def _handle_unbound_topic(
@@ -412,6 +480,11 @@ async def handle_text_message(
     chat = message.chat
     if chat.type in ("group", "supergroup") and thread_id is not None:
         thread_router.set_group_chat_id(user.id, thread_id, chat.id)
+
+    # Worktree branch-name reply: the directory-browser state is still
+    # set during the worktree step, so this must precede the UI guards.
+    if await _handle_worktree_name_reply(context.user_data, thread_id, text, message):
+        return
 
     # UI guards (window picker / directory browser active)
     if await _check_ui_guards(context.user_data, thread_id, message):

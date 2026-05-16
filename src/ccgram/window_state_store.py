@@ -127,6 +127,15 @@ class WindowState:
         panes: Per-pane runtime state, keyed by tmux pane id (e.g. ``%5``).
         pane_lifecycle_notify: Per-window override for pane created/closed
             notifications. ``None`` means "use the global config default".
+        rc_probe_state: Remote Control outcome-probe lifecycle —
+            ``"armed"`` while a probe is running, ``"classified"`` once
+            it has posted a verdict. In-memory only (NOT serialized) —
+            transient and safe to drop on restart.
+        rc_armed_at: ``time.monotonic()`` at probe arm. In-memory only.
+        worktree_path: Absolute path of the git worktree this window was
+            created in (None when the topic kept the current branch).
+            Persisted — a forward investment for the eventual cleanup UX.
+        worktree_branch: Branch name created for ``worktree_path``.
     """
 
     session_id: str = ""
@@ -142,6 +151,16 @@ class WindowState:
     origin: str = DEFAULT_WINDOW_ORIGIN
     panes: dict[str, PaneInfo] = field(default_factory=dict)
     pane_lifecycle_notify: bool | None = None
+    # Transient RC-probe lifecycle — in-memory only, intentionally not in
+    # to_dict/from_dict (drops on restart).
+    rc_probe_state: Literal["armed", "classified"] | None = None
+    rc_armed_at: float | None = None
+    worktree_path: str | None = None
+    worktree_branch: str | None = None
+    # Set once after the user has been warned that this externally-launched
+    # Gemini window lacks ccgram's hardened shell settings (issue #86).
+    # Persisted so the warning is not re-shown on every bot restart.
+    gemini_external_warned: bool = False
 
     def to_dict(self) -> dict[str, Any]:  # noqa: C901
         d: dict[str, Any] = {
@@ -170,6 +189,12 @@ class WindowState:
             d["panes"] = {pid: p.to_dict() for pid, p in self.panes.items()}
         if self.pane_lifecycle_notify is not None:
             d["pane_lifecycle_notify"] = self.pane_lifecycle_notify
+        if self.worktree_path:
+            d["worktree_path"] = self.worktree_path
+        if self.worktree_branch:
+            d["worktree_branch"] = self.worktree_branch
+        if self.gemini_external_warned:
+            d["gemini_external_warned"] = True
         return d
 
     @classmethod
@@ -204,6 +229,9 @@ class WindowState:
             ),
             panes=panes,
             pane_lifecycle_notify=data.get("pane_lifecycle_notify"),
+            worktree_path=data.get("worktree_path"),
+            worktree_branch=data.get("worktree_branch"),
+            gemini_external_warned=data.get("gemini_external_warned", False),
         )
 
 
@@ -398,6 +426,19 @@ class WindowStateStore:
         if state.pane_lifecycle_notify == value:
             return
         state.pane_lifecycle_notify = value
+        self._schedule_save()
+
+    def was_gemini_external_warned(self, window_id: str) -> bool:
+        """True if the external-Gemini shell-mode warning was already shown."""
+        state = self.window_states.get(window_id)
+        return bool(state and state.gemini_external_warned)
+
+    def mark_gemini_external_warned(self, window_id: str) -> None:
+        """Record that the external-Gemini warning was shown for this window."""
+        state = self.get_window_state(window_id)
+        if state.gemini_external_warned:
+            return
+        state.gemini_external_warned = True
         self._schedule_save()
 
     # ------------------------------------------------------------------

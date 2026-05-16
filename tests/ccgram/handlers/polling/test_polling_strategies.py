@@ -11,6 +11,7 @@ from ccgram.handlers.polling.polling_state import (
     TerminalPollState,
     TerminalScreenBuffer,
     TopicLifecycleStrategy,
+    _strip_hook_runner_noise,
 )
 from ccgram.handlers.polling.polling_types import (
     MAX_PROBE_FAILURES,
@@ -28,6 +29,31 @@ def _reset_topic_state_registry():
     yield
     for scope, bucket in topic_state._cleanups.items():
         bucket[:] = snapshot[scope]
+
+
+class TestStripHookRunnerNoise:
+    def test_drops_hook_runner_log_lines(self):
+        pane = (
+            "Real agent output line 1\n"
+            "2026-05-15 14:12:27 [debug    ] Processing hook event from stdin\n"
+            "2026-05-15 14:12:27 [debug    ] tmux key=ccgram:@10766, window_name=g\n"
+            "2026-05-15 14:12:27 [info     ] Updated session_map: ccgram:@10766\n"
+            "Real agent output line 2"
+        )
+        result = _strip_hook_runner_noise(pane)
+        assert result == "Real agent output line 1\nReal agent output line 2"
+
+    def test_preserves_pane_without_noise(self):
+        pane = "❯ ls -la\ntotal 0\ndrwxr-xr-x  2 user  staff  64 May 15 .\n"
+        assert _strip_hook_runner_noise(pane) is pane
+
+    def test_does_not_strip_agent_text_with_brackets(self):
+        pane = "Build [debug] succeeded\n[info] not a timestamped log line"
+        assert _strip_hook_runner_noise(pane) == pane
+
+    def test_strips_with_leading_ansi_color(self):
+        pane = "\x1b[0m2026-05-16 12:00:34 [error    ] boom\nkept line"
+        assert _strip_hook_runner_noise(pane) == "kept line"
 
 
 class TestTerminalScreenBuffer:
@@ -84,6 +110,46 @@ class TestTerminalScreenBuffer:
         self.strategy.update_rc_state(ws, True)
         assert ws.rc_active
         assert ws.rc_off_since is None
+
+    def _claude_plan_pane(self) -> str:
+        sep = "─" * 30
+        return (
+            "  Would you like to proceed?\n"
+            f"  {sep}\n"
+            "  Yes     No\n"
+            f"  {sep}\n"
+            "  ctrl-g to edit in vim\n"
+        )
+
+    def test_claude_chrome_default_detects_interactive(self):
+        result = self.strategy.parse_with_pyte("@0", self._claude_plan_pane(), 200, 50)
+        assert result is not None
+        assert result.is_interactive is True
+
+    def test_non_claude_chrome_skips_claude_ui_returns_none(self):
+        result = self.strategy.parse_with_pyte(
+            "@0", self._claude_plan_pane(), 200, 50, parse_claude_chrome=False
+        )
+        assert result is None
+
+    def test_non_claude_chrome_still_populates_rendered_text(self):
+        self.strategy.parse_with_pyte(
+            "@0",
+            "Gemini is thinking…\nsome output",
+            200,
+            50,
+            parse_claude_chrome=False,
+        )
+        assert "Gemini is thinking" in self.strategy.get_rendered_text("@0", "")
+
+    def test_non_claude_chrome_still_updates_rc_state(self):
+        sep = "─" * 30
+        pane = f"agent output\r\n{sep}\r\n❯ \r\n{sep}\r\n  Remote Control active\r\n"
+        result = self.strategy.parse_with_pyte(
+            "@0", pane, 80, 10, parse_claude_chrome=False
+        )
+        assert result is None
+        assert self.strategy.is_rc_active("@0")
 
     def test_parse_with_pyte_content_hash_cache(self):
         ws = self.poll_state.get_state("@0")

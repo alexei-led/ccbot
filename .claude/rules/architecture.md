@@ -257,6 +257,7 @@ After Round 4 (F1), the flat 50+ peer modules are grouped into feature subpackag
 | `status_bubble.py`      | Status-bubble keyboard + status message lifecycle (send, edit, clear, format, dedup) — owns `_status_msg_info`, `send_status_text`, `clear_status_message`, `build_status_keyboard` |
 | `status_bar_actions.py` | Status-bubble button callbacks (notify toggle, recall, remote control, esc, keys)                                                                                                   |
 | `topic_emoji.py`        | Topic name emoji updates (active/idle/done/dead + RC/YOLO badges), debounced. Color scheme is configurable via `CCGRAM_STATUS_MODE`                                                 |
+| `rc_probe.py`           | Remote Control outcome probe — `arm_rc_probe`, pure `classify_rc_output`, `_classify_loop` polling coroutine; classifies the pane after Claude `/remote-control`, posts one status reply, de-duped via in-memory `WindowState.rc_probe_state` (Claude-only) |
 
 #### `handlers/text/` — text-message routing
 
@@ -277,8 +278,9 @@ After Round 4 (F1), the flat 50+ peer modules are grouped into feature subpackag
 | ------------------------ | -------------------------------------------------------------------------------------- |
 | `topic_orchestration.py` | New window/topic creation, unbound window adoption, rate limiting                      |
 | `topic_lifecycle.py`     | Topic lifecycle management — autoclose timers for done/dead topics, unbound window TTL |
-| `directory_browser.py`   | Directory selection UI for new topics                                                  |
-| `directory_callbacks.py` | Callbacks for directory browser (navigate, confirm, provider pick)                     |
+| `directory_browser.py`   | Directory selection UI for new topics + worktree picker/confirm keyboard builders      |
+| `directory_callbacks.py` | Callbacks for directory browser (navigate, confirm, provider pick, worktree flow)      |
+| `worktree.py`            | Pure git-worktree plumbing — `check_worktree_eligibility`, `suggest_branch_name`, `slug_for_path`, `worktree_path_for`, `validate_branch_name`, `create_worktree` (raises `WorktreeError`); no Telegram/tmux/state deps |
 | `window_callbacks.py`    | Window picker callbacks (bind, new, cancel)                                            |
 | `new_command.py`         | `/new` (and `/start` alias) handler — welcome message                                  |
 

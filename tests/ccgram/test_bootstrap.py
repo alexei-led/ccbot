@@ -243,6 +243,7 @@ class TestVerifyHooksInstalled:
     def test_warns_when_settings_file_missing(self, tmp_path):
         provider = MagicMock()
         provider.capabilities.supports_hook = True
+        provider.capabilities.name = "claude"
 
         missing = tmp_path / "missing.json"
 
@@ -254,3 +255,35 @@ class TestVerifyHooksInstalled:
             bootstrap.verify_hooks_installed()
 
         logger.warning.assert_called_once()
+
+    def test_logs_install_hint_for_non_claude_managed_provider(self):
+        provider = MagicMock()
+        provider.capabilities.supports_hook = True
+        provider.capabilities.name = "codex"
+        provider.capabilities.hook_install_managed_by_ccgram = True
+
+        with (
+            patch("ccgram.bootstrap.get_provider", return_value=provider),
+            patch("ccgram.bootstrap.logger") as logger,
+        ):
+            bootstrap.verify_hooks_installed()
+
+        logger.info.assert_called_once()
+        # Message includes the provider name and the install command.
+        args = logger.info.call_args[0]
+        assert "codex" in args
+
+    def test_no_hint_for_non_managed_provider(self):
+        provider = MagicMock()
+        provider.capabilities.supports_hook = True
+        provider.capabilities.name = "pi"
+        provider.capabilities.hook_install_managed_by_ccgram = False
+
+        with (
+            patch("ccgram.bootstrap.get_provider", return_value=provider),
+            patch("ccgram.bootstrap.logger") as logger,
+        ):
+            bootstrap.verify_hooks_installed()
+
+        logger.info.assert_not_called()
+        logger.warning.assert_not_called()

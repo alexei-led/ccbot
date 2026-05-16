@@ -14,7 +14,12 @@ from ccgram.providers.codex import (
     _format_codex_tool_result,
     _resolve_pending,
 )
-from ccgram.providers.gemini import GeminiProvider
+from ccgram.providers.gemini import (
+    GeminiProvider,
+    _box_is_interactive,
+    _clean_box_lines,
+    _extract_active_box,
+)
 
 
 class TestResolvePending:
@@ -48,28 +53,34 @@ class TestResolvePending:
         assert _resolve_pending(42, pending) == (None, None)
 
 
-HOOKLESS_PROVIDERS = [CodexProvider, GeminiProvider]
+HOOK_AWARE_JSONL_PROVIDERS = [CodexProvider, GeminiProvider]
 
 
-@pytest.fixture(params=HOOKLESS_PROVIDERS, ids=lambda cls: cls.__name__)
-def hookless(request: pytest.FixtureRequest):
+@pytest.fixture(params=HOOK_AWARE_JSONL_PROVIDERS, ids=lambda cls: cls.__name__)
+def hook_aware_jsonl_provider(request: pytest.FixtureRequest):
     return request.param()
 
 
-class TestHooklessCapabilities:
-    def test_hookless_flags(self, hookless) -> None:
-        caps = hookless.capabilities
-        assert caps.supports_hook is False
+@pytest.fixture(params=HOOK_AWARE_JSONL_PROVIDERS, ids=lambda cls: cls.__name__)
+def jsonl_provider(request: pytest.FixtureRequest):
+    return request.param()
+
+
+class TestHookAwareCapabilities:
+    def test_hook_flags(self, hook_aware_jsonl_provider) -> None:
+        caps = hook_aware_jsonl_provider.capabilities
+        assert caps.supports_hook is True
+        assert caps.supports_hook_events is True
         assert caps.supports_resume is True
         assert caps.supports_continue is True
 
-    def test_invalid_resume_id_raises(self, hookless) -> None:
+    def test_invalid_resume_id_raises(self, hook_aware_jsonl_provider) -> None:
         with pytest.raises(ValueError, match="Invalid resume_id"):
-            hookless.make_launch_args(resume_id="abc; rm -rf /")
+            hook_aware_jsonl_provider.make_launch_args(resume_id="abc; rm -rf /")
 
-    def test_valid_resume_ids(self, hookless) -> None:
-        assert hookless.make_launch_args(resume_id="abc-123")
-        assert hookless.make_launch_args(resume_id="session_42")
+    def test_valid_resume_ids(self, hook_aware_jsonl_provider) -> None:
+        assert hook_aware_jsonl_provider.make_launch_args(resume_id="abc-123")
+        assert hook_aware_jsonl_provider.make_launch_args(resume_id="session_42")
 
 
 class TestCodexLaunchArgs:
@@ -1082,6 +1093,176 @@ class TestGeminiTerminalStatus:
         assert status is None
 
 
+class TestGeminiBoxedPrompt:
+    REAL_TOOL_PERMISSION_BOX = (
+        "> use the shell tool to run: whoami\n"
+        "\n"
+        "  Responding with gemini-3-flash-preview\n"
+        "╭────────────────────────────────────────────────────────────────╮\n"
+        "│ Answer Questions                                                 │\n"
+        "│                                                                  │\n"
+        "│ The 'whoami' command was denied by policy. Is there another way "
+        "I can help you, or do you want to try a different approach?       │\n"
+        "│                                                                  │\n"
+        "│ > Explain why you need this or suggest an alternative.           │\n"
+        "│                                                                  │\n"
+        "│ Enter to submit · Esc to cancel                                  │\n"
+        "╰────────────────────────────────────────────────────────────────╯\n"
+    )
+    REAL_TRUST_SELECTION_BOX = (
+        " ╭───────────────────────────────────────────────────────────────╮\n"
+        " │                                                                 │\n"
+        " │ Do you trust the files in this folder?                          │\n"
+        " │                                                                 │\n"
+        " │ Trusting a folder allows Gemini CLI to load its local "
+        "configurations, including custom commands, hooks, and settings.  │\n"
+        " │ These configurations could execute code on your behalf.         │\n"
+        " │                                                                 │\n"
+        " │ ● 1. Trust folder (gemini-issue75)                              │\n"
+        " │   2. Trust parent folder (tmp)                                  │\n"
+        " │   3. Don't trust                                                │\n"
+        " │                                                                 │\n"
+        " ╰───────────────────────────────────────────────────────────────╯\n"
+    )
+    BOXED_ALLOW_PROMPT = (
+        "╭──────────────────────────────────────────────╮\n"
+        "│ Allow execution of: 'rm -rf build'?           │\n"
+        "│ ● 1. Allow once                               │\n"
+        "│   2. Allow for this session                   │\n"
+        "│   3. Allow for all future sessions            │\n"
+        "│   4. No, suggest changes (esc)                │\n"
+        "╰──────────────────────────────────────────────╯\n"
+    )
+    AUTH_STARTUP_BOX = (
+        "╭────────────────────────────────────────────────────────────╮\n"
+        "│                                                              │\n"
+        "│ ⠧ Waiting for authentication... (Press Esc or Ctrl+C to "
+        "cancel)  │\n"
+        "│                                                              │\n"
+        "╰────────────────────────────────────────────────────────────╯\n"
+    )
+    TOOL_EXEC_BOX = (
+        "╭──────────────────────────────────────────────╮\n"
+        "│ ✓  Shell ls -la                               │\n"
+        "│                                               │\n"
+        "╰──────────────────────────────────────────────╯\n"
+    )
+
+    def test_issue_75_real_tool_permission_shows_question(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(
+            self.REAL_TOOL_PERMISSION_BOX, pane_title="Action Required: ✋"
+        )
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "PermissionPrompt"
+        assert status.raw_text != "Action Required"
+        assert "Answer Questions" in status.raw_text
+        assert "denied by policy" in status.raw_text
+
+    def test_real_trust_selection_box_detected(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(
+            self.REAL_TRUST_SELECTION_BOX, pane_title="Ready: ◇"
+        )
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "SelectionUI"
+        assert "Do you trust the files in this folder?" in status.raw_text
+        assert "Don't trust" in status.raw_text
+
+    def test_boxed_allow_prompt_includes_options(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(
+            self.BOXED_ALLOW_PROMPT, pane_title="Action Required: ✋"
+        )
+        assert status is not None
+        assert status.is_interactive is True
+        assert status.ui_type == "PermissionPrompt"
+        assert status.raw_text != "Action Required"
+        assert "Allow once" in status.raw_text
+        assert "Allow for this session" in status.raw_text
+
+    def test_box_content_strips_border_glyphs(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(
+            self.REAL_TOOL_PERMISSION_BOX, pane_title="Action Required: ✋"
+        )
+        assert status is not None
+        for glyph in ("│", "╭", "╮", "╰", "╯"):
+            assert glyph not in status.raw_text
+
+    def test_auth_startup_box_not_interactive(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(
+            self.AUTH_STARTUP_BOX, pane_title="Ready: ◇"
+        )
+        assert status is None
+
+    def test_tool_exec_box_not_interactive(self) -> None:
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(self.TOOL_EXEC_BOX, pane_title="")
+        assert status is None
+
+    def test_extract_active_box_returns_cleaned_inner(self) -> None:
+        box = (
+            "noise above\n"
+            "╭────────────╮\n"
+            "│ question?  │\n"
+            "│ ● 1. yes   │\n"
+            "╰────────────╯\n"
+        )
+        assert _extract_active_box(box) == "question?\n● 1. yes"
+
+    def test_extract_active_box_none_without_box(self) -> None:
+        assert _extract_active_box("just normal output\n> \n") is None
+
+    def test_extract_active_box_picks_last_box(self) -> None:
+        two = "╭───╮\n│ old │\n╰───╯\ninterim\n╭───╮\n│ new │\n╰───╯\n"
+        assert _extract_active_box(two) == "new"
+
+    def test_clean_box_lines_drops_borders_and_padding(self) -> None:
+        assert _clean_box_lines(["│ a │", "│   │", "│ b │", "──────"]) == ["a", "b"]
+
+    def test_box_is_interactive_true_for_options(self) -> None:
+        assert _box_is_interactive("header\n● 1. choose me\n  2. other") is True
+
+    def test_box_is_interactive_false_for_plain_text(self) -> None:
+        assert _box_is_interactive("just a status line\nno options here") is False
+
+    def test_box_is_interactive_single_numbered_line_is_prose(self) -> None:
+        assert _box_is_interactive("Step 1. do the thing first") is False
+
+    def test_box_is_interactive_two_numbered_lines_is_prompt(self) -> None:
+        assert _box_is_interactive("Pick:\n1. yes\n2. no") is True
+
+    def test_extract_active_box_none_on_dangling_open(self) -> None:
+        torn = (
+            "╭───╮\n│ old │\n╰───╯\n"
+            "interim output\n"
+            "╭───────────────────╮\n│ new question being drawn │\n"
+        )
+        assert _extract_active_box(torn) is None
+
+    def test_extract_active_box_none_when_crossing_box_boundary(self) -> None:
+        torn = "╭──╮\n│ a │\n╰──╯\n╰──╯\n"
+        assert _extract_active_box(torn) is None
+
+    def test_dangling_open_falls_back_not_stale_question(self) -> None:
+        torn = (
+            "╭────────────────────────────╮\n"
+            "│ Old answered prompt          │\n"
+            "│ ● 1. picked                  │\n"
+            "╰────────────────────────────╯\n"
+            "scrollback\n"
+            "╭────────────────────────────╮\n"
+            "│ New prompt still rendering   │\n"
+        )
+        gemini = GeminiProvider()
+        status = gemini.parse_terminal_status(torn, pane_title="Ready: ◇")
+        assert status is None
+
+
 class TestGeminiPaneTitleStatus:
     def test_working_title_returns_working_status(self) -> None:
         gemini = GeminiProvider()
@@ -1143,10 +1324,10 @@ class TestGeminiPaneTitleStatus:
 
 
 class TestHooklessCommands:
-    def test_returns_exact_builtins(self, hookless) -> None:
-        result = hookless.discover_commands("/tmp/nonexistent")
+    def test_returns_exact_builtins(self, jsonl_provider) -> None:
+        result = jsonl_provider.discover_commands("/tmp/nonexistent")
         names = {c.name for c in result}
-        assert names == set(hookless.capabilities.builtin_commands)
+        assert names == set(jsonl_provider.capabilities.builtin_commands)
 
 
 class TestGeminiCommandDiscovery:

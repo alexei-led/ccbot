@@ -52,10 +52,10 @@ graph TD
 
     subgraph handlers["Handler Layer — handlers/"]
         TopLevel["Top-level: callback_*, cleanup,<br>command_*, file_handler, hook_events,<br>inline, reactions, registry, response_builder,<br>sessions_dashboard, sync_command, upgrade, user_state"]
-        TopicsPkg["topics/<br>topic_orchestration, topic_lifecycle,<br>directory_browser, directory_callbacks,<br>window_callbacks, new_command"]
+        TopicsPkg["topics/<br>topic_orchestration, topic_lifecycle,<br>directory_browser, directory_callbacks,<br>window_callbacks, new_command, worktree"]
         TextPkg["text/<br>text_handler"]
         InteractivePkg["interactive/<br>interactive_ui, interactive_callbacks"]
-        StatusPkg["status/<br>status_bubble, status_bar_actions, topic_emoji"]
+        StatusPkg["status/<br>status_bubble, status_bar_actions, topic_emoji, rc_probe"]
         LivePkg["live/<br>live_view, screenshot_callbacks, pane_callbacks"]
         SendPkg["send/<br>send_command, send_callbacks, send_security"]
         ToolbarPkg["toolbar/<br>toolbar_keyboard, toolbar_callbacks"]

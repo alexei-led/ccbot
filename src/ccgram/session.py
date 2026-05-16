@@ -628,6 +628,20 @@ class SessionManager:
         """Set the lifecycle origin for a window and persist state."""
         window_store.set_window_origin(window_id, origin)
 
+    def set_window_worktree(
+        self, window_id: str, worktree_path: str, branch: str
+    ) -> None:
+        """Persist the git worktree path + branch for a window.
+
+        Set when a new topic was created on a fresh worktree. No
+        behaviour reads these yet — a forward investment for the
+        eventual worktree cleanup UX.
+        """
+        state = window_store.get_window_state(window_id)
+        state.worktree_path = worktree_path
+        state.worktree_branch = branch
+        self._save_state()
+
     def get_approval_mode(self, window_id: str) -> str:
         """Get approval mode for a window (default: 'normal')."""
         state = self.window_states.get(window_id)

@@ -119,19 +119,24 @@ When creating a topic via the directory browser, users can choose the provider (
 
 ### Provider Capability Matrix
 
-| Capability       | Claude                          | Codex              | Gemini                      | Pi                       | Shell                       |
-| ---------------- | ------------------------------- | ------------------ | --------------------------- | ------------------------ | --------------------------- |
-| Hook events      | Yes (all supported event types) | No                 | No                          | No                       | No                          |
-| Resume           | Yes (`--resume`)                | Yes (`resume`)     | Yes (`--resume idx/latest`) | Yes (`--session <path>`) | No                          |
-| Continue         | Yes                             | Yes                | Yes                         | Yes                      | No                          |
-| Transcript       | JSONL                           | JSONL              | JSONL (incremental)         | JSONL (v3)               | None                        |
-| Incremental read | Yes                             | Yes                | Yes                         | Yes                      | No                          |
-| Commands         | Yes                             | Yes                | Yes                         | Yes (builtins + skills)  | No                          |
-| Status detection | Hook events + pyte + spinner    | Activity heuristic | Pane title + interactive UI | Transcript activity      | Shell prompt idle detection |
-| YOLO auto-accept | Yes                             | No                 | No                          | No                       | No                          |
-| Mode scraping    | Yes (mode-line parse)           | No                 | No                          | No                       | No                          |
+| Capability       | Claude                          | Codex                          | Gemini                                                           | Pi                              | Shell                       |
+| ---------------- | ------------------------------- | ------------------------------ | ---------------------------------------------------------------- | ------------------------------- | --------------------------- |
+| Hook events      | Yes (all supported event types) | Yes (`SessionStart`, `Stop`)   | Yes (`SessionStart`, `AfterAgent`, `SessionEnd`, `Notification`) | Yes via hook-runner             | No                          |
+| Resume           | Yes (`--resume`)                | Yes (`resume`)                 | Yes (`--resume idx/latest`)                                      | Yes (`--session <path>`)        | No                          |
+| Continue         | Yes                             | Yes                            | Yes                                                              | Yes                             | No                          |
+| Transcript       | JSONL                           | JSONL                          | JSONL (incremental)                                              | JSONL (v3)                      | None                        |
+| Incremental read | Yes                             | Yes                            | Yes                                                              | Yes                             | No                          |
+| Commands         | Yes                             | Yes                            | Yes                                                              | Yes (builtins + skills)         | No                          |
+| Status detection | Hook events + pyte + spinner    | Stop hook + activity heuristic | AfterAgent hook + pane title                                     | Stop hook + transcript activity | Shell prompt idle detection |
+| YOLO auto-accept | Yes                             | No                             | No                                                               | No                              | No                          |
+| Mode scraping    | Yes (mode-line parse)           | No                             | No                                                               | No                              | No                          |
+| RC feedback      | Yes (probe after `/remote-control`) | No                         | No                                                               | No                              | No                          |
 
-Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks all hook event types for Claude. Codex, Gemini, Pi, and Shell have no hooks — session tracking for these providers relies on auto-detection from running processes.
+Capabilities gate UX per-window: recovery keyboard only shows Continue/Resume buttons when supported; `ccgram doctor` checks managed hook installs for Claude, Codex, and Gemini. Pi hook support is supplied by cc-thingz hook-runner; transcript/process detection remains fallback for all non-shell agents.
+
+### Remote Control Feedback
+
+Claude's `/remote-control` is silent on outcome — no signal on success, "feature unavailable", or failure. Both trigger paths (status-bubble RC button, forwarded `/remote-control` or `/rc` slash) call `arm_rc_probe(window_id, client)` in `handlers/status/rc_probe.py`. The probe captures the pane ~1.5s after RC fires and re-scans every 1.5s up to 10s, classifying via the pure `classify_rc_output()` regex (success-with-URL, success-without-URL, unavailable, failed, timeout) with `terminal_screen_buffer.is_rc_active(window_id)` as a tiebreaker, then posts one status reply in the topic. De-duped per-window via the in-memory `WindowState.rc_probe_state` field (double-tap is a no-op; never serialized — safe to drop on restart). Capability-gated to Claude; other providers keep their existing "not supported by &lt;provider&gt;" reply.
 
 ### Shell Prompt Configuration
 
@@ -239,11 +244,19 @@ Providers absent from the TOML keep their built-in defaults. Malformed entries a
 
 ### Migration Notes
 
-Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccgram hook --install`) is Claude-specific and skipped for other providers.
+Existing Claude deployments need no changes — `claude` is the default provider. Windows without an explicit `provider_name` fall back to the config default. The hook subsystem (`ccgram hook --install`) defaults to Claude; pass `--provider {codex,gemini,pi}` to manage other providers. Codex and Gemini hook installs are ccgram-managed (settings written into `~/.codex/hooks.json` + `~/.codex/config.toml` and `~/.gemini/settings.json` respectively). Pi hooks are owned by the cc-thingz hook-runner extension — ccgram receives Pi events but does not modify Pi configuration. Shell windows have no hooks. When hooks are absent or fail, providers with JSONL transcripts (Codex/Gemini/Pi) fall back to transcript-scan discovery, so missing hooks degrade latency rather than functionality.
 
 ### Pi Provider
 
-[Pi](https://pi.dev) is a Node.js-based coding agent CLI with JSONL v3 transcripts and no hook subsystem, so session discovery follows the Codex/Gemini pattern (hookless `discover_transcript()`). Transcripts live under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`; the canonical session id sits in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`). Resume always uses `--session <path>` — `--resume` would open an interactive picker ccgram can't drive. Command discovery (`pi_discovery.py`) surfaces Telegram-friendly builtins (`/clear`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`, `/changelog`) plus on-disk sources: skills under `.pi/skills`, `.agents/skills`, `~/.pi/agent/skills`, and `~/.agents/skills`; prompt templates under `.pi/prompts` and `~/.pi/agent/prompts`; extension commands via `pi.registerCommand(...)` scans in `.pi/extensions` and `~/.pi/agent/extensions`.
+[Pi](https://pi.dev) is a Node.js-based coding agent CLI with JSONL v3 transcripts and hook support via cc-thingz hook-runner. The extension sends `SessionStart`, `Stop`, `SessionEnd`, and subagent events to `ccgram hook`; transcript discovery remains fallback and message source of truth. Transcripts live under `~/.pi/agent/sessions/--<encoded-cwd>--/<timestamp>_<uuid>.jsonl`; the canonical session id sits in the header line (`{"type":"session","id":"<uuid>","cwd":"...","version":3}`). Resume always uses `--session <path>` — `--resume` would open an interactive picker ccgram can't drive. Command discovery (`pi_discovery.py`) surfaces Telegram-friendly builtins (`/clear`, `/compact`, `/export`, `/name`, `/reload`, `/session`, `/share`, `/changelog`) plus on-disk sources: skills under `.pi/skills`, `.agents/skills`, `~/.pi/agent/skills`, and `~/.agents/skills`; prompt templates under `.pi/prompts` and `~/.pi/agent/prompts`; extension commands via `pi.registerCommand(...)` scans in `.pi/extensions` and `~/.pi/agent/extensions`.
+
+## Git Worktree Integration
+
+The new-topic flow inserts an opt-in worktree step between directory-confirm and provider-pick. After the directory is confirmed, `check_worktree_eligibility(path)` (in `handlers/topics/worktree.py`) runs four `git -C <path>` probes plus a merge/rebase filesystem check. The step is shown only for an eligible git repo (in-work-tree, not bare, on a named branch, no in-progress merge/rebase); for any other directory the flow is unchanged — straight to the provider picker, no warning UI.
+
+When shown, the user picks **Use current branch** (today's behaviour, no worktree) or **New worktree**. New worktree suggests a branch name (`ccg/<kebab(topic-title)>` or `ccg/agent-<n>` with branch+worktree collision avoidance), one-tap confirm or edit-via-text-reply. Worktrees are created at `<repo>.worktrees/<slug>` (slug = branch with `/`→`-`) via `git -C <repo> worktree add`; `WorktreeError` is raised and surfaced as a one-line error with a Cancel button on failure. A dirty source repo is allowed with a warning line.
+
+The chosen branch and worktree path are persisted on the existing `WindowState` (`worktree_path`, `worktree_branch`) atomically with the rest of the topic metadata — omitted from `to_dict` when unset, `.get()`-loaded for backward-compat with old `state.json`. No behaviour reads them yet; they are a forward investment for eventual cleanup UX. `SessionManager.set_window_worktree` is on the query-layer write/admin allow-list. Edit-name uses the only free-text input in the new flow: `AWAITING_WORKTREE_BRANCH_NAME` in user_data routes the next text message to branch-name validation (`git check-ref-format --branch`) before `text_handler` forwards it to the window. Cancel is the inline button (`/cancel` is a command and never reaches `text_handler`).
 
 ## Testing
 

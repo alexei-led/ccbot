@@ -386,6 +386,56 @@ class TestForwardCommandResolution:
         codex_provider.build_status_snapshot.assert_not_called()
         assert update.message.reply_text.call_count == 1
 
+    async def test_arms_rc_probe_for_claude_remote_control(self) -> None:
+        from ccgram.telegram_client import PTBTelegramClient
+
+        with patch("ccgram.handlers.status.rc_probe.arm_rc_probe") as mock_arm:
+            update = _make_update(text="/remote-control")
+            await forward_command_handler(update, _make_context())
+
+        self.mock_send_to_window.assert_called_once_with(
+            "@1", "/remote-control project"
+        )
+        mock_arm.assert_called_once()
+        args = mock_arm.call_args.args
+        assert args[0] == "@1"
+        assert isinstance(args[1], PTBTelegramClient)
+
+    async def test_arms_rc_probe_for_rc_alias(self) -> None:
+        with patch("ccgram.handlers.status.rc_probe.arm_rc_probe") as mock_arm:
+            update = _make_update(text="/rc")
+            await forward_command_handler(update, _make_context())
+
+        mock_arm.assert_called_once()
+
+    async def test_no_rc_probe_for_non_rc_command(self) -> None:
+        with patch("ccgram.handlers.status.rc_probe.arm_rc_probe") as mock_arm:
+            update = _make_update(text="/clear")
+            await forward_command_handler(update, _make_context())
+
+        mock_arm.assert_not_called()
+
+    async def test_no_rc_probe_for_codex_rejected_remote_control(self) -> None:
+        codex_provider = SimpleNamespace(
+            capabilities=SimpleNamespace(
+                name="codex",
+                supports_incremental_read=True,
+                supports_status_snapshot=False,
+            )
+        )
+        with (
+            patch(f"{_FW}.get_provider_for_window", return_value=codex_provider),
+            patch(f"{_FW}._command_known_in_other_provider", return_value=True),
+            patch("ccgram.handlers.status.rc_probe.arm_rc_probe") as mock_arm,
+        ):
+            update = _make_update(text="/remote-control")
+            await forward_command_handler(update, _make_context())
+
+        self.mock_send_to_window.assert_not_called()
+        mock_arm.assert_not_called()
+        reply_text = update.message.reply_text.call_args[0][0]
+        assert "not supported" in reply_text
+
 
 class TestNormalizeSlashToken:
     def test_normalize_slash_token(self) -> None:

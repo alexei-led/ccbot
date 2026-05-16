@@ -18,6 +18,7 @@ module instead when stateful behaviour is not required.
 
 from __future__ import annotations
 
+import re
 import time
 import zlib
 from collections.abc import Iterable
@@ -50,6 +51,29 @@ if TYPE_CHECKING:
     from ...tmux_manager import PaneInfo as TmuxPaneInfo
 
 logger = structlog.get_logger()
+
+# cc-thingz hook-runner writes structlog ConsoleRenderer lines straight
+# into the agent pane (e.g. ``2026-05-15 14:12:27 [debug    ] ...``).
+# These leak into capture_pane and skew status / interactive-UI parsing
+# (issue #87). Drop them before feeding pyte. Upstream fix is cc-thingz
+# not writing to the pane; this is the defensive ccgram-side mitigation.
+_HOOK_RUNNER_LOG_RE = re.compile(
+    r"^(?:\x1b\[[0-9;]*m)*"
+    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} "
+    r"\[\s*(?:debug|info|warning|error|critical)\s*\]"
+)
+
+
+def _strip_hook_runner_noise(pane_text: str) -> str:
+    """Drop cc-thingz hook-runner log lines from a raw pane capture."""
+    if "] " not in pane_text:
+        return pane_text
+    lines = pane_text.split("\n")
+    kept = [ln for ln in lines if not _HOOK_RUNNER_LOG_RE.match(ln)]
+    if len(kept) == len(lines):
+        return pane_text
+    return "\n".join(kept)
+
 
 # ── TerminalScreenBuffer ───────────────────────────────────────────────
 
@@ -153,11 +177,22 @@ class TerminalScreenBuffer:
         pane_text: str,
         columns: int = 0,
         rows: int = 0,
+        *,
+        parse_claude_chrome: bool = True,
     ) -> StatusUpdate | None:
         """Parse terminal via pyte screen buffer for status and interactive UI.
 
         Content-hash optimization: unchanged pane content returns cached result
         without re-parsing.
+
+        ``parse_claude_chrome`` gates the Claude-specific interactive-UI and
+        status-block extraction (UI_PATTERNS + ─-separator chrome). When
+        False (non-Claude providers, issue #85) the buffer is still fed and
+        ``last_rendered_text`` / RC state are still updated — those side
+        effects are provider-agnostic and consumed by the provider path and
+        vim-insert detection — but Claude pattern extraction is skipped and
+        the function returns ``None`` so the provider's own
+        ``parse_terminal_status`` runs unshadowed.
         """
         # Lazy: terminal_parser imports terminal_parser_v100 (pyte
         # heavyweight) — match the get_screen_buffer pattern.
@@ -177,6 +212,8 @@ class TerminalScreenBuffer:
         ):
             columns, rows = 200, 50
 
+        pane_text = _strip_hook_runner_noise(pane_text)
+
         ws = self._poll_state.get_state(window_id)
         content_hash = hash((pane_text, columns, rows))
         if (
@@ -194,6 +231,11 @@ class TerminalScreenBuffer:
         rc_detected = detect_remote_control(buf.display)
         ws.last_rc_detected = rc_detected
         self.update_rc_state(ws, rc_detected)
+
+        if not parse_claude_chrome:
+            ws.last_pane_hash = content_hash
+            ws.last_pyte_result = None
+            return None
 
         interactive = parse_from_screen(buf)
         if interactive:

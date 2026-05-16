@@ -268,7 +268,14 @@ async def _handle_new(
     pending_tid = (
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
-    if pending_tid is not None and get_thread_id(update) != pending_tid:
+    # A live picker always has a pending thread (set when it was shown).
+    # None means the flow was reset (e.g. /new) and this is a stale tap —
+    # rebuilding the browser here would leave it pending-thread-less and
+    # let a later confirm spawn an unbound window in the bot's own cwd.
+    if pending_tid is None:
+        await query.answer("Stale picker (flow reset)", show_alert=True)
+        return
+    if get_thread_id(update) != pending_tid:
         await query.answer("Stale picker (topic mismatch)", show_alert=True)
         return
     clear_window_picker_state(context.user_data)

@@ -146,6 +146,109 @@ GEMINI_UI_PATTERNS: list[UIPattern] = [
 ]
 
 
+# ── Boxed-prompt extraction (Gemini CLI ≥ 0.42) ─────────────────────────
+#
+# Modern Gemini wraps every interactive prompt in a rounded box:
+#
+#   ╭──────────────────────────────────────────────╮
+#   │ Allow execution of: 'whoami'?                 │
+#   │ ● 1. Allow once                               │
+#   │   2. Allow for this session                   │
+#   │   4. No, suggest changes (esc                 │
+#   ╰──────────────────────────────────────────────╯
+#
+# There is no bare "Action Required"/"Select" line in-pane — that text now
+# lives only in the OSC pane title. The regex UIPattern anchors therefore
+# never match real ≥0.42 output, so the question is extracted directly from
+# the box instead.  Older non-boxed renderings still go through
+# GEMINI_UI_PATTERNS below.
+_BOX_OPEN_RE = re.compile(r"^\s*[╭┌╔]")
+_BOX_CLOSE_RE = re.compile(r"^\s*[╰└╚]")
+_BOX_SIDE_RE = re.compile(r"^\s*[│┃║|]\s?|\s*[│┃║|]\s*$")
+_BOX_GLYPHS = frozenset("─━═│┃║|╭╮╰╯┌┐└┘╔╗╚╝ ")
+# Any one of these unambiguously marks an interactive prompt.
+_GEMINI_STRONG_MARKERS = (
+    re.compile(r"^\s*[●❯]\s*\d+\."),  # selected option marker
+    re.compile(r"(?i)\benter to (submit|select|confirm|continue)\b"),
+    re.compile(r"(?i)\(press esc to (close|cancel)\)"),
+    re.compile(r"(?i)\(esc\b"),
+)
+# A bare numbered line is weak — a single one may be prose. Require ≥2.
+_GEMINI_NUMBERED_OPTION_RE = re.compile(r"^\s*\d+\.\s")
+_MIN_NUMBERED_OPTIONS = 2
+_PERMISSION_HINT_RE = re.compile(
+    r"(?i)\b(allow|permission|denied|proceed|approve)\b|\(esc\b"
+)
+
+
+def _clean_box_lines(lines: list[str]) -> list[str]:
+    """Strip box-drawing borders/rules from a captured box, keep content."""
+    out: list[str] = []
+    for raw in lines:
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            out.append("")
+            continue
+        if set(stripped) <= _BOX_GLYPHS:  # pure border or horizontal rule
+            continue
+        out.append(_BOX_SIDE_RE.sub("", line).rstrip())
+    while out and not out[0].strip():
+        out.pop(0)
+    while out and not out[-1].strip():
+        out.pop()
+    return out
+
+
+def _extract_active_box(pane_text: str) -> str | None:
+    """Return the cleaned content of the active box, or None.
+
+    Conservative against torn captures: returns content only for a single
+    well-formed box at the bottom. A dangling open border below the last
+    close (active box mid-render) or another box boundary between the
+    matched open and close yields None — the next poll re-reads a complete
+    frame rather than surfacing a stale earlier box.
+    """
+    lines = pane_text.split("\n")
+    close_idx = next(
+        (i for i in range(len(lines) - 1, -1, -1) if _BOX_CLOSE_RE.match(lines[i])),
+        None,
+    )
+    if close_idx is None:
+        return None
+    if any(_BOX_OPEN_RE.match(lines[i]) for i in range(close_idx + 1, len(lines))):
+        return None
+    open_idx: int | None = None
+    for i in range(close_idx - 1, -1, -1):
+        if _BOX_CLOSE_RE.match(lines[i]):
+            return None
+        if _BOX_OPEN_RE.match(lines[i]):
+            open_idx = i
+            break
+    if open_idx is None:
+        return None
+    inner = _clean_box_lines(lines[open_idx + 1 : close_idx])
+    return "\n".join(inner) if inner else None
+
+
+def _box_is_interactive(box_text: str) -> bool:
+    """True when the box content carries an interactive affordance.
+
+    Any strong marker (selected ``●``/``❯`` option, footer hint) is
+    sufficient. A bare numbered list needs ≥2 entries so a single ``1.``
+    line in informational prose is not misread as a prompt.
+    """
+    numbered = 0
+    for line in box_text.split("\n"):
+        if any(marker.search(line) for marker in _GEMINI_STRONG_MARKERS):
+            return True
+        if _GEMINI_NUMBERED_OPTION_RE.search(line):
+            numbered += 1
+            if numbered >= _MIN_NUMBERED_OPTIONS:
+                return True
+    return False
+
+
 _TRANSCRIPT_MAX_AGE_SECS = 120.0
 _MAX_TOOL_SUMMARY = 200
 _SHORT_SESSION_ID_LEN = 8
@@ -463,7 +566,10 @@ class GeminiProvider(JsonlProvider):
     _CAPS = ProviderCapabilities(
         name="gemini",
         launch_command="gemini",
-        supports_hook=False,
+        supports_hook=True,
+        supports_hook_events=True,
+        hook_install_managed_by_ccgram=True,
+        hook_event_types=("SessionStart", "AfterAgent", "SessionEnd", "Notification"),
         supports_resume=True,
         supports_continue=True,
         supports_structured_transcript=True,
@@ -711,7 +817,24 @@ class GeminiProvider(JsonlProvider):
             "\u270b" in pane_title or "Action Required" in pane_title
         )  # ✋
 
-        # 3. Pane content for interactive UI details
+        # 3. Boxed prompt (Gemini ≥ 0.42) — extract the question from the box.
+        # GEMINI_UI_PATTERNS anchors no longer exist in-pane; the prompt is
+        # wrapped in box-drawing borders with the question as the first line.
+        box_text = _extract_active_box(pane_text)
+        if box_text and _box_is_interactive(box_text):
+            ui_type = (
+                "PermissionPrompt"
+                if action_required or _PERMISSION_HINT_RE.search(box_text)
+                else "SelectionUI"
+            )
+            return StatusUpdate(
+                raw_text=box_text,
+                display_label=ui_type,
+                is_interactive=True,
+                ui_type=ui_type,
+            )
+
+        # 4. Legacy non-boxed rendering (Gemini ≤ 0.41) — regex patterns.
         interactive = extract_interactive_content(pane_text, GEMINI_UI_PATTERNS)
         if interactive:
             return StatusUpdate(
@@ -721,7 +844,7 @@ class GeminiProvider(JsonlProvider):
                 ui_type=interactive.name,
             )
 
-        # 4. Title says action required but content didn't match patterns
+        # 5. Title says action required but content didn't match anything.
         if action_required:
             return StatusUpdate(
                 raw_text="Action Required",

@@ -37,6 +37,7 @@ from .apply import (
     _forward_pane_output,
     _handle_dead_window_notification,
     _maybe_check_passive_shell,
+    _maybe_warn_external_gemini,
     _notify_pane_lifecycle,
     _scan_window_panes,
     _send_typing_throttled,
@@ -75,6 +76,8 @@ async def tick_window(
         await _handle_dead_window_notification(bot, user_id, thread_id, window_id)
         return
 
+    await _maybe_warn_external_gemini(bot, user_id, window_id, thread_id)
+
     await discover_and_register_transcript(
         window_id,
         _window=window,
@@ -111,6 +114,7 @@ __all__ = [
     "_get_provider",
     "_handle_dead_window_notification",
     "_maybe_check_passive_shell",
+    "_maybe_warn_external_gemini",
     "_notify_pane_lifecycle",
     "_parse_with_pyte",
     "_resolve_status",

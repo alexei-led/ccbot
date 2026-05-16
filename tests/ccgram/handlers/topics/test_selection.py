@@ -221,6 +221,27 @@ class TestHandleProviderSelect:
         )
         query.answer.assert_any_call("Unknown provider", show_alert=True)
 
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
+    async def test_state_lost_fails_closed(
+        self, mock_registry: MagicMock, mock_tmux: MagicMock, mock_edit: AsyncMock
+    ) -> None:
+        mock_registry.is_valid.return_value = True
+        mock_tmux.create_window = AsyncMock()
+        query = _make_query(data=f"{CB_PROV_SELECT}claude")
+        update = _make_update()
+        context = _make_context({})
+
+        await _handle_provider_select(
+            query, 100, f"{CB_PROV_SELECT}claude", update, context
+        )
+
+        mock_tmux.create_window.assert_not_called()
+        assert "expired" in mock_edit.call_args[0][1].lower()
+
 
 class TestHandleModeSelect:
     @patch("ccgram.providers.resolve_launch_command")
@@ -343,6 +364,27 @@ class TestHandleModeSelect:
             query, 100, f"{CB_MODE_SELECT}codex:unknown", update, context
         )
         query.answer.assert_any_call("Unknown mode", show_alert=True)
+
+    @patch(
+        "ccgram.handlers.topics.directory_callbacks.safe_edit", new_callable=AsyncMock
+    )
+    @patch("ccgram.handlers.topics.directory_callbacks.tmux_manager")
+    @patch("ccgram.handlers.topics.directory_callbacks.provider_registry")
+    async def test_state_lost_fails_closed(
+        self, mock_registry: MagicMock, mock_tmux: MagicMock, mock_edit: AsyncMock
+    ) -> None:
+        mock_registry.is_valid.return_value = True
+        mock_tmux.create_window = AsyncMock()
+        query = _make_query(data=f"{CB_MODE_SELECT}codex:normal")
+        update = _make_update()
+        context = _make_context({})
+
+        await _handle_mode_select(
+            query, 100, f"{CB_MODE_SELECT}codex:normal", update, context
+        )
+
+        mock_tmux.create_window.assert_not_called()
+        assert "expired" in mock_edit.call_args[0][1].lower()
 
     @patch("ccgram.providers.resolve_launch_command")
     @patch(

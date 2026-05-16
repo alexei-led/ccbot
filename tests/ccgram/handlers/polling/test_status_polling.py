@@ -15,6 +15,7 @@ from ccgram.handlers.topics.topic_lifecycle import (
 )
 from ccgram.handlers.polling.window_tick import (
     _handle_dead_window_notification,
+    _maybe_warn_external_gemini,
     _parse_with_pyte,
     _scan_window_panes,
     decide_tick,
@@ -873,7 +874,7 @@ class TestProviderSwitchPromptSetup:
                     session_id="",
                     cwd="/proj",
                     provider_name="shell",
-                    transcript_path="",
+                    transcript_path="/path/to/claude.jsonl",
                 )
             }
             mock_tmux.find_window_by_id = AsyncMock(
@@ -1343,6 +1344,71 @@ class TestMaybeDiscoverTranscript:
             provider_name="codex",
         )
 
+    async def test_skips_session_if_already_bound_to_other_window(self) -> None:
+        from ccgram.handlers.recovery.transcript_discovery import (
+            discover_and_register_transcript,
+        )
+        from ccgram.providers.base import SessionStartEvent
+
+        mock_provider = MagicMock()
+        mock_provider.capabilities.supports_hook = False
+        mock_provider.capabilities.name = "codex"
+        event = SessionStartEvent(
+            session_id="shared-session",
+            cwd="/my/project",
+            transcript_path="/path/to/transcript.jsonl",
+            window_key="ccgram:@7",
+        )
+        mock_provider.discover_transcript.return_value = event
+
+        mock_router = MagicMock()
+        mock_router.iter_thread_bindings.return_value = [
+            (123, 42, "@7"),
+            (321, 7, "@9"),
+        ]
+
+        with (
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_manager"
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
+            ) as mock_sms,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.get_provider_for_window",
+                return_value=mock_provider,
+            ),
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.config"
+            ) as mock_config,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
+            ) as mock_tmux,
+            patch("ccgram.thread_router.thread_router", mock_router),
+        ):
+            mock_ws.window_states = {
+                "@7": MagicMock(
+                    session_id="", cwd="/my/project", provider_name="codex"
+                ),
+                "@9": MagicMock(
+                    session_id="shared-session",
+                    cwd="/my/project",
+                    provider_name="codex",
+                ),
+            }
+            mock_config.tmux_session_name = "ccgram"
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(pane_current_command="bun")
+            )
+            mock_tmux.get_pane_title = AsyncMock(return_value="")
+            await discover_and_register_transcript("@7")
+
+        mock_sms.register_hookless_session.assert_not_called()
+        mock_sms.write_hookless_session_map.assert_not_called()
+
     async def test_updates_when_new_session_discovered_for_same_window(self) -> None:
         from ccgram.handlers.recovery.transcript_discovery import (
             discover_and_register_transcript,
@@ -1573,6 +1639,93 @@ class TestMaybeDiscoverTranscript:
             cwd="/proj",
             transcript_path="/path/to/transcript.jsonl",
             provider_name="codex",
+        )
+
+    async def test_tries_next_provider_when_session_conflicts_with_bound_window(
+        self,
+    ) -> None:
+        from ccgram.handlers.recovery.transcript_discovery import (
+            discover_and_register_transcript,
+        )
+        from ccgram.providers.base import SessionStartEvent
+
+        conflicting_event = SessionStartEvent(
+            session_id="uuid-in-use",
+            cwd="/proj",
+            transcript_path="/path/to/in-use.jsonl",
+            window_key="ccgram:@7",
+        )
+        alternative_event = SessionStartEvent(
+            session_id="uuid-new",
+            cwd="/proj",
+            transcript_path="/path/to/alt.jsonl",
+            window_key="ccgram:@7",
+        )
+
+        mock_codex = MagicMock()
+        mock_codex.capabilities.supports_hook = False
+        mock_codex.capabilities.name = "codex"
+        mock_codex.discover_transcript.return_value = conflicting_event
+
+        mock_gemini = MagicMock()
+        mock_gemini.capabilities.supports_hook = False
+        mock_gemini.capabilities.name = "gemini"
+        mock_gemini.discover_transcript.return_value = alternative_event
+
+        mock_registry = MagicMock()
+        mock_registry.provider_names.return_value = ["codex", "gemini"]
+
+        def mock_get(name: str) -> MagicMock:
+            return {"codex": mock_codex, "gemini": mock_gemini}[name]
+
+        mock_registry.get = mock_get
+        mock_router = MagicMock()
+        mock_router.iter_thread_bindings.return_value = [(123, 42, "@9")]
+
+        mock_bound_state = MagicMock(
+            session_id="uuid-in-use",
+            cwd="/proj",
+            provider_name="codex",
+        )
+
+        with (
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_manager"
+            ) as mock_sm,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.window_store"
+            ) as mock_ws,  # noqa: F841
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.session_map_sync"
+            ) as mock_sms,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.tmux_manager"
+            ) as mock_tmux,
+            patch(
+                "ccgram.handlers.recovery.transcript_discovery.config"
+            ) as mock_config,
+            patch("ccgram.providers.registry", mock_registry),
+            patch("ccgram.thread_router.thread_router", mock_router),
+        ):
+            mock_ws.window_states = {
+                "@7": MagicMock(session_id="", cwd="/proj", provider_name=""),
+                "@9": mock_bound_state,
+            }
+            mock_config.tmux_session_name = "ccgram"
+            mock_tmux.find_window_by_id = AsyncMock(
+                return_value=MagicMock(pane_current_command="bun")
+            )
+            mock_tmux.get_pane_title = AsyncMock(return_value="")
+            await discover_and_register_transcript("@7")
+
+        mock_codex.discover_transcript.assert_called_once()
+        mock_gemini.discover_transcript.assert_called_once()
+        mock_sms.register_hookless_session.assert_called_once_with(
+            window_id="@7",
+            session_id="uuid-new",
+            cwd="/proj",
+            transcript_path="/path/to/alt.jsonl",
+            provider_name="gemini",
         )
 
     async def test_skips_hookless_fallback_when_pane_is_shell(self) -> None:
@@ -1882,6 +2035,81 @@ class TestMaybeDiscoverTranscript:
             transcript_path="/Users/alexei/.codex/sessions/2026/03/23/test.jsonl",
             provider_name="codex",
         )
+
+
+class TestMaybeWarnExternalGemini:
+    def _patches(
+        self,
+        *,
+        provider: str,
+        external: bool,
+        already_warned: bool,
+        view: object | None = "__default__",
+    ):
+        prov = MagicMock()
+        prov.capabilities.name = provider
+        store = MagicMock()
+        store.was_gemini_external_warned.return_value = already_warned
+        win_view = MagicMock(external=external) if view == "__default__" else view
+        return prov, store, win_view
+
+    async def _run(self, prov, store, win_view):
+        bot = AsyncMock(spec=Bot)
+        with (
+            patch("ccgram.handlers.polling.window_tick.apply.window_store", store),
+            patch("ccgram.handlers.polling.window_tick.apply.window_query") as mock_wq,
+            patch("ccgram.handlers.polling.window_tick.apply.thread_router") as mock_tr,
+            patch(
+                "ccgram.handlers.polling.window_tick.apply._get_provider",
+                return_value=prov,
+            ),
+            patch(
+                "ccgram.handlers.polling.window_tick.apply.safe_send",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            mock_wq.view_window.return_value = win_view
+            mock_tr.resolve_chat_id.return_value = -100
+            await _maybe_warn_external_gemini(bot, 1, "@9", 42)
+        return mock_send
+
+    async def test_warns_once_for_external_gemini(self) -> None:
+        prov, store, view = self._patches(
+            provider="gemini", external=True, already_warned=False
+        )
+        mock_send = await self._run(prov, store, view)
+        mock_send.assert_called_once()
+        store.mark_gemini_external_warned.assert_called_once_with("@9")
+
+    async def test_silent_when_already_warned(self) -> None:
+        prov, store, view = self._patches(
+            provider="gemini", external=True, already_warned=True
+        )
+        mock_send = await self._run(prov, store, view)
+        mock_send.assert_not_called()
+        store.mark_gemini_external_warned.assert_not_called()
+
+    async def test_silent_for_managed_gemini(self) -> None:
+        prov, store, view = self._patches(
+            provider="gemini", external=False, already_warned=False
+        )
+        mock_send = await self._run(prov, store, view)
+        mock_send.assert_not_called()
+
+    async def test_silent_for_external_non_gemini(self) -> None:
+        prov, store, view = self._patches(
+            provider="claude", external=True, already_warned=False
+        )
+        mock_send = await self._run(prov, store, view)
+        mock_send.assert_not_called()
+        store.mark_gemini_external_warned.assert_not_called()
+
+    async def test_silent_when_no_window_view(self) -> None:
+        prov, store, _ = self._patches(
+            provider="gemini", external=True, already_warned=False, view=None
+        )
+        mock_send = await self._run(prov, store, None)
+        mock_send.assert_not_called()
 
 
 class TestDeadWindowNotification:
@@ -2485,7 +2713,9 @@ class TestCheckInteractiveOnly:
         ):
             mock_tm.capture_pane = AsyncMock(return_value="Allow?\nEsc\n")
             await _check_interactive_only(bot, 1, "@0", 42, _window=mock_window)
-        mock_pyte.assert_called_once_with("@0", "Allow?\nEsc\n", columns=80, rows=24)
+        mock_pyte.assert_called_once_with(
+            "@0", "Allow?\nEsc\n", columns=80, rows=24, parse_claude_chrome=True
+        )
         mock_set.assert_called_once_with(1, "@0", 42)
         _assert_handle_called_once_with_client(mock_handle, bot, 1, "@0", 42)
 

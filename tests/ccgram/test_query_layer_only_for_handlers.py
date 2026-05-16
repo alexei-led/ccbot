@@ -35,6 +35,7 @@ import pytest
 #   set_window_origin × 4
 #   set_window_approval_mode × 3
 #   set_window_cwd × 1
+#   set_window_worktree × 1
 #   set_display_name × 1
 #   cycle_batch_mode × 1
 #   cycle_tool_call_visibility × 1
@@ -49,6 +50,7 @@ ALLOWED_SESSION_MANAGER_ATTRS: frozenset[str] = frozenset(
         "set_window_origin",
         "set_window_approval_mode",
         "set_window_cwd",
+        "set_window_worktree",
         "set_display_name",
         "set_notification_mode",
         "set_batch_mode",

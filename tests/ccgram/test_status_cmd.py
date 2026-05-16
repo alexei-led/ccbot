@@ -115,9 +115,7 @@ class TestStatusMain:
         assert "hook" in captured.out
         assert "resume" in captured.out
 
-    def test_hookless_provider_capabilities(
-        self, tmp_path, monkeypatch, capsys
-    ) -> None:
+    def test_codex_provider_capabilities(self, tmp_path, monkeypatch, capsys) -> None:
         monkeypatch.setenv("CCGRAM_DIR", str(tmp_path))
         monkeypatch.setenv("CCGRAM_PROVIDER", "codex")
         monkeypatch.setenv("TMUX_SESSION_NAME", "test")
@@ -128,4 +126,4 @@ class TestStatusMain:
 
         captured = capsys.readouterr()
         assert "Provider: codex" in captured.out
-        assert "hook" not in captured.out.split("Provider:")[1].split("\n")[0]
+        assert "hook" in captured.out.split("Provider:")[1].split("\n")[0]

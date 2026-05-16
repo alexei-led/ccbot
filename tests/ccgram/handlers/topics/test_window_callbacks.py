@@ -94,6 +94,32 @@ class TestBindWindowCallback:
             "Stale picker (topic mismatch)", show_alert=True
         )
 
+    async def test_bind_rejected_after_new_command_reset(self) -> None:
+        from ccgram.handlers.topics.new_command import new_command
+
+        user_data = {UNBOUND_WINDOWS_KEY: ["@5"], PENDING_THREAD_ID: 42}
+        query, update, context = _make_query_update_context(user_data=user_data)
+
+        nc_update = MagicMock()
+        nc_update.effective_user = MagicMock(id=100)
+        nc_update.message = AsyncMock()
+        with patch(
+            "ccgram.handlers.topics.new_command.config.is_user_allowed",
+            return_value=True,
+        ):
+            await new_command(nc_update, context)
+
+        with patch(
+            "ccgram.handlers.topics.window_callbacks.tmux_manager.find_window_by_id",
+            new_callable=AsyncMock,
+        ) as mock_find:
+            await handle_window_callback(query, 100, f"{CB_WIN_BIND}0", update, context)
+
+        mock_find.assert_not_called()
+        query.answer.assert_called_once_with(
+            "Window list changed, please retry", show_alert=True
+        )
+
     async def test_bind_forwards_pending_text(self) -> None:
         user_data = {
             UNBOUND_WINDOWS_KEY: ["@5"],
@@ -157,6 +183,37 @@ class TestNewWindowCallback:
         query.answer.assert_called_once_with(
             "Stale picker (topic mismatch)", show_alert=True
         )
+
+    async def test_new_rejected_after_new_command_reset(self) -> None:
+        from ccgram.handlers.topics.new_command import new_command
+        from ccgram.handlers.topics.directory_browser import (
+            BROWSE_PATH_KEY,
+            STATE_KEY,
+        )
+
+        user_data = {PENDING_THREAD_ID: 42}
+        query, update, context = _make_query_update_context(user_data=user_data)
+
+        nc_update = MagicMock()
+        nc_update.effective_user = MagicMock(id=100)
+        nc_update.message = AsyncMock()
+        with patch(
+            "ccgram.handlers.topics.new_command.config.is_user_allowed",
+            return_value=True,
+        ):
+            await new_command(nc_update, context)
+
+        with patch(
+            "ccgram.handlers.topics.window_callbacks.build_directory_browser"
+        ) as mock_build:
+            await handle_window_callback(query, 100, CB_WIN_NEW, update, context)
+
+        mock_build.assert_not_called()
+        query.answer.assert_called_once_with(
+            "Stale picker (flow reset)", show_alert=True
+        )
+        assert STATE_KEY not in context.user_data
+        assert BROWSE_PATH_KEY not in context.user_data
 
 
 class TestCancelCallback:

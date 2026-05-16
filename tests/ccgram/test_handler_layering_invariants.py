@@ -95,6 +95,10 @@ _SINGLETON_ALLOWLIST = frozenset(
         "sessions_dashboard.py",
         "shell/shell_capture.py",
         "shell/shell_commands.py",
+        # rc_probe iterates thread bindings to route the RC outcome reply
+        # to the bound topic — same notification-routing pattern as
+        # hook_events.py / msg_telegram.py (read-only over thread_router).
+        "status/rc_probe.py",
         "status/status_bar_actions.py",
         "status/status_bubble.py",
         "status/topic_emoji.py",

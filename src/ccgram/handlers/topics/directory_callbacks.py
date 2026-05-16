@@ -22,7 +22,12 @@ import asyncio
 import structlog
 from pathlib import Path
 
-from telegram import CallbackQuery, Update
+from telegram import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Update,
+)
 from telegram.error import TelegramError
 from ...providers import registry as provider_registry
 from ...session import session_manager
@@ -42,6 +47,10 @@ from ..callback_data import (
     CB_DIR_UP,
     CB_MODE_SELECT,
     CB_PROV_SELECT,
+    CB_WT_CONFIRM,
+    CB_WT_EDIT_NAME,
+    CB_WT_NEW,
+    CB_WT_USE_CURRENT,
 )
 from ..callback_helpers import get_thread_id
 from .directory_browser import (
@@ -51,13 +60,34 @@ from .directory_browser import (
     build_directory_browser,
     build_mode_picker,
     build_provider_picker,
+    build_worktree_confirm,
+    build_worktree_picker,
     clear_browse_state,
+    clear_worktree_state,
     get_favorites,
+)
+from .worktree import (
+    WorktreeError,
+    check_worktree_eligibility,
+    create_worktree,
+    slug_for_path,
+    suggest_branch_name,
+    worktree_path_for,
 )
 from ..callback_registry import register
 from ..messaging_pipeline.message_sender import safe_edit, safe_send
 from ..status.topic_emoji import format_topic_name_for_mode
-from ..user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT
+from ..user_state import (
+    AWAITING_WORKTREE_BRANCH_NAME,
+    PENDING_THREAD_ID,
+    PENDING_THREAD_TEXT,
+    PENDING_WORKTREE_BRANCH,
+    PENDING_WORKTREE_CREATING,
+    PENDING_WORKTREE_DIRTY,
+    PENDING_WORKTREE_PATH,
+    PENDING_WORKTREE_REPO,
+    PENDING_WORKTREE_SUBDIR,
+)
 from . import topic_orchestration
 
 if TYPE_CHECKING:
@@ -95,8 +125,30 @@ async def handle_directory_callback(
         await _handle_provider_select(query, user_id, data, update, context)
     elif data.startswith(CB_MODE_SELECT):
         await _handle_mode_select(query, user_id, data, update, context)
+    elif data in (CB_WT_USE_CURRENT, CB_WT_NEW, CB_WT_CONFIRM, CB_WT_EDIT_NAME):
+        await _handle_worktree_callback(query, data, update, context)
     elif data == CB_DIR_CANCEL:
         await _handle_cancel(query, update, context)
+
+
+def _browser_flow_stale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """True if the directory-browser flow was reset or the tap is cross-topic.
+
+    A live browser always has ``PENDING_THREAD_ID`` set in the same topic
+    (``_handle_unbound_topic`` / ``_handle_dead_window`` set it together
+    with the browse state; navigation never clears it). If it is gone
+    (``/new`` or Cancel cleared it) or the tap arrived in a different
+    topic, every navigation/favorites handler must fail closed: otherwise
+    they repopulate ``BROWSE_PATH_KEY`` (falling back to the bot's own
+    cwd) *without* setting ``STATE_KEY``, so ``_check_ui_guards`` can't
+    catch the residue and a later stale ``db:confirm`` spawns a window in
+    that path. ``_handle_star`` would also toggle a persistent favorite
+    off a dead browser.
+    """
+    pending_tid = (
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
+    )
+    return pending_tid is None or get_thread_id(update) != pending_tid
 
 
 async def _resolve_fav_index(
@@ -108,11 +160,8 @@ async def _resolve_fav_index(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> str | None:
     """Validate pending thread, parse fav index, and return the fav path or None."""
-    pending_tid = (
-        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
-    )
-    if pending_tid is not None and get_thread_id(update) != pending_tid:
-        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+    if _browser_flow_stale(update, context):
+        await query.answer("Stale browser (flow reset)", show_alert=True)
         return None
     try:
         idx = int(data[len(prefix) :])
@@ -195,11 +244,8 @@ async def _handle_select(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_DIR_SELECT: navigate into a subdirectory."""
-    pending_tid = (
-        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
-    )
-    if pending_tid is not None and get_thread_id(update) != pending_tid:
-        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+    if _browser_flow_stale(update, context):
+        await query.answer("Stale browser (flow reset)", show_alert=True)
         return
     try:
         idx = int(data[len(CB_DIR_SELECT) :])
@@ -246,11 +292,8 @@ async def _handle_up(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_DIR_UP: navigate to parent directory."""
-    pending_tid = (
-        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
-    )
-    if pending_tid is not None and get_thread_id(update) != pending_tid:
-        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+    if _browser_flow_stale(update, context):
+        await query.answer("Stale browser (flow reset)", show_alert=True)
         return
     default_path = str(Path.cwd())
     current_path = (
@@ -280,11 +323,8 @@ async def _handle_home(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_DIR_HOME: jump to home directory."""
-    pending_tid = (
-        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
-    )
-    if pending_tid is not None and get_thread_id(update) != pending_tid:
-        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+    if _browser_flow_stale(update, context):
+        await query.answer("Stale browser (flow reset)", show_alert=True)
         return
 
     home_path = str(Path.home())
@@ -307,11 +347,8 @@ async def _handle_page(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_DIR_PAGE: paginate directory listing."""
-    pending_tid = (
-        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
-    )
-    if pending_tid is not None and get_thread_id(update) != pending_tid:
-        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+    if _browser_flow_stale(update, context):
+        await query.answer("Stale browser (flow reset)", show_alert=True)
         return
     try:
         pg = int(data[len(CB_DIR_PAGE) :])
@@ -336,6 +373,20 @@ async def _handle_page(
     await query.answer()
 
 
+def _subdir_within_repo(selected_path: str, repo_path: Path) -> str:
+    """Path of *selected_path* relative to *repo_path*, or "" if at the root.
+
+    Both sides are resolved first so a symlinked tmp/realpath mismatch
+    (common on macOS) doesn't lose the subdirectory. Returns "" when
+    *selected_path* is the repo top-level or not inside the repo.
+    """
+    try:
+        rel = Path(selected_path).resolve().relative_to(repo_path.resolve())
+    except ValueError, OSError:
+        return ""
+    return str(rel) if rel.parts else ""
+
+
 async def _handle_confirm(
     query: CallbackQuery,
     user_id: int,
@@ -343,19 +394,28 @@ async def _handle_confirm(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """Handle CB_DIR_CONFIRM: confirm directory, show provider picker."""
-    default_path = str(Path.cwd())
-    selected_path = (
-        context.user_data.get(BROWSE_PATH_KEY, default_path)
-        if context.user_data
-        else default_path
-    )
+    selected_path = _required_selected_path(context)
     pending_thread_id: int | None = (
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
 
+    # A live browser always has both a selected path and a pending thread
+    # (set together when it was shown). Either being absent means the flow
+    # was reset (e.g. /new) and this is a stale tap — proceeding would
+    # confirm the bot's own cwd and spawn an unbound window/worktree there.
+    if selected_path is None or pending_thread_id is None:
+        clear_browse_state(context.user_data)
+        clear_worktree_state(context.user_data)
+        if context.user_data is not None:
+            context.user_data.pop(PENDING_THREAD_ID, None)
+            context.user_data.pop(PENDING_THREAD_TEXT, None)
+        await query.answer("Stale browser (flow reset)", show_alert=True)
+        return
+
     confirm_thread_id = get_thread_id(update)
     if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
         clear_browse_state(context.user_data)
+        clear_worktree_state(context.user_data)
         if context.user_data is not None:
             context.user_data.pop(PENDING_THREAD_ID, None)
             context.user_data.pop(PENDING_THREAD_TEXT, None)
@@ -382,9 +442,212 @@ async def _handle_confirm(
             )
             return
 
+    # Eligible git repo → offer the worktree step before provider pick.
+    # Ineligible (non-git, bare, detached, mid-rebase) → unchanged flow.
+    # Offloaded: check_worktree_eligibility runs blocking git subprocesses.
+    eligibility = await asyncio.to_thread(
+        check_worktree_eligibility, Path(selected_path)
+    )
+    if eligibility.eligible and eligibility.repo_path is not None:
+        if context.user_data is not None:
+            context.user_data[PENDING_WORKTREE_REPO] = str(eligibility.repo_path)
+            context.user_data[PENDING_WORKTREE_DIRTY] = eligibility.dirty
+            context.user_data[PENDING_WORKTREE_SUBDIR] = _subdir_within_repo(
+                selected_path, eligibility.repo_path
+            )
+        text, keyboard = build_worktree_picker(
+            str(eligibility.repo_path), eligibility.current_branch or "HEAD"
+        )
+        await safe_edit(query, text, reply_markup=keyboard)
+        return
+
     # Show provider selection keyboard (keep browse state for _handle_provider_select)
+    await _show_provider_picker(query, selected_path)
+
+
+async def _show_provider_picker(query: CallbackQuery, selected_path: str) -> None:
+    """Edit the message to the provider picker for *selected_path*."""
     text, keyboard = build_provider_picker(selected_path)
     await safe_edit(query, text, reply_markup=keyboard)
+
+
+def _cancel_only_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Cancel", callback_data=CB_DIR_CANCEL)]]
+    )
+
+
+def _required_selected_path(context: ContextTypes.DEFAULT_TYPE) -> str | None:
+    """Selected directory for a window-creating step, or None if the flow
+    was reset (e.g. by ``/new``, which clears ``BROWSE_PATH_KEY``).
+
+    Unlike the navigation handlers, the create path must never fall back
+    to the bot's cwd: a stale provider/worktree button tapped after a
+    reset would otherwise spawn an unbound tmux window running an agent
+    CLI in the bot's own working directory.
+    """
+    if context.user_data is None:
+        return None
+    path = context.user_data.get(BROWSE_PATH_KEY)
+    return path if isinstance(path, str) and path else None
+
+
+async def _handle_worktree_callback(
+    query: CallbackQuery,
+    data: str,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """Dispatch the four worktree-picker callbacks (shared stale guard)."""
+    pending_tid = (
+        context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
+    )
+    # Same fail-closed invariant as _handle_confirm / window_callbacks
+    # _handle_new: a live worktree picker always has PENDING_THREAD_ID.
+    # None means the flow was reset (e.g. /new, or Cancel raced the
+    # eligibility probe in _handle_confirm) — a stale tap that would
+    # otherwise reach a sub-handler whose only remaining guard is a
+    # leftover PENDING_WORKTREE_REPO and spawn an unbound window.
+    if pending_tid is None:
+        await query.answer("Stale browser (flow reset)", show_alert=True)
+        return
+    if get_thread_id(update) != pending_tid:
+        await query.answer("Stale browser (topic mismatch)", show_alert=True)
+        return
+    if data == CB_WT_USE_CURRENT:
+        await _handle_wt_use_current(query, context)
+    elif data == CB_WT_NEW:
+        await _handle_wt_new(query, context)
+    elif data == CB_WT_CONFIRM:
+        await _handle_wt_confirm(query, context)
+    elif data == CB_WT_EDIT_NAME:
+        await _handle_wt_edit_name(query, context)
+
+
+async def _handle_wt_use_current(
+    query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Keep the current branch — clear worktree state, go to provider pick."""
+    await query.answer()
+    repo = context.user_data.get(PENDING_WORKTREE_REPO) if context.user_data else None
+    selected_path = _required_selected_path(context)
+    if not repo or not selected_path:
+        await safe_edit(query, "❌ Worktree state lost. Tap Cancel and retry.")
+        return
+    clear_worktree_state(context.user_data)
+    await _show_provider_picker(query, selected_path)
+
+
+async def _handle_wt_new(
+    query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Suggest a non-colliding branch name and show the confirm/edit screen."""
+    await query.answer()
+    repo = context.user_data.get(PENDING_WORKTREE_REPO) if context.user_data else None
+    if not repo:
+        await safe_edit(query, "❌ Worktree state lost. Tap Cancel and retry.")
+        return
+    repo_path = Path(repo)
+    # Offloaded: suggest_branch_name runs blocking git branch/worktree list.
+    branch = await asyncio.to_thread(suggest_branch_name, None, repo_path)
+    worktree_path = worktree_path_for(repo_path, slug_for_path(branch))
+    dirty = bool(
+        context.user_data.get(PENDING_WORKTREE_DIRTY, False)
+        if context.user_data
+        else False
+    )
+    if context.user_data is not None:
+        context.user_data[PENDING_WORKTREE_BRANCH] = branch
+        context.user_data[PENDING_WORKTREE_PATH] = str(worktree_path)
+    text, keyboard = build_worktree_confirm(repo, branch, str(worktree_path), dirty)
+    await safe_edit(query, text, reply_markup=keyboard)
+
+
+async def _handle_wt_confirm(
+    query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Create the worktree, then continue to provider pick rooted in it."""
+    user_data = context.user_data
+    # Re-entrancy guard set synchronously *before* the first await: a
+    # fast double-tap on "Use this" would otherwise run create_worktree
+    # twice and the second call would overwrite the provider picker with
+    # a "branch already exists" error even though the first succeeded.
+    if user_data is not None and user_data.get(PENDING_WORKTREE_CREATING):
+        await query.answer("Creating worktree…")
+        return
+    if user_data is not None:
+        user_data[PENDING_WORKTREE_CREATING] = True
+    await query.answer()
+    repo = user_data.get(PENDING_WORKTREE_REPO) if user_data else None
+    branch = user_data.get(PENDING_WORKTREE_BRANCH) if user_data else None
+    worktree_path = user_data.get(PENDING_WORKTREE_PATH) if user_data else None
+    if not (repo and branch and worktree_path):
+        if user_data is not None:
+            user_data.pop(PENDING_WORKTREE_CREATING, None)
+        await safe_edit(query, "❌ Worktree state lost. Tap Cancel and retry.")
+        return
+    try:
+        # Offloaded: create_worktree runs a blocking `git worktree add`
+        # (up to 30s) that would otherwise freeze the whole event loop.
+        await asyncio.to_thread(
+            create_worktree, Path(repo), branch, Path(worktree_path)
+        )
+    except WorktreeError as exc:
+        # Clear the guard so a transient failure (e.g. disk full) is
+        # retryable from the same screen.
+        if user_data is not None:
+            user_data.pop(PENDING_WORKTREE_CREATING, None)
+        logger.warning("Worktree creation failed: %s", exc)
+        await safe_edit(
+            query,
+            f"❌ Could not create worktree: {str(exc).splitlines()[0]}",
+            reply_markup=_cancel_only_keyboard(),
+        )
+        return
+    subdir = user_data.get(PENDING_WORKTREE_SUBDIR, "") if user_data else ""
+    target = Path(worktree_path)
+    if subdir:
+        candidate = target / subdir
+        if candidate.is_dir():
+            target = candidate
+        else:
+            logger.info(
+                "Worktree subdir %s absent in fresh checkout; rooting at %s",
+                subdir,
+                worktree_path,
+            )
+    target_str = str(target)
+    if user_data is not None:
+        user_data[BROWSE_PATH_KEY] = target_str
+    logger.info(
+        "Created worktree %s on branch %s (cwd=%s)",
+        worktree_path,
+        branch,
+        target_str,
+    )
+    await _show_provider_picker(query, target_str)
+
+
+async def _handle_wt_edit_name(
+    query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Prompt for a custom branch name via a text reply."""
+    await query.answer()
+    # Fail closed like the other worktree handlers: a stale wt:ed tapped
+    # after the flow was reset (e.g. by /new clearing PENDING_WORKTREE_REPO)
+    # must not arm AWAITING_WORKTREE_BRANCH_NAME — a leaked flag hijacks the
+    # next message in a fresh unbound-topic flow with "Worktree state lost".
+    repo = context.user_data.get(PENDING_WORKTREE_REPO) if context.user_data else None
+    if not repo:
+        await safe_edit(query, "❌ Worktree state lost. Tap Cancel and retry.")
+        return
+    if context.user_data is not None:
+        context.user_data[AWAITING_WORKTREE_BRANCH_NAME] = True
+    await safe_edit(
+        query,
+        "✏️ Send the branch name as a message, or tap Cancel.",
+        reply_markup=_cancel_only_keyboard(),
+    )
 
 
 async def _validate_provider_select(
@@ -397,6 +660,11 @@ async def _validate_provider_select(
     """Validate provider select callback; returns True if request should proceed."""
     confirm_thread_id = get_thread_id(update)
     if pending_thread_id is not None and confirm_thread_id != pending_thread_id:
+        # _handle_mode_select clears browse state before calling this, so
+        # _check_ui_guards can no longer catch a leftover worktree flow on
+        # a later message — clear it here or the CREATING re-entrancy flag
+        # sticks and blocks every future worktree confirm.
+        clear_worktree_state(context.user_data)
         if context.user_data is not None:
             context.user_data.pop(PENDING_THREAD_ID, None)
             context.user_data.pop(PENDING_THREAD_TEXT, None)
@@ -442,12 +710,11 @@ async def _handle_provider_select(
         await query.answer("Unknown provider", show_alert=True)
         return
 
-    default_path = str(Path.cwd())
-    selected_path = (
-        context.user_data.get(BROWSE_PATH_KEY, default_path)
-        if context.user_data
-        else default_path
-    )
+    selected_path = _required_selected_path(context)
+    if selected_path is None:
+        await query.answer()
+        await safe_edit(query, "❌ Selection expired. Tap Cancel and retry.")
+        return
     pending_thread_id: int | None = (
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
@@ -535,6 +802,52 @@ def _try_install_messaging_skill(provider_name: str, cwd: str) -> None:
         logger.exception("Failed to install messaging skill at %s", cwd)
 
 
+def _cwd_within(cwd: str, worktree_path: str) -> bool:
+    """True if *cwd* is the worktree root or nested inside it."""
+    try:
+        c = Path(cwd).resolve()
+        w = Path(worktree_path).resolve()
+    except OSError:
+        return False
+    return c == w or c.is_relative_to(w)
+
+
+def _persist_worktree_state(
+    window_id: str, cwd: str, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Persist a pending worktree path/branch onto the new window state.
+
+    Only persists when the window's *cwd* is the pending worktree path
+    (or a subdirectory of it — the new topic may be rooted at a subdir
+    of the fresh checkout) so a stale path from an earlier aborted
+    attempt can't attach to an unrelated window. Always clears the
+    worktree flow keys afterwards.
+    """
+    user_data = context.user_data
+    worktree_path = user_data.get(PENDING_WORKTREE_PATH) if user_data else None
+    worktree_branch = user_data.get(PENDING_WORKTREE_BRANCH) if user_data else None
+    if worktree_path and worktree_branch and _cwd_within(cwd, worktree_path):
+        session_manager.set_window_worktree(window_id, worktree_path, worktree_branch)
+    clear_worktree_state(user_data)
+
+
+async def _abort_topic_creation(
+    query: CallbackQuery, message: str, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Surface a window-creation failure and drop all pending-topic state.
+
+    The error message carries no keyboard, so the user must restart the
+    flow. Clearing the pending worktree state (including the re-entrancy
+    flag) keeps a sticky "creating" guard from rejecting every future
+    worktree confirm — the worktree, if any, was already created on disk.
+    """
+    await safe_edit(query, f"❌ {message}")
+    if context.user_data is not None:
+        context.user_data.pop(PENDING_THREAD_ID, None)
+        context.user_data.pop(PENDING_THREAD_TEXT, None)
+    clear_worktree_state(context.user_data)
+
+
 async def _create_window_and_bind(  # noqa: PLR0915
     query: CallbackQuery,
     user_id: int,
@@ -561,10 +874,7 @@ async def _create_window_and_bind(  # noqa: PLR0915
         selected_path, launch_command=launch_command
     )
     if not success:
-        await safe_edit(query, f"❌ {message}")
-        if pending_thread_id is not None and context.user_data is not None:
-            context.user_data.pop(PENDING_THREAD_ID, None)
-            context.user_data.pop(PENDING_THREAD_TEXT, None)
+        await _abort_topic_creation(query, message, context)
         return
 
     # Race-guard: tag this window as "directory flow in progress" BEFORE any
@@ -579,6 +889,7 @@ async def _create_window_and_bind(  # noqa: PLR0915
     session_manager.set_window_cwd(created_wid, selected_path)
     session_manager.set_window_provider(created_wid, provider_name)
     session_manager.set_window_approval_mode(created_wid, approval_mode)
+    _persist_worktree_state(created_wid, selected_path, context)
     logger.info(
         "Window created: %s (id=%s) at %s provider=%s mode=%s (user=%d, thread=%s)",
         created_wname,
@@ -707,12 +1018,11 @@ async def _handle_mode_select(
         await query.answer("Unknown mode", show_alert=True)
         return
 
-    default_path = str(Path.cwd())
-    selected_path = (
-        context.user_data.get(BROWSE_PATH_KEY, default_path)
-        if context.user_data
-        else default_path
-    )
+    selected_path = _required_selected_path(context)
+    if selected_path is None:
+        await query.answer()
+        await safe_edit(query, "❌ Selection expired. Tap Cancel and retry.")
+        return
     pending_thread_id: int | None = (
         context.user_data.get(PENDING_THREAD_ID) if context.user_data else None
     )
@@ -742,6 +1052,7 @@ async def _handle_cancel(
         await query.answer("Stale browser (topic mismatch)", show_alert=True)
         return
     clear_browse_state(context.user_data)
+    clear_worktree_state(context.user_data)
     if context.user_data is not None:
         context.user_data.pop(PENDING_THREAD_ID, None)
         context.user_data.pop(PENDING_THREAD_TEXT, None)
@@ -762,6 +1073,10 @@ async def _handle_cancel(
     CB_DIR_CONFIRM,
     CB_PROV_SELECT,
     CB_MODE_SELECT,
+    CB_WT_USE_CURRENT,
+    CB_WT_NEW,
+    CB_WT_CONFIRM,
+    CB_WT_EDIT_NAME,
     CB_DIR_CANCEL,
 )
 async def _dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
