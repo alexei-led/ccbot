@@ -212,10 +212,16 @@ def run_bot() -> None:
 
     application = create_bot()
     _install_signal_handlers(loop)
-    application.run_polling(
-        allowed_updates=["message", "callback_query"],
-        stop_signals=None,
-    )
+    
+    if getattr(config, "webhook_url", None):
+        from .webhook_runner import run_with_fallback
+        run_with_fallback(application, config)
+    else:
+        logger.info("Polling mode active")
+        application.run_polling(
+            allowed_updates=["message", "callback_query"],
+            stop_signals=None,
+        )
 
     if _restart_requested:
         logger.info("Restarting bot via os.execv(%s)", sys.argv)
