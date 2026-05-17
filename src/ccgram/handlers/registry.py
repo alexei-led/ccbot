@@ -12,16 +12,21 @@ requires.
 from dataclasses import dataclass
 from typing import TypeAlias
 
+from telegram import Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     InlineQueryHandler,
     MessageHandler,
+    TypeHandler,
+    ContextTypes,
     filters,
 )
 from telegram.ext._utils.types import HandlerCallback
+import structlog
 
+from ..config import config
 from .callback_registry import dispatch as _dispatch_callback
 from .callback_registry import load_handlers as _load_callback_handlers
 from .cleanup import unbind_command
@@ -48,6 +53,13 @@ from .voice import handle_voice_message
 
 HandlerFn: TypeAlias = HandlerCallback
 
+logger = structlog.get_logger()
+
+
+async def _log_webhook_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if getattr(config, "webhook_url", None):
+        logger.info("Incoming webhook request accepted", update_id=update.update_id)
+
 
 @dataclass(frozen=True)
 class CommandSpec:
@@ -67,6 +79,8 @@ def register_all(
     explicit CommandHandlers must precede the COMMAND-fallback
     MessageHandler, which must precede the TEXT MessageHandler.
     """
+    application.add_handler(TypeHandler(Update, _log_webhook_request), group=-1)
+
     command_specs: list[CommandSpec] = [
         CommandSpec("new", new_command),
         CommandSpec("start", new_command),  # compat alias

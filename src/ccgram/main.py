@@ -77,6 +77,32 @@ def _reraise_shutdown_signal() -> None:
         os.kill(os.getpid(), _shutdown_signal)
 
 
+def _mask_secrets(_logger: logging.Logger, _log_method: str, event_dict: dict) -> dict:
+    """Mask sensitive tokens in log outputs."""
+    min_secret_len = 4
+    secrets = [os.environ.get("WEBHOOK_SECRET_TOKEN"), os.environ.get("TELEGRAM_BOT_TOKEN")]
+    secrets = [s for s in secrets if s and len(s) > min_secret_len]
+    
+    if not secrets:
+        return event_dict
+
+    for k, v in event_dict.items():
+        if isinstance(v, str):
+            for secret in secrets:
+                if secret in v:
+                    v = v.replace(secret, "***MASKED***")
+            event_dict[k] = v
+            
+    event = event_dict.get("event")
+    if isinstance(event, str):
+        for secret in secrets:
+            if secret in event:
+                event = event.replace(secret, "***MASKED***")
+        event_dict["event"] = event
+        
+    return event_dict
+
+
 def setup_logging(log_level: str) -> None:
     """Configure structured, colored logging for interactive CLI use."""
     numeric_level = getattr(logging, log_level, None)
@@ -87,6 +113,7 @@ def setup_logging(log_level: str) -> None:
         processors=[
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_log_level,
+            _mask_secrets,
             structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.TimeStamper(fmt="%H:%M:%S"),
             structlog.processors.StackInfoRenderer(),
@@ -212,10 +239,16 @@ def run_bot() -> None:
 
     application = create_bot()
     _install_signal_handlers(loop)
-    application.run_polling(
-        allowed_updates=["message", "callback_query"],
-        stop_signals=None,
-    )
+    
+    if getattr(config, "webhook_url", None):
+        from .webhook_runner import run_with_fallback
+        run_with_fallback(application, config)
+    else:
+        logger.info("Polling mode active")
+        application.run_polling(
+            allowed_updates=["message", "callback_query"],
+            stop_signals=None,
+        )
 
     if _restart_requested:
         logger.info("Restarting bot via os.execv(%s)", sys.argv)

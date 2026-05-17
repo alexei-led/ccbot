@@ -448,6 +448,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     current topic, and delegates to ``handle_text_message`` for the
     bool early-return routing chain.
     """
+    logger.info("Processing text update", update_id=update.update_id)
     user = update.effective_user
     if not user or not config.is_user_allowed(user.id):
         if update.message:
