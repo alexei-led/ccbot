@@ -253,6 +253,12 @@ class DraftStream:
                 await self._start_legacy()
             else:
                 await self._start_streaming()
+        except BadRequest as exc:
+            if "button_type_invalid" in str(exc).lower():
+                logger.warning("DraftStream.start: invalid buttons for this chat type (check web_app in group)", error=str(exc))
+                return None
+            logger.warning("DraftStream.start BadRequest: %s", exc)
+            return None
         except (TimedOut, NetworkError) as exc:
             logger.warning("DraftStream.start transient failure: %s", exc)
             return None

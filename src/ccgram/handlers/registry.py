@@ -55,6 +55,7 @@ HandlerFn: TypeAlias = HandlerCallback
 
 logger = structlog.get_logger()
 
+
 async def _log_webhook_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if getattr(config, "webhook_url", None):
         logger.info("Incoming webhook request accepted", update_id=update.update_id)

@@ -81,6 +81,11 @@ def build_dashboard_button(window_id: str, user_id: int) -> InlineKeyboardButton
         user_id=user_id,
     )
     url = f"{base_url.rstrip('/')}/app/{token}"
+    # WebApp buttons (direct launch) only work in private chats. In groups
+    # they trigger Button_type_invalid. If a group is configured, fall back
+    # to a standard URL button (opens in browser).
+    if config.group_id:
+        return InlineKeyboardButton("\U0001fa9f Dashboard", url=url)
     return InlineKeyboardButton("\U0001fa9f Dashboard", web_app=WebAppInfo(url=url))
 
 
