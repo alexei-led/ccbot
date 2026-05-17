@@ -38,8 +38,8 @@ def run_with_fallback(application: Application, config: object) -> None:
             stop_signals=None,
         )
         logger.info("Webhook stopped cleanly.")
-    except Exception as e:
-        logger.error(f"Webhook failed ({type(e).__name__}): {e}")
+    except Exception as e:  # noqa: BLE001
+        logger.error("Webhook failed (%s): %s", type(e).__name__, e)
         logger.info("Falling back to polling mode")
         
         # python-telegram-bot closes the event loop on run_webhook failure.

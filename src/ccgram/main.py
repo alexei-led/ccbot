@@ -77,10 +77,11 @@ def _reraise_shutdown_signal() -> None:
         os.kill(os.getpid(), _shutdown_signal)
 
 
-def _mask_secrets(logger: logging.Logger, log_method: str, event_dict: dict) -> dict:
+def _mask_secrets(_logger: logging.Logger, _log_method: str, event_dict: dict) -> dict:
     """Mask sensitive tokens in log outputs."""
+    min_secret_len = 4
     secrets = [os.environ.get("WEBHOOK_SECRET_TOKEN"), os.environ.get("TELEGRAM_BOT_TOKEN")]
-    secrets = [s for s in secrets if s and len(s) > 4]
+    secrets = [s for s in secrets if s and len(s) > min_secret_len]
     
     if not secrets:
         return event_dict
